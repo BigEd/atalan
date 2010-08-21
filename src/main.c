@@ -131,7 +131,7 @@ void main(int argc, char *argv[])
 	strcpy(filename, argv[i]);
 	filename_len = StrLen(filename);
 
-	if (filename_len < 4 || StrEqual(".atl", &filename[filename_len-4]) != 0) {
+	if (filename_len < 4 || !StrEqual(".atl", &filename[filename_len-4])) {
 		strcpy(&filename[filename_len], ".atl");
 	} else {
 		filename_len -= 4;
