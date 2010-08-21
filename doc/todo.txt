@@ -24,7 +24,7 @@ x var.min, var.max provides access to bounds
 
 - fix UNTIL x and y  (we must replace AND and OR in negated expressions)
 - support default values for function arguments
-- support  10 < x < 20
+x support  10 < x < 20
 
 - support macro parameters in type parsing (%A, %B before array indices) and result type
   (only when parsing rule)
@@ -66,7 +66,7 @@ if x,y = 3,4 then
 ::::::::::::::::::::::
 
 x context of enum type for array (STRIG(0), STRIG(1))
-- shift characters in font
+x shift characters in font
 
 ::::::::::::::::::::::::::
 draw'tile:proc
@@ -85,17 +85,16 @@ x = if a then 3 else 4
 
 x = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
  
-- optimize ldx #5 ldx #6  to ldx #5, inx
 - use of constant expressions in integer definitions 
 
 - s(15..20, 7) = 5
    =>  for ?:15..20 ( s(?,7) = 5 )
    
 x MODE_LABEL
-- rules are hashed by instruction op 
+x rules are hashed by instruction op 
 - custom defined instructions should be built-in
     
-- AND with const limits the type of resulting value (x & 0xff is 0..255, etc.)
+x AND with const limits the type of resulting value (x & 0xff is 0..255, etc.)
 
 - a() = 0, a = 0
 - string initialized arrays
@@ -172,13 +171,10 @@ Generating
 Arrays
 ======
 
-- multiple dimension type should be array() of array() of byte
-  , is just shorthand
-
 - compute size
 - two byte index
-- multiple dimensions (up to 3)
-- index tables (multidimensional array with 1st index byte - basically fastened multiplication)
+- multiple dimensions (up to 2)
+x index tables (multidimensional array with 1st index byte - basically fastened multiplication)
 - sliced arrays (structures, integers)
 
 
@@ -206,12 +202,6 @@ var2) self-modifying code
 	add idx+1
 	sta ptr+2
 ptr	lda $ffff
-
-==============
-Optimalization
-==============
-- function inlining (function used only once automatically)
-- Multiple prints should be joined together
 
 =============
 6502 backend
@@ -269,8 +259,6 @@ table based parsing
 
 - macros defining operators
 
-
-
 =====
 IDEAS
 =====
@@ -317,12 +305,6 @@ x nested procedures
 - freevar token
 - newvar  token
 
-- print "output string like this using variables [a] [b] [c]"
-  - string is stored after the print routine
-  - it gets preprocessed so, that variable names are replaced by their types and
-    addresses (byte, int, sbyte, sint, text, char, )
-  - routine to call to output chars may be defined (called with buffer and size)     
-
 ==========
 Constructs
 ==========
@@ -350,6 +332,7 @@ Unit Test
 OPTIMIZE
 ******************
 
+- optimize ldx #5 ldx #6  to ldx #5, inx
 - multiply byte by 10 (use temporary _arr ?)
 - optimize jumps
 - optimize x + 0, y * 1,... (do it in eval const?)
@@ -376,3 +359,6 @@ x Should replace let _a, _2000(0) with lo _a, set_col
     let VDSLST(0), _a
     let _a, _2000(1)
     let VDSLST(1), _a
+
+- function inlining (function used only once automatically)
+- Multiple prints should be joined together

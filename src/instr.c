@@ -178,6 +178,11 @@ Purpose:
 
 }
 
+InstrOp OpNot(InstrOp op)
+{
+	return op ^ 1;
+}
+
 
 /*
 char * INSTR_NAME[] = {
@@ -233,12 +238,24 @@ Purpose:
 		CURRENT_LINE_NO = LINE_NO;
 	}
 
-	// For commutative operations make sure the constant is the other operator
+	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processign.
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
 		if (arg1->mode == MODE_CONST) {
-			var = arg2; arg1 = arg2; arg2 = var;
+			var = arg1; arg1 = arg2; arg2 = var;
+
+			// Change oriantation of non commutative relational operators
+			// This is different from NOT operation.
+
+			switch(op) {
+			case INSTR_IFLE: op = INSTR_IFGE; break;
+			case INSTR_IFGE: op = INSTR_IFLE; break;
+			case INSTR_IFGT: op = INSTR_IFLT; break;
+			case INSTR_IFLT: op = INSTR_IFGT; break;
+			default: break;
+			}
+
 		}
 	}
 
