@@ -48,7 +48,8 @@ void TypeLet(Type * type, Var * var)
 {
 	Type * vtype;
 	Var * arr;
-	
+	Int32 min, max;
+
 	vtype = var->type;
 
 	if (vtype == NULL) return;
@@ -68,20 +69,26 @@ void TypeLet(Type * type, Var * var)
 	switch(vtype->variant)
 	{
 	case TYPE_INT:
+
+		// When setting constant N to the variable, it's range is set to N..N
+		// Variables with type like this are in fact constants.
+		if (var->mode == MODE_CONST) {
+			min = max = var->n;
+		} else {
+			min = vtype->range.min;
+			max = vtype->range.max;
+		}
+	
 		if (type->variant == TYPE_UNDEFINED) {
 			type->base = vtype;
 			type->variant = TYPE_INT;
-
-			// When setting constant N to the variable, it's range is set to N..N
-			// Variables with type like this are in fact constants.
-
-			if (var->mode == MODE_CONST) {
-				type->range.min = type->range.max = var->n;
-			} else {
-				type->range.min = vtype->range.min;
-				type->range.max = vtype->range.max;
-			}
+			type->range.min = min;
+			type->range.max = min;
 			type->owner = NULL;
+		} else if (type->variant == TYPE_INT) {
+			if (min < type->range.min) type->range.min = min;
+			if (max > type->range.max) type->range.max = max;
+
 		}
 		break;
 	}
@@ -164,3 +171,51 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 	}
 }
 
+UInt16 TypeItemCount(Type * type)
+{
+	UInt16 cnt;
+	Type * idx;
+	if (type->variant != TYPE_ARRAY) return 1;
+	idx = type->dim[0];
+	cnt = idx->range.max - idx->range.min + 1;
+	return cnt;
+}
+
+void TypeAddConst(Type * type, Var * var)
+/*
+Purpose:
+	Add specified variable as associated constant to type.
+*/
+{
+
+	if (type->variant == TYPE_INT) {
+		// Register type of this constant as specified type
+		var->type  = type;
+		var->scope = var->type->owner;
+
+		if (!var->value_nonempty) {
+			if (type->range.flexible) {
+				type->range.max++;
+				var->n = type->range.max;
+				var->value_nonempty = true;
+			} else {
+				SyntaxError("it is necessary to define constant value explicitly for this type");
+			}
+		} else {
+			if (var->n < type->range.min) {
+				if (type->range.flexible) {
+					type->range.min = var->n;
+				} else {
+					SyntaxError("constant out of available range");
+				}
+			}
+			if (var->n > type->range.max) {
+				if (type->range.flexible) {
+					type->range.max = var->n;
+				} else {
+					SyntaxError("constant out of available range");
+				}
+			}
+		}
+	}
+}

@@ -2,6 +2,12 @@
 TODO
 ****
 
+- Records
+  - type definition (just variable of TYPE_STRUCT with local variables - address of variable is offset of the variable regarding the structure base)
+  - use MODE_ELEMENT as access to record field
+  - type of the element is type of field (or last field)
+	- combination with array 
+
 - self referencing (cannot define type - available in esieve)
 - warning hi from small variable
 - xor, or & and self (produces 0, self, 0)
@@ -9,14 +15,14 @@ TODO
 x invalid array index detection
 x assign type inferencing
 x multiple return function assign type inferencing
-- repeated assign inferencing (merge type - only for flexible types)
-- var.min, var.max provides access to bounds
+x repeated assign inferencing (merge type - only for flexible types)
+x var.min, var.max provides access to bounds
 
 - linear transformation operator   a = RANDOM in 10..30
 
 - for may parse expression at the beginning (variable name may be deduced)
 
-- fix UNTIL x and y
+- fix UNTIL x and y  (we must replace AND and OR in negated expressions)
 - support default values for function arguments
 - support  10 < x < 20
 
@@ -27,7 +33,7 @@ x multiple return function assign type inferencing
 
 - for i until p(i) = 5
 
-- in display_list, we do not use DLI, because it's a type (and we cannot evaluate type)
+x in display_list, we do not use DLI, because it's a type (and we cannot evaluate type)
 
 - mul, div (byte, card)
 - all card comparisons
@@ -85,7 +91,7 @@ x = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
 - s(15..20, 7) = 5
    =>  for ?:15..20 ( s(?,7) = 5 )
    
-- MODE_LABEL
+x MODE_LABEL
 - rules are hashed by instruction op 
 - custom defined instructions should be built-in
     

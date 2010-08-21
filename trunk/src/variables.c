@@ -351,6 +351,7 @@ Bool VarIsLabel(Var * var)
 	return var->type != NULL && var->type->variant == TYPE_LABEL;
 }
 
+//TODO: VarIsConst
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
@@ -499,15 +500,5 @@ Purpose:
 			REG[REG_CNT++] = var;
 		}
 	NEXT_VAR
-}
-
-UInt16 TypeItemCount(Type * type)
-{
-	UInt16 cnt;
-	Type * idx;
-	if (type->variant != TYPE_ARRAY) return 1;
-	idx = type->dim[0];
-	cnt = idx->range.max - idx->range.min + 1;
-	return cnt;
 }
 

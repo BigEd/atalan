@@ -2,6 +2,8 @@
 News
 ****
 
+- var.min, var.max built-in associated variables
+
 ===========
 16-Aug-2010
 ===========
