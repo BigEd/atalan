@@ -188,7 +188,7 @@ _out_putchr .proc
 ;Leading zeroes are not printed.
 ;In:
 ;	?varptr		Pointer to memory containing the number
-;	?size		Number of bytes to print
+;	?size		  Number of bytes to print
 ;Uses:
 ;	?aux
 ;	?aux2
@@ -214,6 +214,14 @@ _outbyte
 _loop	
 		dec ?aux
 		bpl _outbyte
+		
+		;If no character has been written, write at least one 0		
+		lda ?aux2
+		bne _no_empty
+		lda #48
+		jsr _std_putchr
+_no_empty
+ 
 		rts
 	
 _write_digit
