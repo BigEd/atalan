@@ -1,10 +1,12 @@
 if exist atalan rmdir /S /Q atalan
 
 mkdir atalan
-mkdir atalan\bin
-mkdir atalan\doc
-mkdir atalan\tools
-mkdir atalan\examples
+cd atalan
+mkdir bin
+mkdir doc
+mkdir tools
+mkdir examples
+cd ..
 
 REM Bin
 
@@ -21,12 +23,28 @@ copy src\mads.exe atalan\bin
 
 copy tools\Atalan.ini atalan\tools
 
+
+REM Doc generating
+
+if exist www rmdir /S /Q www
+mkdir www
+cd www
+mkdir template
+mkdir raster
+mkdir examples
+mkdir download
+cd ..
+xcopy www_src\template www\template /E /I /Q
+xcopy www_src\raster www\raster /E /I /Q
+
 docgen.rb
 
 copy examples\*.* atalan\examples /Y
 
 echo \download\ > exclude.list
+
 xcopy www atalan\doc /E /I /Q /EXCLUDE:exclude.list
+
 del exclude.list
 
 copy doc\contents.txt atalan\
@@ -59,8 +77,8 @@ cd ..
 cd ..
 
 
-if exist www\download\atalan.zip del www\download\atalan.zip
-if exist www\download\atalan_src.zip del www\download\atalan_src.zip
+REM if exist www\download\atalan.zip del www\download\atalan.zip
+REM if exist www\download\atalan_src.zip del www\download\atalan_src.zip
  
 zip -q -r www\download\atalan.zip atalan\
 
