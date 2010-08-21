@@ -707,6 +707,7 @@ Purpose:
 					lrange = type->range.min;
 					if (lrange > 0) lrange = 0;
 					return (type->range.max - lrange) / 256 + 1;
+				default: break;
 			}
 		}
 	}

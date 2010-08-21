@@ -522,7 +522,7 @@ typedef enum {
 	RULE_ARG			// argument (type of argument is defined, may be NULL)
 } RuleArgVariant;
 
-typedef struct RuleArgTag {
+struct RuleArgTag {
 	RuleArgVariant variant;
 	UInt8          arg_no;		// argument index (1..26)  used for variable & const
 	union {
@@ -556,7 +556,7 @@ Bool ProcTranslate(Var * proc);
 typedef struct BlockTag Block;
 extern Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
 
-typedef struct BlockTag {
+struct BlockTag {
 	Token command;		// TOK_IF, TOK_WHILE
 	Var * body_label;
 	Var * loop_label;

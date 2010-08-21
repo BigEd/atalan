@@ -456,6 +456,7 @@ Purpose:
 			switch(op) {
 			case INSTR_HI: r = (n1 >> 8) & 0xff; break;
 			case INSTR_LO: r = n1 & 0xff; break;
+			default: break;
 			}
 			result = VarNewInt(r);
 			goto done;
@@ -1021,6 +1022,7 @@ void ParseRel()
 		case TOKEN_HIGHER:       op = INSTR_IFGT; break;
 		case TOKEN_LOWER_EQUAL:  op = INSTR_IFLE; break;
 		case TOKEN_HIGHER_EQUAL: op = INSTR_IFGE; break;
+		default: break;
 		}
 
 		if (op != INSTR_VOID) {
@@ -2385,6 +2387,7 @@ void ParseId()
 					NextToken();
 					ParseMacro(var);
 					return;
+				default: break;
 			}
 		}
 	}

@@ -13,7 +13,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys\stat.h> 
+#include <sys/stat.h> 
 
 #define STDERR stderr
 GLOBAL Bool VERBOSE;
@@ -131,7 +131,7 @@ void main(int argc, char *argv[])
 	strcpy(filename, argv[i]);
 	filename_len = StrLen(filename);
 
-	if (filename_len < 4 || _stricmp(".atl", &filename[filename_len-4]) != 0) {
+	if (filename_len < 4 || StrEqual(".atl", &filename[filename_len-4]) != 0) {
 		strcpy(&filename[filename_len], ".atl");
 	} else {
 		filename_len -= 4;
