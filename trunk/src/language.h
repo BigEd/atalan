@@ -435,6 +435,8 @@ void PrintVarName(Var * var);
 #define IS_INSTR_BRANCH(x) ((x)>=INSTR_IFEQ && (x)<=INSTR_IFLE)
 #define IS_INSTR_JUMP(x) (IS_INSTR_BRANCH(x) || (x) == INSTR_GOTO)
 
+InstrOp OpNot(InstrOp op);
+
 /*
 Compiler instruction.
 */

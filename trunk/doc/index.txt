@@ -20,7 +20,7 @@ Language Features
 =================
 
 - structured programming (if then else, while, until)
-- powerful loop (for k where sieve(k) = 1 until KEY = Q)
+- powerful loop construct (for k where sieve(k) = 1 until KEY = Q)
 - procedures
 - nested procedures
 - functions with multiple return values
@@ -28,8 +28,9 @@ Language Features
 - numeric types defined using range (min..max)
 - variables may be stored in user defined place
 - blocks defined by parentheses, indent or one line
-- enumerators
+- enumerations
 - local scope rules for constants
-- type specific constants  (type hour:0..23 (noon = 12 midnight = 0))
+- type associated constants  (type hour:0..23 (noon = 12 midnight = 0))
 - multidimensional arrays
 - support for interrupts
+- chained relational operators (10 < x <= 100)

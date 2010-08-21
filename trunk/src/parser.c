@@ -974,12 +974,27 @@ void ParseCondParenthesis()
 	if (!NextIs(TOKEN_CLOSE_P)) SyntaxError("missing closing ')'");
 }
 
-InstrOp OpNot(InstrOp op)
+InstrOp RelInstrFromToken()
 {
-	return op ^ 1;
+	InstrOp op;
+
+	switch(TOK) {
+	case TOKEN_EQUAL:        op = INSTR_IFEQ; break;
+	case TOKEN_NOT_EQUAL:    op = INSTR_IFNE; break;
+	case TOKEN_LOWER:        op = INSTR_IFLT; break;
+	case TOKEN_HIGHER:       op = INSTR_IFGT; break;
+	case TOKEN_LOWER_EQUAL:  op = INSTR_IFLE; break;
+	case TOKEN_HIGHER_EQUAL: op = INSTR_IFGE; break;
+	default: op = INSTR_VOID;
+	}
+	return op;
 }
 
 void ParseRel()
+/*
+	relop: "=" | "<>" | "<" | "<=" | ">" | ">="
+	rel:  <exp> <relop> <exp> [<relop> <exp>]*
+*/
 {
 	Var * v1;
 	InstrOp op;
@@ -992,26 +1007,14 @@ void ParseRel()
 		G_CONDITION_EXP = false;
 		v1 = STACK[0];
 
-		op = INSTR_VOID;
-		switch(TOK) {
-		case TOKEN_EQUAL:        op = INSTR_IFEQ; break;
-		case TOKEN_NOT_EQUAL:    op = INSTR_IFNE; break;
-		case TOKEN_LOWER:        op = INSTR_IFLT; break;
-		case TOKEN_HIGHER:       op = INSTR_IFGT; break;
-		case TOKEN_LOWER_EQUAL:  op = INSTR_IFLE; break;
-		case TOKEN_HIGHER_EQUAL: op = INSTR_IFGE; break;
-		default: break;
-		}
-
-		if (op != INSTR_VOID) {
+		while ((op = RelInstrFromToken()) != INSTR_VOID) {
 
 			// For normal operation, we jump to false label when the condition does NOT apply
 			// For example for if:
 			// if <cond>
 			//     <block>
 			//
-			// must skip the <block>.
-			
+			// must skip the <block>.			
 
 			if (!G_BLOCK->not) op = OpNot(op);
 			NextToken();
@@ -1024,9 +1027,11 @@ void ParseRel()
 				}
 				Gen(op, G_BLOCK->f_label, v1, STACK[0]);
 				VarFree(v1);
-				VarFree(STACK[0]);
+				v1 = STACK[0];		//
+									//VarFree(STACK[0]);
 			}
 		}
+		VarFree(v1);
 	}
 }
 

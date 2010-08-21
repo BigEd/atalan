@@ -2,7 +2,12 @@
 News
 ****
 
+===========
+21-Aug-2010
+===========
+
 - var.min, var.max built-in associated variables
+- relational operators chains (10 < x < 30)
 
 ===========
 16-Aug-2010
