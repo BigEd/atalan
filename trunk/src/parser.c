@@ -725,6 +725,19 @@ indices:
 				if (NextIs(TOKEN_DOT)) {
 					if (TOK == TOKEN_ID) {
 						item = VarFindScope(var, LEX.name, 0);
+
+						// If the element has not been found, try to match some built-in elements
+
+						if (item == NULL) {
+							if (var->type->variant == TYPE_INT) {
+								if (StrEqual(LEX.name, "min")) {
+									item = VarNewInt(var->type->range.min);
+								} else if (StrEqual(LEX.name, "max")) {
+									item = VarNewInt(var->type->range.max);
+								}
+							}
+						}
+
 						if (item != NULL) {
 							var = item;
 							NextToken();

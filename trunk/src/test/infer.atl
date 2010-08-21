@@ -1,5 +1,34 @@
+;*****************************
+; Type inferencing
+;*****************************
 
-x = (RANDOM and 63) * 2
+;All integer variables have built-in associated constants min and max defining
+;minimal and maximal possible value of the variable. 
 
-"[x]"
+x0:13..100
+min0 = x0.min
+max0 = x0.max
+"x0:[min0]..[max0]"
+
+;>> x0:13..100
+
+;Assigning variable to constant n, initializes the type as n..n
+
+x1 = 15
+min = x1.min
+max = x1.max
+"x1:[min]..[max]"
+
+;>> x1:15..15
+
+;Operators are correctly handled. In this case, RANDOM is variable of type 0..255
+;And changes the type to 0..63 and multiplication by two expands it to 0..126.
+;Finally adding 1 shifts it to 1..127.
+
+x2 = (RANDOM and 63) * 2 + 1
+min2 = x2.min
+max2 = x2.max
+"x2:[min2]..[max2]"
+
+;>> x2:1..127
  

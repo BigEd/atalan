@@ -266,6 +266,25 @@ c1 = color.gray
 c2 = pink				; c2 is of type color, color. is not necessary
 :::::::::::::::::::::::::::::::
 
+===============
+Limit constants 
+===============
+
+All integer variables have built-in associated constants min and max defining
+minimal and maximal possible value (limit) of the variable. 
+
+:::::::::::::::::::::::::::::::
+x:13..100
+min = x.min
+max = x.max
+"x:[min]..[max]"
+:::::::::::::::::::::::::::::::
+
+Will print x:13..100.
+
+It is possible to define custom associated variable with name of some built-in constant. 
+It does not change the type of the variable. Built-in constant will be unavailable.  
+
 *****
 Enums
 *****
