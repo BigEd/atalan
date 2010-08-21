@@ -1,0 +1,9 @@
+x,y:byte
+z:card
+
+x = 5
+y = 12
+
+z = x * y
+
+"[x] * [y] = [z]"

@@ -1,0 +1,46 @@
+﻿; ATRIS
+; Tetris implemented in ATATAN
+
+s:array(0..39,0..23) of byte
+const dl:array of byte = 3 times $70, $42, s, 23 times $02, $41, dl
+
+SDLSTL@$230:adr
+
+; Position of well on the screen (Left Margin, Right Margin, ...)
+const 
+	LM = 15
+	RM = 25
+	TM = 1
+	BM = 22
+
+x:15..25
+y:1..22
+
+;tile:array(3,3) =
+;    "  # "
+;    " ## "
+;   " #  "
+;    "    "
+    
+sdlstl = dl
+
+; Draw the well
+
+for y
+  s(LM,y) = 5
+  s(RM,y) = 5
+
+for x
+	s(x,BM) = 5
+	
+
+;Draw a tile
+
+x = 19
+y = 1
+
+for j:0..3
+	for k:0..3
+		s(x+k,y+j) = 3
+
+;s(x+1,y) = 3

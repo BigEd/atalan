@@ -1,0 +1,29 @@
+*****************************
+ATALAN Compiler Optimizations
+*****************************
+
+Atalan compiler performs extensive code optimizations. As 6502 family processors are
+very irregular, common methods had to be tailored and some special techniques had to be developed.
+
+For example, due to low number of registers (A,X,Y) and their specialized functions,
+usual register allocation technique could not be used.
+
+===================
+Local optimizations
+===================
+
+- constant folding and propagation
+- live value analysis
+- optimal operation is chosen according to variable range
+
+==================
+Loop optimizations
+==================
+
+- most common variables in loop are replaced by registers (if possible)
+
+===============
+Macro expansion
+===============
+
+- it is possible to write macros that are expanded in place

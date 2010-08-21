@@ -1,0 +1,104 @@
+﻿;ATALAN Language system definition file
+;This file is always loaded as fisrt file by compiler.
+
+;======================
+;Processor instructions
+;======================
+;
+;Instructions are defined using INSTRS codelist.
+;Instructions used by compiler are defined here, it is essential to preserve their order.
+;It is possible to define custom instructions by adding constants to this codelist.
+
+type instrs:enum
+	nop = 0
+	let = 1
+	
+	ifeq = 2
+	ifne = 3
+	iflt = 4
+	ifge = 5
+	ifgt = 6
+	ifle = 7
+	
+	prologue = 8	;generated at the beggining of the program
+	epilogue = 9	;generated at the end of programm
+	emit = 10  		;emit string to output
+	vardef = 11 	
+	label = 12  
+	goto = 13
+	add = 14
+	sub = 15
+	mul = 16
+	div = 17
+	and = 18
+	or = 19
+	
+	alloc = 20
+	print = 21		;print string argument
+	format = 22
+	proc = 23		;procedure entry
+	endproc	= 24	;procedure exit
+	call = 25		;call procedure
+	var_arg = 26
+	str_arg = 27
+	data  = 28
+	file  = 29
+	align = 30
+	hi = 31
+	lo = 32
+	ptr = 33
+	arrindex = 34		;generate index for 2d array
+	let_adr = 35
+	rol
+	ror
+	debug
+	mod
+	xor
+	not
+	line
+	
+;=================
+;Instruction flags
+;=================
+;
+;It is possible to define processor flags.
+;Flags represent bool value true/false and any instruction can define, in
+;what flags it is interested and how it affects flags.
+;
+;There are four possible flag states:
+;		clear		0	set to 0
+;		set			1	set to 1
+;		undefined	?	undefined
+;		changed		x	changed by previous instruction (eventually which one) 
+;
+;Up to 8 flags may be defined.
+;
+;Flags are specified using pflags enumerator.
+
+type iflag:enum
+
+;===============
+;Register groups
+;===============
+
+type regset:enum
+
+;==========
+;Interrupts
+;==========
+
+type interrupt:proc
+
+;All procedures based on type Interrupt are considered to be implementation
+;of some interrupt.
+;As such, they will not share local variables with other, normal procedures.
+
+;=================
+;Predefined macros
+;=================
+
+inc:macro(x) =
+	x = x + 1
+	
+dec:macro(x) =
+	x = x - 1

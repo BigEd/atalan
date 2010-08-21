@@ -1,0 +1,45 @@
+﻿; Sieve of Erastosthenes
+; Demo program for ATALAN programming language
+;(c) 2010 Rudla Kudla
+
+  
+RTCLOCK@20:byte
+
+;SQRT_COUNT = 91
+
+top:0..8191
+sieve:array(top) of 0..1
+k,j,prime:top
+start,time:byte
+
+"Computing primes..."
+
+for k 
+	sieve(k) = 1
+
+RTCLOCK = 0
+
+for i:2..91
+	if sieve(i) = 1
+		j = i * 2
+		while j<=8191
+			sieve(j) = 0
+			j = j + i
+
+time = RTCLOCK
+ 
+"Time used: [time] ticks"
+"Press Q to quit, any other key for list"
+
+CH = none
+until CH <> none
+
+if CH <> Q
+	for k
+		if sieve(k) = 1 "[k]"
+
+"Press any key to quit"
+CH = none
+until CH <> none
+	
+CH = none

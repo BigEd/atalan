@@ -1,0 +1,676 @@
+﻿*************************************
+ATALAN Programming Language Reference
+*************************************
+
+::index::
+
+***************
+Syntax elements
+***************
+
+Atalan source code is ASCII text file.
+It does not support reading of UTF-8 files, it can however safely skip UTF-8 header,
+so if you mistakenly safe your source code using UTF-8 (hello PSPad), 
+there should be no problem.
+
+Atalan is case insensitive.
+
+========
+Literals
+========
+
+Numeric and string literals may be defined.
+
+:::::::::::::
+65535       dec
+$494949     hex
+%0101010    bin
+"C"         character string
+:::::::::::::
+
+It is possible to separate parts on a numeric constant by apostrophe.
+
+::::::::::::::::::::::::::::::
+65'535
+$ff'ff
+%0101'0101'0101'1111
+::::::::::::::::::::::::::::::
+
+========
+Comments
+========
+
+Anything after ; to the end of line is comment.
+
+===========
+Identifiers
+===========
+
+Identifiers must start with letter and may contain numbers, underline and apostrophes.
+Identifier may be enclosed in apostrophes. In such case, it may contain any characters including apostrophe. 
+
+Example:
+:::::::::::::
+name
+x1 x2
+x'pos
+'RH-'
+'else'		; this is identifier, even if else is keyword
+:::::::::::::
+
+======
+Blocks
+======
+
+Commands are organized in blocks.
+
+Block may be defined using several methods:
+
+- line
+- parentheses
+- indent
+
+In following examples, block starts after 'then' and everything before "Hello" 
+is part of the block.
+
+Line block start somewhere on the line and continue until the end of line.
+
+::::::::::::::::::::::
+if x = 10 then a=1 b=2
+"Hello"
+::::::::::::::::::::::
+
+Parentheses ignore line ends and whitespaces completely.
+
+:::::::::::::::::::::::::::::::::::
+if x = 10 then ( a=1 b=2 ) "Hello"
+:::::::::::::::::::::::::::::::::::
+
+or
+
+:::::::::::::::::::::::::::::::::::
+if x = 10 then ( 
+	a=1 b=2 
+	) 
+"Hello"
+:::::::::::::::::::::::::::::::::::
+
+Indented blocks must have first character of block on next line indented more than 
+the line that starts the block. Block ends, when there is some indented less than
+lines in the block.
+
+:::::::::::::::::::::::::::::::::::
+if x = 10 then
+    a=1 
+    b=2 
+"Hello"
+:::::::::::::::::::::::::::::::::::
+
+Both TABS and spaces can be used to define indent, but they must not be mixed.
+If both is used on same line, there must be first TABS, then spaces.
+This prevents some common errors when using indent.
+ 
+******************************************
+Variables, types, constants and assignment
+******************************************
+
+Variables do not have to be defined, they are declared using assignment action.
+
+:::::::::::::
+name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
+:::::::::::::
+
+name	Name of variable, multiple variables may be declared/assigned (separated by comma)
+adr		Place variable at specified address or register.
+
+Type is declared using one of following methods:
+	- numeric range (min..max)
+	- variable name declares type identical to that variable
+	- structure (list of variable declarations)
+
+
+================
+Type declaration
+================
+
+Type is defined using 'type' keyword.
+
+::::::::::
+type short:-128..127				; signed byte type
+type byte:0..255
+type word:0..65535
+type int:-32768..32767
+type long:0..$ffffff
+type char:byte
+::::::::::::
+
+=================
+Const declaration
+=================
+
+Constant is variable, that is initialized during declaration and never assigned again.
+Array may be used as const to define static data.
+
+::::::::::::::::
+const TAB = 3 * 3		; it is possible to use expressions to evaluate constants
+const SPC = 32
+const DIGITS:char(16) = "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F"
+::::::::::::::::
+
+Const keyword introduces a block, so it is possible to declare multiple constants at once.
+
+::::::::::::::::::::::::::::::::::::
+const
+   TOP = 1
+   BOTTOM = 2
+::::::::::::::::::::::::::::::::::::
+
+====================
+Register declaration
+====================
+
+It is possible to place variable to specified address. This is usually used
+to define system and hardware registers.
+:::::::::::::
+PCOLR  @704:byte(4)		; player & missile graphics color (4 missiles)
+COLOR  @708:byte(5)		; playfield color
+SDLSTL @560:ptr			; pointer to beginning of display list
+STICK  @632:byte(4)
+::::::::::::::
+Value of some hardware registers changes automatically.
+It is necessary to mark such variables as 'in' or 'out'. 
+
+  
+===================
+Variable assignment
+===================
+::::::::::: 
+x = y
+:::::::::::
+
+====================
+Multiple assignments
+====================
+
+::::::::::::::::::::
+x,y:int
+x,y = 3,4
+x,y = y,x  [TODO]
+
+x,y = cursor
+::::::::::::::::::::
+
+===================================
+Writing to specified address [TODO]
+===================================
+
+Anonymous variable may be assigned (like POKE in BASIC).
+It is possible to specify type too.
+
+:::::::::::::::::::::::::::
+@712 = 0				; set background color to black 
+@$230:ptr = my_dlist
+@buf:byte(100) = 0		; set 100 bytes at address stored in variable buf to 0 (memset)
+:::::::::::::::::::::::::::
+ 
+======
+Labels
+======
+
+Label is specified as variable located at address where address is not specified.
+Note, that there must be at least one space after label definition.
+
+:::::
+name@
+:::::
+
+********
+Integers
+********
+
+Integer type is declared using numeric range.
+Compiler automatically decides, how many bytes to use.
+
+:::::::::::::::::::::::::::::
+byte:0..255
+word:0..$ffff
+int:-32768..32767
+flag:0..1
+:::::::::::::::::::::::::::::
+
+====================
+Associated constants
+====================
+
+It is possible to associate constant with integer type.
+Associated constant works like enum, but the type remains integer
+(i.e. you can still assign numbers to them).
+
+::::::::::::::::::::::::::
+color:0..255
+
+const gray:color = 0
+const pink:color = 4
+::::::::::::::::::::::::::
+
+When using associated constant, it must be preceded by type name and dot.
+It is not necessary, when the type is clear (assigning or comparing with
+variable of the )
+
+::::::::::::::::::::::::::::::::
+
+c1:0..255
+c2:color
+
+c1 = color.gray
+c2 = pink				; c2 is of type color, color. is not necessary
+:::::::::::::::::::::::::::::::
+
+*****
+Enums
+*****
+
+Enumerators are integer types, that define list of named values, that may be assign
+to them.
+
+Enums are declared using enum keyword optionally followed by numeric range.
+If numeric range is specified, all constants associated with this enum must be
+in the range.
+If not specified, range is computed automatically based on specified values.
+
+:::::::::::::::::::::::::::::::::::
+
+button_state:enum (pressed = 0, not'pressed = 1)
+
+color: enum
+	gray
+	pink
+	purple
+:::::::::::::::::::::::::::::::::::
+
+
+*****************
+Structures [TODO]
+*****************
+
+Structure is defined as list of variable declarations.
+Either "," or new line may be used as separator. 
+ 
+:::::::::::::::::::::::
+xcoord:0..319
+ycoord:0..239
+point:(x:xcoord, y:ycoord)
+
+point: 
+	x:xcoord		; x screen coordinate
+	y:ycoord		; y screen coordinate
+:::::::::::::::::::::::
+
+Using @ inside structure places the variable at specified offset from the beginning of
+a structure. Structures with 'holes' can be defined this way, even if it is not usually very useful.
+
+:::::::::::::::::::::::
+audch:
+	f:byte		; frequency
+	c:byte		; control
+
+aud@$D200:audch(4)
+:::::::::::::::::::::::
+
+******
+Arrays
+******
+
+Array is defined using keyword array.
+
+::::::::::::::::
+name:array [(min..max|count)[,(min..max|count)]] of byte
+::::::::::::::::
+
+If the array size is defined using single value, the value defines maximal index.
+Minimal index is then 0.
+So x:array(31) defines array of 32 elements (index 0..31).
+
+Array can be defined as one or two dimensional.
+
+==============
+Initialization
+==============
+
+It is possible to initialize arrays using literals. Array constants are
+defined as comma separated list of values.
+It is not necessary to define dimension for initialized array.
+
+If there is reference to array variable as part of array initializers, pointer
+to that array is stored in the array.
+This is possible for byte arrays too, in such case the element will occupy 
+multiple bytes (usually 2 bytes for 8-bit processors).
+
+When some item is to be repeated several times in initialization,
+it is posible to use &lt;n&gt; TIMES &lt;item&gt; construct.
+&lt;n&gt; must be integer number. If it is lower or equal 0, no item will be generated.
+
+:::::::::::::::::::::::::::::
+disp:array(0..39,0..23) of byte
+const a:array of byte = 3 times 112, disp, 0
+;Array has dimension 0..6 
+:::::::::::::::::::::::::::::
+
+==============
+Element access
+==============
+
+Array element is accessed using parentheses.
+
+::::::::::::::::
+arr:array(10) of byte
+arr(1) = arr(2)
+
+scr:array(39,23) of byte
+arr(0,0) = 65
+::::::::::::::::
+
+===================
+Range access [TODO]
+===================
+
+When assigning single variable to array, all items in array are set. 
+
+::::::::::::::::
+screen:array(39,239) of byte
+screen = 0		; clear the screen (fill with 0)
+::::::::::::::::
+
+
+*********
+Operators
+*********
+
+:::::::::::
+* / mod        Multiplication, division, modulus
++ -            Addition, substraction
+lo hi          Low/high byte of a word (lo $abcd = $ab, hi $abcd = $ab)
+not            Binary negation
+and            Binary and 
+or xor         Binary or and exlusive or
+( )            Parentheses
+:::::::::::
+
+==========
+Conditions
+==========
+
+Expression used in conditions have slightly different rules than normal expressions.
+They (at least in theory) evaluate to true/false.
+If simple value is used, it's 0 value means false, any other value true.
+
+:::::::::::
+not               Logical negation
+and or            Logical operators with short circuit evaluation
+= &lt;&gt; &lt; &gt; &lt;= &gt;=    Relational operators [TODO: == and <> working]
+is  isn't         Same as '=' '&lt;&gt;' (lower priority). [TODO]
+:::::::::::
+
+********
+Commands
+********
+
+========
+Printing
+========
+
+String constant used as command will be printed to screen.
+
+:::::::::::::::::::
+"Hello, World!"
+""
+"I'm here!"
+:::::::::::::::::::
+
+Square braces may be used to insert variables into the printed string.
+
+:::::::::::::::::::::::::::::::
+x = 4
+y = 6
+z = x + y
+"Sum of [x] and [y] is [z]."
+:::::::::::::::::::::::::::::::
+
+Variable type is automatically recognized, there is no need to specify it.
+
+**************
+Labels & Jumps
+**************
+
+Label is be defined as
+
+::::::::::::
+label@
+::::::::::::
+
+It is possible to jump on specified label unconditionally using
+goto.
+
+::::::::::::
+goto label
+::::::::::::
+
+It is also possible to jump to address specified in variable.
+
+::::::::::::::::::
+x:word
+x = 1000
+goto x		; jump to address 1000
+::::::::::::::::::
+
+*********************
+Conditional execution
+*********************
+
+Full conditional statement is supported.
+Note, that the blocks may be defined using indent.
+It is possible to optionally use THEN keyword after condition.
+Arbitrary number of else if sections is supported.
+ 
+::::::::::::::::
+if &lt;cond&gt; [then]
+	&lt;code&gt;
+else if &lt;cond2&gt;
+	&lt;code&gt;
+else
+	&lt;code&gt;
+::::::::::::::::
+
+Short one-line version is supported.
+:::::::::::::::
+if &lt;cond&gt; then &lt;code&gt;
+:::::::::::::::
+
+Again, it is not necessary to use then:
+:::::::::::::::
+if &lt;cond&gt; goto &lt;label&gt;
+:::::::::::::::
+
+
+*****
+Loops
+*****
+
+Loops are written like:
+
+:::::::::::::::::::::::::::::::::::
+["for" var [":" range] ["where" filter]]["while" cond | "until" cond] code_block
+:::::::::::::::::::::::::::::::::::
+
+===
+For
+===
+
+"For" part of loop enables iteration over specified loop variable.
+Loop variable must be integer. All possible values will be iterated, depending on variable
+type.
+
+Range may be defined as:
+
+- min..max (simmilar to type definition, but min & max may be expressions)
+- integer type (range is defined by the type)
+- integer variable (range will be indentical to that variable)
+- function returning two results
+ 
+==========
+Loop scope
+==========
+
+Loop provides it's own local scope, so all variables (including loop variable)
+declared in the loop will be only accessible in the loop.
+
+===========================
+Loop over existing variable
+===========================
+
+It is sometimes usefull to know the state of the loop variable after the loop 
+has exited. In such case, it is possible to loop over existing variable.
+No range is defined in this case.
+
+::::::::::::::::::::::::::
+x:1..60000
+for x until KEY = Q 	
+"You hit [x]."
+::::::::::::::::::::::::::::
+
+=====
+Where
+=====
+
+"Where" may be used after for to restrict the iterated values by condition.
+It is same, as the first command in the loop was "if <cond>".
+Usually where containg some reference to loop variable, but it is not 
+strictly required.
+
+Print random sequence in ascending order:
+
+:::::::::::::::::::::::::::::::
+for x:1..1000 where RANDOM mod 1 = 1 "[x]"
+:::::::::::::::::::::::::::::::
+
+=============
+While & Until
+=============
+ 
+It is possible to specify condition for loop using while or until keyword.
+It is also usable without for part.
+
+While will repeat commands in the block as long as the specified condition is true. 
+::::::::::::::::::::::::::
+while &lt;cond&gt;
+	&lt;block&gt;
+::::::::::::::::::::::::::
+	
+Until will repeat commands in the block as long as the specified condition is not true. 
+::::::::::::::::::::::::::
+until &lt;cond&gt;
+	&lt;block&gt;
+::::::::::::::::::::::::::
+
+While or until may be combined with for.
+
+::::::::::::::::::::::::::
+for &lt;var&gt; where &lt;filter&gt; 
+	&lt;body&gt;
+::::::::::::::::::::::::::::
+Loop body is executed only if the condition after where is true. 
+
+============
+Combinations
+============
+
+Following loop will print odd numbers until Q is pressed.
+ 
+::::::::::::::::::::::::::::::::::
+for k:1..10000 where k mod 2 = 0 until KEY = Q
+  "[k]"
+::::::::::::::::::::::::::::::::::
+
+
+**********
+Procedures
+**********
+
+Procedures can be defined using proc type. After the proc keyword follows block
+defining procedure arguments. Arguments marked using "<" are output arguments (
+results).
+
+
+:::::::::::::::::::::::
+name ":" "proc" args = code
+
+
+addw:proc i:word j:word >k:word = 
+	k = i + j
+
+add3: word proc
+	i:word
+	j:word
+	k:word
+	>result:word
+=
+	result = i + j + k
+:::::::::::::::::::::::
+
+================
+Multiple results
+================
+
+Procedure may define more than one output arguments (results).
+
+:::::::::::::::::::::::::::::::
+sumdiv:proc a,b:byte >sum:byte >div:byte =
+	sum = a + b
+	div = a - b
+
+a:byte
+b:byte
+
+a,b = sumdiv 10 3
+
+"Sum is [a], div is [b]" 
+:::::::::::::::::::::::::::::::
+
+=================
+Nested procedures
+=================
+
+It is possible to define local procedure inside other procedure.
+
+:::::::::::::::::::::::::::::::::::::::::::
+set'line'color:proc =
+ 
+	wait'line:proc =
+		WSYNC = 0
+
+	COL'BK = VCOUNT * 2 + RTCLOCK
+	wait'line
+
+:::::::::::::::::::::::::::::::::::::::::::
+
+====================================
+Procedures with identical signatures
+====================================
+
+Procedure may be declared using type of another procedure.
+
+:::::::::::::::::::::::
+subw:addw =
+	k = i - j
+:::::::::::::::::::::::
+
+===============================
+Procedures at specified address
+===============================
+
+It is possible to define routines in ROM using @ syntax.
+
+:::::::::::::::::::::::
+reset@$E034:proc
+:::::::::::::::::::::::
+

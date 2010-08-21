@@ -1,0 +1,93 @@
+*********************
+ATALAN Atari platform
+*********************
+
+::index::
+
+************
+Introduction
+************
+
+This document describes standard ATALAN library for ATARI 8-bit platform.
+Some parts of this text require good knowledge of ATARI platform.
+
+*******************
+Basic memory layout
+*******************
+
+Application starts at $2000.
+When it ends, infine loop is performed.
+If you want to exit to DOS, execute DOS command at the end of application.
+
+Variables are placed in zero page starting from address 128.
+
+********************
+Supported data types
+********************
+
+- 0..255
+- 0..65535 - not all operations supported yet
+- 0..16777215 - very limited (only assignment and increment)
+- array(0..255) of byte
+- array(0..65535) of byte
+- array(0..255,0..255) of byte - two dimensional array
+
+**********************
+Printing
+**********************
+
+Printing strings is done using standard OS routine.
+When printing into arrays, it is supposed the array is displayed
+on screen and conversion to ATARI screen codes is performed.
+
+
+************************
+Fonts
+************************
+
+
+**********
+Interrupts
+**********
+
+It is possible to write interrupt routines directly in ATALAN.
+Compiler will create appropriate code to 
+ 
+===
+VBI
+===
+
+VBI procedures are executed every frame (1/50s on PAL, 1/60 on NTSC).
+Defered VBI is used (consult ATARI ROM manual to understand what it means),
+so hardware registers must be used to change colors etc.
+
+VBI procedure must be of type VBI. It takes no arguments.
+
+To activate the interrupt, use on'vbi procedure.
+
+:::::::::::::::::::::::::::::::::::::
+cycle'color:vbi =
+	inc	COLOR0(5)
+	COLBK = COLOR0(5)		;as we are using deferred VBI, we must copy the color to hardware register
+
+on'vbi cycle'color   
+:::::::::::::::::::::::::::::::::::::
+
+===
+DLI
+===
+
+********
+Commands
+********
+
+===
+DOS
+===
+Exit to DOS
+
+=========
+wait'line
+=========
+
+Wait for the end of current scan-line. (Performs sta WSYNC).

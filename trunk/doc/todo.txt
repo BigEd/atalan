@@ -1,0 +1,372 @@
+﻿****
+TODO
+****
+
+- self referencing (cannot define type - available in esieve)
+- warning hi from small variable
+- xor, or & and self (produces 0, self, 0)
+
+x invalid array index detection
+x assign type inferencing
+x multiple return function assign type inferencing
+- repeated assign inferencing (merge type - only for flexible types)
+- var.min, var.max provides access to bounds
+
+- linear transformation operator   a = RANDOM in 10..30
+
+- for may parse expression at the beginning (variable name may be deduced)
+
+- fix UNTIL x and y
+- support default values for function arguments
+- support  10 < x < 20
+
+- support macro parameters in type parsing (%A, %B before array indices) and result type
+  (only when parsing rule)
+  
+- loops with variable should test the bounds first
+
+- for i until p(i) = 5
+
+- in display_list, we do not use DLI, because it's a type (and we cannot evaluate type)
+
+- mul, div (byte, card)
+- all card comparisons
+
+- support for bool (or 0..1 types)
+- test assignment to non-existing variable
+- Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
+- define assembler in platform file using ASSEMBLER constant
+
+- platform:atari		- must be first assignment in file
+		platform atari, c64, mc6502
+		first think in the file (possibly after comments)
+		platforms may nest (i.e. platform file may specify another platform)
+		atari->mc6502
+		-p may specify platform on command line
+		default platform is ATARI :-)
+
+=========    
+In TETRIS
+=========
+
+- when tile drops with speed (force) make screen vibrate vertically
+
+if x,y = 3,4 then
+
+::::::::::::::::::::
+	tile = 7
+	while tile = 7
+		tile = random and 7
+::::::::::::::::::::::
+
+x context of enum type for array (STRIG(0), STRIG(1))
+- shift characters in font
+
+::::::::::::::::::::::::::
+draw'tile:proc
+	tile:tile
+	x:x
+	y:y
+=
+	code of the procedure
+::::::::::::::::::::::::::::::
+
+- conditional expression
+
+x = if a then 3 else 4
+
+- loop expression
+
+x = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
+ 
+- optimize ldx #5 ldx #6  to ldx #5, inx
+- use of constant expressions in integer definitions 
+
+- s(15..20, 7) = 5
+   =>  for ?:15..20 ( s(?,7) = 5 )
+   
+- MODE_LABEL
+- rules are hashed by instruction op 
+- custom defined instructions should be built-in
+    
+- AND with const limits the type of resulting value (x & 0xff is 0..255, etc.)
+
+- a() = 0, a = 0
+- string initialized arrays
+- a(..50)
+- a(50..)
+- array slices a(23..50) = 0
+- dif slices a(23..+20) = 0
+- a = 1,2,3  (repeat the vvalue or fill with zeroes, or keep rest untouched?)
+
+- maybe we may have insert implemented?
+   a(10..+1) = "ahoj"  -> insert 4 bytes instead of one
+x   a(10) = "ahoj" 
+
+- array assignment a(23) = sprite
+- constant arrays (initialization)
+- sqrt,sin,cos,... -> translation operators
+ 
+
+x const %A:byte
+- detect possibily to invert for loop
+  Input or output registers musn't be accessed.
+  (RANDOM is exception - it is input which does not require an order)
+  
+- detect possibility to increment loop variable so, that it ends with 0
+  This means offseting arrays based on this variable.
+  There cannot be aby other computation with the variable.
+
+  
+- shallow binding
+		 
+- check undefined labels (also we should specify type label when assigning it)
+
+- prints on same line are not entered?
+x "Hello"...	  does not make new-line
+
+	
+- platforms to www menu
+- scope solving
+- sophisticated error reporting
+- type should be Var too 
+
+==========
+Generating
+==========
+
+- flags are represented as special registers with 0..1
+- instruction may define implied results to flags
+	let _a,0
+	flag _z,0
+	flag _n,0
+
+    ifeq lbl, _z, 0
+    ifeq lbl, _z, 1
+
+	;labels in macros are indexed using macro invocation sequence number
+
+	add %0:card, %0, 1   =
+			add %0, %0, 1
+			flag _z
+			ifeq l1, _z, 0		; skip 1 instruction
+			add %0(1), %0(1), 1
+			label l1
+
+
+
+;We need inc & dec to implement carry
+
+	ADD _t, _c, %1 ADD _a, _a, _t  = adc %1 
+	
+	inc _a, _c, %1
+	dec _a, _c, %1
+	  
+======
+Arrays
+======
+
+- multiple dimension type should be array() of array() of byte
+  , is just shorthand
+
+- compute size
+- two byte index
+- multiple dimensions (up to 3)
+- index tables (multidimensional array with 1st index byte - basically fastened multiplication)
+- sliced arrays (structures, integers)
+
+
+idx 	computed index (possibly by multiplication)
+
+var1)
+	letarr :byte, @, :card  
+
+	clc
+	lda #<arr
+	add idx
+	sta ptr
+	lda #>arr
+	add idx+1
+	sta ptr+1
+	ldy #0
+	lda (ptr),y
+	
+var2) self-modifying code
+	clc
+	lda #<arr
+	add idx
+	sta ptr+1
+	lda #>arr
+	add idx+1
+	sta ptr+2
+ptr	lda $ffff
+
+==============
+Optimalization
+==============
+- function inlining (function used only once automatically)
+- Multiple prints should be joined together
+
+=============
+6502 backend
+=============
+x all conditional if's
+x 16bit arithmetics
+- constant array offset may be implemented as lda array+offset (even for big arrays!!)
+- large arrays
+
+=============
+Documentation
+=============
+
+- Generate examples page
+- Colorize
+- Generate Index for reference
+
+======================
+Source code generation
+======================
+
+- lexer searches var table (so it can return TOKEN_VAR immediatelly)
+- proc can be defined using instructions (only two arg, one result)
+- range type (min..max), variable defines type
+
+==============
+Counted arrays
+==============
+
+Array can remeber number of elements it contains.
+It is then possible to add items, get count and access top item. 
+
+===================
+Fixed point support
+===================
+
+Specify multiplier. Powers of 2 are very usefull due to it's efficiency, but any multiplier may be used.
+
+seconds:0..65535*50
+
+seconds = 3.5		;seconds = 175
+
+Seconds are specified in ticks.
+
+For time, it may be ticks.
+
+Time is specified in seconds. It is then known, that is should be multiplied by 50, or 60 (depending
+on whether the counter is PAL or NTSC).
+
+Fraction support.
+
+===================
+table based parsing
+===================
+
+- macros defining operators
+
+
+
+=====
+IDEAS
+=====
+
+- instructions may be macros, arguments define number o arguments (and type - label)
+
+============
+6502 backend
+============
+
+- multiply, divide
+x enums
+- variable is referenced together with it's offset (offset is in bytes, or bits - as specified in struct)
+
+- parse condition (for if, while, ...)
+   - <x> | [not] <x> [= <> > < >= <=] <y> [and] [or]  
+   - ( )
+      
+- rule may be special procedure with argument list and token list
+
+  jmpeq dst, src, src
+
+- relational operators (= <> > < >= <=)
+x logical operators (not, and or)
+
+- bit operations
+
+- procedures declaration
+	- local variables
+- procedures call (no arg)
+- procedures args
+x nested procedures
+- structures
+- arrays
+	- short byte array
+	
+- optimizer
+	- mutiply and divide using shift (*2, *4, *8, *16)
+	- multi-rule matches
+	- match variables (%2, %3, %4, ...)
+	
+- inline functions
+
+- freevar token
+- newvar  token
+
+- print "output string like this using variables [a] [b] [c]"
+  - string is stored after the print routine
+  - it gets preprocessed so, that variable names are replaced by their types and
+    addresses (byte, int, sbyte, sint, text, char, )
+  - routine to call to output chars may be defined (called with buffer and size)     
+
+==========
+Constructs
+==========
+
+while x = 3
+	<case1>
+else while x = 4
+	<case2>
+
+
+while x = 3 or x = 4
+	if x = 3
+		<case1>
+	else
+		<case2>
+
+******************
+Unit Test
+******************
+
+- lo, hi
+- array access & arithmetic etc.
+		
+******************
+OPTIMIZE
+******************
+
+- multiply byte by 10 (use temporary _arr ?)
+- optimize jumps
+- optimize x + 0, y * 1,... (do it in eval const?)
+- multiply byte by 3
+- do not generate unnecessary labels (missile_size)
+
+- when calling procedure, we may want to mark variables as used or not used based on
+  current values (constants)
+  
+
+- optimize PROC parameter (and local variable?) usage
+
+x Should replace let _a, _2000(0) with lo _a, set_col
+
+    lo _a, cycle
+    let VVBLKD(0), _a
+    hi _a, cycle
+    let VVBLKD(1), _a
+    lo _a, set_col
+    let _2000(0), _a
+    hi _a, set_col
+    let _2000(1), _a
+    let _a, _2000(0)
+    let VDSLST(0), _a
+    let _a, _2000(1)
+    let VDSLST(1), _a
