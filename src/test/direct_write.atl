@@ -1,0 +1,33 @@
+﻿; ATALAN Tetris
+; Tetris implemented in ATALAN Programming language
+; (c) 2010 Rudla Kudla
+
+;Screen and DISPLAY LIST
+
+;This if GR.0 screen 40 characters width and 24 characters height
+
+s:array(0..39,0..23) of byte
+
+;Display list is defined as constant array.
+;We do not specify size of the array, so it is computed automatically.
+;At the top are three empty lines 8 pixels height.
+;First line specifies the pointer to start of the data (see the reference to s).
+ 
+const dl:array = 3 times $70, $42, s, 23 times $02, $41, dl
+
+;We use custom font, so we declare variable to hole the font and initialize it
+;(at compilation time) with file.
+
+;const tetris'font:font = file "tetris.fnt"
+
+;Initialize graphics.
+;We set display list, colors and font.
+
+sdlstl = dl
+COLOR0(2) = 0
+COLOR0(5) = 0
+;set'font tetris'font
+
+s(0,0) = "*** ATARI Using direct write"
+
+ 

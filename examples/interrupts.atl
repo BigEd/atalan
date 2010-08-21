@@ -1,0 +1,39 @@
+﻿; Interrupts in ATALAN
+; Example on using Display List interrupts in Atalan.
+; (c) 2010 Rudla Kudla
+
+
+s:array(0..39,0..23) of byte
+
+;3rd line of display list has DLI flag set.
+const dl:array of dl_command = 3 times $70, $42, s, 2 times $02, $02+$80, 20 times $02, $41, dl
+
+;Here we define the DLI procedure.
+;It is special procedure of type dli. 
+
+set_col:dli =
+	wait'line
+	COLPF(2) = white	
+
+;Here we define the VBI procedure.
+;It is special procedure of type vbi.
+;It cycles the border color.
+ 
+cycle:vbi =
+	inc	COLOR0(5)
+	COLBK = COLOR0(5)		;as we are using deferred VBI, we must copy the color to hardware register
+
+;Initialize graphics.
+
+sdlstl = dl
+COLOR0(2) = red+8
+COLOR0(5) = black
+
+;Write some text on screen
+
+s(1,1) = "Demonstration of Interrupts in ATALAN"
+
+;Set the inerrupts.
+
+on'vbi cycle
+on'dli set_col

@@ -1,0 +1,23 @@
+*********************
+Atalan Compiler Usage
+*********************
+
+atalan.exe is command line utility. Specify name of source code to compile as 
+an argument (source come nust have .atl extension, it is not necessary to specify it in argument). 
+The compiler will generate file *.asm. If mads.exe is in the 
+same directory as the compiler, *.asm is automatically compiled and
+*.xex is produced.
+
+You may specify following switches (each after minus):
+
+- -v Verbose (will write lot of internal information on screen)
+- -a Do not call assembler after compilation
+
+
+For example to compile example stars.atl, type
+
+::::::::::::::::::
+atalan stars
+::::::::::::::::::
+
+atalan.asm and atalan.xex will be generated.

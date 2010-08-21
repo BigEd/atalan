@@ -1,0 +1,26 @@
+﻿***************
+Atalan tutorial
+***************
+
+The first application, we are always obliged to write in a new language is "Hello World!".
+So here it is:
+
+:::::::::::::::::::::::
+"Hello, World!"
+""
+"I'm Atalan."
+:::::::::::::::::::::::
+
+That was easy :-) Atalan prints any text in double quotes (string) to display on
+separate line. 
+
+If you write variable name enclosed in square brackets inside string, it's
+contents will be printed.
+
+:::::::::::::::::::::::::::::::::::
+a,b:0..255
+a = 10
+b = 20
+c = a + b
+"Sum of [a] and [b] is [c]."
+:::::::::::::::::::::::::::::::::::

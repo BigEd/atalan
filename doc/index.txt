@@ -1,0 +1,35 @@
+******
+Atalan
+******
+
+Atalan is new high level programming language for MOS Technology 6502 microprocessors.
+It is meant to be used for development on 8bit computers like Atari 800,
+C64 etc.
+
+Atalan is work in progress, it can however already generate working code.
+
+Atalan is cross-platform development system. Compiler runs on desktop machine
+(currently Windows, but it is developed just using ANSI C, so porting should be
+straightforward).
+
+It generates source code for 6502 assembler (MADS). It does not however use 
+any special features, so other assemblers could be used too.
+
+=================
+Language Features
+=================
+
+- structured programming (if then else, while, until)
+- powerful loop (for k where sieve(k) = 1 until KEY = Q)
+- procedures
+- nested procedures
+- functions with multiple return values
+- macros
+- numeric types defined using range (min..max)
+- variables may be stored in user defined place
+- blocks defined by parentheses, indent or one line
+- enumerators
+- local scope rules for constants
+- type specific constants  (type hour:0..23 (noon = 12 midnight = 0))
+- multidimensional arrays
+- support for interrupts

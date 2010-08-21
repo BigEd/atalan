@@ -1,0 +1,67 @@
+****
+News
+****
+
+===========
+16-Aug-2010
+===========
+
+- first version of type inferencing
+- improved error reporting (displays text of line with error)
+- comments with lines generated into .asm output
+- static array bounds checking
+- compiler can detect and report as error types not implemented by backend 
+- unused labels are no longer generated into .asm source code
+- improved block parsing 
+- updated to Visual Studio 10
+- fix: logical operators
+- fix: exit label after loop was not skipped by optimizer when spilling at the end of loop
+
+===========
+07-Aug-2010
+===========
+
+- for loops now support variable ranges (for i:s-10..s+10 etc.)
+- support for enums in array constants (also introduced type matching)
+- support for byte multiplication and division
+- new modulus operator MOD
+- fixed problem with UNIX style line separators
+- miscelaneous other fixes
+- doc: reference now has index 
+- doc: new loop example demonstrates differend kinds of loops
+
+===========
+05-Aug-2010
+===========
+
+- support for interrupts (DLI and VBI)
+- assigning addresses to variables
+- string may be assigned to array element (printing into string)
+
+===========
+02-Aug-2010
+===========
+
+- procedures can return values and be called from expressions
+- multiple return values from procedures
+- local scope in FOR, PROC
+- fixed identifier scope for arrays 
+- improved TETRIS example
+
+===========
+20-Jul-2010
+===========
+
+- 2-dimensional arrays
+- array initialization
+- n TIMES i initializator
+- TETRIS example
+- procedure arguments
+
+===========
+28-Apr-2010
+===========
+
+- FOR i WHERE cond loops
+- fixed procedure calls
+- GOTO variable
