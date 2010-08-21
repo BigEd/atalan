@@ -83,41 +83,6 @@ Purpose:
 	}
 }
 
-void TypeAddConst(Type * type, Var * var)
-{
-
-	if (type->variant == TYPE_INT) {
-		// Register type of this constant as specified type
-		var->type  = type;
-		var->scope = var->type->owner;
-
-		if (!var->value_nonempty) {
-			if (type->range.flexible) {
-				type->range.max++;
-				var->n = type->range.max;
-				var->value_nonempty = true;
-			} else {
-				SyntaxError("it is necessary to define constant value explicitly for this type");
-			}
-		} else {
-			if (var->n < type->range.min) {
-				if (type->range.flexible) {
-					type->range.min = var->n;
-				} else {
-					SyntaxError("constant out of available range");
-				}
-			}
-			if (var->n > type->range.max) {
-				if (type->range.flexible) {
-					type->range.max = var->n;
-				} else {
-					SyntaxError("constant out of available range");
-				}
-			}
-		}
-	}
-}
-
 Type * ParseIntType()
 {
 	Type * type = NULL;
@@ -2005,7 +1970,7 @@ Purpose:
 
 									if (var->type == NULL) {
 
-										// Variable is initialzied by constant, set the type to n..n
+										// Variable is initialized by constant, set the type to n..n
 										if (item->mode == MODE_CONST) {
 											if (item->type->variant == TYPE_INT) {
 												var->type = TypeAllocInt(item->n, item->n);
@@ -2024,8 +1989,13 @@ Purpose:
 										}
 										var->type->flexible = true;
 									} else {
-										if (!VarMatchType(item, var->type)) {
-											LogicError("value does not fit into variable", bookmark);
+										// Variables with flexible type will have their type expanded.
+										if (var->type->flexible) {
+											TypeLet(var->type, item);
+										} else {
+											if (!VarMatchType(item, var->type)) {
+												LogicError("value does not fit into variable", bookmark);
+											}
 										}
 									}
 

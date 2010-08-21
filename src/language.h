@@ -366,6 +366,8 @@ void TypeLet(Type * type, Var * var);
 typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 void TypeTransform(Type * type, Var * var, InstrOp op);
 
+void TypeAddConst(Type * type, Var * var);
+
 
 void VarInit();
 void VarInitRegisters();
