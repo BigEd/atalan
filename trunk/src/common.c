@@ -11,6 +11,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 
 #include "common.h"
+#pragma warning (disable: 4996)
 
 void * MemAllocEmpty(long size)
 {
@@ -21,7 +22,7 @@ void * MemAllocEmpty(long size)
 
 char * StrAlloc(char * str)
 {
-	if (str != NULL) str = _strdup(str);
+	if (str != NULL) str = strdup(str);
 	return str;
 }
 
@@ -29,6 +30,6 @@ Bool   StrEqual(char * str1, char * str2)
 {
 	if (str1 == str2) return true;
 	if (str1 == NULL || str2 == NULL) return false;
-	return _stricmp(str1, str2) == 0;
+	return stricmp(str1, str2) == 0;
 }
 

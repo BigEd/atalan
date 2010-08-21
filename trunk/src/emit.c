@@ -42,7 +42,7 @@ void EmitStr(char * str)
 void EmitInt(long n)
 {
 	char buf[32];
-	_ltoa(n, buf, 10);
+	int result = sprintf( buf, "%d", n );
 	EmitStr(buf);
 }
 
@@ -68,6 +68,7 @@ void EmitVar(Var * var)
 			switch(var->type->variant) {
 			case TYPE_INT: EmitInt(var->n);	break;
 			case TYPE_STRING: EmitStr(var->str); break;
+			default: break;
 			}
 		}
 	}

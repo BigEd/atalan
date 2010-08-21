@@ -317,6 +317,7 @@ Result:
 			case INSTR_XOR:
 				r = VarNewInt(arg1->n ^ arg2->n);
 				break;
+			default: break;
 		}
 	}
 	return r;
@@ -358,7 +359,7 @@ void RuleRegister(Rule * rule)
 }
 
 
-Bool ArgMatch(RuleArg * pattern, Var * arg);
+static Bool ArgMatch(RuleArg * pattern, Var * arg);
 
 Bool TypeIsSubsetOf(Type * type, Type * master)
 /*
@@ -468,6 +469,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 			case TYPE_STRING:
 				if (!StrEqual(pvar->str, arg->str)) return false;
 				break;
+			default: break;
 			}
 		} else {
 			// TODO: Test, that arg const matches the specified type
@@ -497,6 +499,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 	case RULE_ANY:
 		break;
+
+	default: break;
 	}
 
 	// If there is macro argument number %A-%Z specified in rule argument, we set or check it here
