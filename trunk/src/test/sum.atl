@@ -1,5 +1,0 @@
-﻿a,b:0..255
-a = 10
-b = 20
-c = a + b
-"Sum of [a] and [b] is [c]."
