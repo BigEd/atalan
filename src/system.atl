@@ -87,11 +87,11 @@ type regset:enum
 ;Interrupts
 ;==========
 
-type interrupt:proc
-
 ;All procedures based on type Interrupt are considered to be implementation
 ;of some interrupt.
 ;As such, they will not share local variables with other, normal procedures.
+
+type interrupt:proc
 
 ;=================
 ;Predefined macros

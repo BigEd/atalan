@@ -58,7 +58,7 @@ Purpose:
 {
 	VarSubmode submode = SUBMODE_EMPTY;
 
- 	EnterBlockWithStop(TOKEN_EQUAL, TOKEN_VOID);			// TOKEN_EQUAL
+ 	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
 
 	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 
@@ -169,7 +169,7 @@ const_list:
 		// First thing in the block must be an identifier, so we try to open the block with this in mind.
 
 //		if (TOK != TOKEN_COMMA && TOK != TOKEN_EQUAL && TOK != TOKEN_BLOCK_END) {
-			EnterBlockWithStop(TOKEN_VOID, TOKEN_ID);
+			EnterBlockWithStop(TOKEN_VOID);
 		
 			id_required = false;
 
@@ -186,6 +186,8 @@ const_list:
 						if (TOK == TOKEN_INT) {
 							last_n = LEX.n;
 							NextToken();
+						} else {
+							SyntaxError("expected integer value");
 						}
 					} else {
 						last_n++;
@@ -228,7 +230,7 @@ const_list:
 		i = 0;
 
 		if (TOK == TOKEN_OPEN_P) {
-			EnterBlockWithStop(TOKEN_EQUAL, TOKEN_VOID);
+			EnterBlockWithStop(TOKEN_EQUAL);
 			while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 				elmt = ParseIntType();
 				if (elmt != NULL) {
@@ -1147,6 +1149,10 @@ void ParseGoto()
 }
 
 void ParseIf()
+/*
+Syntax:
+	If: "if" <commands> ["then"] <commands>  ["else" "if" <cond>]* ["else" <commands>]
+*/
 {	
 	BeginBlock(TOKEN_IF);		// begin if block
 retry:
@@ -1164,7 +1170,7 @@ retry:
 	// There may be optional THEN after IF
 	NextIs(TOKEN_THEN);
 
-		EnterBlockWithStop(TOKEN_ELSE, TOKEN_VOID);
+		EnterBlockWithStop(TOKEN_ELSE);
 		ParseCommands();
 		NextIs(TOKEN_BLOCK_END);	// Block must end with TOKEN_END_BLOCK
 		if (NextIs(TOKEN_ELSE)) {
@@ -1197,15 +1203,6 @@ retry:
 		}
 //	}
 	EndBlock();
-}
-
-void TypeLimits(Type * type, Var ** p_min, Var ** p_max)
-{
-	Var * min, * max;
-	min = VarNewInt(type->range.min);
-	max = VarNewInt(type->range.max);
-	*p_min = min;
-	*p_max = max;
 }
 
 void ParseRange(Var ** p_min, Var ** p_max)
@@ -1298,13 +1295,8 @@ Purpose:
 
 void ParseFor()
 /*
-for i	-- existing variable
-for i:1..10 -- new variable, the variable is not accessible outside the loop
-	body
-"for" var_name:type
-"for" var "seconds"
-
-"for" <var> ["until" cond | "while" cond]["where" cond]
+Syntax:
+	for: "for" <var> [":" <range>] ["where" cond] ["until" cond | "while" cond]
 
 */
 {
@@ -1328,7 +1320,7 @@ for i:1..10 -- new variable, the variable is not accessible outside the loop
 			strcpy(name, LEX.name);
 			NextToken();
 
-			// for i:min..max
+			// for i ":" <range>
 			if (NextIs(TOKEN_COLON)) {
 				ParseRange(&min, &max);
 				if (TOK) {
@@ -1339,7 +1331,7 @@ for i:1..10 -- new variable, the variable is not accessible outside the loop
 						var->type = type;
 					}
 				}
-			// for i
+			// for i (range is not specified, this is reference to global variable or type)
 			} else {
 				var = VarFind2(name, 0);
 				if (var != NULL) {
@@ -1473,7 +1465,7 @@ done:
 	VarFree(max);
 	ExitScope();
 }
-
+/*
 void ParseLoop()
 {
 
@@ -1528,7 +1520,7 @@ void ParseLoop()
 		EndBlock();
 	}
 }
-
+*/
 /*
 void ParseExpression(Var * result)
 {
@@ -2345,7 +2337,11 @@ void ParseMacro(Var * macro)
 	arg = FirstArg(macro, SUBMODE_ARG_IN);
 	EnterBlock();
 	i = 0;
-	while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END) && arg != NULL) {
+	while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+		if (arg == NULL) {
+			ExitBlock();
+			break;
+		}
 		ParseExpression(arg);
 		//TODO: Use all the results from expression parsing
 		args[i] = STACK[0];
@@ -2354,7 +2350,7 @@ void ParseMacro(Var * macro)
 		i++;
 	}
 	if (arg != NULL) {
-		SyntaxError("Missing argument in procedure call");
+		SyntaxError("Missing argument in macro call");
 	}
 	GenMacro(macro->instr, macro, args);
 }
@@ -2451,9 +2447,9 @@ Bool Parse(char * name)
 		ParseCommands();
 		if (TOK != TOKEN_ERROR) {
 			if (TOK == TOKEN_BLOCK_END) {
-				if (BLK_TOP > 1) {
-					SyntaxError("Unended blocks at the end of file");
-				}
+//				if (BLK_TOP > 1) {
+//					SyntaxError("Unended blocks at the end of file");
+//				}
 			} else {
 				SyntaxError("Unexpected end of file");
 			}
@@ -2461,7 +2457,7 @@ Bool Parse(char * name)
 		SrcClose();
 	}
 
-	if (LOGIC_ERROR_CNT > 0) {
+	if (LOGIC_ERROR_CNT > 0 && ERROR_CNT == 0) {
 		Warning("There were logical errors.\nCompilation will proceed, but the resulting program may be errorneous.");
 	}
 
@@ -2472,12 +2468,7 @@ void ParseInit()
 {
 	MemEmptyVar(G_BLOCKS);
 	G_BLOCK = &G_BLOCKS[0];
-//	G_BLOCK->start_token = TOKEN_EOF;
 	G_BLOCK->command = TOKEN_PROC;
 	G_CONDITION_EXP = 0;
 	SYSTEM_PARSE = true;
-
-//	EnterLocalScope();
-//	RULE_SCOPE = SCOPE;
-//	ExitScope();
 }

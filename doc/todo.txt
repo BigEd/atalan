@@ -2,6 +2,9 @@
 TODO
 ****
 
+- support constant expressions in enumerator definitions
+- dead code elimination in parsing (conditional compilation)
+
 - Records
   - type definition (just variable of TYPE_STRUCT with local variables - address of variable is offset of the variable regarding the structure base)
   - use MODE_ELEMENT as access to record field
@@ -20,7 +23,7 @@ x var.min, var.max provides access to bounds
 
 - linear transformation operator   a = RANDOM in 10..30
 
-- for may parse expression at the beginning (variable name may be deduced)
+x for may parse expression at the beginning (variable name may be deduced)
 
 - fix UNTIL x and y  (we must replace AND and OR in negated expressions)
 - support default values for function arguments

@@ -1,46 +1,67 @@
 /*********************************************************
 
-Lexer
+ Lexer
 
-(c) 2010 Rudolf Kudla 
-Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+ (c) 2010 Rudolf Kudla 
+ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
 *********************************************************/
+
+// C characters & lines
+// B blocks
+// T tokens
+// F files
 
 #include "language.h"
 #include <ctype.h>
 
-typedef struct {
-	Token  end_token;		// TOKEN_OUTDENT, TOKEN_CLOSE_P, TOKEN_EOL, TOKEN_BLOCK_END
-	Token  stop_token;
-	UInt16 indent;
-} BlockStyle;
+typedef UInt16 LineIndent;
 
 #define UNDEFINED_INDENT 65535
 
-GLOBAL char   LINE[MAX_LINE_LEN];		// current buffer
+/*
+
+Lexer traces block nesting using stack of BlockStyle structures.
+Parser calls function EnterBlock.
+At that moment, type of block is detected based on current token.
+Block type is stored on the block stack.
+
+*/
+
+typedef struct {
+
+	Token      end_token;   // Token, which will end the block. 
+	                        // TOKEN_OUTDENT, TOKEN_CLOSE_P, TOKEN_EOL, TOKEN_BLOCK_END, TOKEN_EOF
+	Token      stop_token;  // Stop token may alternativelly end the block.
+	                        // It is specified by caller (if not TOKEN_VOID). 
+	                        // For example TOKEN_THEN, TOKEN_ELSE etc. Stop token will be returned by parser after block end.
+	LineIndent indent;		// Indent of the block. For TOKEN_OUTDENT, any indent smaller than this will end the block.
+
+} BlockStyle;
+
+GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
 GLOBAL LineNo  LINE_NO;
 GLOBAL UInt16  LINE_LEN;
 GLOBAL UInt16  LINE_POS;						// index of next character in line
 GLOBAL UInt16  TOKEN_POS;
+static LineIndent     LINE_INDENT;
 
-int     PREV_CHAR;
+static int     PREV_CHAR;
 
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
-GLOBAL Token NEXT_TOK;					// if not TOKEN_VOID, return this token on next call
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
-static UInt16 BLOCK_END_CNT;
 
-static char * keywords[] = {
-	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
-	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
-	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor"
-};
+/*******************************************************************
 
-int ReadByte()
+  Characters & lines
+
+********************************************************************/
+//$C
+
+static int ReadByte()
 {
 	return fgetc(LEX.f);
 }
@@ -54,8 +75,14 @@ Result:
 */
 {
 	int b, b2;
+	LineIndent indent;
+	UInt16 tabs, spaces;
+	Bool mixed_spaces;
+	UInt16 top;
+	Token t;
 
 	// Remeber current line as previous
+	// Previous line may be used for error reporting and generating lines into emitted code
 
 	if (PREV_LINE != NULL) {
 		free(PREV_LINE);
@@ -65,6 +92,7 @@ Result:
 		PREV_LINE = StrAlloc(LINE);
 	}
 
+next_line:
 	LINE_LEN = 0;
 	b = EOF;
 
@@ -74,7 +102,7 @@ Result:
 		goto have_char;
 	}
 
-	while (b != EOL && (b = ReadByte()) != EOF) {
+	while ((b = ReadByte()) != EOF) {
 have_char:
 		// EOL found
 		if (b == 10 || b == 13) {
@@ -82,28 +110,86 @@ have_char:
 			if (b2 != (b ^ (13 ^ 10))) {
 				PREV_CHAR = b2;
 			}
-			b = EOL;
+			break;
 		}
 		LINE[LINE_LEN++] = b;
 		if (LINE_LEN == MAX_LINE_LEN) break;
 	}
-	LINE[LINE_LEN] = 0;
-	LINE_POS = 0;
-	LINE_NO++;
-	return LINE_LEN > 0;
-}
 
-static int GetChar()
-{
-	if (LINE_POS == LINE_LEN) {
-		if (!ReadLine()) return EOF;
+	// Terminate the line with EOL
+	// Do not do this if we didn't read any characters
+
+	if (b != EOF || LINE_LEN > 0) {
+		LINE[LINE_LEN++] = EOL;
 	}
-	return LINE[LINE_POS++];
-}
+	LINE[LINE_LEN] = 0;
+	LINE_NO++;
 
-static void UnGetChar(int c)
-{
-	LINE_POS--;
+	// Compute indent of the line.
+	// Indent is defined by spaces and tabs at the beginning of the line.
+	// Spaces and tabs can not be mixed, there must be first tabs, then spaces.
+	// If there is exactly one space before a TAB character, it is ignored.
+	// Two and more spaces are reported as errors.
+
+	mixed_spaces = false; tabs = 0; spaces = 0;
+
+	for(LINE_POS = 0; LINE_POS < LINE_LEN; LINE_POS++) {
+		b = LINE[LINE_POS];
+		if (b == SPC) {
+			spaces++;
+		} else if (b == TAB) {
+			// One space before TAB will be ignored. We suppose, that TAB size is at least 2,
+			// so one space should not cause any misalignment.
+			if (spaces > 1) mixed_spaces = true;
+			spaces = 0;
+			tabs++;
+		} else {
+			break;
+		}
+	}
+
+	// If this is empty line, read next line.
+	// Character following whitespaces on empty line is either EOL, or semicolon (for coment lines).
+
+	if (b == EOL || b == ';') goto next_line;
+
+	indent = tabs * 256 + spaces;
+
+	LINE_INDENT = indent;
+
+	if (mixed_spaces) {
+		SyntaxError("spaces before tab");
+	}
+
+	// No character has been read, this is end of file
+	// We have to end all blocks until TOKEN_EOF block
+	// If there are some other blocks than TOKEN_OUTDENT or TOKEN_EOL, it is an error (missing closing parenthesis)
+	if (LINE_LEN == 0) {
+		for(top = BLK_TOP; top > 0; top--) {
+			t = BLK[top].end_token;
+			BLK[top].end_token = TOKEN_BLOCK_END;
+			if (t == TOKEN_EOF) break;
+			if (t != TOKEN_EOL && t != TOKEN_OUTDENT) {
+				SyntaxError("missing closing parenthesis");
+			}
+		}
+		return false;
+	}
+
+	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) {
+		BLK[BLK_TOP].indent = indent;
+		// If the indent is smaller or equal than previous indented block, 
+		// this is empty indented block, and must be ended immediatelly.
+		// We make sure following loop will end this block by making it's indent bigger than current indent.
+		if (indent <= BLK[BLK_TOP-1].indent) BLK[BLK_TOP].indent++; //BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+	}
+
+	// End all indent blocks with indent smaller than actual
+	for(top = BLK_TOP; top > 0 && (BLK[top].end_token == TOKEN_BLOCK_END || BLK[top].end_token == TOKEN_OUTDENT) && BLK[top].indent > indent; top--) {
+		BLK[top].end_token = TOKEN_BLOCK_END;
+	}
+
+	return true;
 }
 
 Bool Spaces()
@@ -114,115 +200,48 @@ Purpose:
 */
 {
 	int c;
-	c = GetChar();
-	UnGetChar(c);
+	c = LINE[LINE_POS];
 	return c == SPC || c == TAB || c == EOL || c == EOF;
 }
 
-UInt16 SkipSpaces()
-/*
-	Skip spaces and compute indent.
-*/
+/***********************************************
+
+ Blocks
+
+************************************************/
+//$B
+
+void EnterBlockWithStop(Token stop_token)
 {
-	Int16 c;
-	UInt16 tabs, spaces, indent;
-
-retry:
-	c = GetChar();
-	tabs = 0; spaces = 0;
-	do {
-		switch(c) {
-		case ' ': spaces++; break;
-		case '\t':
-			if (TOK == TOKEN_EOL && spaces>1) {
-				SyntaxError("spaces before tab");
-				return 0;
-			}
-			spaces = 0;
-			tabs++;
-			break;
-		// Ignore completely empty lines, if there was nothing on the line
-		// Otherwise reset indent (empty line can not modify indent)
-		case EOL:
-			if (TOK != TOKEN_EOL) goto done;
-			goto retry;
-		// Comment
-		case ';':
-			do {
-				c = GetChar();		
-			} while(c != EOL && c != EOF);
-
-			// If previous token was EOL, this is line completely with comment, so swallow it including the EOL
-			// Otherwise we return EOL token, because it belongs to some items already at line
-			if (TOK == TOKEN_EOL) goto retry;
-		default:
-			goto done;
-		}
-		c = GetChar();
-	} while(true);
-
-done:
-	// If there are no more tokens, return EOF
-	// TODO: Return TOKEN_OUTDENT, if there is block open with indent
-
-	UnGetChar(c);
-
-	indent = tabs * 256 + spaces;
-	return indent;
-}
-
-void EnterBlockWithStop(Token stop_token, Token first_token)
-{
-	Token end_token = TOKEN_EOL;
-	Token prev_end_token;
+	Token end  = TOKEN_EOL;
+	Token stop = TOKEN_VOID;
 
 	Bool next_token = true;
 
+	// 1. Block may be enclosed in ( )
 	if (TOK == TOKEN_OPEN_P) {
-		end_token = TOKEN_CLOSE_P;
-		stop_token = TOKEN_VOID;
+		end = TOKEN_CLOSE_P;
+
+	// 2. Indented block will start at the end of line
 	} else if (TOK == TOKEN_EOL) {
-		end_token = TOKEN_OUTDENT;
+		end = TOKEN_OUTDENT;
+
+	// 3. We may be at the end of some block, in such case new block is empty (ends immediatelly)
 	} else if (TOK == TOKEN_BLOCK_END) {
-		// We currently have an end of block
-		// This may be in situation, where we have line block followed by indent block.
-		// In such situation, the line end block should be postponed after the end of
-		// indent block.
-		
-		//  const { enum
-		//     { id = 1
-		//  }}
-
-		prev_end_token = BLK[BLK_TOP + 1].end_token;
-		if (prev_end_token == TOKEN_EOL) {
-			if (NEXT_TOK == TOKEN_VOID) {
-				BLK_TOP++;			// return state before the block has been ended
-				BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;	// mark block as once closed
-				TOK = TOKEN_EOL;
-				end_token = TOKEN_OUTDENT;
-			} else {
-				BLOCK_END_CNT++;
-				return;
-			}
-		} else if (prev_end_token == TOKEN_CLOSE_P) {
-
-			// We are at the ending of parenthesised block, if there would be new block
-			// now, it would have to be BEFORE the parenthesized block has ended.
-			// Therefore we just return TOKEN_BLOCK_END.
-
-			BLOCK_END_CNT++;
-			return;
-		} else {
-			SyntaxError("Unexpected token BLOCK_END in EnterBlock");
-		}
-//		BLOCK_END_CNT++;
-//		return;
-	} else {
+		end = TOKEN_BLOCK_END;
 		next_token = false;
+
+	// 4. For other tokens, this is line block
+	//    Line block may be alternativelly ended by stop_token.
+	} else {
+		end  = TOKEN_EOL;
+		stop = stop_token;
+		next_token = false;
+
 		// Block may be immediatelly terminated by stop token (may be empty)
 		// In such case, do not even create the block
 		if (TOK == stop_token) {
-			NEXT_TOK = TOK;
+			LINE_POS = TOKEN_POS;		// make sure the token is parsed again
 			TOK = TOKEN_BLOCK_END;
 			return;
 		}
@@ -230,9 +249,9 @@ void EnterBlockWithStop(Token stop_token, Token first_token)
 
 	BLK_TOP++;
 	BLK[BLK_TOP].indent = BLK[BLK_TOP-1].indent;
-	if (end_token == TOKEN_OUTDENT) BLK[BLK_TOP].indent = UNDEFINED_INDENT;
-	BLK[BLK_TOP].end_token  = end_token;
-	BLK[BLK_TOP].stop_token  = stop_token;
+	if (end == TOKEN_OUTDENT) BLK[BLK_TOP].indent = UNDEFINED_INDENT;
+	BLK[BLK_TOP].end_token   = end;
+	BLK[BLK_TOP].stop_token  = stop;
 
 	// NextToken MUST be called AFTER new block  has been created 
 	// (so it may possibly immediatelly exit that block, if it is empty)
@@ -242,7 +261,7 @@ void EnterBlockWithStop(Token stop_token, Token first_token)
 
 void EnterBlock()
 {
-	EnterBlockWithStop(TOKEN_VOID, TOKEN_VOID);
+	EnterBlockWithStop(TOKEN_VOID);
 }
 
 void ExitBlock()
@@ -254,95 +273,85 @@ Purpose:
 	BLK_TOP--;
 }
 
+/***********************************************
+
+ Tokens
+
+************************************************/
+//$T
+
+static char * keywords[] = {
+	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
+	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
+	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor"
+};
+
+
 void NextToken()
 {
 	Int16 c, c2, n;
-	UInt16 indent;
+	UInt16 top;
 
-	// If there are some stacked block ends, return next of them
-	if (BLOCK_END_CNT > 0) {
-stock_block_end:
-		BLOCK_END_CNT--;
-		TOK = TOKEN_BLOCK_END;
-		return;
-	}
-
-	// If we have some token in stock, return this token
-	if (NEXT_TOK != TOKEN_VOID) {
-		TOK = NEXT_TOK;
-		NEXT_TOK = TOKEN_VOID;
-		return;
-	}
-
-	*LEX.name = 0;
-	TOKEN_POS = LINE_POS;
-
-	//TODO: Should not be block_end before next token?
-
-	if (BLK[BLK_TOP].end_token == TOKEN_VOID) {
+	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
+	// For blocks ended with stop token, return the stop_token instead
+retry:
+	if (BLK[BLK_TOP].end_token == TOKEN_BLOCK_END) {
 		TOK = BLK[BLK_TOP].stop_token;
+		if (TOK == TOKEN_VOID) TOK = TOKEN_BLOCK_END;
 		BLK_TOP--;
 		return;
 	}
 
-	if (BLK[BLK_TOP].end_token == TOKEN_BLOCK_END) {
-		if (BLK[BLK_TOP].stop_token != TOKEN_VOID) {
-			BLK[BLK_TOP].end_token = TOKEN_VOID;
-		} else {
-			BLK_TOP--;
-		}
-		TOK = TOKEN_BLOCK_END;
-		return;
-	}
+	// If it is necessary to read next line, read the line
+	// Line reading may have closed some blocks, so we go to routine start
 
-	indent = SkipSpaces();
-
-	// We only solve indent at new line or end of file
-
-	if (TOK == TOKEN_EOL) {
-		if (BLK[BLK_TOP].end_token == TOKEN_OUTDENT) {
-			if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) {
-				// End current block & other blocks too
-
-				if (indent <= BLK[BLK_TOP-1].indent) {
-					BLOCK_END_CNT++;
-					BLK_TOP--;
-					goto outdent;
-				}
-				BLK[BLK_TOP].indent = indent;
-			} else {
-outdent:
-				// indent decreases agains current indent
-				while (indent < BLK[BLK_TOP].indent && BLK[BLK_TOP].end_token == TOKEN_OUTDENT) {
-					BLK_TOP--;
-					BLOCK_END_CNT++;
-				}
-				if (BLOCK_END_CNT > 0) goto stock_block_end;
+	if (LINE_POS == LINE_LEN) {
+		// This is end of line, all line blocks should be ended
+		for(top = BLK_TOP; top > 0; top--) {
+			if (BLK[top].end_token == TOKEN_EOL) {
+				BLK[top].end_token = TOKEN_BLOCK_END;
+				BLK[top].stop_token = TOKEN_VOID;
 			}
 		}
+		ReadLine();
+		goto retry;
 	}
 
-	c = GetChar();		// non-space char
+	// Skip spaces
+	// These spaces are in the middle of the line, so we simply skip them, as they do not affect indent
 
-	if (c == EOF && BLK[BLK_TOP].end_token == TOKEN_OUTDENT) {
-		indent = 0;
-		goto outdent;
+	while((c = LINE[LINE_POS]) == SPC || c == TAB) LINE_POS++;
+
+	// We have first character of the next token.
+	// Remember it's position on line
+
+	// Comment (skip characters to the end of line, EOL is still used)
+	if (c == ';') {
+		LINE_POS = LINE_LEN-1;
+		c = EOL;
 	}
 
+	TOKEN_POS = LINE_POS;
+	LINE_POS++;
+
+	*LEX.name = 0;
+
+	// Identifier
 	if (isalpha(c) || c == '_' || c == '\'') {
 		n = 0;
+		// Identifier may be closed in ''
 		c2 = 0; if (c == '\'') c2 = c;
 		do {
 			if (n == 255) {
-				SyntaxError("identifier too long");
+				SyntaxError("identifier is too long");
 				return;
 			}
 			LEX.name[n++] = c;
-			c = GetChar();
-			if (c == c2) break;
+			c = LINE[LINE_POS++];
+			if (c == c2) { LINE_POS++; break; }
 		} while(isalpha(c) || isdigit(c) || c == '_' || c == '\'');
 		LEX.name[n] = 0;
-		if (c != c2) UnGetChar(c);
+		LINE_POS--;
 
 		TOK = TOKEN_ID;
 
@@ -360,7 +369,7 @@ outdent:
 	} else if (c == '$') {
 		LEX.n = 0;
 		do {
-			c = GetChar();
+			c = LINE[LINE_POS++];
 			if (isdigit(c)) {
 				n = c - '0';
 			} else if (c >= 'a' && c<='f') {
@@ -370,7 +379,7 @@ outdent:
 			} else if (c == '\'') {
 				continue;
 			} else {
-				UnGetChar(c);
+				LINE_POS--;
 				break;
 			}
 			LEX.n *= 16;
@@ -396,16 +405,17 @@ outdent:
 		} while(true);
 		TOK = TOKEN_INT;
 */		
-	} else if (isdigit(c) /*|| c == '-'*/) {
+	// Decimal number
+	} else if (isdigit(c)) {
 		LEX.n = 0;
 		while (isdigit(c) || c == '\'') {
 			if (c != '\'') {
 				LEX.n *= 10;
 				LEX.n += c - '0';
 			}
-			c = GetChar();
+			c = LINE[LINE_POS++];
 		}
-		UnGetChar(c);
+		LINE_POS--;
 		TOK = TOKEN_INT;
 
 	// String
@@ -416,16 +426,22 @@ outdent:
 				SyntaxError("string too long");
 				return;
 			}
-			c2 = GetChar();
+			c2 = LINE[LINE_POS++];
 			if (c2 == '\"') break;
 			LEX.name[n++] = c2;
 		} while(1);
 		LEX.name[n] = 0;
 		TOK = TOKEN_STRING;
 
+	// End of line
+	} else if (c == EOL) {
+		TOK = TOKEN_EOL;
+		return;
+
+	// Symbol
 	} else {
-//symbol:
-		c2 = GetChar();
+
+		c2 = LINE[LINE_POS++];
 		if (c == '.' && c2 == '.') {
 			TOK = TOKEN_DOTDOT;
 		} else if (c == '<' && c2 == '=') {
@@ -440,60 +456,21 @@ outdent:
 			TOK = c;
 			LEX.name[0] = c;
 			LEX.name[1] = 0;
-			UnGetChar(c2);
+			LINE_POS--;
 		}
 	}
 
 	// Stop token will be returned on next call, now end block and return TOKEN_BLOCK_END
 	if (TOK == BLK[BLK_TOP].stop_token) {
-		NEXT_TOK = TOK;
 		TOK = TOKEN_BLOCK_END;
-		BLK_TOP--;
+		BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
 
 	// Block end token is replaced by block end
 	} else if (TOK == BLK[BLK_TOP].end_token) {
-		TOK = TOKEN_BLOCK_END;
 		BLK_TOP--;
+		TOK = TOKEN_BLOCK_END;
 	}
 
-}
-
-Bool SrcOpen(char * name)
-{
-	int c;
-	
-	PREV_CHAR = EOF;
-
-	BLK_TOP++;
-	BLK[BLK_TOP].end_token = TOKEN_EOF;
-	BLK[BLK_TOP].indent    = 0;
-
-	TOK = TOKEN_EOL;
-	NEXT_TOK = TOKEN_VOID;
-
-    LEX.f = fopen(name, "rb");
-	if (LEX.f != NULL) {
-		LINE_NO   = 0;
-		LINE_POS  = 0;
-		LINE_LEN  = 0;
-		LEX.filename = name;
-		PREV_LINE = NULL;
-
-		// Skip UTF-8 BOM
-
-		c = ReadByte();
-		if (c == 239) {
-			c = ReadByte();
-			c = ReadByte();
-		} else {
-			PREV_CHAR = c;
-		}
-	} else {
-		BLK_TOP--;
-        InternalError("open file ");
-		return false;
-    }
-	return true;
 }
 
 Bool NextIs(Token tok)
@@ -519,20 +496,67 @@ void ExpectToken(Token tok)
 	}
 }
 
+
+/***********************************************
+
+ Source Files
+
+************************************************/
+//$B
+
+Bool SrcOpen(char * name)
+{
+	int c;
+	
+	PREV_CHAR = EOF;
+
+	// Create new block for the file 
+	// File block is ended with TOKEN_EOF and starts with indent 0
+	BLK_TOP++;
+	BLK[BLK_TOP].end_token = TOKEN_EOF;
+	BLK[BLK_TOP].indent    = 0;
+	BLK[BLK_TOP].stop_token = TOKEN_VOID;
+
+	TOK = TOKEN_EOL;
+
+    LEX.f = fopen(name, "rb");
+	if (LEX.f != NULL) {
+		LINE_NO   = 0;
+		LINE_POS  = 0;
+		LINE_LEN  = 0;
+		LINE_INDENT = 0;
+		LEX.filename = name;
+		PREV_LINE = NULL;
+
+		// Skip UTF-8 BOM
+
+		c = ReadByte();
+		if (c == 239) {
+			c = ReadByte();
+			c = ReadByte();
+		} else {
+			PREV_CHAR = c;
+		}
+	} else {
+		BLK_TOP--;
+        InternalError("open file ");
+		return false;
+    }
+	return true;
+}
+
 void SrcClose()
 {
 	if (LEX.f != NULL) {
 		fclose(LEX.f);
 		LEX.f = 0;
-		BLK_TOP = 1;
 	}
 }
 
 void LexerInit()
 {
-	BLK_TOP = 1;
-	NEXT_TOK = TOKEN_VOID;
-	BLK[BLK_TOP].end_token = TOKEN_EOF;
+	BLK_TOP = 0;
+	BLK[BLK_TOP].end_token = TOKEN_VOID;
 	BLK[BLK_TOP].indent    = 0;
 	BLK[BLK_TOP].stop_token = TOKEN_VOID;
 }

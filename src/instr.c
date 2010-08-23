@@ -229,14 +229,22 @@ Purpose:
 */
 {
 	Var * var;
+//	char * line;
+//	UInt32 line_no;
 
 	// If this is new line, generate INSTR_LINE instruction
 	if (!SYSTEM_PARSE && CURRENT_LINE_NO != LINE_NO) {
-		InstrInsert(CODE, NULL, INSTR_LINE, NULL, NULL, NULL);
-		CODE->last->line_no = LINE_NO;
-		CODE->last->line = StrAlloc(PREV_LINE);
-		CURRENT_LINE_NO = LINE_NO;
-	}
+/*		InstrInsert(CODE, NULL, INSTR_LINE, NULL, NULL, NULL);
+		line = LINE;
+		line_no = LINE_NO;
+		if (LINE_POS == 0) {
+			line = PREV_LINE;
+			line_no--;
+		}
+		CODE->last->line_no = line_no;
+		CODE->last->line = StrAlloc(line);
+		CURRENT_LINE_NO = line_no;
+	*/}
 
 	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processign.
@@ -934,9 +942,11 @@ void CodePrint(InstrBlock * blk)
 {
 	Instr * i;
 	UInt32 n;
-	for(n = 1, i = blk->first; i != NULL; i = i->next, n++) {
-		printf("%3ld| ", n);
-		InstrPrint(i);
+	if (blk != NULL) {
+		for(n = 1, i = blk->first; i != NULL; i = i->next, n++) {
+			printf("%3ld| ", n);
+			InstrPrint(i);
+		}
 	}
 }
 
