@@ -60,10 +60,10 @@ in RTCLOCK@20:byte
 ; GLOBAL VARIABLES ------------------------------------------------
 
 ; Position of the snake on the screen 
-Hx:0..39
-Hy:0..24
-Tx:0..39
-Ty:0..24
+Hx:1..39
+Hy:1..24
+Tx:1..39
+Ty:1..24
 
 ;Snake's head direction 
 HDir:stick'state
@@ -129,7 +129,7 @@ getNextHeadCoord:proc(>x:byte >y:byte) =
 		y = Hy + 1
 
 		
-getNextTailCoord:proc(ss:byte >x:byte >y:byte) = 
+getNextTailCoord:proc(ss:byte >x:Tx >y:Ty) = 
 	; get next tail's coordinates depending on its direction
 	if ss = SNAKE_TAIL_r
 		x = Tx + 1
@@ -190,11 +190,8 @@ increaseLevel:proc =
 
 eatFruit:proc =
 	
-	l:Level = 0				; this was 'Score = Score + 10 * Level'
-	while l < Level			; but it didn't compile for some reason
-		Score = Score + 10
-		inc l
-		
+	Score = Score + 10 * Level
+			
 	if Score = 150 increaseLevel ; 15 * 10
 	if Score = 450 increaseLevel ; + 15 * 20
 	if Score = 900 increaseLevel ; + 15 * 30 
@@ -204,15 +201,15 @@ eatFruit:proc =
 	if Score = 5800 increaseLevel ; + 30 * 70
 	if Score = 9000 increaseLevel ; + 40 * 80
 		
-	l = Level
-	s:Score = Score  	; for some reason '"... SCORE: [Score]"' doesn't work
-	_scr(0,24) = " LEVEL: [l]                   SCORE: [s]" 
+;	l = Level
+;	s:Score = Score  	; for some reason '"... SCORE: [Score]"' doesn't work
+	_scr(0,24) = " LEVEL: [Level]                   SCORE: [Score]" 
 
 	
 generateFruit:proc =
 	; generate random coordinates inside the playing area: 1..38, 2..22
-	x = (RANDOM and 63) + 1
-	y = (RANDOM and 31) + 2
+	x:Tx = (RANDOM and 63) + 1
+	y:Ty = (RANDOM and 31) + 2
 	while x > 38 x = x - 38
 	while y > 22 y = y - 22
 	; if this position is occupied, find a free one by increasing (and wrapping) x, then y
@@ -277,16 +274,16 @@ moveHead:proc(>gotFruit:0..1) =
 ; Random animation -------------------------
 
 drawSnakeAtRandomPosition:proc =
-	rl = (RANDOM and 15) + 6
+	rl:6..21 = (RANDOM and 15) + 6			;rl = 6..15+6
 	while rl > 15 
 		rl = rl - 9
-	ry = (RANDOM and 15) + 2
+	ry:Hy = (RANDOM and 15) + 2
 	while ry > 13 
 		ry = ry - 11
 	if ry > 6 then ry = ry + 9
-	rx = (RANDOM and 63) + (1 + rl)
+	rx:Hx = (RANDOM and 63) + (1 + rl)
 	while rx > 38 
-		rx = rx - 38 + (1 + rl)
+		rx = rx + (1 + rl) - 38
 		
 	drawSnakeBegin(rx ry rl)
 
@@ -485,7 +482,7 @@ _scr(11,24) = "-+ GAME OVER +-"
 
 until STRIG(0) = not'pressed
 
-until STRIG(0) = pressed   
+until STRIG(0) = pressed
 	COL'BK = VCOUNT * 2 + RTCLOCK	; do the Atari rainbow
 
 until STRIG(0) = not'pressed

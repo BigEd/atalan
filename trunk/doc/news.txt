@@ -3,6 +3,12 @@ News
 ****
 
 ===========
+23-Aug-2010
+===========
+
+- rewritten lexer (fixes some parsing errors)
+
+===========
 21-Aug-2010
 ===========
 

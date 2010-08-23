@@ -83,7 +83,7 @@ void TypeLet(Type * type, Var * var)
 			type->base = vtype;
 			type->variant = TYPE_INT;
 			type->range.min = min;
-			type->range.max = min;
+			type->range.max = max;
 			type->owner = NULL;
 		} else if (type->variant == TYPE_INT) {
 			if (min < type->range.min) type->range.min = min;
@@ -99,8 +99,24 @@ typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 void TAdd(Int32 * x, Int32 tr) { *x = *x + tr; }
 void TSub(Int32 * x, Int32 tr) { *x = *x - tr; }
 void TMul(Int32 * x, Int32 tr) { *x = *x * tr; }
-void TDiv(Int32 * x, Int32 tr) { *x = *x / tr; }
-void TMod(Int32 * x, Int32 tr)  { *x = *x % tr; }
+void TDiv(Int32 * x, Int32 tr) 
+{ 
+	// We may divide by zero.
+	// In such case, no type transformation is performed
+	if (tr != 0) {
+		*x = *x / tr; 
+	}
+}
+
+void TMod(Int32 * x, Int32 tr)  
+{ 
+	// For types like 0..255 etc., tr can be zero.
+	// In such case, we do not modify the type.
+	if (tr != 0) {
+		*x = *x % tr;
+	}
+}
+
 void TAnd(Int32 * x, Int32 tr) { *x = *x & tr; }
 void TOr(Int32 * x, Int32 tr)  { *x = *x | tr; }
 void TXor(Int32 * x, Int32 tr)  { *x = *x ^ tr; }
@@ -219,3 +235,17 @@ Purpose:
 		}
 	}
 }
+
+void TypeLimits(Type * type, Var ** p_min, Var ** p_max)
+/*
+Purpose:
+	Return integer type limits as two variables.
+*/
+{
+	Var * min, * max;
+	min = VarNewInt(type->range.min);
+	max = VarNewInt(type->range.max);
+	*p_min = min;
+	*p_max = max;
+}
+

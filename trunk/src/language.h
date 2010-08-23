@@ -103,7 +103,7 @@ UInt16 SetBookmark();
 Bool Spaces();
 Bool NextIs(Token tok);
 void EnterBlock();
-void EnterBlockWithStop(Token stop_token, Token first_token);
+void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
 
 void LexerInit();
@@ -112,7 +112,7 @@ void LexerInit();
 
 extern Lexer LEX;
 extern Token TOK;
-extern char   LINE[MAX_LINE_LEN];
+extern char   LINE[MAX_LINE_LEN+2];		// we reserve one extra byte for terminating EOL, one for 0
 extern LineNo  LINE_NO;
 extern UInt16  LINE_LEN;
 extern UInt16  LINE_POS;
@@ -361,6 +361,7 @@ Type * TypeByte();
 Type * TypeLongInt();
 
 UInt16 TypeItemCount(Type * type);
+void TypeLimits(Type * type, Var ** p_min, Var ** p_max);
 
 void TypeLet(Type * type, Var * var);
 typedef void (*RangeTransform)(Int32 * x, Int32 tr);

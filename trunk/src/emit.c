@@ -243,6 +243,7 @@ void EmitProcedures()
 			vardef.op = INSTR_PROC;
 			vardef.result = var;
 			EmitInstr(&vardef);
+//			PrintProc(var);
 			EmitProc(var);
 			vardef.op = INSTR_ENDPROC;
 			EmitInstr(&vardef);

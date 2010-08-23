@@ -107,7 +107,7 @@ void main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (16-Aug-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (23-Aug-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	while (i < argc) {
 		if (StrEqual(argv[i], "-v")) {
@@ -190,7 +190,8 @@ void main(int argc, char *argv[])
 
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC) {
+		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
+//			PrintProc(var);
 			ProcTranslate(var);
 		}
 	}
@@ -288,10 +289,6 @@ void main(int argc, char *argv[])
 				PrintVar(var);
 			}
 		}
-
-//		printf("==== Preprocessed\n");
-
-//		PrintProc(&ROOT_PROC);
 
 		printf("==== Output\n");
 	} // verbose

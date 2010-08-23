@@ -775,7 +775,7 @@ rule sub _a,_a,%A(const %B) = "   sbc %A+%B"
 rule goto @%A(0)  = "   jmp (%A)"
 rule goto %A     = "   jmp %A"
 
-type interrupt:proc
+;type interrupt:proc
 
 ;rule proc %A:interrupt = "%A .proc" "   pha" "   txa" "   pha" "   tya" "   pha"
 ;rule endproc %A:interrupt = "   pla" "   tay" "   pla" "   tax" "   pla" "   rti" ".endp"
