@@ -881,6 +881,7 @@ void PrintVarVal(Var * var)
 			switch(var->type->variant) {
 			case TYPE_INT: printf("%ld", var->n); break;
 			case TYPE_STRING: printf("'%s'", var->str); break;
+			default: break;
 			}
 		}
 	} else {
