@@ -9,7 +9,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-#if SYSTEM_NAME == Windows
+#if !defined(__UNIX__)
     #include <windows.h>
 #endif
 
@@ -25,7 +25,7 @@ Purpose:
 	Change the color of printed text.
 */
 {
-#if SYSTEM_NAME == Windows
+#if !defined(__UNIX__)
 	HANDLE hStdout; 
 	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
 	SetConsoleTextAttribute(hStdout, color);

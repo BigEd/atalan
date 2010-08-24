@@ -39,8 +39,8 @@ Bool   StrEqual(char * str1, char * str2)
 	if (str1 == str2) return true;
 	if (str1 == NULL || str2 == NULL) return false;
 
-#if SYSTEM_NAME == Darwin
-	return stricmp(str1, str2) == 0;
+#ifdef __Darwin__
+	return strcasecmp(str1, str2) == 0;
 #else
 	return stricmp(str1, str2) == 0;
 #endif

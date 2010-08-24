@@ -1,4 +1,4 @@
-﻿/*
+/*
 
 ATALAN - Programming language Compiler for embeded systems
 
