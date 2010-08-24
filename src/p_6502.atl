@@ -508,6 +508,48 @@ rule and %A:byte,%B:byte,%C:byte = instr
   and _a,_a,%C
   let %A,_a
 
+rule and %A:byte(%B:byte),%C:byte,%D:byte = instr
+	let _a,%C
+	and _a, _a, %D
+	let _x,%B
+	let %A(_x),_a
+
+rule and %A:byte,%B:byte(%C:byte),%D:byte = instr
+	let _x,%C
+	let _a,%B(_x)
+	and _a, _a, %D
+	let %A, _a
+
+rule and %A:card, %B:card, const %C = instr
+	let _a, %B(0)
+	lo   %Z, %C
+	and  _a, _a, %Z 
+ 	let %A(1), _a
+ 	
+	let _a, %B(1)
+	hi   %Z, %C
+	and  _a, _a, %Z 
+ 	let %A(1), _a
+ 	
+rule and %A:card, %B:card, %C:byte = instr
+	let _a, %B(0)
+	and  _a, _a, %C
+	let %A(0), _a 
+	let _a, %B(1)
+	let %A(1), _a
+	
+rule and %A:card, %B:byte, %C:card = instr and %A, %C, %B
+
+rule and %A:card, %B:card, %C:card = instr
+	let _a, %B(0)
+	and   _a, _a, %C(0)
+	let %A(0), _a
+	 
+	let _a, %B(1)
+	and   _a, _a, %C(1)
+	let %A(1), _a
+
+	
 ;*********** Or
 
 rule or _a,_a,const %A:byte  = "   ora #%A"
