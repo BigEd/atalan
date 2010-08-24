@@ -1,4 +1,4 @@
-﻿/*
+/*
 
 ATALAN - Programming language Compiler for embeded systems
 
@@ -83,7 +83,7 @@ void PrintVar(Var * var)
 
 extern InstrBlock * CODE;
 
-void main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	Var * var;
 	Var * data;
@@ -96,12 +96,14 @@ void main(int argc, char *argv[])
 	int result = 0;
 	UInt32 size;
 	UInt32 n;
-	char filename[128], command[128];
+	char filename[128], command[128], include_path[1024], path[2048];
 	UInt16 filename_len;
 
 	VERBOSE = false;
+	include_path[0]='\0';
 
 	InitErrors();
+
 
 	//
     // Check arguments.
@@ -114,6 +116,21 @@ void main(int argc, char *argv[])
 			VERBOSE = true;
 		} else if (StrEqual(argv[i], "-a")) {
 			assembler = false;
+		} else if (StrEqual(argv[i], "-I")) {
+			i++;
+			if (i<argc)
+				if (strlen(argv[i])<1022) {
+					strcpy(include_path,argv[i]);
+					char * t = & include_path[strlen(include_path)-1];
+					if (*t!=DIRSEP)
+					{
+						t++;
+						*t++=DIRSEP;
+						*t='\0';
+					}
+
+				}
+
 		} else {
 			break;
 		}
@@ -121,7 +138,11 @@ void main(int argc, char *argv[])
 	}
 
     if (i == argc) {
-        fprintf(STDERR, "Usage: %s [-v][-a] file\n  -v  Verbose output\n  -a Only generate assembler source code, but do not call assembler", argv[0]);
+        fprintf(STDERR, "Usage:\n"
+	"%s [-v][-a] file\n"
+	"  -v Verbose output\n"
+	"  -I <include_path> define include path (default: current catalog)\n"
+	"  -a Only generate assembler source code, but do not call assembleri\n", argv[0]);
         exit(-1);
     }
 
@@ -150,13 +171,20 @@ void main(int argc, char *argv[])
 	// It must always be included.
 	// Some of the definitions in system.atl are directly used by compiler.
 
-	if (!Parse("system.atl")) goto failure;
+	strcpy(path,include_path);
+	strcat(path,"system.atl");
+	if (!Parse(path)) goto failure;
 	
 	INSTRSET = VarFindScope(&ROOT_PROC, "instrs", 0);
 	REGSET = VarFindScope(&ROOT_PROC, "regset", 0);
 
-	if (!Parse("p_6502.atl")) goto failure;
-	if (!Parse("atari.atl")) goto failure;
+	strcpy(path,include_path);
+	strcat(path,"p_6502.atl");
+	if (!Parse(path)) goto failure;
+
+	strcpy(path,include_path);
+	strcat(path,"atari.atl");
+	if (!Parse(path)) goto failure;
 
 	VarInitRegisters();
 
@@ -301,14 +329,21 @@ void main(int argc, char *argv[])
 	//==== Call the assembler
 
 	if (assembler) {
+#if SYSTEM_NAME == Darwin
+		filename[filename_len] = 0;
+		sprintf(command, MADS_COMMAND, filename, filename);
+		result = system(command);
+		if (result != 0) goto asm_failure;
+#else
 		asmf = fopen("mads.exe", "rb");
 		if (asmf != NULL) {
 			fclose(asmf);
 			filename[filename_len] = 0;
-			sprintf(command, "mads.exe \"%s.asm\" -o:\"%s.xex\" -x", filename, filename);
+			sprintf(command, MADS_COMMAND, filename, filename);
 			result = system(command);
 			if (result != 0) goto asm_failure;
 		}
+#endif
 	}
 	
  	exit(0);
