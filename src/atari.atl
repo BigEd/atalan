@@ -208,5 +208,5 @@ DOS:macro =
 
 rule prologue  = "   org $2e0" "   dta a($2000)" "   org $2000"
 rule epilogue  = "   jmp *" "   icl 'atari.asm'"
-rule line      = ";(%1) %2"
+rule line      = ";### %0(%1) %2"
  	

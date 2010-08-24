@@ -17,6 +17,8 @@ void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
 #define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
 char * StrAlloc(char * str);
+char * StrAllocLen(char * str, UInt16 len);
+
 Bool   StrEqual(char * str1, char * str2);
 #define StrLen(str) strlen(str)
 
@@ -33,20 +35,17 @@ Bool   StrEqual(char * str1, char * str2);
 	#define ASSERT(x) if (!(x)) exit(-1)
 #endif
 
-#define MADS_COMMAND "mads.exe \"%s.asm\" -o:\"%s.xex\" -x"
+#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 #define DIRSEP '\\'
 
 #if SYSTEM_NAME == Darwin || SYSTEM_NAME == Linux || SYSTEM_NAME == FreeBSD || SYSTEM_NAME == SunOS || SYSTEM_NAME == OSF1 || SYSTEM_NAME == IRIX || SYSTEM_NAME == IRIX64 || SYSTEM_NAME == AIX || SYSTEM_NAME == HP-UX
 
 
 #undef MADS_COMMAND
-#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x"
+#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 
 #undef DIRSEP
 #define DIRSEP '/'
 
 #endif
 
-#if SYSTEM_NAME == Darwin 
-#define stricmp strcasecmp
-#endif

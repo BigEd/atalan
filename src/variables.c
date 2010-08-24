@@ -66,8 +66,7 @@ void VarInit()
 	SCOPE_IDX = 0;
 
 	for(i=0; i<MACRO_ARG_CNT; i++) {
-		var = VarAlloc(NULL, i+1);
-		var->mode = MODE_ARG;
+		var = VarAlloc(MODE_ARG, NULL, i+1);
 		MACRO_ARG_VAR[i] = var;
 	}
 
@@ -93,8 +92,7 @@ Argument:
 		}
 	}
 
-	item = VarAlloc(NULL, 0);
-	item->mode = MODE_ELEMENT;
+	item = VarAlloc(MODE_ELEMENT, NULL, 0);
 	if (ref) item->submode = SUBMODE_REF;
 	item->adr  = arr;
 
@@ -145,8 +143,7 @@ void EnterLocalScope()
 {
 	Var * var;
 	SCOPE_IDX++;
-	var = VarAlloc(SCOPE_NAME, SCOPE_IDX);
-	var->mode = MODE_SCOPE;
+	var = VarAlloc(MODE_SCOPE, SCOPE_NAME, SCOPE_IDX);
 	EnterSubscope(var);
 }
 
@@ -194,8 +191,7 @@ Var * VarNewTmp(long idx, Type * type)
 	var = NULL;
 	if (var == NULL) {
 		TMP_IDX++;
-		var = VarAlloc(NULL, TMP_IDX /*idx*/);
-		var->mode = MODE_VAR;
+		var = VarAlloc(MODE_VAR, NULL, TMP_IDX /*idx*/);
 		var->name = TMP_NAME;
 		var->type = type;
 	}
@@ -234,8 +230,7 @@ Purpose:
 		if (var->mode == MODE_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
 	NEXT_VAR
 
-	var = VarAlloc(NULL, 0);
-	var->mode = MODE_CONST;
+	var = VarAlloc(MODE_CONST, NULL, 0);
 	var->type = &TINT;
 	var->value_nonempty = true;
 	var->n = n;
@@ -245,8 +240,7 @@ Purpose:
 Var * VarNewStr(char * str)
 {
 	Var * var;
-	var = VarAlloc(NULL, 0);
-	var->mode = MODE_CONST;
+	var = VarAlloc(MODE_CONST, NULL, 0);
 	var->type = &TSTR;
 	var->value_nonempty = true;
 	var->str = StrAlloc(str);
@@ -256,9 +250,8 @@ Var * VarNewStr(char * str)
 Var * VarNewLabel(char * name)
 {
 	Var * var;
-	var = VarAlloc(name, 0);
+	var = VarAlloc(MODE_LABEL, name, 0);
 	var->type = &TLBL;
-	var->mode = MODE_LABEL;
 	return var;
 }
 
@@ -278,7 +271,7 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
-Var * VarAlloc(char * name, VarIdx idx)
+Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
 /*
 Purpose:
 	Alloc new variable.
@@ -287,6 +280,7 @@ Purpose:
 	Var * var;
 	var = MemAllocStruct(Var);
 
+	var->mode = mode;
 	var->name  = StrAlloc(name);
 	var->idx   = idx;
 	var->scope = SCOPE;
@@ -379,8 +373,7 @@ Var * VarNewType(TypeVariant variant)
 {
 	Var * var;
 //	Type * type;
-	var = VarAlloc(NULL, 0);
-	var->mode = MODE_TYPE;
+	var = VarAlloc(MODE_TYPE, NULL, 0);
 	var->type = TypeAlloc(variant);
 	return var;
 }

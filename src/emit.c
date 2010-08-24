@@ -9,11 +9,28 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+#if SYSTEM_NAME == Windows
+    #include <windows.h>
+#endif
+
 FILE * G_OUTPUT;
 
 extern Rule * EMIT_RULES[INSTR_CNT];
 extern Bool VERBOSE;
 extern Var   ROOT_PROC;
+
+void PrintColor(UInt8 color)
+/*
+Purpose:
+	Change the color of printed text.
+*/
+{
+#if SYSTEM_NAME == Windows
+	HANDLE hStdout; 
+	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
+	SetConsoleTextAttribute(hStdout, color);
+#endif
+}
 
 void EmitChar(char c)
 {
@@ -55,7 +72,9 @@ void EmitVarName(Var * var)
 void EmitVar(Var * var)
 {
 	if (var != NULL) {
-		if (var->name != NULL) {
+		if (var->mode == MODE_SRC_FILE) {
+			EmitStr(var->name);
+		} else if (var->name != NULL) {
 			if (var->mode == MODE_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
 				EmitStr("__");
@@ -81,19 +100,22 @@ void EmitInstr2(Instr * instr, char * str)
 	char * s, c;
 	s = str;
 
+	if (instr->op == INSTR_LINE) {
+		PrintColor(BLUE);
+	}
+
 	while(c = *s++) {		
 		if (c == '%') {
 			c = *s++;
 			// INSTR_LINE has special arguments
-			if (instr->op == INSTR_LINE) {
-			}
 
 			if (c >='A' && c<='Z') {
 				EmitVar(MACRO_ARG[c-'A']); continue;
 			}
 
 			switch(c) {
-				case '0': EmitVar(instr->result); continue;
+				case '0': 
+					EmitVar(instr->result); continue;
 				case '1': 
 					if (instr->op != INSTR_LINE) {
 						EmitVar(instr->arg1); 
@@ -115,6 +137,9 @@ void EmitInstr2(Instr * instr, char * str)
 		EmitChar(c);
 	}
 	EmitChar(EOL);
+	if (instr->op == INSTR_LINE) {
+		PrintColor(RED+GREEN+BLUE);
+	}
 }
 
 Rule * EmitRule(Instr * instr)
@@ -176,7 +201,11 @@ Bool EmitProc(Var * proc)
 
 Bool EmitOpen(char * filename)
 {
-	G_OUTPUT = fopen(filename, "w");
+	char path[255];
+	strcpy(path, PROJECT_DIR);
+	strcat(path, filename);
+	strcat(path, ".asm");
+	G_OUTPUT = fopen(path, "w");
 	return true;
 }
 

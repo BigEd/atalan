@@ -1,4 +1,4 @@
-/*
+﻿/*
 
 ATALAN - Programming language Compiler for embeded systems
 
@@ -20,68 +20,8 @@ GLOBAL Bool VERBOSE;
 
 extern Var   ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
-
-
-void PrintVar(Var * var)
-{
-	Type * type;
-	Var * arg;
-
-	if (FlagOn(var->submode, SUBMODE_REF)) {
-		printf("@");
-	}
-
-	if (var->mode == MODE_ELEMENT) {
-		PrintVarName(var->adr);
-		printf("(");
-		PrintVar(var->var);
-		printf(")");
-	} else if (var->mode == MODE_CONST) {
-		printf("%ld", var->n);
-		return;
-	} else {
-
-		PrintVarName(var);
-
-		if (var->adr != NULL) {
-			printf("@");
-			PrintVarVal(var->adr);
-		}
-
-		type = var->type;
-		if (type != NULL) {
-			if (type->variant == TYPE_PROC) {
-				printf(":proc");
-			} else if (type->variant == TYPE_MACRO) {
-				printf(":macro");
-			}
-			printf("(");
-			for(arg = var->next; arg != NULL; arg = arg->next) {
-				if (arg->mode == MODE_ARG && arg->scope == var) {
-					printf(" %s", arg->name);
-				}
-			}
-			printf(")");
-		}
-
-		if (VarIsConst(var)) {
-			printf(" = %ld", var->n);
-		} else {
-			type = var->type;
-			if (type != NULL) {
-				if (type->variant == TYPE_INT) {
-					if (type->range.min == 0 && type->range.min == 255) {
-					} else {
-						printf(":%ld..%ld", type->range.min, type->range.max);
-					}
-				}
-			}
-		}
-	}
-	printf("  R%ld W%ld\n", var->read, var->write);
-}
-
 extern InstrBlock * CODE;
+Var * INTERRUPT;
 
 int main(int argc, char *argv[])
 {
@@ -91,19 +31,20 @@ int main(int argc, char *argv[])
 	Int32 adr;
 	Int16 i = 1;
 	TypeVariant tv;
-	FILE * asmf;
 	Bool assembler = true;
 	int result = 0;
 	UInt32 size;
 	UInt32 n;
-	char filename[128], command[128], include_path[1024], path[2048];
+	char filename[128], command[128], path[2048];
 	UInt16 filename_len;
+	char * last_slash, * s;
+
+//	FILE * asmf;
 
 	VERBOSE = false;
-	include_path[0]='\0';
+	SYSTEM_DIR[0]='\0';
 
 	InitErrors();
-
 
 	//
     // Check arguments.
@@ -120,13 +61,13 @@ int main(int argc, char *argv[])
 			i++;
 			if (i<argc)
 				if (strlen(argv[i])<1022) {
-					strcpy(include_path,argv[i]);
-					char * t = & include_path[strlen(include_path)-1];
-					if (*t!=DIRSEP)
+					strcpy(SYSTEM_DIR,argv[i]);
+					s = &SYSTEM_DIR[strlen(SYSTEM_DIR)-1];
+					if (*s!=DIRSEP)
 					{
-						t++;
-						*t++=DIRSEP;
-						*t='\0';
+						s++;
+						*s++=DIRSEP;
+						*s='\0';
 					}
 
 				}
@@ -141,8 +82,8 @@ int main(int argc, char *argv[])
         fprintf(STDERR, "Usage:\n"
 	"%s [-v][-a] file\n"
 	"  -v Verbose output\n"
-	"  -I <include_path> define include path (default: current catalog)\n"
-	"  -a Only generate assembler source code, but do not call assembleri\n", argv[0]);
+	"  -I <SYSTEM_DIR> define include path (default: current catalog)\n"
+	"  -a Only generate assembler source code, but do not call assembler\n", argv[0]);
         exit(-1);
     }
 
@@ -152,13 +93,27 @@ int main(int argc, char *argv[])
 	strcpy(filename, argv[i]);
 	filename_len = StrLen(filename);
 
-	if (filename_len < 4 || !StrEqual(".atl", &filename[filename_len-4])) {
-		strcpy(&filename[filename_len], ".atl");
-	} else {
+	if (filename_len > 4 && StrEqual(".atl", &filename[filename_len-4])) {
+//		strcpy(&filename[filename_len], ".atl");
+//	} else {
 		filename_len -= 4;
+		filename[filename_len] = 0;
 	}
 
-	printf("Building %s\n", filename);
+	//==== Split dir and filename
+
+	strcpy(PROJECT_DIR, filename);
+	last_slash = 0;
+	for(s = PROJECT_DIR; *s != 0; s++) {
+		if (*s == '/' || *s == '\\') last_slash = s+1;
+	}
+	strcpy(filename, last_slash);
+	if (last_slash != NULL) *last_slash = 0;
+
+
+	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
+
+	//===== Initialize
 
 	VarInit();
 	InstrInit();
@@ -167,24 +122,21 @@ int main(int argc, char *argv[])
 
 	data = VarNewTmpLabel();
 
+	//==== Initialize system dir
+
 	// system.atl is file defining some ATALAN basics.
 	// It must always be included.
 	// Some of the definitions in system.atl are directly used by compiler.
 
-	strcpy(path,include_path);
-	strcat(path,"system.atl");
-	if (!Parse(path)) goto failure;
+	if (!Parse("system")) goto failure;
+
 	
-	INSTRSET = VarFindScope(&ROOT_PROC, "instrs", 0);
-	REGSET = VarFindScope(&ROOT_PROC, "regset", 0);
+	INSTRSET  = VarFindScope(&ROOT_PROC, "instrs", 0);
+	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
+	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
 
-	strcpy(path,include_path);
-	strcat(path,"p_6502.atl");
-	if (!Parse(path)) goto failure;
-
-	strcpy(path,include_path);
-	strcat(path,"atari.atl");
-	if (!Parse(path)) goto failure;
+	if (!Parse("p_6502")) goto failure;
+	if (!Parse("atari")) goto failure;
 
 	VarInitRegisters();
 
@@ -195,6 +147,7 @@ int main(int argc, char *argv[])
 	Gen(INSTR_PROLOGUE, NULL, NULL, NULL);
 	SYSTEM_PARSE = false;
 	if (!Parse(filename)) goto failure;
+	SYSTEM_PARSE = true;
 	Gen(INSTR_EPILOGUE, NULL, NULL, NULL);
 
 	ROOT_PROC.instr = CODE;
@@ -289,7 +242,7 @@ int main(int argc, char *argv[])
 
 	if (TOK == TOKEN_ERROR) goto failure;
 
-	strcpy(&filename[filename_len], ".asm");
+//	strcpy(&filename[filename_len], ".asm");
 	EmitOpen(filename);
 
 	if (VERBOSE) {
@@ -328,21 +281,24 @@ int main(int argc, char *argv[])
 
 	//==== Call the assembler
 
+	strcpy(path, PROJECT_DIR);
+	strcat(path, filename);
+
 	if (assembler) {
 #if SYSTEM_NAME == Darwin
-		filename[filename_len] = 0;
-		sprintf(command, MADS_COMMAND, filename, filename);
+//		filename[filename_len] = 0;
+		sprintf(command, MADS_COMMAND, path, path, path);
 		result = system(command);
 		if (result != 0) goto asm_failure;
 #else
-		asmf = fopen("mads.exe", "rb");
-		if (asmf != NULL) {
-			fclose(asmf);
-			filename[filename_len] = 0;
-			sprintf(command, MADS_COMMAND, filename, filename);
+//		asmf = fopen("mads.exe", "rb");
+//		if (asmf != NULL) {
+//			fclose(asmf);
+//			filename[filename_len] = 0;
+			sprintf(command, MADS_COMMAND, path, path, path);
 			result = system(command);
 			if (result != 0) goto asm_failure;
-		}
+//		}
 #endif
 	}
 	

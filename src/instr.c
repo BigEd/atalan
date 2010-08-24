@@ -229,22 +229,28 @@ Purpose:
 */
 {
 	Var * var;
-//	char * line;
-//	UInt32 line_no;
+	char * line;
+	UInt32 line_no;
+	UInt16 line_len;
 
-	// If this is new line, generate INSTR_LINE instruction
+	// Generate LINE instruction.
+	// Line instructions are used to be able to reference back from instructions to line of source code.
+	// That way, we can report logical errors detected in instructions to user.
+
 	if (!SYSTEM_PARSE && CURRENT_LINE_NO != LINE_NO) {
-/*		InstrInsert(CODE, NULL, INSTR_LINE, NULL, NULL, NULL);
+		InstrInsert(CODE, NULL, INSTR_LINE, NULL, NULL, NULL);
 		line = LINE;
 		line_no = LINE_NO;
 		if (LINE_POS == 0) {
 			line = PREV_LINE;
 			line_no--;
 		}
+		line_len = StrLen(line)-1;
+		CODE->last->result    = SRC_FILE;
 		CODE->last->line_no = line_no;
-		CODE->last->line = StrAlloc(line);
+		CODE->last->line = StrAllocLen(line, line_len);
 		CURRENT_LINE_NO = line_no;
-	*/}
+	}
 
 	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processign.
@@ -363,12 +369,6 @@ GLOBAL Rule * LAST_RULE[INSTR_CNT];
 GLOBAL Rule * EMIT_RULES[INSTR_CNT];
 GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
 
-//TODO: Implement
-Bool RuleFirstIsMoreConcrete(Rule * r1, Rule * r2)
-{
-	return true;
-}
-
 void RuleRegister(Rule * rule)
 {
 	InstrOp op = rule->op;
@@ -385,22 +385,6 @@ void RuleRegister(Rule * rule)
 
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg);
-
-Bool TypeIsSubsetOf(Type * type, Type * master)
-/*
-Purpose:
-	Return true, if first type is subset of second type.
-*/
-{
-	if (type == master) return true;
-	if (type == NULL || master == NULL) return false;
-	if (type->variant != master->variant) return false;
-	if (type->variant == TYPE_INT) {
-		if (type->range.max > master->range.max) return false;
-		if (type->range.min < master->range.min) return false;
-	}
-	return true;
-}
 
 Bool VarMatchesType(Var * var, RuleArg * pattern)
 {
@@ -595,8 +579,6 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 {
 	return NextArg(proc, proc, submode);
 }
-
-
 
 Var * FindArg(Var * macro, Var * var, Var ** args)
 /*
@@ -798,41 +780,6 @@ Bool ProcTranslate(Var * proc)
 	return modified;
 }
 
-//$I
-void InstrInit()
-{
-	UInt16 op;
-
-	ROOT_PROC_TYPE.variant = TYPE_PROC;
-//	ROOT_PROC_TYPE.members = NULL;
-
-	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
-	ROOT_PROC.name = "root";
-	ROOT_PROC.idx  = 0;
-	ROOT_PROC.type = &ROOT_PROC_TYPE;
-	ROOT_PROC.instr = NULL;
-
-	SCOPE = &ROOT_PROC;
-
-	for(op=0; op<INSTR_CNT; op++) {
-		RULES[op] = NULL;
-		LAST_RULE[op] = NULL;
-		EMIT_RULES[op] = NULL;
-		LAST_EMIT_RULE[op] = NULL;
-	}
-
-	CODE = NULL;
-
-	// Alloc instruction block for root procedure.
-	
-	IBLOCK_STACK_SIZE = 0;
-	InstrBlockPush();
-	IBLOCK_STACK_SIZE = 0;
-
-	CURRENT_LINE_NO = 0;
-
-}
-
 /****************************************************************
 
  Print tokens
@@ -900,13 +847,74 @@ void PrintVarVal(Var * var)
 
 }
 
+void PrintVar(Var * var)
+{
+	Type * type;
+	Var * arg;
+
+	if (FlagOn(var->submode, SUBMODE_REF)) {
+		printf("@");
+	}
+
+	if (var->mode == MODE_ELEMENT) {
+		PrintVarName(var->adr);
+		printf("(");
+		PrintVar(var->var);
+		printf(")");
+	} else if (var->mode == MODE_CONST) {
+		printf("%ld", var->n);
+		return;
+	} else {
+
+		PrintVarName(var);
+
+		if (var->adr != NULL) {
+			printf("@");
+			PrintVarVal(var->adr);
+		}
+
+		type = var->type;
+		if (type != NULL) {
+			if (type->variant == TYPE_PROC) {
+				printf(":proc");
+			} else if (type->variant == TYPE_MACRO) {
+				printf(":macro");
+			}
+			printf("(");
+			for(arg = var->next; arg != NULL; arg = arg->next) {
+				if (arg->mode == MODE_ARG && arg->scope == var) {
+					printf(" %s", arg->name);
+				}
+			}
+			printf(")");
+		}
+
+		if (VarIsConst(var)) {
+			printf(" = %ld", var->n);
+		} else {
+			type = var->type;
+			if (type != NULL) {
+				if (type->variant == TYPE_INT) {
+					if (type->range.min == 0 && type->range.min == 255) {
+					} else {
+						printf(":%ld..%ld", type->range.min, type->range.max);
+					}
+				}
+			}
+		}
+	}
+	printf("  R%ld W%ld\n", var->read, var->write);
+}
+
 void InstrPrint(Instr * i)
 {
 	Var * inop;
 	Bool r = false, a1 = false;
 
 	if (i->op == INSTR_LINE) {
-		printf(";(%d) %s", i->line_no, i->line);
+		PrintColor(BLUE);
+		printf(";%s(%d) %s", i->result->name, i->line_no, i->line);
+		PrintColor(RED+GREEN+BLUE);
 	} else if (i->op == INSTR_LABEL) {
 		PrintVarVal(i->result);
 		printf("@");
@@ -955,3 +963,39 @@ void PrintProc(Var * proc)
 {
 	CodePrint(proc->instr);
 }
+
+//$I
+void InstrInit()
+{
+	UInt16 op;
+
+	ROOT_PROC_TYPE.variant = TYPE_PROC;
+//	ROOT_PROC_TYPE.members = NULL;
+
+	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
+	ROOT_PROC.name = "root";
+	ROOT_PROC.idx  = 0;
+	ROOT_PROC.type = &ROOT_PROC_TYPE;
+	ROOT_PROC.instr = NULL;
+
+	SCOPE = &ROOT_PROC;
+
+	for(op=0; op<INSTR_CNT; op++) {
+		RULES[op] = NULL;
+		LAST_RULE[op] = NULL;
+		EMIT_RULES[op] = NULL;
+		LAST_EMIT_RULE[op] = NULL;
+	}
+
+	CODE = NULL;
+
+	// Alloc instruction block for root procedure.
+	
+	IBLOCK_STACK_SIZE = 0;
+	InstrBlockPush();
+	IBLOCK_STACK_SIZE = 0;
+
+	CURRENT_LINE_NO = 0;
+
+}
+

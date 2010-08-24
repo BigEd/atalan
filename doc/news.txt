@@ -3,6 +3,15 @@ News
 ****
 
 ===========
+24-Aug-2010
+===========
+
+- 16 bit multiplication
+- inserting file/line references to output
+- support for colorized output
+- let the assembler generate .lst file too
+
+===========
 23-Aug-2010
 ===========
 

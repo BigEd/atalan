@@ -39,6 +39,10 @@ typedef struct {
 
 } BlockStyle;
 
+char PROJECT_DIR[256];						// directory wh
+char SYSTEM_DIR[256];
+
+GLOBAL Var *  SRC_FILE;					// current source file
 GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
 GLOBAL LineNo  LINE_NO;
@@ -507,7 +511,9 @@ void ExpectToken(Token tok)
 Bool SrcOpen(char * name)
 {
 	int c;
-	
+	Var * file_var;
+	char path[256];
+	UInt16 path_len;
 	PREV_CHAR = EOF;
 
 	// Create new block for the file 
@@ -519,8 +525,25 @@ Bool SrcOpen(char * name)
 
 	TOK = TOKEN_EOL;
 
-    LEX.f = fopen(name, "rb");
+	if (!SYSTEM_PARSE) {
+		strcpy(path, PROJECT_DIR);
+	} else {
+		strcpy(path, SYSTEM_DIR);
+	}
+	path_len = StrLen(path);
+	strcat(path, name);
+	strcat(path, ".atl");
+
+	// Reference to file is stored in variable of MODE_SRC_FILE
+
+	file_var = VarAlloc(MODE_SRC_FILE, path + path_len, 0);
+	file_var->n    = 0;
+	file_var->scope = SRC_FILE;
+	SRC_FILE = file_var;
+
+    LEX.f = fopen(path, "rb");
 	if (LEX.f != NULL) {
+
 		LINE_NO   = 0;
 		LINE_POS  = 0;
 		LINE_LEN  = 0;
@@ -547,6 +570,7 @@ Bool SrcOpen(char * name)
 
 void SrcClose()
 {
+	SRC_FILE = SRC_FILE->scope;
 	if (LEX.f != NULL) {
 		fclose(LEX.f);
 		LEX.f = 0;
