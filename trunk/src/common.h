@@ -38,8 +38,9 @@ Bool   StrEqual(char * str1, char * str2);
 #define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 #define DIRSEP '\\'
 
-#if SYSTEM_NAME == Darwin || SYSTEM_NAME == Linux || SYSTEM_NAME == FreeBSD || SYSTEM_NAME == SunOS || SYSTEM_NAME == OSF1 || SYSTEM_NAME == IRIX || SYSTEM_NAME == IRIX64 || SYSTEM_NAME == AIX || SYSTEM_NAME == HP-UX
+#if defined(__Darwin__) || defined(__Linux__) || defined(__FreeBSD__) || defined(__SunOS__) || defined(__OSF1__) || defined(__IRIX__) || defined(__IRIX64__) || defined(__AIX__)
 
+#define __UNIX__
 
 #undef MADS_COMMAND
 #define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
