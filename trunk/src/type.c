@@ -252,3 +252,19 @@ Purpose:
 	*p_max = max;
 }
 
+Bool TypeIsSubsetOf(Type * type, Type * master)
+/*
+Purpose:
+	Return true, if first type is subset of second type.
+*/
+{
+	if (type == master) return true;
+	if (type == NULL || master == NULL) return false;
+	if (type->variant != master->variant) return false;
+	if (type->variant == TYPE_INT) {
+		if (type->range.max > master->range.max) return false;
+		if (type->range.min < master->range.min) return false;
+	}
+	return true;
+}
+

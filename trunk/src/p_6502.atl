@@ -51,6 +51,7 @@ _arr:adr
 
 _TEMPW1@$32:CARD
 _TEMPW2@$34:CARD
+_TEMPL1@$70:CARD		;Should be: 0..$7fffffff
 
 ;Compiler macros
 ;These macros define available operators.
@@ -96,16 +97,12 @@ _TEMPW2@$34:CARD
 
 ;TODO: Rule for add 0, mul 1, div 1, sub 0
 
+;type long:0..$7fffffff
+
 ;*********** Let
 
 rule let %A:byte, %B:byte = instr
   let _a,%B
-  let %A,_a
-
-rule sub %A:byte, %B:byte, %C:byte = instr
-  let _a,%B
-  let _c,1
-  sub _a,_a,%C
   let %A,_a
 
   
@@ -399,6 +396,12 @@ rule add %A:byte(const %B), %A(%B), 1 = "   inc %A+%B"
 
 ;*********** Sub
 
+rule sub %A:byte, %B:byte, %C:byte = instr
+  let _a,%B
+  let _c,1
+  sub _a,_a,%C
+  let %A,_a
+
 rule sub %A:card, %B:card, const %C:card = instr
 	let _a, %B(0)
 	lo %Z, %C           ; %Z is macro local variable
@@ -433,7 +436,7 @@ rule sub %A:card, %B:card, %C:card = instr
 
 ;If there is a constant in MUL, it should be on left side (Commutativity)
 
-rule mul %A, const %B, %C = instr mul %A, %C, %B
+;rule mul %A, const %B, %C = instr mul %A, %C, %B
 
 rule mul %A:byte, %B:byte, 2    = instr
 	let _a, %B			; lda %B
@@ -464,6 +467,14 @@ rule mul %A:card, %B:card, 2    = instr
 	let _a, %B(1)		; lda %B+1
 	rol _a, _a, 1		; rol
 	let %A(1), _a   ; sta %A+1
+
+_sys_mul16:proc
+
+rule mul %A:card, %B:card, %C:card = instr
+	let _TEMPW1, %B
+	let _TEMPW2, %C
+	call _sys_mul16
+	let %A, _TEMPL1
 
 ;*********** Division
 

@@ -13,6 +13,22 @@
 ;More spare bytes that you shouldn't use because future versions of the OS might use them. 
 ;Locations 651 and 652 are already used by version "B" as part of the interrupt handler routines.
 
+;OS registers we use as temporary:
+;
+;BUFRLO,BUFRHI   50,51 $32,$33
+;BFENLO,BFENHI   52,53 $34,$35
+
+;ADRESS  100,101   $64,$65  A temporary storage location used by the display handler for so many things that it made my mind spin and I forgot what they were.
+;MLTTMP  102,103   $66,$67  More temporary storage, with aliases OPNTMP and TOADR.
+;SAVADR  104,105   $68,$69  Also know as FRMADR. Also used for temporary storage. 
+;                           Also not significant enough to explain (look at the OS listing if, for some reason, you really care).
+
+;Registers used when drawing line
+;ROWAC   112,113   $70,$71
+;COLAC   114,115   $72,$73
+;ENDPT   116,117   $74,$75
+;COUNTR  126,127   $7E,$7F  COUNTR tells how many points have to be plotted before the line is finished.
+
 _putchr_proc_adr = $653  ;+$654 
 ?argptr =   $32		;$33
 ?varptr	=	$34
@@ -22,13 +38,10 @@ _putchr_proc_adr = $653  ;+$654
 
 ;Following assigns are defined by mc6502.atl
 
-_TEMPL1 = $32
-;_TEMPW1 = _TEMPL1
-;_TEMPW2 = _TEMPL1+2
-_TEMPW3 = $15
-
-_TW1 = $32			;mc6502 defines these labels as _TEMPW1, _TEMPW2.
-_TW2 = $34
+_TW1 = $32	;$33  mc6502.atl defines these labels as _TEMPW1, _TEMPW2.
+_TW2 = $34  ;$35
+_TW3 = $15	;$16
+_TL1 = $70	;four byte register ($70-$73) defined under name _TEMPL1 in mc6502.atl		
 
 _stdbuf    = $600		;TODO: use LINBUF ($247-$26E)  (100,101 can point to it)
 
@@ -323,26 +336,82 @@ loop	rol ?aux2		;divide by two, if result is 0, end
 
 _sys_mul8  .proc
 
-	sta _TW1			;input comes in A and X
-	stx _TW1+1
+MUL1 = _TW1
+MUL2 = _TW1+1
+RES  = _TW2		;_TW2+1
 
-  lda #0
-  sta _TW2
-  ldx #8
+		sta MUL1			;input comes in A and X
+		stx MUL2
+		
+		lda #0			;RES = 0
+		sta RES
+		
+		ldx #8  
 loop
-  lsr _TW1		;p1_math
-  bcc noadd
-  clc
-  adc _TW1+1	;p2_math
-noadd ror @
-  ror _TW2
-  dex
-  bne loop
-  sta _TW2+1
-  rts
+		lsr MUL1		;MUL1 = MUL1 / 2
+		bcc noadd
+		
+		clc					;RES = RES + (MUL2 * $ff)
+		adc MUL2	  
+noadd 
+		ror @				;RES = RES / 2		(Carry is 0, when there was no add)
+		ror RES
 
-  .endp
+		dex
+		bne loop
+		
+		sta RES+1
+		rts
 
+		.endp
+
+/*
+  Mul16 - 16-bit multiplication routine
+    
+  Parameters:
+	  _TW1 First multiplicant (we use only two bytes now)
+	  _TW2 Second multiplicant
+  Result: 
+		_TL1 Result
+*/
+
+_sys_mul16  .proc
+
+MUL1 = _TW1
+MUL2 = _TW2
+RES  = _TL1
+		
+		lda #0      ;RES = 0;
+		sta RES
+		sta RES+1
+		sta RES+2
+		sta RES+3
+		
+		ldx #16  
+loop
+		lsr MUL1+1		;MUL1 = MUL1 / 2
+		ror MUL1
+		bcc noadd
+		
+		lda RES+2			;RES = RES + (MUL2 * $ffff)  (only upper half) 
+		clc		
+		adc MUL2
+		sta RES+2
+		lda RES+3
+		adc MUL2+1
+		sta RES+3
+noadd
+		ror RES+3				;RES = RES / 2		(Carry is 0, when there was no add)
+		ror RES+2
+		ror RES+1
+		ror RES+0
+		 
+		dex
+		bne loop
+		
+		rts
+
+		.endp
  
 /*
   Div8 - 8-bit division routine
@@ -399,3 +468,4 @@ fini
   rts
  
   .endp
+

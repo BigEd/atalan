@@ -1,6 +1,8 @@
 #include "common.h"
 #include <stdio.h>
 
+typedef struct VarTag Var;
+
 /*************************************************************
 
  Lexer
@@ -57,7 +59,7 @@ typedef enum {
 	TOKEN_CONST,
 	TOKEN_ENUM,
 	TOKEN_ARRAY,
-	TOKEN_TYPE,
+	TOKEN_TYPE2,			// this should be TOKEN_TYPE, but there was conflict with windows.h include on Windows
 	TOKEN_FILE,
 	TOKEN_LO,
 	TOKEN_HI,
@@ -118,6 +120,9 @@ extern UInt16  LINE_LEN;
 extern UInt16  LINE_POS;
 extern UInt16  TOKEN_POS;
 extern char * PREV_LINE;
+extern Var *  SRC_FILE;					// current source file
+extern char PROJECT_DIR[256];
+extern char SYSTEM_DIR[256];
 
 /*********************************************************
 
@@ -156,7 +161,6 @@ Undefined name is used for positional argument, because otherwise arguments have
 
 
 typedef struct TypeTag Type;
-typedef struct VarTag Var;
 typedef struct InstrTag Instr;
 typedef struct InstrBlockTag InstrBlock;
 //typedef struct InstrEnumTag InstrEnum;
@@ -368,6 +372,7 @@ typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 void TypeTransform(Type * type, Var * var, InstrOp op);
 
 void TypeAddConst(Type * type, Var * var);
+Bool TypeIsSubsetOf(Type * type, Type * master);
 
 
 void VarInit();
@@ -386,7 +391,7 @@ Var * VarNewStr(char * str);
 Var * VarNewLabel(char * name);
 Var * VarNewTmp(long idx, Type * type);
 Var * VarNewTmpLabel();
-Var * VarAlloc(Name name, VarIdx idx);
+Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);
@@ -585,6 +590,12 @@ void Optimize(Var * proc);
  Emit phase
 
 *************************************************************/
+
+#define BLUE 1
+#define GREEN 2
+#define RED 4
+#define LIGHT 8
+void PrintColor(UInt8 color);
 
 Rule * EmitRule(Instr * instr);
 Bool EmitOpen(char * filename);

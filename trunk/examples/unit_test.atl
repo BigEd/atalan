@@ -198,6 +198,14 @@ if r <> 700 goto fail
 r = 13 * x
 if r <> 1300 goto fail
 
+p = 100
+o = 315
+
+r = p * o
+if r <> 31500 goto fail
+
+r = o * 99
+if r <> 31185 goto fail
 
 "Blocks"
 x = 1

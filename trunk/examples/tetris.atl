@@ -36,7 +36,7 @@ const ;Graphics characters
 	RWALL_CHR = 70
 
 x:16..25	;x position of the falling tile
-y:1..20		;y position of the falling tile
+y:1..21		;y position of the falling tile
 ti:0..15  ; size of tile definition (we use 4x4 tiles, so it is 16 bytes)
 c:byte
 nx:x			; new x position of tile
@@ -286,7 +286,7 @@ else
 	
 	;=== remove full lines
  	
-	y,ny = 20
+	y,ny = 21
 	
 	while y >= 1
 		collision = 0

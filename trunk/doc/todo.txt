@@ -2,6 +2,23 @@
 TODO
 ****
 
+================
+Type inferencing
+================
+
+- self modification of attribute in loop should report error requesting 
+  explicit declaration of that variable type
+- self referencing (cannot define type - available in esieve)
+- test assignment to non-existing variable
+- warning hi from byte variable (explicitly defined)
+
+===============
+Error reporting
+===============
+
+- Report unexpected indent
+
+
 - support constant expressions in enumerator definitions
 - dead code elimination in parsing (conditional compilation)
 
@@ -11,8 +28,6 @@ TODO
   - type of the element is type of field (or last field)
 	- combination with array 
 
-- self referencing (cannot define type - available in esieve)
-- warning hi from small variable
 - xor, or & and self (produces 0, self, 0)
 
 x invalid array index detection
@@ -38,11 +53,7 @@ x support  10 < x < 20
 
 x in display_list, we do not use DLI, because it's a type (and we cannot evaluate type)
 
-- mul, div (byte, card)
-- all card comparisons
-
 - support for bool (or 0..1 types)
-- test assignment to non-existing variable
 - Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
 - define assembler in platform file using ASSEMBLER constant
 
@@ -207,14 +218,6 @@ var2) self-modifying code
 ptr	lda $ffff
 
 =============
-6502 backend
-=============
-x all conditional if's
-x 16bit arithmetics
-- constant array offset may be implemented as lda array+offset (even for big arrays!!)
-- large arrays
-
-=============
 Documentation
 =============
 
@@ -272,6 +275,12 @@ IDEAS
 6502 backend
 ============
 
+x all conditional if's
+x 16bit arithmetics
+- constant array offset may be implemented as lda array+offset (even for big arrays!!)
+- large arrays
+- mul, div (byte, card)
+- all card comparisons
 - multiply, divide
 x enums
 - variable is referenced together with it's offset (offset is in bytes, or bits - as specified in struct)
@@ -290,10 +299,8 @@ x logical operators (not, and or)
 - bit operations
 
 - procedures declaration
-	- local variables
 - procedures call (no arg)
 - procedures args
-x nested procedures
 - structures
 - arrays
 	- short byte array
@@ -335,12 +342,12 @@ Unit Test
 OPTIMIZE
 ******************
 
+- optimize jumps
 - optimize ldx #5 ldx #6  to ldx #5, inx
 - multiply byte by 10 (use temporary _arr ?)
-- optimize jumps
 - optimize x + 0, y * 1,... (do it in eval const?)
 - multiply byte by 3
-- do not generate unnecessary labels (missile_size)
+x do not generate unnecessary labels (missile_size)
 
 - when calling procedure, we may want to mark variables as used or not used based on
   current values (constants)

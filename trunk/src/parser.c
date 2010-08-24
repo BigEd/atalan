@@ -178,8 +178,7 @@ const_list:
 				while(NextIs(TOKEN_EOL));
 
 				if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD) {
-					var = VarAlloc(LEX.name, 0);
-					var->mode = MODE_CONST;
+					var = VarAlloc(MODE_CONST, LEX.name, 0);
 					NextToken();
 					if (NextIs(TOKEN_EQUAL)) {
 						// Parse const expression
@@ -1326,8 +1325,7 @@ Syntax:
 				if (TOK) {
 					type = TypeAllocRange(min, max);
 					if (TOK) {
-						var = VarAlloc(name, 0);
-						var->mode = MODE_VAR;
+						var = VarAlloc(MODE_VAR, name, 0);
 						var->type = type;
 					}
 				}
@@ -1788,11 +1786,10 @@ Purpose:
 		}
 		//TODO: Type with same name already exists
 		if (var == NULL) {			
-			var = VarAlloc(LEX.name, 0);
+			var = VarAlloc(MODE_UNDEFINED, LEX.name, 0);
 			// We need to prevent the variable from finding itself in case it has same name as type from outer scope
 			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
 			// Real mode is assigned when the variable type is parsed.
-			var->mode = MODE_UNDEFINED;
 			var->submode = submode;
 		}
 		NextToken();
@@ -2400,7 +2397,7 @@ void ParseCommands()
 		switch(TOK) {
 		case TOKEN_CONST: 
 			ParseDeclarations(MODE_CONST, SUBMODE_EMPTY); break;
-		case TOKEN_TYPE:  
+		case TOKEN_TYPE2:  
 			ParseDeclarations(MODE_TYPE, SUBMODE_EMPTY); break;
 		case TOKEN_IN:    
 			ParseDeclarations(MODE_VAR, SUBMODE_IN); break;
