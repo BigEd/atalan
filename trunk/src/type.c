@@ -91,10 +91,10 @@ void TypeLet(Type * type, Var * var)
 
 		}
 		break;
+	default:
+		break;
 	}
 }
-
-typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 
 void TAdd(Int32 * x, Int32 tr) { *x = *x + tr; }
 void TSub(Int32 * x, Int32 tr) { *x = *x - tr; }
@@ -133,6 +133,7 @@ RangeTransform InstrFn(InstrOp op)
 		case INSTR_AND: r = &TAnd; break;
 		case INSTR_OR:  r = &TOr; break;
 		case INSTR_XOR: r = &TXor; break;
+		default: break;
 	}
 	return r;
 }
@@ -183,6 +184,8 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 			r_fn(&type->range.max, max);
 			
 		}
+		break;
+	default:
 		break;
 	}
 }
