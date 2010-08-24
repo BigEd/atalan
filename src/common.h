@@ -32,3 +32,21 @@ Bool   StrEqual(char * str1, char * str2);
 #ifndef ASSERT
 	#define ASSERT(x) if (!(x)) exit(-1)
 #endif
+
+#define MADS_COMMAND "mads.exe \"%s.asm\" -o:\"%s.xex\" -x"
+#define DIRSEP '\\'
+
+#if SYSTEM_NAME == Darwin || SYSTEM_NAME == Linux || SYSTEM_NAME == FreeBSD || SYSTEM_NAME == SunOS || SYSTEM_NAME == OSF1 || SYSTEM_NAME == IRIX || SYSTEM_NAME == IRIX64 || SYSTEM_NAME == AIX || SYSTEM_NAME == HP-UX
+
+
+#undef MADS_COMMAND
+#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x"
+
+#undef DIRSEP
+#define DIRSEP '/'
+
+#endif
+
+#if SYSTEM_NAME == Darwin 
+#define stricmp strcasecmp
+#endif
