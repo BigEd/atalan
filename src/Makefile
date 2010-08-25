@@ -16,19 +16,24 @@ LIBDIR = $(DESTDIR)/usr/local/lib
 MANDIR = $(DESTDIR)/usr/local/share/man
 
 SOURCES= common.c emit.c errors.c instr.c lexer.c main.c optimize.c parser.c type.c variables.c
+OBJS= common.o emit.o errors.o instr.o lexer.o main.o optimize.o parser.o type.o variables.o
 
 CC = gcc
 CXX = gcc
 
-CFLAGS = -Wall -D__$(SYSTEM_NAME)__ -D__$(SYSTEM_ARCH)__
+CFLAGS = -g -Wall -D__$(SYSTEM_NAME)__ -D__$(SYSTEM_ARCH)__
 ###### generic rules #######
 all:	atalan
-
-atalan: $(SOURCES)
-
 	@echo System name: $(SYSTEM_NAME)
 	@echo System Arch: $(SYSTEM_ARCH)
-	@$(CC) $(CFLAGS) -o $@ $(SOURCES) && echo "Compile OK"
+
+atalan: $(OBJS)
+
+	@$(CC) $(CFLAGS) -o $@ $(OBJS) && echo "Compile OK"
+
+%.o: %.c
+
+	@$(CC) -c $(CFLAGS) $<
 
 %.asm: %.atl
 	./atalan -a -I src examples/$<
@@ -37,6 +42,5 @@ atalan: $(SOURCES)
 	mads examples/$< -i:./src -o:examples/$@ -x
 
 clean:
-	rm -f atalan $(/*.o)
-	rm -f examples/*.asm examples/*.xex
+	rm -f atalan $(OBJS)
 
