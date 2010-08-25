@@ -12,6 +12,8 @@
 
 ****************************************************/
 
+#include <stdio.h>
+#include <stdarg.h>
 #include "language.h"
 
 GLOBAL UInt32 ERROR_CNT;
@@ -95,10 +97,16 @@ void LogicError(char * text, UInt16 bookmark)
 	LOGIC_ERROR_CNT++;
 }
 
-void InternalError(char * text)
+void InternalError(char * text, ...)
 {
-	fprintf(STDERR, "Internal error: %s\n", text);
-
+	va_list argp;
+	fprintf(STDERR, "Internal error: ");
+	va_start(argp, text);
+	vfprintf(STDERR, text, argp);
+	va_end(argp);
+	if (LINE_NO)
+		fprintf(STDERR," (line %d)",LINE_NO);
+	fprintf(STDERR,"\n");
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
 }
