@@ -11,6 +11,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+// How many vars in a row are processed before error
+#define MAX_VARS_COMMA_SEPARATED 100
+
 GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
 
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
@@ -1764,7 +1767,7 @@ Purpose:
 	Bool flexible;
 	UInt16 cnt, j, i, stack;
 	Var * var,  * item;
-	Var * vars[100];
+	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type = NULL;
 	UInt16 bookmark;
 
@@ -1831,6 +1834,8 @@ Purpose:
 
 		vars[cnt] = var;
 		cnt++;
+		// this is to check if there is not too many exprs
+		if (cnt>=MAX_VARS_COMMA_SEPARATED) InternalError("too many comma separated identifiers");
 	} while (NextIs(TOKEN_COMMA));
 
 	// This is definitelly a type!!!
