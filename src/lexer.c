@@ -562,7 +562,7 @@ Bool SrcOpen(char * name)
 		}
 	} else {
 		BLK_TOP--;
-        InternalError("open file ");
+		InternalError("could not open file: %s",path);
 		return false;
     }
 	return true;
