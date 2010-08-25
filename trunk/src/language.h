@@ -110,7 +110,7 @@ void ExitBlock();
 
 void LexerInit();
 
-#define MAX_LINE_LEN 2048
+#define MAX_LINE_LEN 500000
 
 extern Lexer LEX;
 extern Token TOK;
