@@ -103,12 +103,18 @@ int main(int argc, char *argv[])
 	//==== Split dir and filename
 
 	strcpy(PROJECT_DIR, filename);
-	last_slash = 0;
-	for(s = PROJECT_DIR; *s != 0; s++) {
-		if (*s == '/' || *s == '\\') last_slash = s+1;
+
+	last_slash=strrchr(PROJECT_DIR,DIRSEP);
+
+	if (last_slash != NULL) {
+		// basename
+		strcpy(filename, ++last_slash);
+		// dirname
+		*last_slash = 0;
 	}
-	strcpy(filename, last_slash);
-	if (last_slash != NULL) *last_slash = 0;
+	else 
+		// dirname empty
+		PROJECT_DIR[0]='\0';
 
 
 	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
@@ -285,7 +291,7 @@ int main(int argc, char *argv[])
 	strcat(path, filename);
 
 	if (assembler) {
-#if SYSTEM_NAME == Darwin
+#if defined(__UNIX__)
 //		filename[filename_len] = 0;
 		sprintf(command, MADS_COMMAND, path, path, path);
 		result = system(command);
