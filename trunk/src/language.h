@@ -135,7 +135,7 @@ extern UInt32 LOGIC_ERROR_CNT;
 
 void SyntaxError(char * text);
 void LogicError(char * text, UInt16 bookmark);
-void InternalError(char * text);
+void InternalError(char * text, ...);
 void Warning(char * text);
 
 void InitErrors();
