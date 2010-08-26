@@ -120,6 +120,10 @@ rule let _a,%A:byte(%B:byte) = instr
   let _x,%B 
   let _a,%A(_x)
 
+rule let %A:byte(%B:byte), _a = instr
+  let _x,%B 
+  let %A(_x),_a
+
 
 rule let %A:byte(%B:byte),%C:byte = instr
 	let _a,%C
@@ -231,6 +235,18 @@ rule let %C:byte(%D:card), %A:byte = instr
   let _arr(1), _a
   let _y,%D(0)
   let _a,%A
+  let @_arr(_y), _a  
+
+rule let %C:byte(%D:card), _a = instr
+  let _x,_a
+  let_adr _a, %C(0)
+  let _arr(0), _a
+  let_adr _a, %C(1)
+  let _c, 0
+  add _a,_a, %D(1)
+  let _arr(1), _a
+  let _y,%D(0)
+  let _a,_x
   let @_arr(_y), _a  
 
 rule let %A:byte, %C:byte(%D:card)  = instr
@@ -491,6 +507,12 @@ rule div %A:byte, %B:card, %C:byte = instr
 	let _a, %C          ;divisor
 	call _sys_div8
 	let %A, _a
+
+rule div %A:byte(%B:card), %C:card, %D:byte = instr
+	let _TEMPW1, %C			;divident
+	let _a, %D          ;divisor
+	call _sys_div8
+	let %A(%B), _a
 
 ;*********** Modulo
 
