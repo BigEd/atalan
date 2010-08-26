@@ -459,8 +459,6 @@ rule sub %A:card, %B:card, %C:card = instr
 ;If there is a constant in MUL, it should be on left side (Commutativity)
 
 ;rule mul %A, const %B, %C = instr mul %A, %C, %B
-rule empty     = "   ;"
-
 rule mul %A:byte, %A:byte, 3	= instr
 	let _a, %A
 	mul _a, _a, 2
