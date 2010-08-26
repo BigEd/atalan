@@ -459,19 +459,195 @@ rule sub %A:card, %B:card, %C:card = instr
 ;If there is a constant in MUL, it should be on left side (Commutativity)
 
 ;rule mul %A, const %B, %C = instr mul %A, %C, %B
+rule empty     = "   ;"
+
+rule mul %A:byte, %A:byte, 3	= instr
+	let _a, %A
+	mul _a, _a, 2
+	let _c, 0
+	add _a, _a, %A
+	let %A, _a
+
+rule mul %A:byte, %B:byte, 1    = instr
+	let _a, %B			; lda %B
+	let %A, _a      ; sta %A
 
 rule mul %A:byte, %B:byte, 2    = instr
 	let _a, %B			; lda %B
 	mul _a, _a, 2   ; asl
 	let %A, _a      ; sta %A
 
+rule mul %A:byte, %B:byte, 3    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	let _c, 0
+	add _a, _a, %B
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 4    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 5    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let _c, 0
+	add _a, _a, %B
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 6    = instr
+	mul %A, %B, 3
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 8    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 10    = instr
+	mul %A, %B, 5
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 12    = instr
+	mul %A, %B, 6
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 16    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 24    = instr
+	mul %A, %B, 12
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 32    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 48    = instr
+	mul %A, %B, 24
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 64    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:byte, %B:byte, 96    = instr
+	mul %A, %B, 48
+	mul %A, %A, 2
+
+rule mul %A:byte, %B:byte, 128    = instr
+	let _a, %B			; lda %B
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	mul _a, _a, 2   ; asl
+	let %A, _a      ; sta %A
+
+rule mul %A:card, %B:byte, 1    = instr
+	let _a, %B			; lda %B
+	let %A(0), _a   ; sta %A
+	let _a, 0	; lda #0
+	let %A(1), _a   ; sta %A+1
+
 rule mul %A:card, %B:byte, 2    = instr
 	let _a, %B			; lda %B
 	mul _a, _a, 2   ; asl
 	let %A(0), _a   ; sta %A
-	let _a, 0    		; lda #0
+	let _a, 0	; lda #0
 	rol _a,_a,1			; rol
 	let %A(1), _a   ; sta %A+1
+
+rule mul %A:card, %B:byte, 4    = instr
+	mul %A, %B, 2
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+
+
+rule mul %A:card,%B:byte, 8    = instr
+	mul %A, %B, 4
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+rule mul %A:card,%B:byte, 16    = instr
+	mul %A, %B, 8
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+rule mul %A:card,%B:byte, 32    = instr
+	mul %A, %B, 16
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+rule mul %A:card,%B:byte, 64    = instr
+	mul %A, %B, 32
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+; more efficient would be from the other side
+rule mul %A:card,%B:byte, 128    = instr
+	mul %A, %B, 64
+	mul %A(0),%A(0), 2
+	rol %A(0),%A(0), 1
+
+rule mul %A:card,%B:byte, 256    = instr
+	let _a, %B
+	let %A(1), _a
+	let _a, 0
+	let %A(0), _a
+
+rule mul %A:card,%B:byte, 512    = instr
+	mul %A, %B, 256
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 1024    = instr
+	mul %A, %B, 512
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 2048    = instr
+	mul %A, %B, 1024
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 4096    = instr
+	mul %A, %B, 2048
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 8192    = instr
+	mul %A, %B, 4096
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 16384    = instr
+	mul %A, %B, 8192
+	rol %A, %A, 1
+
+rule mul %A:card,%B:byte, 32768    = instr
+	mul %A, %B, 16384
+	rol %A, %A, 1
+
 
 _sys_mul8:proc
 
@@ -871,13 +1047,31 @@ rule let %A(const %B),_y  = "   sty %A+%B"
 rule let %A,_y  = "   sty %A"
 
 ;LSR,ASL
+rule div _a,_a,1 = "   ;"
 rule div _a,_a,2 = "   lsr"
+rule div %A:byte,%A:byte,1 = "   ;"
+rule div %A:byte,%A:byte,2 = "   lsr %A"
+
+rule mul _a,_a,0 = "   lda #0"
+rule mul _a,_a,1 = "   ;"
 rule mul _a,_a,2 = "   asl"
+rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
+rule mul %A:byte,%A:byte,1 = "   ;"
+rule mul %A:byte,%A:byte,2 = "   asl %A"
+rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A(0)" "   sta %A(1)"
+rule mul %A:card,%A:card,1 = "   ;"
 
 ;ROL, ROR
 
+rule ror _a,_a,0 = "   ;"
 rule ror _a,_a,1 = "   ror"
+rule ror %A:byte,%A:byte,0 = "   ;"
+rule ror %A:byte,%A:byte,1 = "   ror %A"
+
+rule rol _a,_a,0 = "   ;"
 rule rol _a,_a,1 = "   rol"
+rule rol %A:byte,%A:byte,0 = "   ;"
+rule rol %A:byte,%A:byte,1 = "   rol %A"
 
 ;SBC, DEX, DEY, DEC
 
@@ -917,7 +1111,6 @@ rule endproc %A:proc  = "   rts" ".endp"
 rule call %A:proc   = "   jsr %A"
 rule call %A = "jsr %A"
 rule arrindex %A:array (byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
-
 
 rule print     = "   jsr _std_print_out"
 rule format    = "   jsr _std_print_adr"

@@ -9,7 +9,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 */
 
 #include "language.h"
-
+#define MAX_RULE_UNROLL 20
 /*
 
 Intruction generating function always write to this block.
@@ -372,6 +372,8 @@ GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
 void RuleRegister(Rule * rule)
 {
 	InstrOp op = rule->op;
+	if (!rule->to->first) InternalError("Empty rule");
+
 	if (rule->to->first->op == INSTR_EMIT) {
 		if (LAST_EMIT_RULE[op] != NULL) LAST_EMIT_RULE[op]->next = rule;
 		if (EMIT_RULES[op] == NULL) EMIT_RULES[op] = rule;
@@ -775,7 +777,7 @@ Bool ProcTranslate(Var * proc)
 			PrintProc(proc);
 		}
 		step++;
-	} while(modified && step < 3);
+	} while(modified && step < MAX_RULE_UNROLL);
 
 	return modified;
 }
