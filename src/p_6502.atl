@@ -620,10 +620,50 @@ rule xor _a, %A:byte(_y)      = "   eor %A,y"
 rule xor _a, @%A:byte(_y)     = "   eor (%A),y"
 
 rule xor  %A:byte,%B:byte,%C:byte = instr
-  let _a,%B
-  xor _a,_a,%C
-  let %A,_a
+	let _a,%B
+	xor _a,_a,%C
+	let %A,_a
 
+rule xor %A:byte(%B:byte),%C:byte,%D:byte = instr
+	let _a,%C
+	xor _a, _a, %D
+	let _x,%B
+	let %A(_x),_a
+
+rule xor %A:byte,%B:byte(%C:byte),%D:byte = instr
+	let _x,%C
+	let _a,%B(_x)
+	xor _a, _a, %D
+	let %A, _a
+
+rule xor %A:card, %B:card, const %C = instr
+	let _a, %B(0)
+	lo   %Z, %C
+	xor  _a, _a, %Z 
+ 	let %A(0), _a
+ 	
+	let _a, %B(1)
+	hi   %Z, %C
+	xor  _a, _a, %Z 
+ 	let %A(1), _a
+ 	
+rule xor %A:card, %B:card, %C:byte = instr
+	let _a, %B(0)
+	xor  _a, _a, %C
+	let %A(0), _a 
+	let _a, %B(1)
+	let %A(1), _a
+	
+rule xor %A:card, %B:byte, %C:card = instr xor %A, %C, %B
+
+rule xor %A:card, %B:card, %C:card = instr
+	let _a, %B(0)
+	xor   _a, _a, %C(0)
+	let %A(0), _a
+	 
+	let _a, %B(1)
+	xor   _a, _a, %C(1)
+	let %A(1), _a
 ;*********** Not
 
 rule not _a,_a  = "   eor #$FF"
