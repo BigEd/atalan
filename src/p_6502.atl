@@ -504,9 +504,9 @@ rule and _a, %A:byte(_y)      = "   and %A,y"
 rule and _a, @%A:byte(_y)     = "   and (%A),y"
 
 rule and %A:byte,%B:byte,%C:byte = instr
-  let _a,%B
-  and _a,_a,%C
-  let %A,_a
+	let _a,%B
+	and _a,_a,%C
+	let %A,_a
 
 rule and %A:byte(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
@@ -524,7 +524,7 @@ rule and %A:card, %B:card, const %C = instr
 	let _a, %B(0)
 	lo   %Z, %C
 	and  _a, _a, %Z 
- 	let %A(1), _a
+ 	let %A(0), _a
  	
 	let _a, %B(1)
 	hi   %Z, %C
@@ -579,7 +579,7 @@ rule or %A:card, %B:card, const %C = instr
 	let _a, %B(0)
 	lo   %Z, %C
 	or  _a, _a, %Z 
- 	let %A(1), _a
+ 	let %A(0), _a
  	
 	let _a, %B(1)
 	hi   %Z, %C
