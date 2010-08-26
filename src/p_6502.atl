@@ -163,6 +163,11 @@ rule let %D:byte, %A:byte(%B:byte, %C:byte)  = instr
 	let _a, @_arr(_y)	
 	let %D, _a
 
+;Convert 2-byte const to 1-byte
+rule let %A:byte, const %B:card = instr
+	lo _a, %B
+	let %A, _a
+
 rule let %A:card,const %B:card = instr
   lo  %Z, %B
   let _a, %Z
@@ -182,6 +187,7 @@ rule let %A:card, %B:byte = instr
 rule let %A:byte, %B:card = instr
 	let _a, %B(0)
 	let %A, _a
+
 
 rule let %A:card,%B:card   = instr
   let _a,%B(0)
