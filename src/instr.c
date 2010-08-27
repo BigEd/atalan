@@ -225,7 +225,7 @@ LineNo CURRENT_LINE_NO;
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2)
 /*
 Purpose:
-	Generate function into specified code.
+	Generate instruction into current code block.
 */
 {
 	Var * var;
@@ -395,14 +395,23 @@ Bool VarMatchesType(Var * var, RuleArg * pattern)
 
 	// Pattern expects reference to array with one or more indeces
 	if (pattern->index != NULL) {
-		if (var->mode != MODE_ELEMENT) return false;		// this should be a(x) and it is not array reference
-		if (!ArgMatch(pattern->index, var->var)) return false;
-		//TODO: Match type of array item (we suppose byte not)
-		return true;
+		if (var->mode == MODE_ELEMENT) {
+			if (VarIsStructElement(var)) {
+				// This is reference to structure
+				// We may treat it as normal variable
+				printf("");
+			} else {
+				if (!ArgMatch(pattern->index, var->var)) return false;
+				//TODO: Match type of array item (we suppose byte not)
+				return true;
+			}
+		} else {
+			return false;
+		}
 
 	// Pattern does not expect any index, but we have some
 	} else {
-		if (var->mode == MODE_ELEMENT) return false;
+		if (var->mode == MODE_ELEMENT && VarIsArrayElement(var)) return false;
 	}
 
 	if (type == vtype) return true;
@@ -518,10 +527,10 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 	if (pattern->arg_no != 0) {
 
-		// For element variable store array into the macro argument
+		// For array element variable store array into the macro argument
 
 		pvar = arg;
-		if (arg->mode == MODE_ELEMENT) {
+		if (arg->mode == MODE_ELEMENT && VarIsArrayElement(arg)) {
 			pvar = arg->adr;
 		}
 
@@ -546,17 +555,21 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 GLOBAL Bool RULE_MATCH_BREAK;
 
-Bool RuleMatch(Rule * rule, Instr * i)
+void EmptyMacros()
 {
 	UInt8 n;
+	for(n=0; n<MACRO_ARG_CNT; n++) {
+		MACRO_ARG[n] = NULL;
+	}
+}
+
+Bool RuleMatch(Rule * rule, Instr * i)
+{
 	Bool match;
 
 	if (i->op != rule->op) return false;
 
-	for(n=0; n<MACRO_ARG_CNT; n++) {
-		MACRO_ARG[n] = NULL;
-	}
-
+	EmptyMacros();
 
 	match = ArgMatch(&rule->arg[0], i->result) 
 		&& ArgMatch(&rule->arg[1], i->arg1) 
@@ -773,8 +786,11 @@ Bool ProcTranslate(Var * proc)
 		proc->instr = blk;
 
 		if (VERBOSE) {
-			printf("=========== Step %d ===============\n", step+1);
-			PrintProc(proc);
+			// Do not print unmodified step (it would be same as previous step already printed)
+			if (modified) {
+				printf("========== Translate (step %d) ============\n", step+1);
+				PrintProc(proc);
+			}
 		}
 		step++;
 	} while(modified && step < MAX_RULE_UNROLL);
@@ -788,18 +804,22 @@ Bool ProcTranslate(Var * proc)
 
 ****************************************************************/
 
-void PrintVarName(Var * var)
+void PrintVarNameNoScope(Var * var)
 {
-	if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
-		PrintVarName(var->scope);
-		printf(".");
-	}
 	printf("%s", var->name);
 	if (var->idx > 0) {
 		printf("%ld", var->idx-1);
 	}
 }
 
+void PrintVarName(Var * var)
+{
+	if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
+		PrintVarName(var->scope);
+		printf(".");
+	}
+	PrintVarNameNoScope(var);
+}
 
 void PrintVarVal(Var * var)
 {
@@ -817,15 +837,20 @@ void PrintVarVal(Var * var)
 			printf("#%ld", var->idx-1);
 		} else if (var->mode == MODE_ELEMENT) {
 			PrintVarVal(var->adr);
-			printf("(");
-			index = var->var;
-			while(index->mode == MODE_ELEMENT) {
-				PrintVarVal(index->adr);
-				printf(",");
-				index = index->var;
+			if (var->adr->type->variant == TYPE_STRUCT) {
+				printf(".");
+				PrintVarNameNoScope(var->var);
+			} else {
+				printf("(");
+				index = var->var;
+				while(index->mode == MODE_ELEMENT) {
+					PrintVarVal(index->adr);
+					printf(",");
+					index = index->var;
+				}
+				PrintVarVal(index);
+				printf(")");
 			}
-			PrintVarVal(index);
-			printf(")");
 		} else {
 			switch(var->type->variant) {
 			case TYPE_INT: printf("%ld", var->n); break;

@@ -1,4 +1,5 @@
 #define OK 0
+
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
@@ -29,14 +30,14 @@ Bool   StrEqual(char * str1, char * str2);
 #define SetFlagOff(set, flag) set &= !(flag)
 
 
+//GLOBAL is uset to mark global variables, so it is easy to find all of them
 #define GLOBAL
 
 #ifndef ASSERT
 	#define ASSERT(x) if (!(x)) exit(-1)
 #endif
 
-#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
-#define DIRSEP '\\'
+#define MAX_PATH_LEN 4096
 
 #if defined(__Darwin__) || defined(__Linux__) || defined(__FreeBSD__) || defined(__SunOS__) || defined(__OSF1__) || defined(__IRIX__) || defined(__IRIX64__) || defined(__AIX__)
 
@@ -47,6 +48,12 @@ Bool   StrEqual(char * str1, char * str2);
 
 #undef DIRSEP
 #define DIRSEP '/'
+
+//WIDOWS
+#else
+
+#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
+#define DIRSEP '\\'
 
 #endif
 

@@ -91,10 +91,16 @@ void SyntaxError(char * text)
 	ERROR_CNT++;
 }
 
-void LogicError(char * text, UInt16 bookmark)
+void LogicWarning(char * text, UInt16 bookmark)
 {
 	ReportError("logic", text, bookmark);
 	LOGIC_ERROR_CNT++;
+}
+
+void LogicError(char * text, UInt16 bookmark)
+{
+	ReportError("logic", text, bookmark);
+	ERROR_CNT++;
 }
 
 void InternalError(char * text, ...)

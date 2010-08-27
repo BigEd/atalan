@@ -25,6 +25,8 @@ typedef enum {
 	TOKEN_INT,
 	TOKEN_STRING,
 
+	// Single character tokens (any ascii character is token)
+
 	TOKEN_EOL = 10,
 	TOKEN_ADR = '@',
 	TOKEN_EQUAL = '=',
@@ -41,6 +43,7 @@ typedef enum {
 	TOKEN_DIV = '/',
 	TOKEN_DOT = '.',
 
+	// Keyword tokens
 
 	TOKEN_KEYWORD = 128,
 	TOKEN_GOTO    = 128,
@@ -73,6 +76,7 @@ typedef enum {
 	TOKEN_DEBUG,
 	TOKEN_MOD,
 	TOKEN_XOR,
+	TOKEN_STRUCT,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -121,8 +125,8 @@ extern UInt16  LINE_POS;
 extern UInt16  TOKEN_POS;
 extern char * PREV_LINE;
 extern Var *  SRC_FILE;					// current source file
-extern char PROJECT_DIR[256];
-extern char SYSTEM_DIR[256];
+extern char PROJECT_DIR[MAX_PATH_LEN];
+extern char SYSTEM_DIR[MAX_PATH_LEN];
 
 /*********************************************************
 
@@ -134,6 +138,7 @@ extern UInt32 ERROR_CNT;
 extern UInt32 LOGIC_ERROR_CNT;
 
 void SyntaxError(char * text);
+void LogicWarning(char * text, UInt16 bookmark);
 void LogicError(char * text, UInt16 bookmark);
 void InternalError(char * text, ...);
 void Warning(char * text);
@@ -356,6 +361,8 @@ arg2       pointer to text of line
 
 *************************************************************/
 
+void TypeInit();		// initialize the Type subsytem
+
 Type * TypeAlloc(TypeVariant variant);
 Type * TypeAllocInt(Int32 min, Int32 max);
 Type * TypeDerive(Type * base);
@@ -373,6 +380,15 @@ void TypeTransform(Type * type, Var * var, InstrOp op);
 
 void TypeAddConst(Type * type, Var * var);
 Bool TypeIsSubsetOf(Type * type, Type * master);
+
+UInt32 TypeSize(Type * type);
+UInt32 TypeAdrSize();
+UInt32 TypeStructAssignOffsets(Type * type);
+
+extern Type TVOID;
+extern Type TINT;		// used for int constants
+extern Type TSTR;
+extern Type TLBL;
 
 
 void VarInit();
@@ -402,6 +418,8 @@ Bool VarIsConst(Var * var);
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
 Bool VarIsTmp(Var * var);
+Bool VarIsStructElement(Var * var);
+Bool VarIsArrayElement(Var * var);
 
 extern Var * REG[64];		// Array of registers (register is variable with address in REGSET, submode has flag SUBMODE_REG)
 extern UInt8 REG_CNT;		// Count of registers
@@ -413,8 +431,6 @@ void VarGenerateArrays();
 void VarToLabel(Var * var);
 
 Var * VarNewType(TypeVariant variant);
-
-UInt16 AdrSize();
 
 Var * FirstArg(Var * proc, VarSubmode submode);
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode);
@@ -548,6 +564,8 @@ struct RuleArgTag {
 
 struct RuleTag {
 	Rule * next;
+	Var *  file;			// file in which the rule has been defined
+	LineNo line_no;			// line in the source code, on which the rule was defined
 	InstrOp op;
 	RuleArg arg[3];
 	InstrBlock * to;

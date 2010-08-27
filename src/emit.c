@@ -74,6 +74,15 @@ void EmitVar(Var * var)
 	if (var != NULL) {
 		if (var->mode == MODE_SRC_FILE) {
 			EmitStr(var->name);
+
+		} else if (var->mode == MODE_ELEMENT) {
+			if (VarIsStructElement(var)) {
+				EmitVar(var->adr);
+				EmitStr("+");
+				EmitVar(var->var);
+			} else {
+				InternalError("don't know how to emit array element");
+			}
 		} else if (var->name != NULL) {
 			if (var->mode == MODE_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
