@@ -39,8 +39,8 @@ typedef struct {
 
 } BlockStyle;
 
-char PROJECT_DIR[256];						// directory wh
-char SYSTEM_DIR[256];
+char PROJECT_DIR[MAX_PATH_LEN];						// directory wh
+char SYSTEM_DIR[MAX_PATH_LEN];
 
 GLOBAL Var *  SRC_FILE;					// current source file
 GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
@@ -173,7 +173,7 @@ have_char:
 			t = BLK[top].end_token;
 			BLK[top].end_token = TOKEN_BLOCK_END;
 			if (t == TOKEN_EOF) break;
-			if (t != TOKEN_EOL && t != TOKEN_OUTDENT) {
+			if (t == TOKEN_CLOSE_P) {
 				SyntaxError("missing closing parenthesis");
 			}
 		}
@@ -287,7 +287,7 @@ Purpose:
 static char * keywords[] = {
 	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
-	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor"
+	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct"
 };
 
 

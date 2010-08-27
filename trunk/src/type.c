@@ -9,6 +9,12 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+GLOBAL Type TVOID;
+GLOBAL Type TINT;		// used for int constants
+GLOBAL Type TSTR;
+GLOBAL Type TLBL;
+GLOBAL Type TBYTE;		//0..255
+
 Type * TypeAlloc(TypeVariant variant)
 {
 	Type * type = MemAllocStruct(Type);
@@ -268,3 +274,118 @@ Purpose:
 	return true;
 }
 
+UInt32 TypeAdrSize()
+{
+	//TODO: should be platform defined
+	return 2;
+}
+
+Type * TypeByte()
+{
+	return &TBYTE;
+}
+
+Type * TypeLongInt()
+{
+	return &TINT;
+}
+
+Var * NextItem(Var * scope, Var * arg, VarSubmode submode)
+{
+	Var * var = arg->next;
+	while(var != NULL && (var->mode != MODE_VAR || var->scope != scope || (submode != 0 && FlagOff(var->submode, submode)))) var = var->next;
+	return var;
+}
+
+Var * FirstItem(Var * scope, VarSubmode submode)
+{
+	return NextItem(scope, scope, submode);
+}
+
+UInt32 TypeStructSize(Var * var);
+
+UInt32 TypeSize(Type * type)
+{
+	UInt32 size;
+	size = 0;
+	if (type != NULL) {
+		switch(type->variant) {
+		case TYPE_INT:
+			size = type->range.max - type->range.min;
+			if (size <= 255) size = 1;
+			else if (size <= 65535) size = 2;
+			else if (size <= 0xffffff) size = 3;
+			else size = 4;		// we currently do not support bigger numbers than 4 byte integers
+			break;
+
+		case TYPE_ADR:
+			size = TypeAdrSize();
+			break;
+		case TYPE_STRUCT:
+			size = TypeStructSize(type->owner);
+			break;
+		default: break;
+		}
+	}
+	return size;
+}
+
+UInt32 TypeStructSize(Var * var)
+/*
+Purpose:
+	Compute size of structure variable in bytes.
+*/
+{
+	UInt32 size = 0;
+	Var * item;
+	item = FirstItem(var, 0);
+	while(item != NULL) {
+		if (item->mode == MODE_VAR) {
+			size += TypeSize(item->type);
+		}
+		item = NextItem(var, item, 0);
+	}
+	return size;
+}
+
+UInt32 TypeStructAssignOffsets(Type * type)
+/*
+Purpose:
+	Asign offsets to elements of structure.
+*/
+{
+	UInt32 offset = 0;
+	Var * item;
+	item = FirstItem(type->owner, 0);
+	while(item != NULL) {
+		if (item->mode == MODE_VAR) {
+			if (item->adr == NULL) {
+				item->adr = VarNewInt(offset);
+				offset += TypeSize(item->type);
+			}
+		}
+		item = NextItem(type->owner, item, 0);
+	}
+	return offset;			// offset now contains total size of structure
+}
+
+void TypeInit()
+{
+	TINT.variant = TYPE_INT;
+	TINT.range.min = -(long)2147483648L;
+	TINT.range.max = 2147483647L;
+	TINT.base      = NULL;
+
+	TBYTE.variant = TYPE_INT;
+	TBYTE.range.min = 0;
+	TBYTE.range.max = 255;
+	TBYTE.base      = NULL;
+
+	TSTR.variant = TYPE_STRING;
+	TSTR.base      = NULL;
+
+	TLBL.variant = TYPE_LABEL;
+	TLBL.range.min = -(long)2147483648L;
+	TLBL.range.max = 2147483647L;
+	TLBL.base      = NULL;
+}

@@ -36,6 +36,7 @@ type
 
 ;rule alloc %A:0..255  = ".ds 1"
 
+rule alloc %A:struct(), %B                         = "   .ds %B"
 rule alloc %A:array(card) of byte, %B            = "   .ds %B"
 rule alloc %A:array(byte,byte) of byte, %B, %C   = "   .ds %B*%C"
 rule alloc %A:byte                               = "   .ds 1"
@@ -104,7 +105,6 @@ _TEMPL1@$70:CARD		;Should be: 0..$7fffffff
 rule let %A:byte, %B:byte = instr
   let _a,%B
   let %A,_a
-
   
 ;Array (byte index, byte value)
 ;We use indexing using X register.
@@ -309,10 +309,6 @@ rule hi _a,%A:card      = "   lda %A"
 
 ;*********** Add
 
-;If there is a constant in the add instruction, let it be on right size (commutativity)
-
-rule add %A, const %B, %C = instr add %A, %C, %B
-
 rule add %A:byte, %B:byte, %C:byte = instr
   let _a,%B 
   let _c,0
@@ -456,9 +452,6 @@ rule sub %A:card, %B:card, %C:card = instr
 
 ;*********** Multiplication
 
-;If there is a constant in MUL, it should be on left side (Commutativity)
-
-;rule mul %A, const %B, %C = instr mul %A, %C, %B
 rule mul %A:byte, %A:byte, 3	= instr
 	let _a, %A
 	mul _a, _a, 2

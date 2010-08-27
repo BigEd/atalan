@@ -29,11 +29,6 @@ char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
-Type TVOID;
-Type TINT;		// used for int constants
-Type TSTR;
-Type TLBL;
-Type TBYTE;		//0..255
 
 void VarInit()
 {
@@ -42,24 +37,6 @@ void VarInit()
 
 	VARS = NULL;
 	LAST_VAR = NULL;
-
-	TINT.variant = TYPE_INT;
-	TINT.range.min = -(long)2147483648L;
-	TINT.range.max = 2147483647L;
-	TINT.base      = NULL;
-
-	TBYTE.variant = TYPE_INT;
-	TBYTE.range.min = 0;
-	TBYTE.range.max = 255;
-	TBYTE.base      = NULL;
-
-	TSTR.variant = TYPE_STRING;
-	TSTR.base      = NULL;
-
-	TLBL.variant = TYPE_LABEL;
-	TLBL.range.min = -(long)2147483648L;
-	TLBL.range.max = 2147483647L;
-	TLBL.base      = NULL;
 
 	TMP_IDX = 0;
 	TMP_LBL_IDX = 0;
@@ -102,6 +79,9 @@ Argument:
 	if (arr->type != NULL) {
 		if (arr->type->variant == TYPE_ARRAY) {
 			item->type = arr->type->element;
+		} else if (arr->type->variant == TYPE_STRUCT) {
+			item->type = idx->type;
+			item->submode |= (idx->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
 		} else {
 			item->type = TypeByte();
 		}
@@ -207,6 +187,17 @@ Bool VarIsTmp(Var * var)
 {
 	return var->name == TMP_NAME;
 }
+
+Bool VarIsStructElement(Var * var)
+{
+	return var->adr->type->variant == TYPE_STRUCT;
+}
+
+Bool VarIsArrayElement(Var * var)
+{
+	return var->adr->type->variant == TYPE_ARRAY;
+}
+
 
 Var * VarFindInt(Var * scope, UInt32 n)
 {
@@ -353,21 +344,6 @@ Bool VarIsConst(Var * var)
 	return var->mode != MODE_ARG && ((var->mode == MODE_CONST || (var->adr == NULL && var->value_nonempty) || var->name == NULL));
 }
 
-
-UInt16 AdrSize()
-{
-	return 2;
-}
-
-Type * TypeByte()
-{
-	return &TBYTE;
-}
-
-Type * TypeLongInt()
-{
-	return &TINT;
-}
 
 Var * VarNewType(TypeVariant variant)
 {

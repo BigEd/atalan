@@ -32,11 +32,11 @@ in RANDOM@$D20A:0..255
 
 type font@1024:array(1023)
 
-CHBAS@756:byte	;CHBAS register contains hi byte of font address              
+out CHBAS@756:byte	  ;CHBAS register contains hi byte of font address              
+out CHBASE@$D409:byte ;Hardware register for font base
 
 set'font:macro(x) =
 	chbas = hi x
-
 
 ;*********************
 ;Screen editor
@@ -101,8 +101,18 @@ out COLOR0@$02C4:array(5) of color
 out COLPF@$d016:array(0..4) of color
 out COLBK@$d01a:color			;is alias for COLPF(4)
 
-;Player-missile graphics
+;***********************
+;Player Missile Graphics
+;***********************
 
+type PMG@1024:array(2048) 
+type PMG_LOWRES@1024:array(1024)
+
+;type PMG@1024:array(0..127,-2..6)
+;There is unused memory at the beginning of the sprite array.
+
+out PMBASE@$D407:byte  
+;Player-missile graphics
 
 out player_size@$d008:array(3) of byte
 out player_x@$d000:array(3) of byte
@@ -115,10 +125,21 @@ out missile_x@$d004:array(3) of byte
 
 out GRACTL@$d01d:byte
 
+;*******************************
 ;Sound
+;*******************************
+
+;What we would like:
+;
+; sound(0).freq        = 100
+; sound(0).control     = 105   (volume + distortion + volume_only)
 
 out AUDF1@$D200:byte   ; audio 1 freq.      
 out AUDC1@$D201:byte   ; audio 1 control    
+
+out AUDF2@$D202:byte   ; audio 2 freq.      
+out AUDC2@$D203:byte   ; audio 2 control    
+
 out AUDCTL@$D208:byte  ; audio control
 out SKCTL@$d20f:byte   ; audio control   
 

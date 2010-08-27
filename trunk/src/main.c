@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 	int result = 0;
 	UInt32 size;
 	UInt32 n;
-	char filename[128], command[128], path[2048];
+	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
 	char * last_slash, * s;
 
@@ -52,19 +52,20 @@ int main(int argc, char *argv[])
 
 	printf("Atalan programming language compiler (23-Aug-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
-	while (i < argc) {
-		if (StrEqual(argv[i], "-v")) {
+	while (i < argc) {		
+		if (StrEqual(argv[i], "-V")) {
 			VERBOSE = true;
-		} else if (StrEqual(argv[i], "-a")) {
+		} else if (StrEqual(argv[i], "-A")) {
 			assembler = false;
+		} else if (StrEqual(argv[i], "-O")) {
+
 		} else if (StrEqual(argv[i], "-I")) {
 			i++;
 			if (i<argc)
-				if (strlen(argv[i])<1022) {
-					strcpy(SYSTEM_DIR,argv[i]);
+				if (strlen(argv[i])<MAX_PATH_LEN) {
+					strcpy(SYSTEM_DIR, argv[i]);
 					s = &SYSTEM_DIR[strlen(SYSTEM_DIR)-1];
-					if (*s!=DIRSEP)
-					{
+					if (*s!=DIRSEP)	{
 						s++;
 						*s++=DIRSEP;
 						*s='\0';
@@ -121,6 +122,7 @@ int main(int argc, char *argv[])
 
 	//===== Initialize
 
+	TypeInit();
 	VarInit();
 	InstrInit();
 	ParseInit();
@@ -160,7 +162,7 @@ int main(int argc, char *argv[])
 	VarGenerateArrays();
 
 	if (VERBOSE) {
-		printf("==== Instructions\n");
+		printf("================= Parsed =================\n");
 		PrintProc(&ROOT_PROC);
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			type = var->type;
@@ -185,21 +187,24 @@ int main(int argc, char *argv[])
 
 	ProcTranslate(&ROOT_PROC);
 
-	if (VERBOSE) {
-		printf("==== Translated\n");
-		PrintProc(&ROOT_PROC);
-	}
-
 	//***** Optimalization
 
 	Optimize(&ROOT_PROC);
 
 	if (VERBOSE) {
-		printf("==== Optimized\n");
+		printf("============== Optimized ==============\n");
 		PrintProc(&ROOT_PROC);
 	}
 
 	VarUse();
+
+	//==== Assign offsets to structure items
+	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		// Compute offsets for structure members
+		if (var->type != NULL && var->type->variant == TYPE_STRUCT && var->type->owner == var) {
+			TypeStructAssignOffsets(var->type);
+		}
+	}
 
 	//==== Assign addresses to variables
 
@@ -207,35 +212,10 @@ int main(int argc, char *argv[])
 	n = 1;
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 
-//		if (var->name != NULL && _stricmp(var->name, "i") == 0) {
-//			printf("Ho!\n");
-//		}
-//		if (var->idx == 100) {
-//			n = n;
-//		}
-
-//		if ((var->name != NULL) && (strcmp("i", var->name) == 0) && (var->scope->mode == MODE_SCOPE) && (var->scope->idx == 6)) {
-//			PrintVar(var);
-//		}
-
 		if ((var->write > 0 || var->read > 0) && var->type != NULL && !VarIsLabel(var)) {
 			tv = var->type->variant;
 			if (var->adr == NULL && (var->mode == MODE_VAR || var->mode == MODE_ARG)) {
-				size = 0;
-				if (tv == TYPE_INT) {
-					size = var->type->range.max - var->type->range.min;
-//					if (size == 0) size = 0;
-					if (size <= 255) size = 1;
-					else if (size <= 65535) size = 2;
-					else if (size <= 0xffffff) size = 3;
-					else size = 4;		// we currently do not support bigger numbers than 4 byte integers
-
-					if (size == 0) {
-						InternalError("Size of used variable is 0");
-					}
-				} else if (tv == TYPE_ADR) {
-					size = AdrSize();
-				}
+				size = TypeSize(var->type);		
 
 				if (size > 0) {
 					var->adr = VarNewInt(adr);

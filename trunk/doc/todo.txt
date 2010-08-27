@@ -2,6 +2,8 @@
 TODO
 ****
 
+proc :type   (type must be structure type, or proc type or macro type)
+
 ================
 Type inferencing
 ================

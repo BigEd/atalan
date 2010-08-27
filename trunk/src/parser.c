@@ -21,6 +21,7 @@ UInt16 ParseSubExpression(Type * result_type);
 void ParseCall(Var * proc);
 Type * ParseType();
 Var * ParseArrayElement(Var * arr, Bool ref);
+Var * ParseStructElement(Var * arr);
 
 // This variable is set to true, when we parse expression inside condition.
 // It modifies parsing behaviour concernign and, or and not.
@@ -65,11 +66,6 @@ Purpose:
 
 	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 
-//		if (TOK == TOKEN_EQUAL) {
-//			ExitBlock();
-//			break;
-//		}
-
 		submode = SUBMODE_ARG_IN;
 		if (NextIs(TOKEN_LOWER)) {
 			submode = SUBMODE_ARG_IN;
@@ -80,6 +76,7 @@ Purpose:
 
 		if (TOK == TOKEN_ID) {
 			ParseAssign(mode, submode, to_type);
+			NextIs(TOKEN_EOL);
 		} else {
 			SyntaxError("Expected variable name");
 		}
@@ -225,6 +222,11 @@ const_list:
 
 		type = TypeAlloc(TYPE_MACRO);
 		ParseArgList(MODE_ARG, type);
+
+	// Struct
+	} else if (NextIs(TOKEN_STRUCT)) {
+		type = TypeAlloc(TYPE_STRUCT);
+		ParseArgList(MODE_VAR, type);
 
 	// Array
 	} else if (NextIs(TOKEN_ARRAY)) {		
@@ -440,8 +442,9 @@ done:
 
 void ParseParenthesis()
 {
+	EnterBlock();
 	ParseExpRoot();
-	if (!NextIs(TOKEN_CLOSE_P)) SyntaxError("missing closing ')'");
+	if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 }
 
 UInt8 ParseArgNo2()
@@ -528,12 +531,42 @@ Purpose:
 	if (idx_type != NULL) {
 		if (!VarMatchType(idx, idx_type)) {
 			if (idx->mode == MODE_CONST) {
-				LogicError("array index is out of bounds", bookmark);
+				LogicWarning("array index is out of bounds", bookmark);
 			} else {
-				LogicError("array index may get out of bounds", bookmark);
+				LogicWarning("array index may get out of bounds", bookmark);
 			}
 		}
 	}
+}
+
+Var * ParseStructElement(Var * arr)
+/*
+Purpose:
+	Parse access to structure element.
+Syntax:  
+	Member: "." <id>
+*/
+{
+	Var * idx = NULL;
+	Var * item;
+
+	if (arr->type->variant == TYPE_STRUCT) {
+		NextIs(TOKEN_DOT);
+		if (TOK == TOKEN_ID) {
+			item = VarFindScope(arr->type->owner, LEX.name, 0);
+			if (item != NULL) {
+				idx = VarNewElement(arr, item, false);
+			} else {
+				SyntaxError("$Structure does not contain member with name");
+			}
+			NextToken();
+		} else {
+			SyntaxError("Expected structure member identifier after '.'");
+		}
+	} else {
+		SyntaxError("Variable has no members");
+	}
+	return idx;
 }
 
 Var * ParseArrayElement(Var * arr, Bool ref)
@@ -617,7 +650,7 @@ void ParseOperand()
 	UInt8 arg_no;
 	Bool spaces;
 
-	if (NextIs(TOKEN_OPEN_P)) {
+	if (TOK == TOKEN_OPEN_P) {
 		ParseParenthesis();
 	} else {
 		// @id denotes reference to variable
@@ -692,29 +725,33 @@ indices:
 			NextToken();
 			if (!spaces) {
 				if (NextIs(TOKEN_DOT)) {
-					if (TOK == TOKEN_ID) {
-						item = VarFindScope(var, LEX.name, 0);
+					if (var->type->variant == TYPE_STRUCT) {
+						var = ParseStructElement(var);
+					} else {
+						if (TOK == TOKEN_ID) {
+							item = VarFindScope(var, LEX.name, 0);
 
-						// If the element has not been found, try to match some built-in elements
+							// If the element has not been found, try to match some built-in elements
 
-						if (item == NULL) {
-							if (var->type->variant == TYPE_INT) {
-								if (StrEqual(LEX.name, "min")) {
-									item = VarNewInt(var->type->range.min);
-								} else if (StrEqual(LEX.name, "max")) {
-									item = VarNewInt(var->type->range.max);
+							if (item == NULL) {
+								if (var->type->variant == TYPE_INT) {
+									if (StrEqual(LEX.name, "min")) {
+										item = VarNewInt(var->type->range.min);
+									} else if (StrEqual(LEX.name, "max")) {
+										item = VarNewInt(var->type->range.max);
+									}
 								}
 							}
-						}
 
-						if (item != NULL) {
-							var = item;
-							NextToken();
+							if (item != NULL) {
+								var = item;
+								NextToken();
+							} else {
+								SyntaxError("$unknown item");
+							}
 						} else {
-							SyntaxError("$unknown item");
+							SyntaxError("variable name expected after .");
 						}
-					} else {
-						SyntaxError("variable name expected after .");
 					}
 
 				// Access to array may be like
@@ -974,8 +1011,9 @@ void EndBlock()
 
 void ParseCondParenthesis()
 {
+	EnterBlock();
 	ParseCondition();
-	if (!NextIs(TOKEN_CLOSE_P)) SyntaxError("missing closing ')'");
+	if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 }
 
 InstrOp RelInstrFromToken()
@@ -1003,7 +1041,7 @@ void ParseRel()
 	Var * v1;
 	InstrOp op;
 
-	if (NextIs(TOKEN_OPEN_P)) {
+	if (TOK == TOKEN_OPEN_P) {
 		ParseCondParenthesis();
 	} else {
 		G_CONDITION_EXP = true;
@@ -1695,7 +1733,7 @@ Arguments:
 			// Generate reference to variable
 			if (item->type->variant == TYPE_ARRAY) {
 				Gen(INSTR_PTR, NULL, item, NULL);
-				i += AdrSize();		// address has several bytes
+				i += TypeAdrSize();		// address has several bytes
 			} else {
 				Gen(INSTR_DATA, NULL, item, NULL);
 				i++;
@@ -1709,6 +1747,7 @@ Arguments:
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 {
 	Type * dim;
+	UInt32 size;
 
 	*p_dim1 = NULL;
 	*p_dim2 = NULL;
@@ -1719,6 +1758,9 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 		if (dim != NULL) {
 			*p_dim2 = VarNewInt(dim->range.max - dim->range.min + 1);
 		}
+	} else if (type->variant == TYPE_STRUCT) {
+		size = TypeSize(type);
+		*p_dim1 = VarNewInt(size);
 	}
 }
 
@@ -1801,8 +1843,9 @@ Purpose:
 
 		if (mode != MODE_CONST && mode != MODE_ARG && mode != MODE_TYPE && !Spaces()) {
 			if (TOK == TOKEN_OPEN_P) {
-				item = ParseArrayElement(var, false);
-				var = item;
+				var = ParseArrayElement(var, false);
+			} else if (TOK == TOKEN_DOT) {
+				var = ParseStructElement(var);
 			}
 
 		}
@@ -1835,7 +1878,9 @@ Purpose:
 		vars[cnt] = var;
 		cnt++;
 		// this is to check if there is not too many exprs
-		if (cnt>=MAX_VARS_COMMA_SEPARATED) InternalError("too many comma separated identifiers");
+		if (cnt>=MAX_VARS_COMMA_SEPARATED) {
+			SyntaxError("too many comma separated identifiers");
+		}
 	} while (NextIs(TOKEN_COMMA));
 
 	// This is definitelly a type!!!
@@ -1848,6 +1893,7 @@ Purpose:
 		// Parsing may create new constants, arguments atc. so we must enter subscope, to assign the
 		// type elements to this variable
 		EnterSubscope(var);
+		bookmark = SetBookmark();
 		type = ParseType2(mode);
 		ExitScope();
 	}
@@ -1869,7 +1915,7 @@ Purpose:
 					}
 				} else {
 					if (!VarIsImplemented(var)) {
-						SyntaxError("Type not supported by platform");
+						LogicError("Type not supported by platform", bookmark);
 					}
 				}
 			}
@@ -1993,7 +2039,7 @@ Purpose:
 											TypeLet(var->type, item);
 										} else {
 											if (!VarMatchType(item, var->type)) {
-												LogicError("value does not fit into variable", bookmark);
+												LogicWarning("value does not fit into variable", bookmark);
 											}
 										}
 									}
@@ -2181,6 +2227,8 @@ void ParseRule()
 
 	rule = MemAllocStruct(Rule);
 	rule->op = op;
+	rule->line_no = LINE_NO;
+	rule->file    = SRC_FILE;
 
 	// Parse three parameters
 
