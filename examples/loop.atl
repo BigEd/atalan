@@ -60,4 +60,11 @@ for i:double_range(5) sum = sum + i
 
 "Function range [sum]"
 
+"Loop 0..255 ",
+
+steps:card
+steps = 0
+for i:0..255 inc steps
+
+"[steps]"
    
