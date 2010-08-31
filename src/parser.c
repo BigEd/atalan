@@ -9,6 +9,18 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
+/*
+Syntax:
+
+	{  }   means at the specified place, block is expected (in whatever form)
+	[  ]   optional part
+	[  ]*  zero or more repeates of the part
+	  |    option
+	"sk"   verbatim text
+	<rule> reference to other rule
+
+*/
+
 #include "language.h"
 
 // How many vars in a row are processed before error
@@ -2111,14 +2123,27 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	UInt8 n, arg_no;
 	InstrOp op;
 	Var * label;
-	
+	char inc_path[MAX_PATH_LEN];
+
 	op = ParseInstrOp();
 	if (TOK != TOKEN_ERROR) {
 		n = 0;
+	// Include has special handling
+	// We need to make the file relative to current file dir and check the existence of the file
+
+		if (op == INSTR_INCLUDE) {
+
+			if (TOK == TOKEN_STRING) {
+				PathMerge(inc_path, FILE_DIR, LEX.name);
+				arg[n++] = VarNewStr(inc_path);
+				NextToken();
+			} else {
+				SyntaxError("expectd name of include file");
+			}
+
 		// Branching instruction has label as first argument
 		// 
-
-		if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
+		} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
 			if (TOK == TOKEN_ID) {
 				label = VarFind2(LEX.name, 0);
 				if (label == NULL) {
@@ -2432,12 +2457,39 @@ void ParseDeclarations(VarMode mode, VarSubmode submode)
 /*
 Purpose:
 	Parse list of declarations of variables of specified mode and submode.
+Syntax:
+	Decl: { [<assign>]* }
 */
 {
 	NextToken();
 	EnterBlock();		
 	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 		ParseAssign(mode, submode, NULL);
+		while(NextIs(TOKEN_EOL));
+	}
+}
+
+void ParseUseFile()
+{
+	if (TOK != TOKEN_ID && TOK != TOKEN_STRING) {
+		SyntaxError("Expected module name");
+		return;
+	}
+
+	Parse(LEX.name, false);
+	NextToken();
+}
+
+void ParseUse()
+/*
+Syntax: { [file_ref] }
+*/
+{
+	NextToken();		// skip TOKEN_USE
+	EnterBlock();
+	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+		ParseUseFile();
+		NextIs(TOKEN_COMMA);
 		while(NextIs(TOKEN_EOL));
 	}
 }
@@ -2456,6 +2508,10 @@ void ParseCommands()
 			ParseDeclarations(MODE_VAR, SUBMODE_IN); break;
 		case TOKEN_OUT:   
 			ParseDeclarations(MODE_VAR, SUBMODE_OUT);	break;
+
+		case TOKEN_USE:
+			ParseUse();
+			break;
 
 		case TOKEN_STRING: 
 			Gen(INSTR_PRINT, NULL, NULL, NULL);
@@ -2490,10 +2546,13 @@ void ParseCommands()
 
 extern UInt8      BLK_TOP;
 
-Bool Parse(char * name)
+Bool Parse(char * name, Bool main_file)
 {
 	G_TEMP_CNT = 1;
 	if (SrcOpen(name)) {
+		if (main_file) {
+			SRC_FILE->submode = SUBMODE_MAIN_FILE;
+		}
 		ParseCommands();
 		if (TOK != TOKEN_ERROR) {
 			if (TOK == TOKEN_BLOCK_END) {
@@ -2505,10 +2564,6 @@ Bool Parse(char * name)
 			}
 		}
 		SrcClose();
-	}
-
-	if (LOGIC_ERROR_CNT > 0 && ERROR_CNT == 0) {
-		Warning("There were logical errors.\nCompilation will proceed, but the resulting program may be errorneous.");
 	}
 
 	return ERROR_CNT == 0;

@@ -13,6 +13,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include "common.h"
 #pragma warning (disable: 4996)
 
+#if defined(__Windows__)
+    #include <windows.h>
+#endif
+
 void * MemAllocEmpty(long size)
 {
 	void * m = malloc(size);
@@ -46,3 +50,74 @@ Bool   StrEqual(char * str1, char * str2)
 #endif
 }
 
+
+char * PathFilename(char * path)
+/*
+Purpose:
+	Find filename in path.
+	Filename starts after last dir separator in the filename.
+*/
+{
+	char * last_slash;
+	last_slash = strrchr(path, DIRSEP);
+	return (last_slash == NULL)?path:last_slash+1;
+}
+
+void PathSeparate(char * path, char * dirname, char * filename)
+{
+	char * pf;
+	UInt16 len;
+	pf = PathFilename(path);
+	len = pf - path;
+
+	// Copy dir to other place
+	if (dirname != NULL && path != dirname) {		
+		memcpy(dirname, path, len);
+		dirname[len] = 0;
+	}
+
+	// Copy file path
+	if (filename != NULL) {
+		strcpy(filename, pf);
+	}
+
+	// If path and dirname are same, just mark the end of dir in the path
+	if (path == dirname) {
+		path[len] = 0;
+	}
+}
+
+void PathParent(char * path)
+{
+	char * s;
+	UInt16 len;
+	len = StrLen(path);
+	if (len < 2) return;
+	s = path + len - 1;
+	s--;		// skip last dir separator
+	while(s > path) {
+		if (*s == DIRSEP) { 
+			*(s+1) = 0;
+			break;
+		}
+		s--;
+	}
+}
+
+void PathMerge(char * path, char * dirname, char * filename)
+{
+	UInt16 len;
+	strcpy(path, dirname);
+	len = strlen(path);
+	strcpy(path+len, filename);
+}
+
+void GetApplicationDir(char * name, char * path)
+{
+#ifdef __Windows__
+	GetModuleFileName(NULL, path, MAX_PATH_LEN);
+	PathSeparate(path, path, NULL);
+#else
+	PathSeparate(name, path, NULL);
+#endif
+}

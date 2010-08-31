@@ -304,6 +304,10 @@ Purpose:
 }
 
 Var * VarFind2(char * name, VarIdx idx)
+/*
+Purpose:
+	Find variable in current scope.
+*/
 {
 	Var * var = NULL;
 	Var * s;
@@ -313,6 +317,7 @@ Var * VarFind2(char * name, VarIdx idx)
 	}
 	return var;
 }
+
 
 Var * VarFind(char * name, VarIdx idx)
 {

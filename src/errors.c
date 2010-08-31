@@ -10,6 +10,14 @@
  - Logic     Logic error in user program. For example type mismatch, index out of bounds etc.
  - Internal  Error, that really should not have happened
 
+ It is possible to specify arguments for error messages using ErrArg method.
+ Last error argument has name A, the one before it B etc.
+
+ For example:
+
+ ErrArg(var_a); ErrArg(var_b);
+ SyntaxError("Value [A] conflicts with [B].");
+
 ****************************************************/
 
 #include <stdio.h>
@@ -26,11 +34,18 @@ UInt16 BOOKMARK_LINE_POS;
 
 #define STDERR stderr
 
+#define MAX_ERR_ARG_COUNT 26
+GLOBAL Var * ERR_ARGS[MAX_ERR_ARG_COUNT];
+static UInt8 ERR_ARG_POS;
+
 static void ReportError(char * kind, char * text, UInt16 bookmark)
 {
 	UInt16 i, token_pos;
-	char c;
+	char c, * t, * n;
 	char * line;
+	char buf[2048];
+	char * o;
+	Var * var;
 
 	Bool name = false;
 	if (*text == '$') {
@@ -45,7 +60,41 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
-	fprintf(STDERR, "%s(%d) %s error: %s", LEX.filename, i, kind, text);
+	// Format error message
+	t = text; o = buf;
+	while((c = *t++) != 0) {
+		if (c == '[') {
+			c = *t++;
+			// Get argument and print it's property
+			if (c>='A' && c<='Z') {
+				c = c - 'A';
+				if (c > ERR_ARG_POS) {
+					c = ERR_ARG_POS + MAX_ERR_ARG_COUNT - c;
+				} else {
+					c = ERR_ARG_POS - c;
+				}
+				var = ERR_ARGS[c-1];
+			}
+
+			// Output variable name
+			n = var->name;
+			*o++ = '\'';
+			while(*n != 0) *o++ = *n++;
+			*o++ = '\'';
+
+			c = *t++;
+			if (c != ']') {
+				InternalError("Invalid format of argument in error message %s", text);
+			}
+		} else {
+			*o++ = c;
+		}
+	}
+	*o++ = 0;
+
+	fprintf(STDERR, "%s(%d) %s error:", SRC_FILE->name, i, kind);
+	fprintf(STDERR, "%s", buf);
+
 	if (name) fprintf(STDERR, " \'%s\'", LEX.name);
 	fprintf(STDERR, "\n\n");
 
@@ -129,8 +178,16 @@ UInt16 SetBookmark()
 	return 1;
 }
 
+void ErrArg(Var * var)
+{
+	ERR_ARGS[ERR_ARG_POS++] = var;
+	if (ERR_ARG_POS == MAX_ERR_ARG_COUNT) ERR_ARG_POS = 0;
+}
+
 void InitErrors()
 {
 	ERROR_CNT = 0;
 	LOGIC_ERROR_CNT = 0;
+	MemEmptyVar(ERR_ARGS);
+	ERR_ARG_POS = 0;
 }

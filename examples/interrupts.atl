@@ -1,15 +1,24 @@
 ﻿; Interrupts in ATALAN
+;
 ; Example on using Display List interrupts in Atalan.
 ; (c) 2010 Rudla Kudla
 
+s@$8000:array(0..39,0..23) of byte
 
-s:array(0..39,0..23) of byte
+;24 lines of text, 4th line will execute DLI
 
-;3rd line of display list has DLI flag set.
-const dl:array of dl_command = 3 times $70, $42, s, 2 times $02, $02+$80, 20 times $02, $41, dl
+const gr0:array of dl_command = ( 
+	3 times BLANK8, 
+	CHR0+LMS, s, 
+	2 times CHR0, 
+	CHR0+DLI, 
+	20 times CHR0, 
+	NEXT, gr0
+	)
 
-;Here we define the DLI procedure.
-;It is special procedure of type dli. 
+;Here we define the Display List Interrupt (DLI) procedure.
+;It is special procedure of type dli.
+;dli is procedure type based on interrupt type. 
 
 set_col:dli =
 	wait'line
@@ -25,7 +34,7 @@ cycle:vbi =
 
 ;Initialize graphics.
 
-sdlstl = dl
+sdlstl = gr0
 COLOR0(2) = red+8
 COLOR0(5) = black
 

@@ -39,20 +39,26 @@ typedef struct {
 
 } BlockStyle;
 
-char PROJECT_DIR[MAX_PATH_LEN];						// directory wh
+/*
+Context rememberend when nesting files.
+*/
+
+char PROJECT_DIR[MAX_PATH_LEN];
 char SYSTEM_DIR[MAX_PATH_LEN];
+char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
+char FILENAME[MAX_PATH_LEN];
 
 GLOBAL Var *  SRC_FILE;					// current source file
+
 GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
 GLOBAL LineNo  LINE_NO;
 GLOBAL UInt16  LINE_LEN;
 GLOBAL UInt16  LINE_POS;						// index of next character in line
-GLOBAL UInt16  TOKEN_POS;
 static LineIndent     LINE_INDENT;
-
 static int     PREV_CHAR;
 
+GLOBAL UInt16  TOKEN_POS;
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
@@ -284,10 +290,10 @@ Purpose:
 ************************************************/
 //$T
 
-static char * keywords[] = {
+static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
-	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct"
+	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use"
 };
 
 
@@ -310,8 +316,8 @@ retry:
 	// Line reading may have closed some blocks, so we go to routine start
 
 	if (LINE_POS == LINE_LEN) {
-		// This is end of line, all line blocks should be ended
-		for(top = BLK_TOP; top > 0; top--) {
+		// This is end of line, all line blocks in current file should be ended
+		for(top = BLK_TOP; top > 0 && BLK[top].end_token != TOKEN_EOF; top--) {
 			if (BLK[top].end_token == TOKEN_EOL) {
 				BLK[top].end_token = TOKEN_BLOCK_END;
 				BLK[top].stop_token = TOKEN_VOID;
@@ -361,7 +367,7 @@ retry:
 
 		if (c2 != L'\'' && !LEX.ignore_keywords) {
 			n = 0;
-			for(n = 0; n < sizeof(keywords)/sizeof(char *); n++) {
+			for(n = 0; n < KEYWORD_COUNT; n++) {
 				if (StrEqual(keywords[n], LEX.name)) {
 					TOK = TOKEN_KEYWORD + n;
 					break;
@@ -508,13 +514,148 @@ void ExpectToken(Token tok)
 ************************************************/
 //$B
 
+ParseState * ParseStateLabel()
+{
+	ParseState * s;
+
+	s = MemAllocStruct(ParseState);
+	s->file      = LEX.f;
+	s->line      = StrAlloc(LINE);
+	s->line_len  = LINE_LEN;
+	s->line_no   = LINE_NO;
+	s->line_pos  = LINE_POS;
+	s->prev_line = PREV_LINE;
+	s->token     = TOK;
+
+	return s;
+}
+
+void ParseStateGoto(ParseState * s)
+{
+	LEX.f     = s->file;
+	strcpy(LINE, s->line);
+	LINE_LEN  = s->line_len;
+	LINE_NO   = s->line_no;
+	LINE_POS  = s->line_pos;
+	PREV_LINE = s->prev_line;
+	TOK       = s->token;
+
+	MemFree(s->line);
+	MemFree(s);
+}
+
+FILE * FindFile2(char * name, char * ext, char * base_dir)
+{
+//	char path[MAX_PATH_LEN];
+
+	FILE * f = NULL;
+//	if (*base_dir != 0) {
+		strcpy(FILENAME, base_dir);
+		strcat(FILENAME, name);
+		strcat(FILENAME, ext);
+	    f = fopen(FILENAME, "rb");
+		if (f != NULL) {
+			strcpy(FILE_DIR, base_dir);
+		}
+//	}
+	return f;
+}
+
+void PlatformPath(char * path)
+{
+	char sep[2];
+	sep[0] = DIRSEP;
+	sep[1] = 0;
+	strcpy(path, SYSTEM_DIR);
+	strcat(path, "platform");
+	strcat(path, sep);
+	strcat(path, PLATFORM);
+	strcat(path, sep);
+}
+
+FILE * FindFile(char * name, char * ext)
+{
+	FILE * f;
+	char sep[2];
+	char path[MAX_PATH_LEN];
+
+	sep[0] = DIRSEP;
+	sep[1] = 0;
+
+	//%FILEDIR%
+
+	f = FindFile2(name, ext, FILE_DIR);
+
+	//%PROJDIR%/
+
+	if (f == NULL) {
+		f = FindFile2(name, ext, PROJECT_DIR);
+	}
+
+	// %SYSTEM%/platform/%PLATFORM%/
+
+	if (f == NULL) {
+		PlatformPath(path);
+		f = FindFile2(name, ext, path);
+	}
+
+	// %SYSTEM%/processor/%name%/
+
+	if (f == NULL) {
+		strcpy(path, SYSTEM_DIR);
+		strcat(path, "processor");
+		strcat(path, sep);
+		strcat(path, name);
+		strcat(path, sep);
+		f = FindFile2(name, ext, path);
+	}
+
+	// %SYSTEM%/
+
+	if (f == NULL) {
+		strcpy(path, SYSTEM_DIR);
+		strcat(path, "module");
+		strcat(path, sep);
+		f = FindFile2(name, ext, path);
+	}
+
+	return f;
+}
+
 Bool SrcOpen(char * name)
 {
 	int c;
 	Var * file_var;
-	char path[256];
+	FILE * f;
+	char path[MAX_PATH_LEN];
 	UInt16 path_len;
-	PREV_CHAR = EOF;
+	char * filename;
+
+	// When parsing system files, use SYSTEM folder
+	if (!SYSTEM_PARSE) {
+		strcpy(path, PROJECT_DIR);
+	} else {
+		strcpy(path, SYSTEM_DIR);
+	}
+	path_len = StrLen(path);
+	filename = path + path_len;
+	strcat(filename, name);
+	strcat(filename, ".atl");
+
+	// Check, that files are not cyclic dependent
+	for(file_var = SRC_FILE; file_var != NULL; file_var = file_var->scope) {
+		if (StrEqual(file_var->name, filename)) {
+			ErrArg(file_var);
+			ErrArg(SRC_FILE);
+			SyntaxError("Modules [A] and [B] are trying to use each other.");
+			return false;
+		}
+	}
+
+	// If the file has been already loaded (variable with filename exists), 
+	// ignore the load request (do not however report error)
+
+	if (VarFind(filename, 0)) return false;
 
 	// Create new block for the file 
 	// File block is ended with TOKEN_EOF and starts with indent 0
@@ -523,17 +664,6 @@ Bool SrcOpen(char * name)
 	BLK[BLK_TOP].indent    = 0;
 	BLK[BLK_TOP].stop_token = TOKEN_VOID;
 
-	TOK = TOKEN_EOL;
-
-	if (!SYSTEM_PARSE) {
-		strcpy(path, PROJECT_DIR);
-	} else {
-		strcpy(path, SYSTEM_DIR);
-	}
-	path_len = StrLen(path);
-	strcat(path, name);
-	strcat(path, ".atl");
-
 	// Reference to file is stored in variable of MODE_SRC_FILE
 
 	file_var = VarAlloc(MODE_SRC_FILE, path + path_len, 0);
@@ -541,15 +671,22 @@ Bool SrcOpen(char * name)
 	file_var->scope = SRC_FILE;
 	SRC_FILE = file_var;
 
-    LEX.f = fopen(path, "rb");
-	if (LEX.f != NULL) {
+	f = FindFile(name, ".atl");
 
+	if (f != NULL) {
+
+		file_var->parse_state = ParseStateLabel();
+
+		PREV_CHAR = EOF;
+		LEX.f     = f;
 		LINE_NO   = 0;
 		LINE_POS  = 0;
 		LINE_LEN  = 0;
 		LINE_INDENT = 0;
-		LEX.filename = name;
+//		LEX.filename = name;
+		//TODO: Remove LEX.filename
 		PREV_LINE = NULL;
+		TOK = TOKEN_EOL;
 
 		// Skip UTF-8 BOM
 
@@ -570,17 +707,21 @@ Bool SrcOpen(char * name)
 
 void SrcClose()
 {
-	SRC_FILE = SRC_FILE->scope;
 	if (LEX.f != NULL) {
 		fclose(LEX.f);
 		LEX.f = 0;
 	}
+	ParseStateGoto(SRC_FILE->parse_state);
+	SRC_FILE = SRC_FILE->scope;
 }
 
 void LexerInit()
 {
+	*FILE_DIR = 0;
+
 	BLK_TOP = 0;
 	BLK[BLK_TOP].end_token = TOKEN_VOID;
 	BLK[BLK_TOP].indent    = 0;
 	BLK[BLK_TOP].stop_token = TOKEN_VOID;
+	TOK = TOKEN_VOID;
 }

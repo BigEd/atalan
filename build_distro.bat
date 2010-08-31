@@ -3,10 +3,21 @@ if exist atalan rmdir /S /Q atalan
 mkdir atalan
 cd atalan
 mkdir bin
+mkdir platform
+mkdir processor
+mkdir module
 mkdir doc
 mkdir tools
 mkdir examples
 cd ..
+
+echo \svn\ > exclude.list
+
+xcopy src\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
+xcopy src\processor atalan\processor /E /I /Q /EXCLUDE:exclude.list
+xcopy src\module atalan\module /E /I /Q /EXCLUDE:exclude.list
+
+del exclude.list
 
 REM Bin
 
@@ -15,14 +26,9 @@ call build.bat release
 cd ..
 
 copy src\Release\atalan.exe atalan\bin
-copy src\system.atl atalan\bin
-copy src\p_6502.atl atalan\bin
-copy src\atari.asm atalan\bin
-copy src\atari.atl atalan\bin
 copy src\mads.exe atalan\bin
 
 copy tools\Atalan.ini atalan\tools
-
 
 REM Doc generating
 
@@ -52,26 +58,27 @@ copy license.txt atalan\
 
 Rem Build examples
 
-cd atalan\bin
-atalan ..\examples\hello_world
+cd atalan\examples
 
-atalan ..\examples\loop
+..\bin\atalan hello_world
 
-atalan ..\examples\unit_test
+..\bin\atalan loop
 
-atalan ..\examples\hello_font
+..\bin\atalan unit_test
 
-atalan ..\examples\count_2sec
+..\bin\atalan hello_font
 
-atalan ..\examples\rainbow
+..\bin\atalan count_2sec
 
-atalan ..\examples\stars
+..\bin\atalan rainbow
 
-atalan ..\examples\esieve
+..\bin\atalan stars
 
-atalan ..\examples\tetris
+..\bin\atalan esieve
 
-atalan ..\examples\interrupts
+..\bin\atalan tetris
+
+..\bin\atalan interrupts
 
 cd ..
 cd ..

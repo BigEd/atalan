@@ -9,7 +9,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-#if !defined(__UNIX__)
+#if defined(__Windows__)
     #include <windows.h>
 #endif
 
@@ -25,7 +25,7 @@ Purpose:
 	Change the color of printed text.
 */
 {
-#if !defined(__UNIX__)
+#ifdef __Windows__
 	HANDLE hStdout; 
 	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
 	SetConsoleTextAttribute(hStdout, color);
@@ -273,10 +273,11 @@ void EmitProcedures()
 {
 	Var * var;
 	Type * type;
+	Instr vardef;
+
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
 		if (var->mode != MODE_TYPE && var->mode != MODE_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
-			Instr vardef;
 			MemEmptyVar(vardef);
 			vardef.op = INSTR_PROC;
 			vardef.result = var;
@@ -285,6 +286,40 @@ void EmitProcedures()
 			EmitProc(var);
 			vardef.op = INSTR_ENDPROC;
 			EmitInstr(&vardef);
+		}
+	}
+}
+
+void EmitAsmIncludes()
+/*
+Purpose:
+	Try to find corresponding .asm file for every used .atl file.
+	If it is found, generate include instruction to output file.
+*/
+{
+	Var * var;
+	Instr i;
+	FILE * f;
+	char name[MAX_PATH_LEN];
+	UInt16 len;
+
+	MemEmptyVar(i);
+	i.op = INSTR_INCLUDE;
+	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		if (var->mode == MODE_SRC_FILE) {
+			if (FlagOff(var->submode, SUBMODE_MAIN_FILE)) {
+
+				strcpy(name, var->name);
+				len = StrLen(name);
+				name[len-4] = 0;
+				f = FindFile(name, ".asm");
+
+				if (f != NULL) {
+					fclose(f);
+					i.result = VarNewStr(FILENAME);
+					EmitInstr(&i);
+				}
+			}
 		}
 	}
 }

@@ -174,7 +174,7 @@ to define system and hardware registers.
 :::::::::::::
 PCOLR  @704:byte(4)		; player & missile graphics color (4 missiles)
 COLOR  @708:byte(5)		; playfield color
-SDLSTL @560:ptr			; pointer to beginning of display list
+SDLSTL @560:adr 			; address of beginning of display list
 STICK  @632:byte(4)
 ::::::::::::::
 Value of some hardware registers changes automatically.
@@ -209,7 +209,7 @@ It is possible to specify type too.
 
 :::::::::::::::::::::::::::
 @712 = 0				; set background color to black 
-@$230:ptr = my_dlist
+@$230:adr = my_dlist
 @buf:byte(100) = 0		; set 100 bytes at address stored in variable buf to 0 (memset)
 :::::::::::::::::::::::::::
  
@@ -318,7 +318,6 @@ Either "," or new line may be used as separator.
 :::::::::::::::::::::::
 xcoord:0..319
 ycoord:0..239
-point:(x:xcoord, y:ycoord)
 
 point: 
 	x:xcoord		; x screen coordinate
@@ -335,6 +334,19 @@ audch:
 
 aud@$D200:audch(4)
 :::::::::::::::::::::::
+
+==============
+Element access
+==============
+
+Structure elements are accesses using dot operator.
+
+::::::::::::::::::::::::::::::
+p:point
+
+p.x = 10
+p.y = 20
+::::::::::::::::::::::::::::::
 
 ******
 Arrays
@@ -700,3 +712,73 @@ It is possible to define routines in ROM using @ syntax.
 reset@$E034:proc
 :::::::::::::::::::::::
 
+*******
+Modules
+*******
+
+Atalan provides system of modules.
+Use of module may be declared with 'use' keyword followed by list of module names (not filenames!).
+Module name is either identifier or string.
+
+::::::::::::::::::::::::
+use rmt, simple_sprites
+::::::::::::::::::::::::
+
+Modules may use other modules too.
+Module can be used only once (any other use is ignored).
+Cyclic dependency of modules is detected and reported as an error.
+
+Paths used in module 'file' command are relative to the location of the module.
+ 
+==================
+Assembler includes
+==================
+
+For each module (name.atl) there may be associated assembler source code (name.asm).
+If such file exists, it is automatically included at the end of source code.
+
+=================
+Processor modules
+=================
+
+Processor modules are stored in 
+::::::::::::::::::::::::
+%SYSTEM%/processor/%module%/%module%.atl
+::::::::::::::::::::::::
+directory.
+
+They define processor for which the code may be compiled.
+Application may use only one processor module.
+Processor module is usually not used directly by application, platform module
+uses the specific processor.
+
+================
+Platform modules
+================
+
+Platform modules are stored in 
+::::::::::::::::::::::::
+%SYSTEM%/platform/%module%/%module%.atl
+::::::::::::::::::::::::
+directory.
+
+They define computer platform, for which the code may be compiled.
+Application may use only one platform module.
+
+==============
+System modules
+==============
+
+System modules are platform independent modules defined by language. 
+Platform modules are stored in 
+::::::::::::::::::::::::
+%SYSTEM%/module/%module%.atl
+::::::::::::::::::::::::
+directory.
+
+===================
+Application modules
+===================
+
+Application modules are defined by application and are stored in the application
+directory.
