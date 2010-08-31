@@ -918,7 +918,7 @@ rule ifgt %A,%B:card,const %C:card  = instr
   ifeq %A, _c, 1
 	label _loc2
 
-;two byte comparisons
+;16-bit comparisons
 
 rule ifeq %A,%B:card,const %C:card  = instr
   let _a, %B(0)
@@ -940,20 +940,53 @@ rule ifne %A,%B:card,const %C:card  = instr
   hi %Z, %C
   sub _void, _a, %Z
   ifne %A, _z, 1
+;	label _loc
+
+rule iflt %A,%B:card,const %C:card  = instr
+  let _a, %B(1)       ;lda %B+1
+  hi %Z, %C
+  sub _void, _a, %Z   ;cmp #>%C
+  ifeq %A, _c, 0			;bcc %A
+  ifeq _loc, _z, 0    ;bne _loc
+  let _a, %B(0)				;lda %B
+  lo %Z, %C           ;
+  sub _void, _a, %Z   ;cmp #<%C
+  ifeq %A, _c, 0      ;bcc %A
 	label _loc
 
 rule ifle %A,%B:card,const %C:card  = instr
-  let _a, %B(1)
-  hi %Z, %C
-  sub _void, _a, %Z
-  ifeq %A, _c, 0
-  ifeq _loc, _z, 0
-  let _a, %B(0)				;lda %B+1
-  lo %Z, %C           ; %Z is macro local variable
-  sub _void, _a, %Z
-  ifeq %A, _c, 0
-	label _loc
+  hi _a, %C            ;lda #>%C
+  sub _void, _a, %B(1) ;cmp %B+1
+  ifeq %A, _c, 1       ;bcs %A
+  lo _a, %C            ;lda #<%C
+  let _a, %B(0)				 ;lda %B+1
+  sub _void, _a, %B(0) ;cmp %B
+  ifeq %A, _c, 1			 ;bcs %A
 
+;rule ifle %A,%B:card,const %C:card  = instr
+;  let _a, %B(1)       ;lda %B+1
+;  hi %Z, %C
+;  sub _void, _a, %Z   ;cmp #>C
+;  ifeq %A, _c, 0      ;bcc %A
+;  ifeq _loc, _z, 0
+;  let _a, %B(0)				;lda %B+1
+;  lo %Z, %C           ; %Z is macro local variable
+;  sub _void, _a, %Z
+;  ifeq %A, _c, 0			;bcc %A
+;  ifeq %A, _z, 1			;beq %A
+;	label _loc
+
+rule ifge %A,%B:card,const %C:card  = instr
+  let _a, %B(1)				;lda %B+1
+  hi %Z, %C
+  sub _void, _a, %Z   ;cmp #>%C
+  ifeq %A, _c, 0      ;bcc _loc
+  ifeq _loc, _z, 0    ;bne %A
+  let _a, %B(0)				;lda %B
+  lo %Z, %C           
+  sub _void, _a, %Z   ;cmp #<%C
+  ifeq %A, _c, 1      ;bcs %A
+	label _loc
 
 	
 ;Rules emmiting compiled output
