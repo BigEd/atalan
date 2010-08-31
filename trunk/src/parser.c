@@ -1700,7 +1700,7 @@ Arguments:
 	while(!NextIs(TOKEN_BLOCK_END)) {
 
 		// Skip any EOLs (we may use them to separate subarrays?)
-		while (NextIs(TOKEN_EOL));
+		if (NextIs(TOKEN_EOL)) continue;
 
 		// Items may be separated by comma too (though it is optional)
 		if (i > 0) {

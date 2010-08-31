@@ -295,10 +295,11 @@ int main(int argc, char *argv[])
 		result = system(command);
 #endif
 	}
-	
+
+done:	
  	exit(0);
 
 failure:
 	result = -2;
-  	exit(result);
+  	goto done;
 }
