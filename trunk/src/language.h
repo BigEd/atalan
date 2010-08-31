@@ -77,6 +77,9 @@ typedef enum {
 	TOKEN_MOD,
 	TOKEN_XOR,
 	TOKEN_STRUCT,
+	TOKEN_USE,
+
+	TOKEN_LAST_KEYWORD = TOKEN_USE,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -87,16 +90,28 @@ typedef enum {
 
 } Token;
 
+#define KEYWORD_COUNT (TOKEN_LAST_KEYWORD - TOKEN_KEYWORD + 1)
+
+typedef struct {
+	FILE * file;
+	char * line;
+	char * prev_line;
+	LineNo line_no;
+	UInt16 line_len;
+	UInt16 line_pos;
+	Token   token;
+} ParseState;
+
 typedef struct {
 	char   name[256];
 	UInt32   n;
-	char * filename;
 	FILE * f;
 	Bool   ignore_keywords;
 } Lexer;
 
 Bool SrcOpen(char * name);
 void SrcClose();
+FILE * FindFile(char * name, char * ext);
 
 
 // This functions are used only by parser
@@ -127,6 +142,11 @@ extern char * PREV_LINE;
 extern Var *  SRC_FILE;					// current source file
 extern char PROJECT_DIR[MAX_PATH_LEN];
 extern char SYSTEM_DIR[MAX_PATH_LEN];
+char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
+char FILENAME[MAX_PATH_LEN];
+extern char PLATFORM[64];
+
+void PlatformPath(char * path);
 
 /*********************************************************
 
@@ -137,6 +157,7 @@ extern char SYSTEM_DIR[MAX_PATH_LEN];
 extern UInt32 ERROR_CNT;
 extern UInt32 LOGIC_ERROR_CNT;
 
+void ErrArg(Var * var);
 void SyntaxError(char * text);
 void LogicWarning(char * text, UInt16 bookmark);
 void LogicError(char * text, UInt16 bookmark);
@@ -221,7 +242,7 @@ typedef enum {
 	MODE_SRC_FILE = 10	// variable representing source file
 						// scope   FILE that includes this file
 						// name    filename
-						// n       current line number
+						// n       parse state
 } VarMode;
 
 typedef enum {
@@ -231,7 +252,8 @@ typedef enum {
 	SUBMODE_REG = 4,		// variable is stored in register
 	SUBMODE_REF = 8,
 	SUBMODE_ARG_IN  = 16,
-	SUBMODE_ARG_OUT = 32
+	SUBMODE_ARG_OUT = 32,
+	SUBMODE_MAIN_FILE = 4
 } VarSubmode;
 
 //REF
@@ -278,7 +300,7 @@ struct VarTag {
 		char * str;
 		Var * var;
 		Instr * lab_adr;		// label address
-		FILE * f;				// MODE_SRC_FILE
+		ParseState * parse_state;	// MODE_SRC_FILE
 	};
 	UInt32 seq_no;
 	Var *   current_val;	// current value asigned during optimalization
@@ -337,6 +359,7 @@ typedef enum {
 	INSTR_NOT,
 
 	INSTR_LINE,				// reference line in the source code
+	INSTR_INCLUDE,
 	INSTR_CNT
 } InstrOp;
 
@@ -594,7 +617,7 @@ struct BlockTag {
 };
 
 void ParseInit();
-Bool Parse(char * name);
+Bool Parse(char * name, Bool main_file);
 
 /*************************************************************
 
@@ -622,6 +645,7 @@ Bool EmitInstr(Instr * code);
 Bool EmitProc(Var * proc);
 void EmitLabels();
 void EmitProcedures();
+void EmitAsmIncludes();
 
 extern Bool VERBOSE;
 

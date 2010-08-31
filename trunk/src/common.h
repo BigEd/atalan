@@ -17,9 +17,11 @@ typedef unsigned char UInt8;
 void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
 #define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
+#define MemFree(adr) free(adr)
+
 char * StrAlloc(char * str);
 char * StrAllocLen(char * str, UInt16 len);
-
+#define StrCopy(dest, src) strcpy(dest, src);
 Bool   StrEqual(char * str1, char * str2);
 #define StrLen(str) strlen(str)
 
@@ -37,6 +39,9 @@ Bool   StrEqual(char * str1, char * str2);
 	#define ASSERT(x) if (!(x)) exit(-1)
 #endif
 
+
+// Path functions
+
 #define MAX_PATH_LEN 4096
 
 #if defined(__Darwin__) || defined(__Linux__) || defined(__FreeBSD__) || defined(__SunOS__) || defined(__OSF1__) || defined(__IRIX__) || defined(__IRIX64__) || defined(__AIX__)
@@ -52,8 +57,16 @@ Bool   StrEqual(char * str1, char * str2);
 //WIDOWS
 #else
 
+#define __Windows__
 #define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 #define DIRSEP '\\'
 
 #endif
 
+// Path functions
+
+char * PathFilename(char * path);
+void PathSeparate(char * path, char * dirname, char * filename);
+void PathParent(char * path);
+void PathMerge(char * path, char * dirname, char * filename);
+void GetApplicationDir(char * name, char * path);

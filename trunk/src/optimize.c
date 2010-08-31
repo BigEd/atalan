@@ -171,7 +171,7 @@ Bool OptimizeLive(Var * proc)
 
 	for(i = blk->last; i != NULL; i = i->prev, n--) {
 		op = i->op;
-		if (op != INSTR_LINE && op != INSTR_LABEL && op != INSTR_DATA && op != INSTR_PTR && op != INSTR_ALLOC 
+		if (op != INSTR_INCLUDE && op != INSTR_LINE && op != INSTR_LABEL && op != INSTR_DATA && op != INSTR_PTR && op != INSTR_ALLOC 
 			&& op != INSTR_FILE && op != INSTR_ALIGN && op != INSTR_ARRAY_INDEX) break;
 	}
 

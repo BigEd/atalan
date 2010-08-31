@@ -22,27 +22,47 @@ extern Var   ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * CODE;
 Var * INTERRUPT;
+char PLATFORM[64];			// name of platform
 
 int main(int argc, char *argv[])
 {
-	Var * var;
-	Var * data;
+	Var * var, * data;
 	Type * type;
-	Int32 adr;
-	Int16 i = 1;
+	Int16 i;
 	TypeVariant tv;
 	Bool assembler = true;
 	int result = 0;
-	UInt32 size;
-	UInt32 n;
+	UInt32 size, n, adr;
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
-	char * last_slash, * s;
-
-//	FILE * asmf;
+	char * s;
+	UInt16 len;
 
 	VERBOSE = false;
-	SYSTEM_DIR[0]='\0';
+
+	// Default platform is "atari"
+
+	strcpy(PLATFORM, "atari");
+
+	// System folder is parent directory of directory where the binary is stored
+	//
+	//  bin/
+	//      atalan.exe
+	//      mads.exe
+	//  modules/
+	//		system.atl
+	//      ;platform independent modules
+	//  plaforms/
+	//      atari/
+	//         ;platform dependent modules
+	//      c64/
+	//  processors/
+	//      m6502/
+
+	GetApplicationDir(argv[0], SYSTEM_DIR);
+	PathParent(SYSTEM_DIR);
+
+//	printf("System dir: %s\n", SYSTEM_DIR);
 
 	InitErrors();
 
@@ -52,6 +72,7 @@ int main(int argc, char *argv[])
 
 	printf("Atalan programming language compiler (23-Aug-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
+	i = 1;
 	while (i < argc) {		
 		if (StrEqual(argv[i], "-V")) {
 			VERBOSE = true;
@@ -62,7 +83,7 @@ int main(int argc, char *argv[])
 		} else if (StrEqual(argv[i], "-I")) {
 			i++;
 			if (i<argc)
-				if (strlen(argv[i])<MAX_PATH_LEN) {
+				if (strlen(argv[i]) < MAX_PATH_LEN) {
 					strcpy(SYSTEM_DIR, argv[i]);
 					s = &SYSTEM_DIR[strlen(SYSTEM_DIR)-1];
 					if (*s!=DIRSEP)	{
@@ -72,7 +93,6 @@ int main(int argc, char *argv[])
 					}
 
 				}
-
 		} else {
 			break;
 		}
@@ -88,35 +108,21 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-	// If the filename does not have .atl extension, add it
-	// Also get the name of the file, so we can generate output with same name
+	// If the filename has .atl extension, cut it
 
 	strcpy(filename, argv[i]);
 	filename_len = StrLen(filename);
 
 	if (filename_len > 4 && StrEqual(".atl", &filename[filename_len-4])) {
-//		strcpy(&filename[filename_len], ".atl");
-//	} else {
 		filename_len -= 4;
 		filename[filename_len] = 0;
 	}
 
 	//==== Split dir and filename
 
-	strcpy(PROJECT_DIR, filename);
+	PathSeparate(filename, PROJECT_DIR, filename);
 
-	last_slash=strrchr(PROJECT_DIR,DIRSEP);
-
-	if (last_slash != NULL) {
-		// basename
-		strcpy(filename, ++last_slash);
-		// dirname
-		*last_slash = 0;
-	}
-	else 
-		// dirname empty
-		PROJECT_DIR[0]='\0';
-
+//	printf("Project dir: %s\n", PROJECT_DIR);
 
 	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
 
@@ -136,15 +142,14 @@ int main(int argc, char *argv[])
 	// It must always be included.
 	// Some of the definitions in system.atl are directly used by compiler.
 
-	if (!Parse("system")) goto failure;
-
+	if (!Parse("system", false)) goto failure;
 	
 	INSTRSET  = VarFindScope(&ROOT_PROC, "instrs", 0);
 	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
 
-	if (!Parse("p_6502")) goto failure;
-	if (!Parse("atari")) goto failure;
+	if (!Parse("m6502", false)) goto failure;
+	if (!Parse("atari", false)) goto failure;
 
 	VarInitRegisters();
 
@@ -154,9 +159,16 @@ int main(int argc, char *argv[])
 
 	Gen(INSTR_PROLOGUE, NULL, NULL, NULL);
 	SYSTEM_PARSE = false;
-	if (!Parse(filename)) goto failure;
+	if (!Parse(filename, true)) goto failure;
 	SYSTEM_PARSE = true;
 	Gen(INSTR_EPILOGUE, NULL, NULL, NULL);
+
+	// Report warning about logical errors
+
+	if (LOGIC_ERROR_CNT > 0 && ERROR_CNT == 0) {
+		Warning("There were logical errors.\nCompilation will proceed, but the resulting program may be errorneous.");
+	}
+
 
 	ROOT_PROC.instr = CODE;
 	VarGenerateArrays();
@@ -167,7 +179,7 @@ int main(int argc, char *argv[])
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
-				printf(";===================================================\n");
+				printf("---------------------------------------------");
 				PrintVar(var);
 				printf("\n\n");
 				PrintProc(var);
@@ -228,7 +240,6 @@ int main(int argc, char *argv[])
 
 	if (TOK == TOKEN_ERROR) goto failure;
 
-//	strcpy(&filename[filename_len], ".asm");
 	EmitOpen(filename);
 
 	if (VERBOSE) {
@@ -263,6 +274,7 @@ int main(int argc, char *argv[])
 	EmitLabels();
 	if (!EmitProc(&ROOT_PROC)) goto failure;
 	EmitProcedures();
+	EmitAsmIncludes();
 	EmitClose();
 
 	//==== Call the assembler
@@ -270,21 +282,17 @@ int main(int argc, char *argv[])
 	strcpy(path, PROJECT_DIR);
 	strcat(path, filename);
 
+	PlatformPath(command);
+	len = StrLen(command);
+
+	result = 0;
 	if (assembler) {
 #if defined(__UNIX__)
-//		filename[filename_len] = 0;
-		sprintf(command, MADS_COMMAND, path, path, path);
+		sprintf(command+len, MADS_COMMAND, path, path, path);
 		result = system(command);
-		if (result != 0) goto asm_failure;
 #else
-//		asmf = fopen("mads.exe", "rb");
-//		if (asmf != NULL) {
-//			fclose(asmf);
-//			filename[filename_len] = 0;
-			sprintf(command, MADS_COMMAND, path, path, path);
-			result = system(command);
-			if (result != 0) goto asm_failure;
-//		}
+		sprintf(command+len, MADS_COMMAND, path, path, path);
+		result = system(command);
 #endif
 	}
 	
@@ -292,6 +300,5 @@ int main(int argc, char *argv[])
 
 failure:
 	result = -2;
-asm_failure:
   	exit(result);
 }

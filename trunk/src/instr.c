@@ -530,7 +530,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 		// For array element variable store array into the macro argument
 
 		pvar = arg;
-		if (arg->mode == MODE_ELEMENT && VarIsArrayElement(arg)) {
+		if (arg->mode == MODE_ELEMENT && !VarIsStructElement(arg)) {
 			pvar = arg->adr;
 		}
 
