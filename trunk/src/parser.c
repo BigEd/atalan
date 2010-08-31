@@ -1357,6 +1357,7 @@ Syntax:
 	Var * min, * max;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
+	Int32 n;
 
 	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL;
 	where_t_label = NULL;
@@ -1499,8 +1500,21 @@ Syntax:
 
 		// We prefer comparison usign equality.
 		// On many architectures, this is faster than <=, because it has to be done using 2 instructions (carry clear, zero set)
-		if (max->mode == MODE_CONST && max->n != 255 && max->n != 0xffff && max->n != 0xffffff) {
-			max = VarNewInt(max->n + 1);
+		if (max->mode == MODE_CONST) {
+
+			n = max->n;
+			if ((n == 0xff || n == 0xffff || n == 0xffffff) && n == var->type->range.max) {
+				n = 0;
+			} else {
+				n++;
+			}
+
+
+//			if (var->type->range.max == 255 && max->n == 255) {
+//				max = VarNewInt(0);
+//			} else {
+			max = VarNewInt(n);
+//			}
 			Gen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 		} else {
 			Gen(INSTR_IFLE, G_BLOCK->body_label, var, max);	//TODO: Overflow
