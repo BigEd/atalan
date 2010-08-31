@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
 	}
 
 done:	
- 	exit(0);
+ 	exit(result);
 
 failure:
 	result = -2;

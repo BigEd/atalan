@@ -1678,6 +1678,30 @@ void VarFree(Var * var)
 	}
 }
 
+Var * ParseFile()
+{
+	Var * item = NULL;
+	Bool block = false;
+
+	if (TOK == TOKEN_OPEN_P) {
+		EnterBlock();
+		block = true;
+	}
+
+	if (TOK == TOKEN_STRING) {
+		item = VarNewStr(StrAlloc(LEX.name));
+	} else {
+		SyntaxError("expected string specifying file name");
+	}
+
+	if (block) {
+		ExpectToken(TOKEN_BLOCK_END);
+	} else {
+		NextToken();
+	}
+	return item;
+}
+
 UInt32 ParseArrayConst(Var * var)
 /*
 Purpose:
@@ -1714,14 +1738,13 @@ Arguments:
 		// FILE "filename"
 
 		if (NextIs(TOKEN_FILE)) {
-			if (TOK == TOKEN_STRING) {
-				item = VarNewStr(StrAlloc(LEX.name));
+			item = ParseFile();
+			if (TOK) {
 				Gen(INSTR_FILE, NULL, item, NULL);
-				NextToken();
+				continue;
 			} else {
-				SyntaxError("expected string specifying file name");
+				break;
 			}
-			continue;
 		}
 
 		//TODO: Here can be either the type or integer constant or address
