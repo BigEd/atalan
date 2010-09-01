@@ -164,6 +164,8 @@ bmoves@$61a:card
 currcol@$61c:byte
 currentbuf@$61d:adr
 tmp@$61f:byte
+xtilesize@$620:byte
+ytilesize@$621:byte
 
 sleep: proc time:byte =
 	tmp = timer
@@ -241,8 +243,8 @@ gettile:proc tile:byte >tx:byte >ty:byte=
 showboard: proc =
 	for k
 		for l
-			xbtmp = 6*k +XOFF
-			ybtmp = 48*l +YOFF
+			xbtmp = 6*k+XOFF
+			ybtmp = 48*l+YOFF
 			tile = playfield(k,l)
 			if tile <> T_EMPTY
 				i,j=gettile tile
@@ -293,13 +295,17 @@ movetile: proc xs:byte ys:byte m:byte show:byte =
 			xbtmp=xs*6+XOFF
 			ybtmp=ys*48+YOFF
 			AUDF1=z+xs
+			xtilesize=6
+			ytilesize=48
+			
 			if m = D_LEFT
 				if xs<3
 					xoffset=5-z
 					yoffset=0
-					btmp1=xbtmp+xoffset+6
+					btmp1 = xbtmp+6
+					btmp1 = btmp1+xoffset
 					btmp2=ybtmp+yoffset
-					eraserect btmp1 btmp2 1 48
+					xtilesize=1
 
 			if m = D_DOWN
 				if ys>0
@@ -307,16 +313,19 @@ movetile: proc xs:byte ys:byte m:byte show:byte =
 					yoffset = yoffset * 8
 					xoffset=0
 					btmp1=xbtmp+xoffset
-					btmp2=ybtmp-8
-					btmp2=btmp2+yoffset
-					eraserect btmp1 btmp2 6 8
+					btmp2=ybtmp+yoffset
+					btmp2=btmp2-8
+					if z=5 btmp2 = btmp2-40
+					ytilesize=8
 			if m = D_RIGHT
 				if xs>0
 					xoffset=z-5
 					yoffset=0
-					btmp1=xbtmp-1+xoffset
+					btmp1=xbtmp+xoffset
+					dec btmp1
+					if z=5 btmp1 = btmp1-5
 					btmp2=ybtmp+yoffset
-					eraserect btmp1 btmp2 1 48
+					xtilesize=1
 
 			if m = D_UP
 				if ys<3
@@ -324,15 +333,25 @@ movetile: proc xs:byte ys:byte m:byte show:byte =
 					yoffset = yoffset * 8
 					xoffset=0
 					btmp1=xbtmp+xoffset
-					btmp2=ybtmp+yoffset+48 
-					eraserect btmp1 btmp2 6 8
+					btmp2=ybtmp+yoffset
+					btmp2=btmp2+48
+					ytilesize=8
+
+			if xtilesize<>6 or ytilesize<>48
+				if z=5 xtilesize=6 ytilesize=48 
+				eraserect btmp1 btmp2 xtilesize ytilesize
+				
 
 			tile = playfield(xs,ys)
 			if tile <> T_EMPTY
 				if show >0
 					k,l = gettile tile
-					btmp1=xs*6+XOFF+xoffset
-					btmp2=ys*48+YOFF+yoffset
+					btmp1=xs*6
+					btmp1=btmp1+XOFF
+					btmp1=btmp1+xoffset
+					btmp2=ys*48
+					btmp2=btmp2+YOFF
+					btmp2=btmp2+yoffset
 					copytile k l btmp1 btmp2 6 48
 			inc z
 	AUDC1=0
