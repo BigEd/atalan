@@ -10,8 +10,14 @@
  - Logic     Logic error in user program. For example type mismatch, index out of bounds etc.
  - Internal  Error, that really should not have happened
 
+ Errors may be categorized by severity, too:
+
+ - Error
+ - Warning
+
  It is possible to specify arguments for error messages using ErrArg method.
  Last error argument has name A, the one before it B etc.
+ Up to 26 arguments may be used.
 
  For example:
 

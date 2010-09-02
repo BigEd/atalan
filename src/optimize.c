@@ -394,10 +394,6 @@ Bool OptimizeValues(Var * proc)
 retry:
 		if (i->op == INSTR_LINE) continue;
 
-		if (n == 25) {
-			printf("");
-		}
-
 		// When label is encountered, we must reset all values, because we may come from other places
 		if (i->op == INSTR_LABEL || i->op == INSTR_CALL || i->op == INSTR_FORMAT || i->op == INSTR_PRINT) {
 			ResetValues();
@@ -413,7 +409,9 @@ retry:
 				arg1 = i->arg1;
 
 				//TODO: Split OUT & Equivalent
-				if (FlagOff(result->submode, SUBMODE_OUT) && InstrEquivalent(i, result->src_i)) {
+				// If result is equal to arg1, instructions are not equivalent, because they accumulate the result,
+				// (for example sequence of mul a,a,2  mul a,a,2
+				if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && InstrEquivalent(i, result->src_i)) {
 
 					// Array references, that have non-const index may not be removed, as
 					// we can not be sure, that the index variable has not changed since last
