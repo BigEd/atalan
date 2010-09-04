@@ -208,8 +208,8 @@ text:proc xt:byte yt:byte len:byte=
 		
 
 copytile: proc xbm:byte ybm:byte xscr:byte yscr:byte xsize:byte ysize:byte=
-	ctmp1=ybm
-	ctmp1=ctmp1*48*24
+	ctmp1=ybm*24
+	ctmp1=ctmp1*48
 	xbm=xbm*6
 	copyblock currentbuf xbm ctmp1 24 xscr yscr xsize ysize
 
@@ -278,8 +278,10 @@ movetile: proc xs:byte ys:byte m:byte show:byte =
 
 	if xoffset <>1 or yoffset <>1
 		;no rule: playfield(xs,ys)=playfield(xs+xoffset-1,ys+yoffset-1)
-		xbtmp=xs-1+xoffset
-		ybtmp=ys-1+yoffset
+		xbtmp=xs+xoffset
+		dec xbtmp
+		ybtmp=ys+yoffset
+		dec ybtmp
 		playfield(xs,ys)=playfield(xbtmp,ybtmp)
 		playfield(xbtmp,ybtmp)=T_EMPTY
 		inc moves
@@ -457,7 +459,7 @@ shuffletiles: proc =
 	movetile x y dir 2
 	cnt=countgoodtiles
 	if c<50 inc c
-	if cnt>2 or c<50 goto loop
+	if cnt>0 or c<50 goto loop
 		
 
 cycle:vbi =
@@ -638,7 +640,7 @@ titlescreen: proc=
 			mus_init
 			play=1
 			
-	if CONSOL = 6
+	if CONSOL = 3
 		shuffletiles
 		showboard
 		goto loop
@@ -651,7 +653,7 @@ titlescreen: proc=
 		goto loop
 
 
-	if CONSOL <> 3
+	if CONSOL <> 6
 		goto loop
 
 game: proc=
