@@ -352,7 +352,7 @@ rule add %A:card,%B:byte,%C:byte = instr
 	rol _a,_a,1			; rol
 	let %A(1), _a	
 
- rule add %A:card,%A:card,1 = instr
+rule add %A:card,%A:card,1 = instr
   add %A(0), %A(0), 1
   ifeq _lab1, _Z, 0
   add %A(1), %A(1), 1
@@ -879,10 +879,9 @@ rule ifne %A,%B:byte,%C:byte   = instr
   ifne %A, _z, 1      ; jne %A
 
 rule ifle %A,%B:byte,%C:byte   = instr
-  let _a, %B          ; lda %B
-  sub _void, _a, %C   ; cmp %C
-  ifeq %A, _c, 0      ; jcc %A
-  ifeq %A, _z, 1      ; jeq %A
+  let _a, %C          ; lda %B
+  sub _void, _a, %B   ; cmp %C
+  ifeq %A, _c, 1      ; jeq %A
 
 rule ifge %A,%B:byte,%C:byte   = instr
   let _a, %B          ; lda %B
@@ -895,28 +894,9 @@ rule iflt %A,%B:byte,%C:byte   = instr
   ifeq %A, _c, 0      ; jcs %A
 
 rule ifgt %A,%B:byte,%C:byte   = instr
-  let _a, %B          ; lda %B
-  sub _void, _a, %C   ; cmp %C
-  ifeq _loc, _z, 1		; jeq _loc
-  ifeq %A, _c, 1      ; jcs %A
-  label _loc
-
-;if %B(1) > hi %C or (%B(1) = hi %C and %B(0) > lo %C)
-
-rule ifgt %A,%B:card,const %C:card  = instr
-  let _a, %B(1)				;lda B+1
-  hi %Z, %C
-  sub _void, _a, %Z
-  ifeq _loc, _z, 1
-  ifeq %A, _c, 1
-
-  label _loc
-  let _a, %B(0)				;lda %B+1
-  lo %Z, %C           ; %Z is macro local variable
-  sub _void, _a, %Z
-  ifeq _loc2, _z, 1
-  ifeq %A, _c, 1
-	label _loc2
+  let _a, %C          ; lda %B
+  sub _void, _a, %B   ; cmp %C
+  ifeq %A, _c, 0      ; jcs %A
 
 ;16-bit comparisons
 
@@ -931,6 +911,15 @@ rule ifeq %A,%B:card,const %C:card  = instr
   ifeq %A, _z, 1
   label _loc
 
+rule ifeq %A,%B:card,%C:card  = instr
+  let _a, %B(0)
+  sub _void, _a, %C(0)
+  ifne _loc, _z, 1
+  let _a, %B(1)
+  sub _void, _a, %C(1)
+  ifeq %A, _z, 1
+  label _loc
+
 rule ifne %A,%B:card,const %C:card  = instr
   let _a, %B(0)
   lo %Z, %C           ; %Z is macro local variable
@@ -940,53 +929,133 @@ rule ifne %A,%B:card,const %C:card  = instr
   hi %Z, %C
   sub _void, _a, %Z
   ifne %A, _z, 1
-;	label _loc
 
+rule ifne %A,%B:card, %C:card  = instr
+  let _a, %B(0)
+  sub _void, _a, %C(0)
+  ifne %A, _z, 1
+  let _a, %B(1)
+  sub _void, _a, %C(1)
+  ifne %A, _z, 1
+
+; iflt = ! ifge
 rule iflt %A,%B:card,const %C:card  = instr
-  let _a, %B(1)       ;lda %B+1
+  let _a, %B(0)          ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z   ; cmp %C
+  let _a, %B(1)          ; lda %B+1
   hi %Z, %C
-  sub _void, _a, %Z   ;cmp #>%C
-  ifeq %A, _c, 0			;bcc %A
-  ifeq _loc, _z, 0    ;bne _loc
-  let _a, %B(0)				;lda %B
-  lo %Z, %C           ;
-  sub _void, _a, %Z   ;cmp #<%C
-  ifeq %A, _c, 0      ;bcc %A
-	label _loc
+  sub _a, _a, %Z         ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
 
-rule ifle %A,%B:card,const %C:card  = instr
-  hi _a, %C            ;lda #>%C
-  sub _void, _a, %B(1) ;cmp %B+1
-  ifeq %A, _c, 1       ;bcs %A
-  lo _a, %C            ;lda #<%C
-  let _a, %B(0)				 ;lda %B+1
-  sub _void, _a, %B(0) ;cmp %B
-  ifeq %A, _c, 1			 ;bcs %A
+rule iflt %A,%B:card, %C:card   = instr
+  let _a, %B(0)          ; lda %B
+  sub _void, _a, %C(0)   ; cmp %C
+  let _a, %B(1)          ; lda %B+1
+  sub _a, _a, %C(1)         ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
 
-;rule ifle %A,%B:card,const %C:card  = instr
-;  let _a, %B(1)       ;lda %B+1
-;  hi %Z, %C
-;  sub _void, _a, %Z   ;cmp #>C
-;  ifeq %A, _c, 0      ;bcc %A
-;  ifeq _loc, _z, 0
-;  let _a, %B(0)				;lda %B+1
-;  lo %Z, %C           ; %Z is macro local variable
-;  sub _void, _a, %Z
-;  ifeq %A, _c, 0			;bcc %A
-;  ifeq %A, _z, 1			;beq %A
-;	label _loc
-
-rule ifge %A,%B:card,const %C:card  = instr
-  let _a, %B(1)				;lda %B+1
+rule iflt %A,const %B:card,const %C:card   = instr
+  lo %Z, %B
+  let _a, %Z          ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z   ; cmp %C
+  hi %Z, %B
+  let _a, %Z          ; lda %B+1
   hi %Z, %C
-  sub _void, _a, %Z   ;cmp #>%C
-  ifeq %A, _c, 0      ;bcc _loc
-  ifeq _loc, _z, 0    ;bne %A
-  let _a, %B(0)				;lda %B
-  lo %Z, %C           
-  sub _void, _a, %Z   ;cmp #<%C
-  ifeq %A, _c, 1      ;bcs %A
-	label _loc
+  sub _a, _a, %Z   ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
+
+
+;ifgt = !ifle
+rule ifgt %A,const %B:card,const %C:card   = instr
+  lo %Z, %C
+  let _a, %Z          ; lda %B
+  lo %Z, %B
+  sub _void, _a, %Z   ; cmp %C
+  hi %Z, %C
+  let _a, %Z          ; lda %B+1
+  hi %Z, %B
+  sub _a, _a, %Z   ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
+
+rule ifgt %A,%B:card,const %C:card  = instr
+  lo %Z, %C
+  let _a, %Z          ; lda %B
+  sub _void, _a, %B(0)   ; cmp %C
+  hi %Z, %C
+  let _a, %Z          ; lda %B+1
+  sub _a, _a, %B(1)   ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
+
+; ok
+rule ifgt %A,%B:card, %C:card   = instr
+  let _a, %C(0)          ; lda %B
+  sub _void, _a, %B(0)   ; cmp %C
+  let _a, %C(1)          ; lda %B+1
+  sub _a, _a, %B(1)   ; cmp %C+1
+  ifeq %A, _C, 0         ; jcs %A
+
+; ifle
+rule ifle %A,const %B:card,const %C:card   = instr
+  lo %Z, %C
+  let _a, %Z          ; lda %B
+  lo %Z, %B
+  sub _void, _a, %Z   ; cmp %C
+  hi %Z, %C
+  let _a, %Z          ; lda %B+1
+  hi %Z, %B
+  sub _a, _a, %Z   ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+rule ifle %A,%B:card,const %C:card   = instr
+  lo %Z, %C
+  let _a, %Z          ; lda %B
+  sub _void, _a, %B(0)   ; cmp %C
+  hi %Z, %C
+  let _a, %Z          ; lda %B+1
+  sub _a, _a, %B(1)   ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+; ok
+rule ifle %A,%B:card, %C:card   = instr
+  let _a, %C(0)          ; lda %B
+  sub _void, _a, %B(0)   ; cmp %C
+  let _a, %C(1)          ; lda %B+1
+  sub _a, _a, %B(1)   ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+; ifge
+rule ifge %A,const %B:card,const %C:card   = instr
+  lo %Z, %B
+  let _a, %Z          ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z   ; cmp %C
+  hi %Z, %B
+  let _a, %Z          ; lda %B+1
+  hi %Z, %C
+  sub _a, _a, %Z   ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+; ok
+rule ifge %A,%B:card, const %C:card   = instr
+  let _a, %B(0)          ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z   ; cmp %C
+  let _a, %B(1)          ; lda %B+1
+  hi %Z, %C
+  sub _a, _a, %Z         ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+rule ifge %A,%B:card, %C:card   = instr
+  let _a, %B(0)          ; lda %B
+  sub _void, _a, %C(0)   ; cmp %C
+  let _a, %B(1)          ; lda %B+1
+  sub _a, _a, %C(1)         ; cmp %C+1
+  ifeq %A, _C, 1         ; jcs %A
+
+
+
 
 	
 ;Rules emmiting compiled output
@@ -1017,6 +1086,8 @@ rule ifeq %A, _C, 1  = "   jcs %A"
 
 rule sub _void, _a, const %A:byte = "   cmp #%A"
 rule sub _void, _a, %A:byte       = "   cmp %A"
+rule sub _void, _a, %A:byte(1)    = "   cmp %A+1"
+rule sub _void, _a, %A:byte(0)    = "   cmp %A"
 
 rule sub _void, _x, const %A:byte = "   cpx #%A"
 rule sub _void, _x, %A:byte       = "   cpx %A"
@@ -1146,6 +1217,7 @@ rule format    = "   jsr _std_print_adr"
 rule str_arg ,%A,%B:byte  = "   dta b(%B),c'%A'"
 rule var_arg ,%A:byte   = "   dta b(129),a(%A)"
 rule var_arg ,%A:card   = "   dta b(130),a(%A)"
+rule var_arg ,%A:adr    = "   dta b(130),a(%A)"
 rule var_arg ,%A:long   = "   dta b(131),a(%A)"
 rule data ,%A    = "   dta b(%A)"
 rule align ,%A    = "   .align %A"

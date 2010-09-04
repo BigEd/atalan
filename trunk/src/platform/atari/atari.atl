@@ -124,6 +124,8 @@ out missile_size@$d00c:byte
 out missile_x@$d004:array(3) of byte
 
 out GRACTL@$d01d:byte
+out GTICTLS@$26f:byte
+out GTIACTL@$d01b:byte
 
 ;*******************************
 ;Sound
@@ -136,9 +138,12 @@ out GRACTL@$d01d:byte
 
 out AUDF1@$D200:byte   ; audio 1 freq.      
 out AUDC1@$D201:byte   ; audio 1 control    
-
 out AUDF2@$D202:byte   ; audio 2 freq.      
 out AUDC2@$D203:byte   ; audio 2 control    
+out AUDF3@$D204:byte   ; audio 3 freq.      
+out AUDC3@$D205:byte   ; audio 3 control    
+out AUDF4@$D206:byte   ; audio 4 freq.      
+out AUDC4@$D207:byte   ; audio 4 control    
 
 out AUDCTL@$D208:byte  ; audio control
 out SKCTL@$d20f:byte   ; audio control   
