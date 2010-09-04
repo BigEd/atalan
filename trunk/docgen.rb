@@ -207,3 +207,6 @@ txt_file "platform_atari.txt"
 
 $stdout = File.new($proj_folder + 'www/news.html', 'w')
 txt_file "news.txt"
+
+$stdout = File.new($proj_folder + 'www/projects.html', 'w')
+txt_file "projects.txt"
