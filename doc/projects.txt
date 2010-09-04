@@ -29,13 +29,13 @@ Atalan implementation of popular Sokoban game.
 
 <img src="projects/sokoban/screenshot.png">
 
-==============
-Little Fifteen 
-==============
+=========
+Little 15
+=========
 
 Author: Jakub Husak 
 
-Date: September 2010
+Date: 1st September 2010
 
 Not so simple Atalan game.
 
