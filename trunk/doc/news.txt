@@ -3,6 +3,16 @@ News
 ****
 
 ===========
+3-Sep-2010
+===========
+
+- module system (Use keyword)
+- very basic version of structures
+- many bugs fixed
+- projects page
+- Little Fifteen game by Jakub Husak included (3 games developed in Atalan now!)
+
+===========
 24-Aug-2010
 ===========
 
