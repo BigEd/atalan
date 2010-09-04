@@ -17,8 +17,6 @@ xcopy src\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
 xcopy src\processor atalan\processor /E /I /Q /EXCLUDE:exclude.list
 xcopy src\module atalan\module /E /I /Q /EXCLUDE:exclude.list
 
-del exclude.list
-
 REM Bin
 
 cd src
@@ -39,13 +37,17 @@ mkdir template
 mkdir raster
 mkdir examples
 mkdir download
+mkdir projects
 cd ..
-xcopy www_src\template www\template /E /I /Q
-xcopy www_src\raster www\raster /E /I /Q
+xcopy www_src\template www\template /E /I /Q /EXCLUDE:exclude.list
+xcopy www_src\raster www\raster /E /I /Q /EXCLUDE:exclude.list
+xcopy projects www\projects /E /I /Q /EXCLUDE:exclude.list
 
 docgen.rb
 
 copy examples\*.* atalan\examples /Y
+
+del exclude.list
 
 echo \download\ > exclude.list
 
