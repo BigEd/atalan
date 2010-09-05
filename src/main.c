@@ -16,6 +16,11 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <sys/stat.h> 
 
 #define STDERR stderr
+
+#ifdef __UNIX__
+#include <unistd.h>
+#endif
+
 GLOBAL Bool VERBOSE;
 
 extern Var   ROOT_PROC;
@@ -59,10 +64,13 @@ int main(int argc, char *argv[])
 	//  processors/
 	//      m6502/
 
+	getcwd(ABSOLUTE_PATH,MAX_PATH_LEN);
+
+	printf("argv[0]: %s\n", argv[0]);
+	printf("cwd: %s\n", ABSOLUTE_PATH);
+
 	GetApplicationDir(argv[0], SYSTEM_DIR);
 	PathParent(SYSTEM_DIR);
-
-//	printf("System dir: %s\n", SYSTEM_DIR);
 
 	InitErrors();
 
@@ -99,6 +107,8 @@ int main(int argc, char *argv[])
 		i++;
 	}
 
+	printf("System dir: %s\n", SYSTEM_DIR);
+
     if (i == argc) {
         fprintf(STDERR, "Usage:\n"
 	"%s [-v][-a] file\n"
@@ -122,7 +132,7 @@ int main(int argc, char *argv[])
 
 	PathSeparate(filename, PROJECT_DIR, filename);
 
-//	printf("Project dir: %s\n", PROJECT_DIR);
+	printf("Project dir: %s\n", PROJECT_DIR);
 
 	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
 
