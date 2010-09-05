@@ -420,7 +420,7 @@ Operators
 :::::::::::
 * / mod        Multiplication, division, modulus
 + -            Addition, substraction
-lo hi          Low/high byte of a word (lo $abcd = $ab, hi $abcd = $ab)
+lo hi          Low/high byte of a word (lo $abcd = $cd, hi $abcd = $ab)
 not            Binary negation
 and            Binary and 
 or xor         Binary or and exlusive or
