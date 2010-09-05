@@ -484,6 +484,10 @@ rule mul %A:byte, %A:byte, 3	= instr
 	mula %A, 3
 	let %A, _a
 
+rule mul %A:byte, %B:byte, 0    = instr
+	let _a, 0			; lda %B
+	let %A, _a      ; sta %A
+
 rule mul %A:byte, %B:byte, 1    = instr
 	let _a, %B			; lda %B
 	let %A, _a      ; sta %A
@@ -628,6 +632,10 @@ rule mul %A:byte, %B:byte, 192    = instr
 	mul _a, _a, 2
 	let %A, _a      ; sta %A
 
+;rule mul %A:card, %B:byte, 0    = instr
+;	let _a, 0	; lda #0
+;	let %A(0), _a   ; sta %A
+;	let %A(1), _a   ; sta %A+1
 
 rule mul %A:card, %B:byte, 1    = instr
 	let _a, %B			; lda %B
@@ -1291,6 +1299,8 @@ rule let _a, @%A(_y)  = "   lda (%A),y"
 
 rule let %A:byte,_a  = "   sta %A"
 rule let %A:byte(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
+rule let %A:card(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
+rule let %A:card(1),_a  = "   sta %A+1"       ;would be handled by next rule but we do not want +0 there
 rule let %A:byte(const %B),_a  = "   sta %A+%B"
 
 rule let @%A(_y),_a  = "   sta (%A),y"
@@ -1324,7 +1334,7 @@ rule mul %A:byte,%A:byte,1 = "   ;"
 rule mul %A:byte,%A:byte,2 = "   asl %A"
 rule mul %A:byte(0),%A:byte(0),2 = "   asl %A"
 rule mul %A:byte(1),%A:byte(1),2 = "   asl %A+1"
-rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A(0)" "   sta %A(1)"
+rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
 rule mul %A:card,%A:card,1 = "   ;"
 
 ;ROL, ROR
