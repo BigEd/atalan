@@ -63,7 +63,6 @@ Bool   StrEqual(char * str1, char * str2);
 
 #endif
 
-extern char ABSOLUTE_PATH[MAX_PATH_LEN];
 // Path functions
 
 char * PathFilename(char * path);
