@@ -606,7 +606,7 @@ rule mul %A:byte, %B:byte, 128    = instr
 	let _a, %B			; lda %B
 	div _a, _a, 2
 	let _a, 0
-	rol _a, _a, 1
+	ror _a, _a, 1
 	let %A, _a      ; sta %A
 
 rule mul %A:byte, %B:byte, 160    = instr
