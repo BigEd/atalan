@@ -23,6 +23,8 @@ mem@$0000:array(60000) of byte
 ; Screen 208 lines long (well, 200, but last 8 are the first 8 repeated)
 screen@$A0b0:array(39, 199) of byte
 
+PORTB@$d301:byte
+
 ; GR8 dl.
 const dl:array of byte = ( 2 times $70, $4f,  screen ,
 	32 times $f,
@@ -741,6 +743,8 @@ game: proc=
 	CH = none
 
 
+; switch off basic
+PORTB = PORTB or 2
 initscreen
 besttime(0)=0
 bmoves=999
