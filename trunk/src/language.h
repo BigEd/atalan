@@ -360,6 +360,9 @@ typedef enum {
 
 	INSTR_LINE,				// reference line in the source code
 	INSTR_INCLUDE,
+	INSTR_MULA,				// templates for 8 - bit multiply 
+	INSTR_MULA16,                           // templates for 8 - bit multiply 
+
 	INSTR_CNT
 } InstrOp;
 

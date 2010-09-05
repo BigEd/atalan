@@ -17,6 +17,12 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
     #include <windows.h>
 #endif
 
+// this is the buffer for getcwd()
+// there is a ind of bug where using getcwd in various places
+// it must be called before argv manipulation.
+// this works too on other unices
+char ABSOLUTE_PATH[MAX_PATH_LEN];
+
 void * MemAllocEmpty(long size)
 {
 	void * m = malloc(size);
@@ -118,6 +124,18 @@ void GetApplicationDir(char * name, char * path)
 	GetModuleFileName(NULL, path, MAX_PATH_LEN);
 	PathSeparate(path, path, NULL);
 #else
-	PathSeparate(name, path, NULL);
+	// if the path is absolute
+	if (name[0]==DIRSEP)
+		PathSeparate(name, path, NULL);
+	else
+		{
+		if (strlen(ABSOLUTE_PATH)) {
+			char * s = &(ABSOLUTE_PATH[strlen(ABSOLUTE_PATH)]);
+			*s++=DIRSEP;
+			strcpy(s,name);
+			PathSeparate(ABSOLUTE_PATH, path, NULL);
+			}
+		}
+
 #endif
 }

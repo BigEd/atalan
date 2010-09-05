@@ -398,23 +398,23 @@ retry:
 		TOK = TOKEN_INT;
 
 	// %10  bin number
-/*	} else if (c == '%') {
+	} else if (c == '%' && (LINE[LINE_POS]=='0' || LINE[LINE_POS]=='1')) {
 		LEX.n = 0;
 		do {
-			c = GetChar();
+			c = LINE[LINE_POS++];
 			if (c == '0' || c == '1') {
 				n = c - '0';
 			} else if (c == '\'') {
 				continue;
 			} else {
-				UnGetChar(c);
+				LINE_POS--;
 				break;
 			}
 			LEX.n *= 2;
 			LEX.n += n;
 		} while(true);
 		TOK = TOKEN_INT;
-*/		
+		
 	// Decimal number
 	} else if (isdigit(c)) {
 		LEX.n = 0;
