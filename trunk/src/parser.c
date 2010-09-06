@@ -1869,6 +1869,8 @@ Purpose:
 		return;
 	}
 
+	bookmark = SetBookmark();
+
 	// Comma separated list of identifiers
 	cnt = 0;
 	do {
@@ -1887,12 +1889,17 @@ Purpose:
 			var->submode = submode;
 		}
 		NextToken();
+		ErrArg(var);
 
 		//===== Array index like ARR(x, y)
 
 		if (mode != MODE_CONST && mode != MODE_ARG && mode != MODE_TYPE && !Spaces()) {
 			if (TOK == TOKEN_OPEN_P) {
-				var = ParseArrayElement(var, false);
+				if (var->mode != MODE_UNDEFINED) {
+					var = ParseArrayElement(var, false);
+				} else {
+					SyntaxErrorBmk("Array variable [A] is not declared", bookmark);
+				}
 			} else if (TOK == TOKEN_DOT) {
 				var = ParseStructElement(var);
 			}
