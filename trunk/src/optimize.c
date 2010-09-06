@@ -553,6 +553,7 @@ void InstrVarUse(InstrBlock * code, Instr * from, Instr * to)
 	for(i = from; i != to; i = i->next) {
 
 		if (i->op == INSTR_LINE) continue;
+		if (i->op == INSTR_CALL) continue;		// Calls are used to compute call chains and there are other rules of computation
 
 		// Writes are registered as last to correctly detect uninitialized variable access
 		VarIncRead(i->arg1);
@@ -804,6 +805,7 @@ Purpose:
 			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG | SUBMODE_REF) 
 //			 && (var->mode != MODE_ELEMENT || FlagOff(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG))
 			 && var->mode != MODE_CONST 
+			 && var->type != NULL && var->type->variant != TYPE_PROC
 			 && !VarIsLabel(var) 
 			 && !VarIsArray(var)
 			 && FlagOff(var->flags, VarLoopDependent)

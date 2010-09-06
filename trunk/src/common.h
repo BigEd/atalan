@@ -29,7 +29,8 @@ Bool   StrEqual(char * str1, char * str2);
 
 #define FlagOn(set, flag)  (((set) & (flag))!=0)
 #define FlagOff(set, flag)  (((set) & (flag))==0)
-#define SetFlagOff(set, flag) set &= !(flag)
+#define SetFlagOff(set, flag) set &= ~(flag)
+#define SetFlagOn(set, flag) set |= (flag)
 
 
 //GLOBAL is uset to mark global variables, so it is easy to find all of them

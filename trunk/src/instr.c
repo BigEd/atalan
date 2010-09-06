@@ -32,6 +32,11 @@ extern Var * VARS;		// global variables
 Var * InstrFind(char * name)
 {
 	Var * var;
+
+	if (INSTRSET == NULL) {
+		INSTRSET  = VarFindScope(&ROOT_PROC, "instrs", 0);
+	}
+
 	var = VarFindScope(INSTRSET, name, 0);
 	return var;
 }

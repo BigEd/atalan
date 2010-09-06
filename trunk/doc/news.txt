@@ -3,6 +3,13 @@ News
 ****
 
 ===========
+6-Sep-2010
+===========
+
+- Raster Music Tracker module
+- unused procedure detection
+
+===========
 3-Sep-2010
 ===========
 

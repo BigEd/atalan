@@ -78,8 +78,9 @@ typedef enum {
 	TOKEN_XOR,
 	TOKEN_STRUCT,
 	TOKEN_USE,
+	TOKEN_REF,
 
-	TOKEN_LAST_KEYWORD = TOKEN_USE,
+	TOKEN_LAST_KEYWORD = TOKEN_REF,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -269,6 +270,10 @@ typedef enum {
 #define VarUninitialized   2
 #define VarLoop            4		// loop variable (incremented during loop)
 #define VarLoopDependent   8		// variable is dependent (even transitively) on some loop variable
+#define VarProcessed       16		// used when detecting, whether procedure is used or not
+
+#define VarProcInterrupt   32		// this procedure is used from interrupt
+#define VarProcAddress     64		// procedure address is required (this means, we are not allowed to inline it)
 
 typedef unsigned int VarIdx;
 typedef char * Name;
@@ -363,6 +368,7 @@ typedef enum {
 	INSTR_MULA,				// templates for 8 - bit multiply 
 	INSTR_MULA16,                           // templates for 8 - bit multiply 
 
+	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
 	INSTR_CNT
 } InstrOp;
 
@@ -473,6 +479,8 @@ void VarFree(Var * var);
 
 void PrintVar(Var * var);
 void PrintVarName(Var * var);
+
+void ProcUse(Var * proc, UInt8 flag);
 
 /***********************************************************
 
@@ -651,4 +659,5 @@ void EmitProcedures();
 void EmitAsmIncludes();
 
 extern Bool VERBOSE;
+extern Var * INTERRUPT;
 

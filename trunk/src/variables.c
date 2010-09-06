@@ -454,9 +454,11 @@ void VarResetUse()
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		var->read = 0;
-		var->write = 0;
-		var->flags = var->flags & (~(VarUninitialized|VarLoop|VarLoopDependent));
+		if (var->type == NULL || var->type->variant != TYPE_PROC) {
+			var->read = 0;
+			var->write = 0;
+			var->flags = var->flags & (~(VarUninitialized|VarLoop|VarLoopDependent));
+		}
 	NEXT_VAR
 }
 
@@ -470,9 +472,55 @@ Purpose:
 	Var * var;
 	FOR_EACH_VAR(var)
 		if (var->adr != NULL && var->adr->scope == REGSET) {
-			var->submode |= SUBMODE_REG;
+			SetFlagOn(var->submode, SUBMODE_REG);
 			REG[REG_CNT++] = var;
 		}
 	NEXT_VAR
 }
 
+Bool ProcIsInterrupt(Var * proc)
+{
+	Type * base;
+	base = proc->type;
+	if (base != NULL) {
+		while(base->base != NULL) base = base->base;
+		if (base->owner == INTERRUPT) return true;
+	}
+	return false;
+}
+
+void ProcUse(Var * proc, UInt8 flag)
+/*
+Purpose:
+	Mark all used procedures starting with specified root procedure.
+Arguments:
+	flag		VarProcInterrupt  This procedure is used from interrupt routine
+				VarProcAddress	  Address of this procedure is used
+*/
+{
+	Instr * i;
+	if (proc->instr == NULL) return;
+	if (FlagOn(proc->flags, VarProcessed)) return;
+
+	proc->read++;
+	SetFlagOn(proc->flags, flag | VarProcessed);
+
+	if (ProcIsInterrupt(proc)) {
+		flag |= VarProcInterrupt;
+	}
+
+	for(i = proc->instr->first; i != NULL; i = i->next) {
+		if (i->op == INSTR_CALL) {
+			ProcUse(i->result, flag);
+		} else {
+			if (i->op != INSTR_LINE) {
+				if (VarType(i->arg1) == TYPE_PROC) {
+					ProcUse(i->arg1, flag | VarProcAddress);
+				}
+				if (VarType(i->arg2) == TYPE_PROC) {
+					ProcUse(i->arg2, flag | VarProcAddress);
+				}
+			}
+		}
+	}
+}

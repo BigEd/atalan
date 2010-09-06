@@ -278,14 +278,16 @@ void EmitProcedures()
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
 		if (var->mode != MODE_TYPE && var->mode != MODE_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
-			MemEmptyVar(vardef);
-			vardef.op = INSTR_PROC;
-			vardef.result = var;
-			EmitInstr(&vardef);
-//			PrintProc(var);
-			EmitProc(var);
-			vardef.op = INSTR_ENDPROC;
-			EmitInstr(&vardef);
+			if (var->read > 0) {
+				MemEmptyVar(vardef);
+				vardef.op = INSTR_PROC;
+				vardef.result = var;
+				EmitInstr(&vardef);
+	//			PrintProc(var);
+				EmitProc(var);
+				vardef.op = INSTR_ENDPROC;
+				EmitInstr(&vardef);
+			}
 		}
 	}
 }

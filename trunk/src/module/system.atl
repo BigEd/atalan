@@ -60,6 +60,8 @@ type instrs:enum
 	mula
 	mula16
 		
+	ref
+
 ;=================
 ;Instruction flags
 ;=================
@@ -105,3 +107,5 @@ inc:macro(x) =
 	
 dec:macro(x) =
 	x = x - 1
+
+rule ref %A  = ""
