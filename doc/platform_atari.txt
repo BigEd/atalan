@@ -77,6 +77,41 @@ on'vbi cycle'color
 DLI
 ===
 
+*****
+Music
+*****
+
+Atalan supports Raster Music Tracker modules for playing music in module rmt.
+
+
+:::::::::::::::::::::::::::::::
+;We must inform compiler that we are oing to use Raster Music Tracker (rmt).
+use rmt
+
+;Declare the module to use.
+
+const musmod:array = file "delta.rmt"
+
+;Initialize the music engine (specify, which module to use)
+music'init musmod
+
+;It is necessary to call the music'play routine every 1/50 of second.
+;We will call it from VBI, here we prepare the appropriate routine.
+;It is of course possible to add other functionality to VBI, if necessary.
+
+play:vbi =
+	music'play
+
+;Start playing (set the vbi to our routine).
+;We cannot set the music'play routine directly to VBI, because it is normal
+;subroutine, not interrupt routine.
+
+on'vbi play
+ 
+"Done."
+:::::::::::::::::::::::::::::::
+
+
 ********
 Commands
 ********
