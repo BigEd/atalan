@@ -159,6 +159,7 @@ extern UInt32 ERROR_CNT;
 extern UInt32 LOGIC_ERROR_CNT;
 
 void ErrArg(Var * var);
+void SyntaxErrorBmk(char * text, UInt16 bookmark);
 void SyntaxError(char * text);
 void LogicWarning(char * text, UInt16 bookmark);
 void LogicError(char * text, UInt16 bookmark);

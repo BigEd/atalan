@@ -85,7 +85,7 @@ Atalan supports Raster Music Tracker modules for playing music in module rmt.
 
 
 :::::::::::::::::::::::::::::::
-;We must inform compiler that we are oing to use Raster Music Tracker (rmt).
+;We must inform compiler that we are going to use Raster Music Tracker (rmt).
 use rmt
 
 ;Declare the module to use.

@@ -99,7 +99,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	*o++ = 0;
 
 	PrintColor(RED);
-	fprintf(STDERR, "%s(%d) %s error:", SRC_FILE->name, i, kind);
+	fprintf(STDERR, "%s(%d) %s error: ", SRC_FILE->name, i, kind);
 	fprintf(STDERR, "%s", buf);
 
 	if (name) fprintf(STDERR, " \'%s\'", LEX.name);
@@ -141,22 +141,27 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	PrintColor(RED+GREEN+BLUE);
 }
 
-void SyntaxError(char * text)
+void SyntaxErrorBmk(char * text, UInt16 bookmark)
 {
-	ReportError("syntax", text, 0);
+	ReportError("Syntax", text, bookmark);
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
 }
 
+void SyntaxError(char * text)
+{
+	SyntaxErrorBmk(text, 0);
+}
+
 void LogicWarning(char * text, UInt16 bookmark)
 {
-	ReportError("logic", text, bookmark);
+	ReportError("Logic", text, bookmark);
 	LOGIC_ERROR_CNT++;
 }
 
 void LogicError(char * text, UInt16 bookmark)
 {
-	ReportError("logic", text, bookmark);
+	ReportError("Logic", text, bookmark);
 	ERROR_CNT++;
 }
 
