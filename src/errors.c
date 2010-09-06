@@ -98,6 +98,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	}
 	*o++ = 0;
 
+	PrintColor(RED);
 	fprintf(STDERR, "%s(%d) %s error:", SRC_FILE->name, i, kind);
 	fprintf(STDERR, "%s", buf);
 
@@ -137,6 +138,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		}
 		fprintf(STDERR, "^\n");
 	}
+	PrintColor(RED+GREEN+BLUE);
 }
 
 void SyntaxError(char * text)
@@ -161,6 +163,7 @@ void LogicError(char * text, UInt16 bookmark)
 void InternalError(char * text, ...)
 {
 	va_list argp;
+	PrintColor(RED+LIGHT);
 	fprintf(STDERR, "Internal error: ");
 	va_start(argp, text);
 	vfprintf(STDERR, text, argp);
@@ -170,6 +173,7 @@ void InternalError(char * text, ...)
 	fprintf(STDERR,"\n");
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
+	PrintColor(RED+GREEN+BLUE);
 }
 
 void Warning(char * text)

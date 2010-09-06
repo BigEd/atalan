@@ -858,6 +858,11 @@ rule div %A:byte(%B:card), %C:card, %D:byte = instr
 
 ;*********** Modulo
 
+rule mod %A, %B:byte, 2 = instr
+	let _a, %B
+	and _a, _a, 1
+	let %A, _a
+	
 rule mod %A:byte, %B:card, %C:byte = instr
 	let _TEMPW1, %B			;divident
 	let _a, %C          ;divisor

@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (23-Aug-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (6-Sep-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		
@@ -142,9 +142,9 @@ int main(int argc, char *argv[])
 	// It must always be included.
 	// Some of the definitions in system.atl are directly used by compiler.
 
+	INSTRSET = NULL;
 	if (!Parse("system", false)) goto failure;
 	
-	INSTRSET  = VarFindScope(&ROOT_PROC, "instrs", 0);
 	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
 
@@ -169,8 +169,10 @@ int main(int argc, char *argv[])
 		Warning("There were logical errors.\nCompilation will proceed, but the resulting program may be errorneous.");
 	}
 
-
 	ROOT_PROC.instr = CODE;
+
+	ProcUse(&ROOT_PROC, 0);
+
 	VarGenerateArrays();
 
 	if (VERBOSE) {
@@ -178,8 +180,8 @@ int main(int argc, char *argv[])
 		PrintProc(&ROOT_PROC);
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			type = var->type;
-			if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
-				printf("---------------------------------------------");
+			if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+				printf("---------------------------------------------\n");
 				PrintVar(var);
 				printf("\n\n");
 				PrintProc(var);
@@ -191,8 +193,7 @@ int main(int argc, char *argv[])
 
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
-//			PrintProc(var);
+		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
 			ProcTranslate(var);
 		}
 	}
@@ -209,6 +210,7 @@ int main(int argc, char *argv[])
 	}
 
 	VarUse();
+	ProcUse(&ROOT_PROC, 0);
 
 	//==== Assign offsets to structure items
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {

@@ -74,7 +74,7 @@ in STICK@632:array(0..3) of stick'state
 
 ; DMA
 
-DMACTL@559:byte
+out DMACTL@559:byte
 
 color:0..255
 	Black                    =   0
@@ -117,7 +117,7 @@ out PMBASE@$D407:byte
 out player_size@$d008:array(3) of byte
 out player_x@$d000:array(3) of byte
 out player_gfx@$d00d:array(3) of byte
-player_color@704:array(3) of color			;shadow (slow) color
+out player_color@704:array(3) of color			;shadow (slow) color
 out player_col2@$d012:array(3) of color
 
 out missile_size@$d00c:byte

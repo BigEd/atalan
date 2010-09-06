@@ -19,18 +19,23 @@ rmt_vars:struct
 	reg2:byte
 	reg3:byte
 	tmp:byte		
-	frqaddcmd2:byte ;may be optional (IFT FEAT_COMMAND2)
+	cmd2:byte ;may be optional (IFT FEAT_COMMAND2)
+	rmt_offset:card
+	
+;rmt_init:proc 
+;rmt_play:proc
+;rmt_silence:proc
 
-rmt_init:proc
-rmt_play:proc
-rmt_silence:proc
-
-rmt'init:macro module:adr =
+music'init:macro module:adr =
 	_x = lo module
 	_y = hi module
 	_a = 0
-	rmt_init
+	instr ref rmt_vars
+	instr call rmt_init
 
-rmt'play:macro =
-	rmt_play
-		   
+music'play:macro =
+	instr call rmt_play
+
+music'off:macro =
+	instr call rmt_silence
+		                          

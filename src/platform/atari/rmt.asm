@@ -29,6 +29,7 @@ STEREOMODE equ 0
 ;*
 ;* For optimizations of RMT player routine to concrete RMT modul only!
 ;* --------BEGIN--------
+FEAT_RELOC    equ 1
 FEAT_SFX			equ 0			;* 0 => No SFX support, 1 => SFX support
 FEAT_GLOBALVOLUMEFADE		equ 0			;* 0 => No RMTGLOBALVOLUMEFADE support, 1=> RMTGLOBALVOLUMEFADE support (+7 bytes)
 FEAT_NOSTARTINGSONGLINE		equ 0			;* 0 => Init with starting songline, 1=> no starting songline (start from songline 0 always), cca 22 or 24 bytes
@@ -89,21 +90,36 @@ TRACKS		equ 8
 TRACKS		equ 4
 	EIF
 ;*
-PLAYER		equ $3400
+
+;Reserve space for variables (cannot we reserve this space after the player routine?)
+;and align the address.
+;Current address is then address of player routine.  
+
+	IFT TRACKS>4
+	org *+$400+$40
+	ELS
+	org *+$400+$e0
+	EIF
+	.align $100
+PLAYER
+	
+;PLAYER		equ $3400
 ;*
 ;* RMT FEATures definitions file
 ;* For optimizations of RMT player routine to concrete RMT modul only!
 ;	icl "rmt_feat.a65"
 ;*
 ;* RMT ZeroPage addresses
-	org 203
-;	org rmt_vars
+;	org 203
+	org rmt_vars
 
+;Following four addresses must be together (they are initialized in loop)
 p_tis
 p_instrstable	org *+2
 p_trackslbstable	org *+2
 p_trackshbstable	org *+2
 p_song			org *+2
+
 ns				org *+2
 nr				org *+2
 nt				org *+2
@@ -114,11 +130,18 @@ tmp				org *+1
 	IFT FEAT_COMMAND2
 frqaddcmd2		org *+1
 	EIF
+	
+	IFT FEAT_RELOC
+rmt_offset   org *+2			;real_address - expected address  (real_address = expected_address + rmt_offset)
+	EIF
+
+		
 	IFT TRACKS>4
 	org PLAYER-$400+$40
 	ELS
 	org PLAYER-$400+$e0
 	EIF
+	
 track_variables
 trackn_db	org *+TRACKS
 trackn_hb	org *+TRACKS
@@ -271,12 +294,45 @@ RASTERMUSICTRACKER
 	IFT FEAT_SFX
 	jmp rmt_sfx			;* A=note(0,..,60),X=channel(0,..,3 or 0,..,7),Y=instrument*2(0,2,4,..,126)
 	EIF
+	
 rmt_init
-	stx ns
-	sty ns+1
+
 	IFT FEAT_NOSTARTINGSONGLINE==0
 	pha
 	EIF
+	
+	IFT FEAT_RELOC==1
+	stx ns					;module address
+	sty ns+1
+
+	ldy #2
+	lda (ns),y
+	sta rmt_offset
+	iny
+	lda (ns),y
+	sta rmt_offset+1
+		
+	txa
+	clc
+	adc #6
+	sta ns
+	bcc no_over
+	inc ns+1
+no_over
+	
+	lda ns       ;rmt_offset = real_address - expected_address
+	sec
+	sbc rmt_offset
+	sta rmt_offset
+	lda ns+1
+	sbc rmt_offset+1
+	sta rmt_offset+1
+	
+	ELS
+	stx ns					;module address
+	sty ns+1
+	EIF
+	
 	IFT track_endvariables-track_variables>255
 	ldy #0
 	tya
@@ -308,12 +364,30 @@ ri0	sta track_variables-1,y
 	lda #FEAT_INSTRSPEED
 	sta v_ainstrspeed
 	EIF
+
+	;RELOC: Addresses of tables instruments, tracks lo, track hi, song
+	IFT FEAT_RELOC==1
+	ldy #8
+ri1	lda (ns),y
+	clc
+	adc rmt_offset
+	sta p_tis-8,y
+	iny
+	lda (ns),y	
+	adc rmt_offset+1
+	sta p_tis-8,y	
+	iny
+	cpy #8+8
+	bne ri1
+	ELS
 	ldy #8
 ri1	lda (ns),y
 	sta p_tis-8,y
 	iny
 	cpy #8+8
 	bne ri1
+	EIF
+	
 	IFT FEAT_NOSTARTINGSONGLINE==0
 	pla
 	pha
@@ -389,10 +463,19 @@ nn1	txa
 	cmp #$fe
 	bcs nn2
 	tay
+
 	lda (p_trackslbstable),y
+	IFT FEAT_RELOC==1
+	clc
+	adc rmt_offset
+	EIF	
 	sta trackn_db,x
 	lda (p_trackshbstable),y
-nn1a sta trackn_hb,x
+	IFT FEAT_RELOC==1
+	adc rmt_offset+1
+	EIF	
+nn1a 
+  sta trackn_hb,x
 	lda #0
 	sta trackn_idx,x
 	lda #1
@@ -415,12 +498,19 @@ nn2
 nn2a
 	lda #0
 	beq nn1a2
-nn3
+nn3		;Song jump instruction
 	ldy #2
 	lda (p_song),y
+	IFT FEAT_RELOC==1
+	clc
+	adc rmt_offset
+	EIF	
 	tax
 	iny
 	lda (p_song),y
+	IFT FEAT_RELOC==1
+	adc rmt_offset+1
+	EIF	
 	sta p_song+1
 	stx p_song
 	ldx #0
@@ -549,13 +639,22 @@ RMTSFXVOLUME equ *-1		;* label for sfx note volume parameter overwriting
 	sta trackn_volume,x
 	EIF
 SetUpInstrumentY2
+
 	lda (p_instrstable),y
+	IFT FEAT_RELOC==1
+	clc
+	adc rmt_offset
+	EIF
 	sta trackn_instrdb,x
 	sta nt
 	iny
-	lda (p_instrstable),y
+	lda (p_instrstable),y	
+	IFT FEAT_RELOC==1
+	adc rmt_offset+1
+	EIF
 	sta trackn_instrhb,x
-	sta nt+1
+	sta nt+1	
+	
 	IFT FEAT_FILTER
 	lda #1
 	sta trackn_filter,x

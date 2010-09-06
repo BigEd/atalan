@@ -2212,18 +2212,13 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	}	
 }
 
-void ParseInstr2(InstrBlock ** p_instr)
+void ParseInstr2()
 {	
 	EnterBlock(TOKEN_VOID);
-	InstrBlockPush();
 	while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 		ParseInstr();
 		NextIs(TOKEN_EOL);
 	};
-	*p_instr = InstrBlockPop();	
-
-//	CodePrint(*p_instr);
-
 }
 
 void ParseRuleArg2(RuleArg * arg)
@@ -2308,7 +2303,9 @@ void ParseRule()
 //		EnterLocalScope();
 
 		if (NextIs(TOKEN_INSTR)) {
+			InstrBlockPush();
 			ParseInstr2(&rule->to);
+			rule->to = InstrBlockPop();	
 		} else {
 
 			// Emitting rule
@@ -2531,6 +2528,10 @@ Syntax: { [file_ref] }
 	}
 }
 
+void ParseRef()
+{
+}
+
 void ParseCommands()
 {
 
@@ -2548,6 +2549,11 @@ void ParseCommands()
 
 		case TOKEN_USE:
 			ParseUse();
+			break;
+
+		case TOKEN_INSTR:
+			NextToken();
+			ParseInstr2();
 			break;
 
 		case TOKEN_STRING: 
