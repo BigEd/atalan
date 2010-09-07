@@ -379,8 +379,8 @@ rule add %A:card,%B:card,%C:byte = instr
 	let _c, 0
 	add _a, _a, %C
 	let %A(0),_a
-	let _a, 0
-	rol _a, _a, 1
+	let _a, %B(1)
+	add _a, _a, 0
 	let %A(1), _a
 
 rule add %A:card, %B:card, const %C:card = instr
