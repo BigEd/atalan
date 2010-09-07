@@ -800,16 +800,23 @@ rule mul %A:card,%B:byte, 16384    = instr
 	let _a, 0
 	let %A(0), _a
 
+; This optimizes wrong way
+;rule mul %A:card,%B:byte, 32768    = instr
+;	let _a, %B			; lda %B
+;	div _a, _a, 2
+;	let _a, 0
+;	ror _a, _a, 1
+;	let %A(1), _a      ; sta %A
+;	let _a, 0
+;	let %A(0), _a
+
 
 rule mul %A:card,%B:byte, 32768    = instr
-	mula %B, 2
-	mul _a, _a, 2
-	mul _a, _a, 2
-	mul _a, _a, 2
-	mul _a, _a, 2
-	mul _a, _a, 2
-	mul _a, _a, 2
-	let %A(1), _a
+	let _a, %B			; lda %B
+	divc _a, _a, 2			; do not remove by optimizer
+	ror _a, _a, 1
+	and _a, _a, 128
+	let %A(1), _a      ; sta %A
 	let _a, 0
 	let %A(0), _a
 
@@ -1329,7 +1336,7 @@ rule div _a,_a,2 = "   lsr"
 rule div %A:byte,%A:byte,1 = "   ;"
 rule div %A:byte,%A:byte,2 = "   lsr %A"
 rule div %A:byte(1),%A:byte(1),2 = "   lsr %A+1"
-rule div _a, _a, 2         = "   lsr"
+rule divc _a,_a,2 = "   lsr"
 
 rule mul _a,_a,0 = "   lda #0"
 rule mul _a,_a,1 = "   ;"
