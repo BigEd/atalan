@@ -318,6 +318,33 @@ Purpose:
 	return var;
 }
 
+Var * VarProcScope()
+{
+	Var * s;
+	for (s = SCOPE; s != NULL; s = s->scope) {
+		if (s->type != NULL && (s->type->variant == TYPE_PROC || s->type->variant == TYPE_MACRO)) break;
+	}
+	return s;
+}
+
+Var * VarFindInProc(char * name, VarIdx idx)
+/*
+Purpose:
+	Find variable in current scope.
+*/
+{
+	Var * var = NULL;
+	Var * s = SCOPE;
+	do {
+		var = VarFindScope(s, name, idx);
+		if (var != NULL) break;
+		if (s->type != NULL && s->type->variant == TYPE_PROC) break;
+		s = s->scope;
+	} while(s != NULL);
+
+	return var;
+}
+
 
 Var * VarFind(char * name, VarIdx idx)
 {
@@ -499,6 +526,8 @@ Arguments:
 */
 {
 	Instr * i;
+	InstrBlock * blk;
+
 	if (proc->instr == NULL) return;
 	if (FlagOn(proc->flags, VarProcessed)) return;
 
@@ -509,16 +538,18 @@ Arguments:
 		flag |= VarProcInterrupt;
 	}
 
-	for(i = proc->instr->first; i != NULL; i = i->next) {
-		if (i->op == INSTR_CALL) {
-			ProcUse(i->result, flag);
-		} else {
-			if (i->op != INSTR_LINE) {
-				if (VarType(i->arg1) == TYPE_PROC) {
-					ProcUse(i->arg1, flag | VarProcAddress);
-				}
-				if (VarType(i->arg2) == TYPE_PROC) {
-					ProcUse(i->arg2, flag | VarProcAddress);
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_CALL) {
+				ProcUse(i->result, flag);
+			} else {
+				if (i->op != INSTR_LINE) {
+					if (VarType(i->arg1) == TYPE_PROC) {
+						ProcUse(i->arg1, flag | VarProcAddress);
+					}
+					if (VarType(i->arg2) == TYPE_PROC) {
+						ProcUse(i->arg2, flag | VarProcAddress);
+					}
 				}
 			}
 		}

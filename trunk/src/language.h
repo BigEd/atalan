@@ -444,6 +444,9 @@ Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);
+Var * VarFindInProc(char * name, VarIdx idx);
+Var * VarProcScope();
+
 Var * VarFindInt(Var * scope, UInt32 n);
 Var * VarMacroArg(UInt8 i);
 
@@ -468,6 +471,8 @@ Var * VarNewType(TypeVariant variant);
 Var * FirstArg(Var * proc, VarSubmode submode);
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode);
 
+Var * VarFirstLocal(Var * scope);
+Var * VarNextLocal(Var * scope, Var * local);
 
 Var * VarNewElement(Var * arr, Var * idx, Bool ref);
 
@@ -517,10 +522,24 @@ struct InstrTag {
 };
 
 
-// Instr blocks are in loop.
-
 struct InstrBlockTag {
-	Instr * first, * last;
+
+	InstrBlock * next;			//  Blocks are linked in chain, so we can traverse them as required.
+	UInt32 seq_no;
+
+	InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, this is last block in the procedure)
+	InstrBlock * cond_to;		// last instruction conditionaly jumps to this block
+
+	InstrBlock * from;			// we may come to this block from here
+
+	InstrBlock * callers;		// list of blocks calling this block (excluding prev)
+	InstrBlock * next_caller;	// next caller in the chain
+
+	InstrBlock * loop_end;
+
+	Var * label;				// label that starts the block
+	Bool  processed;
+	Instr * first, * last;		// first and last instruction of the block
 };
 
 void InstrInit();
@@ -542,7 +561,9 @@ void InstrBlockFree(InstrBlock * blk);
 
 // Instructions generating
 
+void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void GenLine();
 void GenLabel(Var * var);
 void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
@@ -557,7 +578,7 @@ extern Var * REGSET;	// enumerator with register sets
 
 void CodePrint(InstrBlock * blk);
 
-void InstrVarUse(InstrBlock * code, Instr * from, Instr * to);
+void InstrVarUse(InstrBlock * code, InstrBlock * end);
 void VarUse();
 
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2);

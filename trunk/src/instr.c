@@ -58,7 +58,6 @@ Purpose:
 	IBLOCK_STACK[IBLOCK_STACK_SIZE] = CODE;
 	IBLOCK_STACK_SIZE++;
 	CODE = MemAllocStruct(InstrBlock);
-	CODE->first = CODE->last = NULL;
 }
 
 InstrBlock * InstrBlockPop()
@@ -227,13 +226,8 @@ char * INSTR_NAME[] = {
 
 LineNo CURRENT_LINE_NO;
 
-void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2)
-/*
-Purpose:
-	Generate instruction into current code block.
-*/
+void GenLine()
 {
-	Var * var;
 	char * line;
 	UInt32 line_no;
 	UInt16 line_len;
@@ -256,7 +250,11 @@ Purpose:
 		CODE->last->line = StrAllocLen(line, line_len);
 		CURRENT_LINE_NO = line_no;
 	}
+}
 
+void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	Var * var;
 	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processign.
 
@@ -277,8 +275,17 @@ Purpose:
 
 		}
 	}
-
 	InstrInsert(CODE, NULL, op, result, arg1, arg2);
+}
+
+void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2)
+/*
+Purpose:
+	Generate instruction into current code block.
+*/
+{
+	GenLine();
+	InternalGen(op, result, arg1, arg2);
 }
 
 void GenGoto(Var * label)
@@ -294,7 +301,7 @@ void GenLabel(Var * var)
 		if (var->type == NULL) {
 			VarToLabel(var);
 		}
-		Gen(INSTR_LABEL, var, NULL, NULL);
+		InternalGen(INSTR_LABEL, var, NULL, NULL);
 	}
 }
 
@@ -519,6 +526,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 	case RULE_ARG:
 		if (FlagOn(arg->submode, SUBMODE_REG)) return false; 
+		if (FlagOn(arg->submode, SUBMODE_REF)) return false;
 		if (!VarMatchesType(arg, pattern)) return false;
 		break;
 
@@ -586,6 +594,21 @@ Bool RuleMatch(Rule * rule, Instr * i)
 		}
 	}
 	return match;
+}
+
+Var * VarNextLocal(Var * scope, Var * local)
+{
+	while(true) {
+		local = local->next;
+		if (local == NULL) break;
+		if (local->scope == scope) break;
+	}
+	return local;
+}
+
+Var * VarFirstLocal(Var * scope)
+{
+	return VarNextLocal(scope, VARS);
 }
 
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
@@ -982,12 +1005,24 @@ void InstrPrint(Instr * i)
 void CodePrint(InstrBlock * blk)
 {
 	Instr * i;
-	UInt32 n;
-	if (blk != NULL) {
-		for(n = 1, i = blk->first; i != NULL; i = i->next, n++) {
+	UInt32 n = 1;
+	while (blk != NULL) {
+		if (blk->label != NULL) {
+			printf("    ");
+			PrintVarVal(blk->label);
+			printf("@");
+		}
+		if (blk->seq_no != 0) {
+			printf("   (#%d)\n", blk->seq_no);
+		} else {
+			printf("\n");
+		}
+		for(i = blk->first; i != NULL; i = i->next, n++) {
 			printf("%3ld| ", n);
 			InstrPrint(i);
 		}
+
+		blk = blk->next;
 	}
 }
 

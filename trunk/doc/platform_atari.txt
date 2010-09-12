@@ -81,7 +81,7 @@ DLI
 Music
 *****
 
-Atalan supports Raster Music Tracker modules for playing music in module rmt.
+Atalan supports <a href="http://raster.atari.org">Raster Music Tracker</a> modules for playing music in module rmt.
 
 
 :::::::::::::::::::::::::::::::
