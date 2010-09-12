@@ -197,11 +197,16 @@ int main(int argc, char *argv[])
 			ProcTranslate(var);
 		}
 	}
-
 	ProcTranslate(&ROOT_PROC);
 
 	//***** Optimalization
 
+	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		type = var->type;
+		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+			Optimize(var);
+		}
+	}
 	Optimize(&ROOT_PROC);
 
 	if (VERBOSE) {

@@ -190,10 +190,22 @@ Bool EmitInstr(Instr * i)
 	}
 }
 
+Bool EmitInstrOp(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	Instr i;
+	MemEmptyVar(i);
+	i.op = op;
+	i.result = result;
+	i.arg1   = arg1;
+	i.arg2   = arg2;
+	return EmitInstr(&i);
+}
+
 Bool EmitInstrBlock(InstrBlock * blk)
 {
 	Bool r = true;
 	Instr * i;
+
 
 	if (blk != NULL) {
 		for(i = blk->first; r && i != NULL; i = i->next) {
@@ -205,7 +217,20 @@ Bool EmitInstrBlock(InstrBlock * blk)
 
 Bool EmitProc(Var * proc)
 {
-	return EmitInstrBlock(proc->instr);
+	Bool result = true;
+	InstrBlock * blk;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+
+		// If block is labeled, Emit label instruction
+		if (blk->label != NULL) {
+			EmitInstrOp(INSTR_LABEL, blk->label, NULL, NULL);
+		}
+
+		result = EmitInstrBlock(blk);
+		if (!result) break;
+	}
+	return result;
 }
 
 Bool EmitOpen(char * filename)

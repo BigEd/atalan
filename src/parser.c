@@ -1168,15 +1168,22 @@ retry:
 
 void ParseLabel(Var ** p_label)
 {
-	
+// Labels are global in procedure
+
+	Var * proc;
 	Var * var = NULL;
+	Var * scope;
 
 	ExpectToken(TOKEN_ID);
 	if (TOK == TOKEN_ID) {
-		var = VarFind2(LEX.name, 0);
+
+		proc = VarProcScope();
+		var = VarFindScope(proc, LEX.name, 0);
 		if (var == NULL) {
+			scope = SCOPE;
+			SCOPE = proc;
 			var = VarNewLabel(LEX.name);
-//			SyntaxError("Unknown label");
+			SCOPE = scope;
 		}
 		NextToken();
 	}
@@ -1186,7 +1193,6 @@ void ParseLabel(Var ** p_label)
 
 void ParseGoto()
 {
-	
 	Var * var;
 	ParseLabel(&var);
 	if (TOK != TOKEN_ERROR) {
@@ -1366,6 +1372,8 @@ Syntax:
 
 	if (NextIs(TOKEN_FOR)) {
 
+		GenLine();
+
 		if (TOK == TOKEN_ID) {
 			
 			// Copy the name of loop variable, so we can get the next token
@@ -1465,7 +1473,7 @@ Syntax:
 	// Variable initialization
 
 	if (var != NULL) {
-		Gen(INSTR_LET, var, min, NULL);
+		InternalGen(INSTR_LET, var, min, NULL);
 	}
 
 	if (cond != NULL) {
@@ -1496,7 +1504,7 @@ Syntax:
 	}
 
 	if (var != NULL) {
-		Gen(INSTR_ADD, var, var, VarNewInt(1));		// STEP
+		InternalGen(INSTR_ADD, var, var, VarNewInt(1));		// STEP
 
 		// We prefer comparison usign equality.
 		// On many architectures, this is faster than <=, because it has to be done using 2 instructions (carry clear, zero set)
@@ -1515,9 +1523,9 @@ Syntax:
 //			} else {
 			max = VarNewInt(n);
 //			}
-			Gen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
+			InternalGen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 		} else {
-			Gen(INSTR_IFLE, G_BLOCK->body_label, var, max);	//TODO: Overflow
+			InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 		}
 	}
 
@@ -1921,7 +1929,11 @@ Purpose:
 				} else if (TOK == TOKEN_ID) {
 					var->adr = VarFindScope(REGSET, LEX.name, 0);
 					if (var->adr == NULL) {
-						SyntaxError("$undefined regset");
+						var->adr = VarFind2(LEX.name, 0);
+						if (var->adr != NULL) {
+						} else {
+							SyntaxError("$undefined regset or variable used as address");
+						}
 					} else {
 						NextToken();
 					}
@@ -1959,6 +1971,7 @@ Purpose:
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
 		if (var->mode == MODE_UNDEFINED) {
+
 			var->mode = mode;
 
 			if (type != NULL) {
@@ -1973,6 +1986,11 @@ Purpose:
 					if (!VarIsImplemented(var)) {
 						LogicError("Type not supported by platform", bookmark);
 					}
+				}
+			} else {
+				// If type has not been defined, but this is alias, use type of the aliased variable
+				if (var->adr != NULL && var->adr->mode == MODE_VAR) {
+					var->type = var->adr->type;
 				}
 			}
 		}
@@ -2115,9 +2133,12 @@ Purpose:
 		}
 	} // idx
 
-
-	if (TOK != TOKEN_ERROR && !is_assign && mode != MODE_ARG) {
-		SyntaxError("expects : or =");
+	if (TOK != TOKEN_ERROR) {
+		if (!is_assign) {
+			if (mode != MODE_ARG) {
+				SyntaxError("expects : or =");
+			}
+		}
 	}
 }
 
@@ -2194,9 +2215,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 					label = VarNewLabel(LEX.name);
 				}
 				NextToken();
-				NextIs(TOKEN_COMMA);
 				arg[0] = label;
 				n++;
+				goto next_arg;	//NextIs(TOKEN_COMMA);
 			} else if (arg_no = ParseArgNo()) {
 				arg[0] = VarMacroArg(arg_no-1);
 				NextIs(TOKEN_COMMA);
@@ -2208,6 +2229,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 
 		while(n<3 && TOK != TOKEN_ERROR) {
 			arg[n++] = ParseInstrArg3();
+next_arg:
 			if (!NextIs(TOKEN_COMMA)) break;
 		}
 

@@ -820,9 +820,8 @@ rule mul %A:card,%B:byte, 32768    = instr
 	let _a, 0
 	let %A(0), _a
 
-
-
-_sys_mul8:proc
+_sys_mul8:proc m1@_a m2@_x >_TEMPW2:0..65025
+;System routine for multiplication.
 
 rule mul %A:card, %B:byte, %C:byte = instr
 	let _a, %B
@@ -839,7 +838,7 @@ rule mul %A:card, %B:card, 2    = instr
 	rol _a, _a, 1		; rol
 	let %A(1), _a   ; sta %A+1
 
-_sys_mul16:proc
+_sys_mul16:proc a@_TEMPW1 b@_TEMPW2 >r@_TEMPL1
 
 rule mul %A:card, %B:card, %C:card = instr
 	let _TEMPW1, %B
@@ -849,7 +848,7 @@ rule mul %A:card, %B:card, %C:card = instr
 
 ;*********** Division
 
-_sys_div8:proc
+_sys_div8:proc a@_TEMPW1:card b@_a:byte >res@_a:byte
 
 rule div %A:byte, %B:card, %C:byte = instr
 	let _TEMPW1, %B			;divident
@@ -1128,14 +1127,14 @@ rule iflt %A,%B:card,const %C:card  = instr
   sub _void, _a, %Z   ; cmp %C
   let _a, %B(1)          ; lda %B+1
   hi %Z, %C
-  sub _a, _a, %Z         ; cmp %C+1
+  sub _void, _a, %Z         ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 rule iflt %A,%B:card, %C:card   = instr
   let _a, %B(0)          ; lda %B
   sub _void, _a, %C(0)   ; cmp %C
   let _a, %B(1)          ; lda %B+1
-  sub _a, _a, %C(1)         ; cmp %C+1
+  sub _void, _a, %C(1)         ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 rule iflt %A,const %B:card,const %C:card   = instr
@@ -1146,7 +1145,7 @@ rule iflt %A,const %B:card,const %C:card   = instr
   hi %Z, %B
   let _a, %Z          ; lda %B+1
   hi %Z, %C
-  sub _a, _a, %Z   ; cmp %C+1
+  sub _void, _a, %Z   ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 
@@ -1159,7 +1158,7 @@ rule ifgt %A,const %B:card,const %C:card   = instr
   hi %Z, %C
   let _a, %Z          ; lda %B+1
   hi %Z, %B
-  sub _a, _a, %Z   ; cmp %C+1
+  sub _void, _a, %Z   ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 rule ifgt %A,%B:card,const %C:card  = instr
@@ -1168,7 +1167,7 @@ rule ifgt %A,%B:card,const %C:card  = instr
   sub _void, _a, %B(0)   ; cmp %C
   hi %Z, %C
   let _a, %Z          ; lda %B+1
-  sub _a, _a, %B(1)   ; cmp %C+1
+  sub _void, _a, %B(1)   ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 ; ok
@@ -1176,7 +1175,7 @@ rule ifgt %A,%B:card, %C:card   = instr
   let _a, %C(0)          ; lda %B
   sub _void, _a, %B(0)   ; cmp %C
   let _a, %C(1)          ; lda %B+1
-  sub _a, _a, %B(1)   ; cmp %C+1
+  sub _void, _a, %B(1)   ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
 ; ifle
@@ -1188,7 +1187,7 @@ rule ifle %A,const %B:card,const %C:card   = instr
   hi %Z, %C
   let _a, %Z          ; lda %B+1
   hi %Z, %B
-  sub _a, _a, %Z   ; cmp %C+1
+  sub _void, _a, %Z   ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 rule ifle %A,%B:card,const %C:card   = instr
@@ -1197,7 +1196,7 @@ rule ifle %A,%B:card,const %C:card   = instr
   sub _void, _a, %B(0)   ; cmp %C
   hi %Z, %C
   let _a, %Z          ; lda %B+1
-  sub _a, _a, %B(1)   ; cmp %C+1
+  sub _void, _a, %B(1)   ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 ; ok
@@ -1205,7 +1204,7 @@ rule ifle %A,%B:card, %C:card   = instr
   let _a, %C(0)          ; lda %B
   sub _void, _a, %B(0)   ; cmp %C
   let _a, %C(1)          ; lda %B+1
-  sub _a, _a, %B(1)   ; cmp %C+1
+  sub _void, _a, %B(1)   ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 ; ifge
@@ -1217,7 +1216,7 @@ rule ifge %A,const %B:card,const %C:card   = instr
   hi %Z, %B
   let _a, %Z          ; lda %B+1
   hi %Z, %C
-  sub _a, _a, %Z   ; cmp %C+1
+  sub _void, _a, %Z   ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 ; ok
@@ -1227,14 +1226,14 @@ rule ifge %A,%B:card, const %C:card   = instr
   sub _void, _a, %Z   ; cmp %C
   let _a, %B(1)          ; lda %B+1
   hi %Z, %C
-  sub _a, _a, %Z         ; cmp %C+1
+  sub _void, _a, %Z         ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 rule ifge %A,%B:card, %C:card   = instr
   let _a, %B(0)          ; lda %B
   sub _void, _a, %C(0)   ; cmp %C
   let _a, %B(1)          ; lda %B+1
-  sub _a, _a, %C(1)         ; cmp %C+1
+  sub _void, _a, %C(1)         ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 
@@ -1402,8 +1401,14 @@ rule call %A:proc   = "   jsr %A"
 rule call %A = "jsr %A"
 rule arrindex %A:array (byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
-rule print     = "   jsr _std_print_out"
-rule format    = "   jsr _std_print_adr"
+_std_print_out:proc
+_std_print_adr:proc a@_arr:adr
+
+rule print     = instr
+	call _std_print_out
+	
+rule format    = instr
+	call _std_print_adr
 
 rule str_arg ,%A,%B:byte  = "   dta b(%B),c'%A'"
 rule var_arg ,%A:byte   = "   dta b(129),a(%A)"

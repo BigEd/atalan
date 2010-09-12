@@ -13,7 +13,7 @@ Local optimizations
 ===================
 
 - constant folding and propagation
-- live value analysis
+- live variable analysis
 - optimal operation is chosen according to variable range
 
 ==================
@@ -27,3 +27,9 @@ Macro expansion
 ===============
 
 - it is possible to write macros that are expanded in place
+
+==================
+Data-flow analysis
+==================
+
+- live variable analysis
