@@ -1492,6 +1492,6 @@ void Optimize(Var * proc)
 		PrintProc(proc);
 	}
 	OptimizeCombined(proc);
-	OptimizeLoops(proc);
+//	OptimizeLoops(proc);
 	OptimizeCombined(proc);
 }

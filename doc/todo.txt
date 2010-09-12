@@ -344,6 +344,35 @@ Unit Test
 OPTIMIZE
 ******************
 
+-code move 
+
+  tya
+   and #7
+   tax
+   lda mask,x
+   sta _4
+   lda #<tab
+   sta _arr
+   lda #>tab
+   clc
+   adc _s0__k+1
+   sta _arr+1
+   lda _4
+   sta (_arr),y
+   iny
+   jne _lbl3
+   inc _s0__k+1
+_lbl3:
+
+here 
+   lda mask,x  (even tay, and#7, tax, lda mask,x) may be moved insted of lda _4
+   
+   under condition that there is only one lda _4 (or it is done for all of them)
+  
+
+- try to use TSX, TXS for on extra register (if the function does not call other functions)
+- try to use pha pla in loops
+
 - in TETRIS:
    jne _lbl48
    lda #1
@@ -353,7 +382,6 @@ _lbl48:
    A is not used anymore, so here ldx #1 would be better.
    Maybe we may have the information on next use from live analysis?
 
-- try to use pha pla in loops
 - optimize jumps
 - optimize ldx #5 ldx #6  to ldx #5, inx
 - multiply byte by 10 (use temporary _arr ?)
