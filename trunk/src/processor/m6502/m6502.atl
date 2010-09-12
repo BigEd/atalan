@@ -810,15 +810,15 @@ rule mul %A:card,%B:byte, 16384    = instr
 ;	let _a, 0
 ;	let %A(0), _a
 
-
-rule mul %A:card,%B:byte, 32768    = instr
-	let _a, %B			; lda %B
-	divc _a, _a, 2			; do not remove by optimizer
-	ror _a, _a, 1
-	and _a, _a, 128
-	let %A(1), _a      ; sta %A
-	let _a, 0
-	let %A(0), _a
+;RK: Temporarily commented out until other changes (language.h, module/system.atl) are commited too.
+;rule mul %A:card,%B:byte, 32768    = instr
+;	let _a, %B			; lda %B
+;	divc _a, _a, 2			; do not remove by optimizer
+;	ror _a, _a, 1
+;	and _a, _a, 128
+;	let %A(1), _a      ; sta %A
+;	let _a, 0
+;	let %A(0), _a
 
 _sys_mul8:proc m1@_a m2@_x >_TEMPW2:0..65025
 ;System routine for multiplication.
@@ -889,6 +889,11 @@ rule and %A:byte,%B:byte,%C:byte = instr
 	and _a,_a,%C
 	let %A,_a
 
+rule and %A:byte,%B:card,%C:byte = instr
+	let _a,%B(0)
+	and _a,_a,%C
+	let %A,_a
+
 rule and %A:byte(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
 	and _a, _a, %D
@@ -916,7 +921,7 @@ rule and %A:card, %B:card, %C:byte = instr
 	let _a, %B(0)
 	and  _a, _a, %C
 	let %A(0), _a 
-	let _a, %B(1)
+	let _a, 0
 	let %A(1), _a
 	
 rule and %A:card, %B:byte, %C:card = instr and %A, %C, %B
@@ -1289,11 +1294,13 @@ rule let _a,_y      = "   tya"
 rule let _x,const %A:byte   = "   ldx #%A"
 rule let _x,%A:byte        = "   ldx %A"
 rule let _x,%A(const %B) = "   ldx %A+%B"
+rule let _x,%A:byte(_y)       = "   ldx %A,y"
 
 ;LDY
 rule let _y,const% A:byte   = "   ldy #%A"
 rule let _y,%A:byte        = "   ldy %A"
 rule let _y,%A(const %B) = "   ldy %A+%B"
+rule let _y,%A:byte(_x)       = "   ldy %A,x"
 
 ;LDA
 
@@ -1323,11 +1330,13 @@ rule let %A:byte(_y),_a  = "   sta %A,y"
 rule let %A(0),_x  = "   stx %A"
 rule let %A(const %B),_x  = "   stx %A+%B"
 rule let %A,_x  = "   stx %A"
+rule let %A:byte(_y),_x  = "   stx %A,y"
 
 ;STY
 rule let %A(0),_y  = "   sty %A"
 rule let %A(const %B),_y  = "   sty %A+%B"
 rule let %A,_y  = "   sty %A"
+rule let %A:byte(_x),_y  = "   sty %A,x"
 
 ;LSR,ASL
 rule div _a,_a,1 = "   ;"
@@ -1335,7 +1344,8 @@ rule div _a,_a,2 = "   lsr"
 rule div %A:byte,%A:byte,1 = "   ;"
 rule div %A:byte,%A:byte,2 = "   lsr %A"
 rule div %A:byte(1),%A:byte(1),2 = "   lsr %A+1"
-rule divc _a,_a,2 = "   lsr"
+;RK: Temporarily commented out until other changes (language.h, module/system.atl) are commited too.
+;rule divc _a,_a,2 = "   lsr"
 
 rule mul _a,_a,0 = "   lda #0"
 rule mul _a,_a,1 = "   ;"
