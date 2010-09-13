@@ -61,6 +61,8 @@ type instrs:enum
 	mula16
 		
 	ref
+	divc			; div with carry set - to prevent unfolding constants
+
 
 ;=================
 ;Instruction flags
