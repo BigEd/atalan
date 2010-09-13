@@ -370,6 +370,7 @@ typedef enum {
 	INSTR_MULA16,                           // templates for 8 - bit multiply 
 
 	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
+	INSTR_DIVCARRY,
 	INSTR_CNT
 } InstrOp;
 
