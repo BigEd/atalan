@@ -2446,6 +2446,7 @@ Var * PopTop()
 void ParseCall(Var * proc)
 {
 	Var * arg;
+	Var * val;
 	arg = FirstArg(proc, SUBMODE_ARG_IN);
 	if (arg != NULL) {
 		EnterBlock();
@@ -2455,13 +2456,16 @@ void ParseCall(Var * proc)
 				break;
 			}
 			ParseExpression(arg);
-			Gen(INSTR_LET, arg, PopTop(), NULL);
-//			if (VarIsTmp(STACK[0])) G_TEMP_CNT--;
-//			TOP = 0;
+
+			if (TOP > 0) {
+				val = PopTop();
+				Gen(INSTR_LET, arg, val, NULL);
+			} else {
+				ErrArg(arg);
+				ErrArg(proc);
+				SyntaxError("Missing argument [A] in call of procedure[B]");
+			}
 			arg = NextArg(proc, arg, SUBMODE_ARG_IN);
-		}
-		if (arg != NULL) {
-			SyntaxError("Missing argument in procedure call");
 		}
 	}
 	Gen(INSTR_CALL, proc, NULL, NULL);
