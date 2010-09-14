@@ -752,16 +752,38 @@ Argument:
 	}
 }
 
+Bool InstrTranslate(Instr * i, Bool * p_modified)
+{
+	Rule * rule;
+	if (i->op == INSTR_LINE) {
+		Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
+	} else if (EmitRule(i)) {
+		Gen(i->op, i->result, i->arg1, i->arg2);
+	} else {
+		// Find translating rule
+		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
+			if (RuleMatch(rule, i)) break;
+		}
+
+		if (rule != NULL) {
+			GenMacro(rule->to, NULL, MACRO_ARG);
+			*p_modified = true;
+		} else {
+			return false;
+		}
+	}
+	return true;
+}
+
 Bool ProcTranslate(Var * proc)
 {
 	Instr * i;	//, * to;
-	Rule * rule;
 	InstrBlock * blk;
-//	Var * arg[3];
 	Bool modified;
 	UInt8 step = 0;
 	UInt32 ln;
 	Var * a = NULL;
+	Instr i2;
 
 	if (proc->instr == NULL) return true;
 
@@ -773,40 +795,40 @@ Bool ProcTranslate(Var * proc)
 
 		for(ln = 1, i = proc->instr->first; i != NULL; i = i->next, ln++) {
 
-			// We only preprocess instructions, that do not have emit rule yet.
-		
-//			if (step == 0 && ln == 2) {
-//				RULE_MATCH_BREAK = true;
-//			}
+			if (!InstrTranslate(i, &modified)) {
 
-			if (i->op == INSTR_LINE) {
-				Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
-			} else if (!EmitRule(i)) {
+				// If this is commutative instruction, try the other order of rules
 
-				for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-					if (RuleMatch(rule, i)) break;
+				if (i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL) {
+					i2.op = i->op;
+					i2.result = i->result;
+					i2.arg1 = i->arg2;
+					i2.arg2 = i->arg1;
+					if (InstrTranslate(&i2, &modified)) continue;						
 				}
 
-				if (rule != NULL) {
-					GenMacro(rule->to, NULL, MACRO_ARG);
+				// No emit rule nor rule for translating instruction found,
+				// try to simplify the instruction.
+
+				if (i->arg1 != NULL && i->arg1->mode == MODE_ELEMENT) {
+					a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
+					Gen(INSTR_LET, a, i->arg1, NULL);
+					Gen(i->op, i->result, a, i->arg2);
 					modified = true;
+				} else if (i->arg2 != NULL && i->arg2->mode == MODE_ELEMENT) {
+					a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
+					Gen(INSTR_LET, a, i->arg2, NULL);
+					Gen(i->op, i->result, i->arg1, a);
+					modified = true;
+				} else if (i->result != NULL && i->result->mode == MODE_ELEMENT) {
+					a = VarNewTmp(102, i->result->type);
+					Gen(i->op, a, i->arg1, i->arg2);
+					Gen(INSTR_LET, i->result, a, NULL);
+					modified = true;
+
 				} else {
-
-					// No emit rule nor rule for translating instruction found,
-					// try to simplify the instruction.
-
-					if (i->arg1 != NULL && i->arg1->mode == MODE_ELEMENT) {
-						a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
-						Gen(INSTR_LET, a, i->arg1, NULL);
-						Gen(i->op, i->result, a, i->arg2);
-						modified = true;
-					} else {
-						Gen(i->op, i->result, i->arg1, i->arg2);
-					}
+					Gen(i->op, i->result, i->arg1, i->arg2);
 				}
-			// Emit rule exists, just copy the instructions
-			} else {
-				Gen(i->op, i->result, i->arg1, i->arg2);
 			}
 		}
 		blk = InstrBlockPop();

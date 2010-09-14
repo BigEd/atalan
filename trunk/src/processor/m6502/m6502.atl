@@ -810,15 +810,14 @@ rule mul %A:card,%B:byte, 16384    = instr
 ;	let _a, 0
 ;	let %A(0), _a
 
-;RK: Temporarily commented out until other changes (language.h, module/system.atl) are commited too.
-;rule mul %A:card,%B:byte, 32768    = instr
-;	let _a, %B			; lda %B
-;	divc _a, _a, 2			; do not remove by optimizer
-;	ror _a, _a, 1
-;	and _a, _a, 128
-;	let %A(1), _a      ; sta %A
-;	let _a, 0
-;	let %A(0), _a
+rule mul %A:card,%B:byte, 32768    = instr
+	let _a, %B			; lda %B
+	divc _a, _a, 2			; do not remove by optimizer
+	ror _a, _a, 1
+	and _a, _a, 128
+	let %A(1), _a      ; sta %A
+	let _a, 0
+	let %A(0), _a
 
 _sys_mul8:proc m1@_a m2@_x >_TEMPW2:0..65025
 ;System routine for multiplication.
@@ -850,6 +849,48 @@ rule mul %A:card, %B:card, %C:card = instr
 
 _sys_div8:proc a@_TEMPW1:card b@_a:byte >res@_a:byte
 
+rule div %A:byte, %B:byte, 2       = instr
+	let _a, %B
+	div _a, _a, 2
+	let %A, _a  
+
+rule div %A:byte, %B:byte, 4       = instr
+	let _a, %B
+	div _a, _a, 2
+	div _a, _a, 2
+	let %A, _a  
+
+rule div %A:byte, %B:byte, 8       = instr
+	let _a, %B
+	div _a, _a, 2
+	div _a, _a, 2
+	div _a, _a, 2
+	let %A, _a  
+	
+rule div %A:card, %A:card, 2       = instr
+	div %A(1), %A(1), 2
+	ror %A(0), %A(0), 1
+
+rule div %A:card, %A:card, 4       = instr
+	div %A, %A, 2
+	div %A, %A, 2
+	
+rule div %A:card, %A:card, 8       = instr
+	div %A, %A, 4
+	div %A, %A, 2
+
+rule div %A:card, %B:card, 8       = instr
+	let _a, %B(0)
+	let %A(0), _a
+	let _a, %B(1)
+	div _a, _a, 2
+	ror %A(0), %A(0), 1
+	div _a, _a, 2
+	ror %A(0), %A(0), 1
+	div _a, _a, 2
+	ror %A(0), %A(0), 1
+	let %A(1), _a
+	
 rule div %A:byte, %B:card, %C:byte = instr
 	let _TEMPW1, %B			;divident
 	let _a, %C          ;divisor
@@ -868,7 +909,42 @@ rule mod %A, %B:byte, 2 = instr
 	let _a, %B
 	and _a, _a, 1
 	let %A, _a
-	
+
+rule mod %A, %B:byte, 4 = instr
+	let _a, %B
+	and _a, _a, 3
+	let %A, _a
+
+rule mod %A, %B:byte, 8 = instr
+	let _a, %B
+	and _a, _a, 7
+	let %A, _a
+
+rule mod %A, %B:byte, 16 = instr
+	let _a, %B
+	and _a, _a, 15
+	let %A, _a
+
+rule mod %A, %B:byte, 32 = instr
+	let _a, %B
+	and _a, _a, 31
+	let %A, _a
+
+rule mod %A, %B:byte, 64 = instr
+	let _a, %B
+	and _a, _a, 63
+	let %A, _a
+
+rule mod %A, %B:byte, 128 = instr
+	let _a, %B
+	and _a, _a, 127
+	let %A, _a
+
+rule mod %A:byte, %B:card, 8 = instr
+	let _a, %B(0)
+	and _a, _a, 7
+	let %A, _a
+		
 rule mod %A:byte, %B:card, %C:byte = instr
 	let _TEMPW1, %B			;divident
 	let _a, %C          ;divisor
@@ -1125,55 +1201,89 @@ rule ifne %A,%B:card, %C:card  = instr
   sub _void, _a, %C(1)
   ifne %A, _z, 1
 
-; iflt = ! ifge
 rule iflt %A,%B:card,const %C:card  = instr
-  let _a, %B(0)          ; lda %B
-  lo %Z, %C
-  sub _void, _a, %Z   ; cmp %C
-  let _a, %B(1)          ; lda %B+1
+  let _a, %B(1)         ; lda %B
   hi %Z, %C
-  sub _void, _a, %Z         ; cmp %C+1
-  ifeq %A, _C, 0         ; jcs %A
+  sub _void, _a, %Z     ; cmp #>%C
+  ifeq %A, _C, 0        ; bcc %A
+  ifeq _lab1, _Z, 0     ; bne _lab1
+  let _a, %B(0)         ; lda %B+1
+  lo %Z, %C
+  sub _a, _a, %Z        ; cmp #<%C
+  ifeq %A, _C, 0        ; jcc %A
+  label _lab1
+
+;rule iflt %A,%B:card,const %C:card  = instr
+;  let _a, %B(0)          ; lda %B
+;  lo %Z, %C
+;  sub _void, _a, %Z   ; cmp %C
+;  let _a, %B(1)          ; lda %B+1
+;  hi %Z, %C
+;  sub _a, _a, %Z         ; cmp %C+1
+;  ifeq %A, _C, 0         ; jcs %A
 
 rule iflt %A,%B:card, %C:card   = instr
   let _a, %B(0)          ; lda %B
   sub _void, _a, %C(0)   ; cmp %C
   let _a, %B(1)          ; lda %B+1
-  sub _void, _a, %C(1)         ; cmp %C+1
+  sub _a, _a, %C(1)         ; cmp %C+1
   ifeq %A, _C, 0         ; jcs %A
 
-rule iflt %A,const %B:card,const %C:card   = instr
-  lo %Z, %B
-  let _a, %Z          ; lda %B
-  lo %Z, %C
-  sub _void, _a, %Z   ; cmp %C
-  hi %Z, %B
-  let _a, %Z          ; lda %B+1
-  hi %Z, %C
-  sub _void, _a, %Z   ; cmp %C+1
-  ifeq %A, _C, 0         ; jcs %A
+;rule iflt %A,const %B:card,const %C:card   = instr
+;  lo %Z, %B
+;  let _a, %Z          ; lda %B
+;  lo %Z, %C
+;  sub _void, _a, %Z   ; cmp %C
+;  hi %Z, %B
+;  let _a, %Z          ; lda %B+1
+;  hi %Z, %C
+;  sub _a, _a, %Z   ; cmp %C+1
+;  ifeq %A, _C, 0         ; jcs %A
 
 
 ;ifgt = !ifle
-rule ifgt %A,const %B:card,const %C:card   = instr
-  lo %Z, %C
-  let _a, %Z          ; lda %B
-  lo %Z, %B
-  sub _void, _a, %Z   ; cmp %C
-  hi %Z, %C
-  let _a, %Z          ; lda %B+1
-  hi %Z, %B
-  sub _void, _a, %Z   ; cmp %C+1
-  ifeq %A, _C, 0         ; jcs %A
+;rule ifgt %A,const %B:card,const %C:card   = instr
+;  lo %Z, %C
+;  let _a, %Z          ; lda %B
+;  lo %Z, %B
+;  sub _void, _a, %Z   ; cmp %C
+;  hi %Z, %C
+;  let _a, %Z          ; lda %B+1
+;  hi %Z, %B
+;  sub _void, _a, %Z   ; cmp %C+1
+;  ifeq %A, _C, 0         ; jcs %A
 
 rule ifgt %A,%B:card,const %C:card  = instr
-  lo %Z, %C
-  let _a, %Z          ; lda %B
-  sub _void, _a, %B(0)   ; cmp %C
+  let _a, %B(1)         ; lda %B
   hi %Z, %C
-  let _a, %Z          ; lda %B+1
-  sub _void, _a, %B(1)   ; cmp %C+1
-  ifeq %A, _C, 0         ; jcs %A
+  sub _void, _a, %Z     ; cmp #>%C
+  ifeq _lab1, _Z, 1     ; beq _lab1
+  ifeq %A, _C, 1        ; bcs %A
+  label _lab1
+  let _a, %B(0)         ; lda %B+1
+  lo %Z, %C
+  sub _void, _a, %Z        ; cmp #<%C
+  ifeq _lab2, _Z, 1     ; beq _lab2
+  ifeq %A, _C, 1        ; jcc %A
+  label _lab2
+
+;rule ifgt %A,%B:card,const %C:card  = instr
+;  lo %Z, %C
+;  let _a, %Z          ; lda %B
+;  sub _void, _a, %B(0)   ; cmp %C
+;  hi %Z, %C
+;  let _a, %Z          ; lda %B+1
+;  sub _a, _a, %B(1)   ; cmp %C+1
+;  ifeq %A, _C, 0         ; jcs %A
+
+;rule ifgt %A,%B:card,const %C:card  = instr
+;  lo %Z, %C
+;  let _a, %Z          ; lda %B
+;  sub _void, _a, %B(0)   ; cmp %C
+;  hi %Z, %C
+;  let _a, %Z          ; lda %B+1
+;  sub _a, _a, %B(1)   ; cmp %C+1
+;  ifeq %A, _C, 0         ; jcs %A
 
 ; ok
 rule ifgt %A,%B:card, %C:card   = instr
@@ -1196,13 +1306,16 @@ rule ifle %A,const %B:card,const %C:card   = instr
   ifeq %A, _C, 1         ; jcs %A
 
 rule ifle %A,%B:card,const %C:card   = instr
-  lo %Z, %C
-  let _a, %Z          ; lda %B
-  sub _void, _a, %B(0)   ; cmp %C
+  let _a, %B(1)       ; lda %B+1
   hi %Z, %C
-  let _a, %Z          ; lda %B+1
-  sub _void, _a, %B(1)   ; cmp %C+1
-  ifeq %A, _C, 1         ; jcs %A
+  sub _void, _a, %Z   ; cmp #>%C
+  ifeq %A, _C, 0      ; bcc %1
+  ifeq _lab1, _Z, 0   ; beq _lab1
+  let _a, %B(0)       ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z   ; cmp #<%C
+  ifeq %A, _C, 0      ; bcc %A
+  label _lab1
 
 ; ok
 rule ifle %A,%B:card, %C:card   = instr
@@ -1224,21 +1337,34 @@ rule ifge %A,const %B:card,const %C:card   = instr
   sub _void, _a, %Z   ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
-; ok
 rule ifge %A,%B:card, const %C:card   = instr
-  let _a, %B(0)          ; lda %B
-  lo %Z, %C
-  sub _void, _a, %Z   ; cmp %C
   let _a, %B(1)          ; lda %B+1
   hi %Z, %C
-  sub _void, _a, %Z         ; cmp %C+1
-  ifeq %A, _C, 1         ; jcs %A
+  sub _void, _a, %Z      ; cmp #>%C
+  ifeq _lab1, _C, 0      ; bcc _lab1		;%B+1 < hi %C
+	ifeq %A, _Z, 0         ; bne %A 
+  let _a, %B(0)          ; lda %B
+  lo %Z, %C
+  sub _void, _a, %Z      ; cmp #<%C
+  ifeq %A, _C, 1         ; bcs %A
+  label _lab1
+  
+; TODO: sub _a, _a, %Z gets optimized by compiler
+;       This method is shorter, but not so fast
+;rule ifge %A,%B:card, const %C:card   = instr
+;  let _a, %B(0)          ; lda %B
+;  lo %Z, %C
+;  sub _void, _a, %Z      ; cmp %C
+;  let _a, %B(1)          ; lda %B+1
+;  hi %Z, %C
+;  sub _a, _a, %Z         ; cmp %C+1
+;  ifeq %A, _C, 1         ; jcs %A
 
 rule ifge %A,%B:card, %C:card   = instr
   let _a, %B(0)          ; lda %B
   sub _void, _a, %C(0)   ; cmp %C
   let _a, %B(1)          ; lda %B+1
-  sub _void, _a, %C(1)         ; cmp %C+1
+  sub _a, _a, %C(1)         ; cmp %C+1
   ifeq %A, _C, 1         ; jcs %A
 
 
@@ -1344,8 +1470,7 @@ rule div _a,_a,2 = "   lsr"
 rule div %A:byte,%A:byte,1 = "   ;"
 rule div %A:byte,%A:byte,2 = "   lsr %A"
 rule div %A:byte(1),%A:byte(1),2 = "   lsr %A+1"
-;RK: Temporarily commented out until other changes (language.h, module/system.atl) are commited too.
-;rule divc _a,_a,2 = "   lsr"
+rule divc _a,_a,2 = "   lsr"
 
 rule mul _a,_a,0 = "   lda #0"
 rule mul _a,_a,1 = "   ;"
@@ -1364,6 +1489,7 @@ rule ror _a,_a,0 = "   ;"
 rule ror _a,_a,1 = "   ror"
 rule ror %A:byte,%A:byte,0 = "   ;"
 rule ror %A:byte,%A:byte,1 = "   ror %A"
+rule ror %A:byte(const %B:0..255),%A:byte(%B),1 = "   ror %A+%B"
 
 rule rol _a,_a,0 = "   ;"
 rule rol _a,_a,1 = "   rol"

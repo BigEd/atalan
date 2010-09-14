@@ -195,7 +195,7 @@ Bool VarIsStructElement(Var * var)
 
 Bool VarIsArrayElement(Var * var)
 {
-	return var->adr->type->variant == TYPE_ARRAY;
+	return var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
 }
 
 

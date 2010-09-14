@@ -319,6 +319,13 @@ Purpose:
 	for (i = block->first; i != NULL; i = i->next) {
 		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
 		if (i->result == var) { res1 = 0; goto done;}
+		if (i->op == INSTR_LET_ADR) {
+			if (i->arg1->mode == MODE_ELEMENT && VarIsArrayElement(i->arg1)) {
+				if (var->mode == MODE_ELEMENT) {
+					if (var->adr == i->arg1->adr) { res1 = 1; goto done; }
+				}
+			}
+		}
 	}
 
 	// If block ends and the variable is one of results, it is live
@@ -1492,6 +1499,6 @@ void Optimize(Var * proc)
 		PrintProc(proc);
 	}
 	OptimizeCombined(proc);
-//	OptimizeLoops(proc);
+	OptimizeLoops(proc);
 	OptimizeCombined(proc);
 }
