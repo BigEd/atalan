@@ -2,8 +2,10 @@
 News
 ****
 
+- FOR now supports STEP
 - variable A may be declared as alias of variable B usign A@B syntax (very usefull for system procedures arguments)
 - data-flow analysis in live value analysis
+- commutative instructions in backend are translated using switched order if necesary
 
 ===========
 6-Sep-2010

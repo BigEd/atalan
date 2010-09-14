@@ -79,8 +79,9 @@ typedef enum {
 	TOKEN_STRUCT,
 	TOKEN_USE,
 	TOKEN_REF,
+	TOKEN_STEP,
 
-	TOKEN_LAST_KEYWORD = TOKEN_REF,
+	TOKEN_LAST_KEYWORD = TOKEN_STEP,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -414,6 +415,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op);
 
 void TypeAddConst(Type * type, Var * var);
 Bool TypeIsSubsetOf(Type * type, Type * master);
+Bool TypeIsBool(Type * type);
 
 UInt32 TypeSize(Type * type);
 UInt32 TypeAdrSize();

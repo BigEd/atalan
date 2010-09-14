@@ -389,3 +389,10 @@ void TypeInit()
 	TLBL.range.max = 2147483647L;
 	TLBL.base      = NULL;
 }
+
+Bool TypeIsBool(Type * type)
+{
+	if (type == NULL) return false;
+	if (type->variant != TYPE_INT) return false;
+	return type->range.min == 0 && type->range.max == 1;
+}

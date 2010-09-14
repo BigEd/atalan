@@ -293,7 +293,7 @@ Purpose:
 static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
-	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use", "ref"
+	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use", "ref", "step"
 };
 
 

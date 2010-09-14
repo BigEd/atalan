@@ -31,6 +31,7 @@ GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
 void ParseCall(Var * proc);
+void ParseMacro(Var * macro);
 Type * ParseType();
 Var * ParseArrayElement(Var * arr, Bool ref);
 Var * ParseStructElement(Var * arr);
@@ -592,6 +593,7 @@ Purpose:
 	Type * idx_type;
 	Var * idx, * idx2, * item;
 	UInt16 bookmark;
+	Bool prev_cond;
 
 	// This is always () block
 	EnterBlock();
@@ -613,6 +615,8 @@ Purpose:
 	}
 
 	bookmark = SetBookmark();
+	prev_cond = G_CONDITION_EXP;
+	G_CONDITION_EXP = false;
 	ParseSubExpression(idx_type);	//Root();
 	if (TOK) {
 		idx = STACK[top];
@@ -642,6 +646,7 @@ Purpose:
 
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
+	G_CONDITION_EXP = prev_cond;
 
 	//ParseParenthesis();
 	// Result is temporary variable created by InstrBinary, 
@@ -715,10 +720,14 @@ id:
 			}
 
 			// Function call
-			if (var->type != NULL && var->type->variant == TYPE_PROC) {
+			if (var->type != NULL && (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO)) {
 				proc = var;
 				NextToken();
-				ParseCall(proc);
+				if (var->type->variant == TYPE_PROC) {
+					ParseCall(proc);
+				} else {
+					ParseMacro(proc);
+				}
 
 				// Output arguments of procedure are stored on stack
 				var = FirstArg(proc, SUBMODE_ARG_OUT);
@@ -851,14 +860,20 @@ retry:
 
 void ParseBinaryAnd()
 {
+	Var * var;
 retry:
 	ParsePlusMinus();
-	if (!G_CONDITION_EXP && NextIs(TOKEN_AND)) {
-		ParsePlusMinus();
-		if (TOK) {
-			InstrBinary(INSTR_AND);
+	if (TOK == TOKEN_AND) {
+		var = STACK[TOP];
+		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
+//	if (!G_CONDITION_EXP && NextIs(TOKEN_AND)) {
+			NextToken();
+			ParsePlusMinus();
+			if (TOK) {
+				InstrBinary(INSTR_AND);
+			}
+			goto retry;
 		}
-		goto retry;
 	}
 }
 
@@ -1360,12 +1375,12 @@ Syntax:
 {
 	Var * var, * where_t_label;
 	char name[256];
-	Var * min, * max;
+	Var * min, * max, * step;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
 	Int32 n;
 
-	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL;
+	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL;
 	where_t_label = NULL;
 
 	EnterLocalScope();
@@ -1413,6 +1428,15 @@ Syntax:
 
 	BeginBlock(TOKEN_FOR);
 	
+	// STEP can be only used if there was FOR
+
+	if (var != NULL) {
+		if (NextIs(TOKEN_STEP)) {
+			ParseExpression(max);
+			step = STACK[0];
+		}
+	}
+
 	// WHERE can be used only if there was FOR
 
 	if (var != NULL) {
@@ -1504,27 +1528,35 @@ Syntax:
 	}
 
 	if (var != NULL) {
-		InternalGen(INSTR_ADD, var, var, VarNewInt(1));		// STEP
+		if (step == NULL) {
+			step = VarNewInt(1);
+		}
+
+		InternalGen(INSTR_ADD, var, var, step);		// STEP
 
 		// We prefer comparison usign equality.
 		// On many architectures, this is faster than <=, because it has to be done using 2 instructions (carry clear, zero set)
-		if (max->mode == MODE_CONST) {
+		if (max->mode == MODE_CONST && step->mode == MODE_CONST) {
 
 			n = max->n;
 			if ((n == 0xff || n == 0xffff || n == 0xffffff) && n == var->type->range.max) {
-				n = 0;
+				if (step->n == 1) {
+					n = 0;
+				} else {
+					if (min->mode == MODE_CONST) {
+						n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
+						n = n & max->n;
+					} else {
+						goto variable;
+					}
+				}
 			} else {
 				n++;
 			}
-
-
-//			if (var->type->range.max == 255 && max->n == 255) {
-//				max = VarNewInt(0);
-//			} else {
 			max = VarNewInt(n);
-//			}
 			InternalGen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 		} else {
+variable:
 			InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 		}
 	}
@@ -2463,7 +2495,7 @@ void ParseCall(Var * proc)
 			} else {
 				ErrArg(arg);
 				ErrArg(proc);
-				SyntaxError("Missing argument [A] in call of procedure[B]");
+				SyntaxError("Missing argument [A] in call of procedure [B]");
 			}
 			arg = NextArg(proc, arg, SUBMODE_ARG_IN);
 		}
@@ -2476,23 +2508,27 @@ void ParseMacro(Var * macro)
 	Var * arg;
 	Var * args[32];
 	UInt8 i;
-	arg = FirstArg(macro, SUBMODE_ARG_IN);
-	EnterBlock();
 	i = 0;
-	while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
-		if (arg == NULL) {
-			ExitBlock();
-			break;
-		}
-		ParseExpression(arg);
-		//TODO: Use all the results from expression parsing
-		args[i] = STACK[0];
-		if (VarIsTmp(STACK[0])) G_TEMP_CNT--;
-		arg = NextArg(macro, arg, SUBMODE_ARG_IN);
-		i++;
-	}
+	arg = FirstArg(macro, SUBMODE_ARG_IN);
 	if (arg != NULL) {
-		SyntaxError("Missing argument in macro call");
+		EnterBlock();
+		while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+			if (arg == NULL) {
+				ExitBlock();
+				break;
+			}
+			ParseExpression(arg);
+
+			if (TOP > 0) {
+				args[i] = STACK[0];
+			} else {
+				ErrArg(arg);
+				ErrArg(macro);
+				SyntaxError("Missing argument [A] in call of macro [B]");
+			}
+			arg = NextArg(macro, arg, SUBMODE_ARG_IN);
+			i++;
+		}
 	}
 	GenMacro(macro->instr, macro, args);
 }
