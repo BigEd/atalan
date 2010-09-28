@@ -291,7 +291,7 @@ Purpose:
 //$T
 
 static char * keywords[KEYWORD_COUNT] = {
-	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not",
+	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use", "ref", "step"
 };

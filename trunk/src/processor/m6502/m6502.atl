@@ -211,6 +211,10 @@ rule let %A:adr, %B = instr
   hi _a, %B
   let %A(1), _a
 
+rule let %A:card, _a = instr
+	let %A(0), _a
+	let %A(1), 0
+	
 ;===== Long
 rule let %A:long,const %B:long = instr
   lo %Z, %B
@@ -845,6 +849,15 @@ rule mul %A:card, %B:card, %C:card = instr
 	call _sys_mul16
 	let %A, _TEMPL1
 
+;*********** Square root
+
+ _sys_sqrt16:proc a@_TEMPW1 >r@_a 
+
+rule sqrt %A:card, %B:card = instr
+	let _TEMPW1, %B
+	call _sys_sqrt16
+	let %A, _a
+	
 ;*********** Division
 
 _sys_div8:proc a@_TEMPW1:card b@_a:byte >res@_a:byte
@@ -1130,6 +1143,9 @@ rule not %A:byte, %B:byte = instr
 	let %A, _a	
 	
 ;************ Conditions
+
+rule ifoverflow %A = "   jcs %A"
+rule ifnoverflow %A = "   jcc %A"
 
 rule ifeq %A,%B:byte,%C:byte   = instr
   let _a, %B          ; lda %A

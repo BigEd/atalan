@@ -195,7 +195,7 @@ Bool VarIsStructElement(Var * var)
 
 Bool VarIsArrayElement(Var * var)
 {
-	return var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
+	return var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
 }
 
 
@@ -355,6 +355,14 @@ Var * VarFind(char * name, VarIdx idx)
 	return var;
 }
 
+Var * VarFindMode(Name name, VarIdx idx, VarMode mode)
+{
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == mode && var->idx == idx && StrEqual(name, var->name)) break;
+	}
+	return var;
+}
 
 TypeVariant VarType(Var * var)
 {
@@ -527,6 +535,8 @@ Arguments:
 {
 	Instr * i;
 	InstrBlock * blk;
+	Var * var;
+	UInt16 bmk;
 
 	if (proc->instr == NULL) return;
 	if (FlagOn(proc->flags, VarProcessed)) return;
@@ -536,6 +546,16 @@ Arguments:
 
 	if (ProcIsInterrupt(proc)) {
 		flag |= VarProcInterrupt;
+	}
+
+	// Mark all defined labels (those defined with label instruction)
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_LABEL) {
+				SetFlagOn(i->result->flags, VarLabelDefined);
+			}
+		}
 	}
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
@@ -549,6 +569,20 @@ Arguments:
 					}
 					if (VarType(i->arg2) == TYPE_PROC) {
 						ProcUse(i->arg2, flag | VarProcAddress);
+					}
+
+					if (i->result != NULL && i->result->mode == MODE_LABEL) {
+						if (FlagOff(i->result->flags, VarLabelDefined)) {
+
+							bmk = SetBookmarkLine(i);
+
+							var = VarFindMode(i->result->name, i->result->idx, MODE_LABEL);
+							if (var != NULL) {
+								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								
+							} else {
+								SyntaxErrorBmk("Label [A] is undefined", bmk);
+							}
+						}
 					}
 				}
 			}

@@ -30,11 +30,14 @@ GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information
 
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
+void ExpectExpression(Var * result);
+Var * PopTop();
 void ParseCall(Var * proc);
 void ParseMacro(Var * macro);
 Type * ParseType();
 Var * ParseArrayElement(Var * arr, Bool ref);
 Var * ParseStructElement(Var * arr);
+Var * ParseFile();
 
 // This variable is set to true, when we parse expression inside condition.
 // It modifies parsing behaviour concernign and, or and not.
@@ -122,7 +125,17 @@ Type * ParseIntType()
 	} else if (TOK == TOKEN_ID) {
 		var = VarFind2(LEX.name, 0);
 		if (var != NULL) {
-			type = var->type;
+			if (var->mode == MODE_CONST) {
+				if (var->type->variant == TYPE_INT) {
+					type = TypeAlloc(TYPE_INT);
+					type->range.min = 0;
+					type->range.max = var->n;
+				} else {
+					SyntaxError("Expected integer constant");
+				}
+			} else {
+				type = var->type;
+			}
 			NextToken();
 		} else {
 			SyntaxError("$unknown variable");
@@ -163,8 +176,18 @@ range:
 		NextToken();
 		if (TOK == TOKEN_DOTDOT) {
 			NextToken();
-			if (TOK == TOKEN_INT) {
-				type->range.max = LEX.n;
+			ExpectExpression(NULL);
+			if (TOK) {
+				var = PopTop();
+				if (var->mode == MODE_CONST) {
+					type->range.max = var->n;
+				} else {
+					SyntaxError("expected constant expression");
+				}
+//				NextToken();
+//				if (TOK == TOKEN_INT) {
+//					type->range.max = LEX.n;
+//				}
 			}
 		} else {
 			type->range.max = type->range.min;
@@ -174,7 +197,7 @@ range:
 		if (type->range.min > type->range.max) {
 			SyntaxError("range minimum bigger than maximum");
 		} else {
-			NextToken();
+//			NextToken();
 		}
 const_list:
 		// Parse type specific constants
@@ -440,6 +463,7 @@ Purpose:
 			switch(op) {
 			case INSTR_HI: r = (n1 >> 8) & 0xff; break;
 			case INSTR_LO: r = n1 & 0xff; break;
+			case INSTR_SQRT: r = (UInt32)sqrt(n1); break;
 			default: break;
 			}
 			result = VarNewInt(r);
@@ -666,12 +690,32 @@ void ParseOperand()
 	Bool type_match;
 	UInt8 arg_no;
 	Bool spaces;
+	Type * type;
 
 	if (TOK == TOKEN_OPEN_P) {
 		ParseParenthesis();
 	} else {
+		// file "slssl"
+		if (TOK == TOKEN_FILE) {
+
+			NextToken();
+
+			// This will be constant variable with temporary name, array of bytes
+			item = ParseFile();
+			if (TOK) {
+				type = RESULT_TYPE;
+				if (type == NULL) {
+					type = TypeAlloc(TYPE_ARRAY);
+				}
+				var = VarNewTmp(0, type);
+				var->mode = MODE_CONST;
+
+				InstrBlockPush();
+				Gen(INSTR_FILE, NULL, item, NULL);
+				var->instr = InstrBlockPop();
+			}
 		// @id denotes reference to variable
-		if (TOK == TOKEN_ADR) {
+		} else if (TOK == TOKEN_ADR) {
 			NextToken();
 			ref = true;
 			goto id;
@@ -809,6 +853,9 @@ void ParseUnary()
 	}  else if (NextIs(TOKEN_NOT)) {
 		ParseOperand();
 		InstrUnary(INSTR_NOT);
+	} else if (NextIs(TOKEN_SQRT)) {
+		ParseOperand();
+		InstrUnary(INSTR_SQRT);
 	} else {
 		ParseOperand();
 	}
@@ -1378,7 +1425,7 @@ Syntax:
 	Var * min, * max, * step;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
-	Int32 n;
+	Int32 n, nmask;
 
 	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL;
 	where_t_label = NULL;
@@ -1528,40 +1575,54 @@ Syntax:
 	}
 
 	if (var != NULL) {
-		if (step == NULL) {
-			step = VarNewInt(1);
-		}
 
-		InternalGen(INSTR_ADD, var, var, step);		// STEP
+		// Default step is 1
+		if (step == NULL) step = VarNewInt(1);
+		
+		// Add the step to variable
+		InternalGen(INSTR_ADD, var, var, step);
 
-		// We prefer comparison usign equality.
-		// On many architectures, this is faster than <=, because it has to be done using 2 instructions (carry clear, zero set)
-		if (max->mode == MODE_CONST && step->mode == MODE_CONST) {
+		// 1. If max equals to byte limit (0xff, 0xffff, 0xffffff, ...), only overflow test is enough
+		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
+		//    to set overflow flag.
 
+		if (max->mode == MODE_CONST) {
 			n = max->n;
-			if ((n == 0xff || n == 0xffff || n == 0xffffff) && n == var->type->range.max) {
-				if (step->n == 1) {
-					n = 0;
-				} else {
-					if (min->mode == MODE_CONST) {
-						n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
-						n = n & max->n;
-					} else {
-						goto variable;
-					}
-				}
-			} else {
-				n++;
-			}
-			max = VarNewInt(n);
-			InternalGen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
-		} else {
-variable:
-			InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);	//TODO: Overflow
-		}
-	}
+			nmask = 0xff;
+			while(n > nmask) nmask = (nmask << 8) | 0xff;
 
-	if (cond != NULL) {
+//			nmask = ((n / 256) + 1) * 256 - 1;
+//			nmask = TypeSize(var->type) * 256 -1;
+			if (n == nmask && (step->mode != MODE_CONST || step->n > 255)) {
+				InternalGen(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
+				goto var_done;
+			} else if (step->mode == MODE_CONST) {
+
+				// 2. Min,max,step are constants, in such case we may use IFNE and calculate correct stop value
+				if (min->mode == MODE_CONST) {
+					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
+					n = n & nmask;
+					max = VarNewInt(n);
+					InternalGen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
+					goto var_done;
+				// 3. max & step are constant, we may detect, that overflow will not occur
+				} else {
+					if ((nmask - max->n) >= step->n) goto no_overflow;
+				}
+			}
+		}
+
+		// Alloc f_label if necessary
+		if (G_BLOCK->f_label == NULL) {
+			G_BLOCK->f_label = VarNewTmpLabel();
+		}
+		InternalGen(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
+no_overflow:
+		InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);
+	}
+var_done:
+
+	if (G_BLOCK->f_label != NULL) {
 		GenLabel(G_BLOCK->f_label);
 	}
 done:
@@ -1748,10 +1809,12 @@ Var * ParseFile()
 		SyntaxError("expected string specifying file name");
 	}
 
-	if (block) {
-		ExpectToken(TOKEN_BLOCK_END);
-	} else {
-		NextToken();
+	if (TOK) {
+		if (block) {
+			ExpectToken(TOKEN_BLOCK_END);
+		} else {
+			NextToken();
+		}
 	}
 	return item;
 }
@@ -2689,3 +2752,10 @@ void ParseInit()
 	G_CONDITION_EXP = 0;
 	SYSTEM_PARSE = true;
 }
+
+/*
+void ProcCheck(Var * proc)
+{
+
+}
+*/

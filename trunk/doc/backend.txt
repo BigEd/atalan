@@ -91,3 +91,26 @@ rule let %A:byte,_a  = "   sta %A"
 rule let _c, 0  = "   clc"
 rule add _a,_a,%A:byte = "   adc %A"
 ::::::::::::::::::::::::
+
+=============
+Rule matching
+=============
+
+Rule is matched by instruction name.
+All three rule parameters must then match.
+
+::::::::::::::::::::::::
+variable          If variable is specified, instruction must reference this variable in the argument.
+                  It is used mainly for register variables.
+value             Concrete value (rule add _a, _a, 1)
+const %A          Constant. Range (or type) of the constant may be specified.              
+%A:type           Value or variable of specified type
+%A:type(idx)      Access to array element at index %B. Idx may be variable, value etc.
+%A:type(idx,idx)  Access to 2d array
+@%A               Reference to variable pointed to by %A (may include index)     
+::::::::::::::::::::::::
+
+Macro variable %Z has special meaning. It is used as local variable in macro evaluation.
+
+Label specified in rule using "label" instruction is local (new temporary label is generated every time
+macro is used.

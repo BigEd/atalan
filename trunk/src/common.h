@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
+#include <math.h>
 
 typedef int Bool;
 typedef int Int16;

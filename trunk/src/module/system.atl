@@ -13,42 +13,45 @@ type instrs:enum
 	nop = 0
 	let = 1
 	
-	ifeq = 2
-	ifne = 3
-	iflt = 4
-	ifge = 5
-	ifgt = 6
-	ifle = 7
+	ifeq
+	ifne
+	iflt
+	ifge
+	ifgt
+	ifle
+	ifoverflow
+	ifnoverflow
+		
+	prologue	;generated at the beggining of the program
+	epilogue	;generated at the end of programm
+	emit  		;emit string to output
+	vardef 	
+	label  
+	goto
+	add
+	sub
+	mul
+	div
+	sqrt
+	and
+	or
 	
-	prologue = 8	;generated at the beggining of the program
-	epilogue = 9	;generated at the end of programm
-	emit = 10  		;emit string to output
-	vardef = 11 	
-	label = 12  
-	goto = 13
-	add = 14
-	sub = 15
-	mul = 16
-	div = 17
-	and = 18
-	or = 19
-	
-	alloc = 20
-	print = 21		;print string argument
-	format = 22
-	proc = 23		;procedure entry
-	endproc	= 24	;procedure exit
-	call = 25		;call procedure
-	var_arg = 26
-	str_arg = 27
-	data  = 28
-	file  = 29
-	align = 30
-	hi = 31
-	lo = 32
-	ptr = 33
-	arrindex = 34		;generate index for 2d array
-	let_adr = 35
+	alloc
+	print			;print string argument
+	format
+	proc			;procedure entry
+	endproc		;procedure exit
+	call			;call procedure
+	var_arg
+	str_arg
+	data
+	file
+	align
+	hi
+	lo
+	ptr
+	arrindex		;generate index for 2d array
+	let_adr
 	rol
 	ror
 	debug

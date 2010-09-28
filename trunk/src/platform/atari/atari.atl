@@ -35,7 +35,7 @@ type font@1024:array(1023)
 out CHBAS@756:byte	  ;CHBAS register contains hi byte of font address              
 out CHBASE@$D409:byte ;Hardware register for font base
 
-set'font:macro(x) =
+set'font:macro x:font =
 	chbas = hi x
 
 ;*********************
