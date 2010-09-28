@@ -24,6 +24,21 @@ extern InstrBlock * CODE;
 Var * INTERRUPT;
 char PLATFORM[64];			// name of platform
 
+void ProcessUsedProc(void (*process)(Var * proc))
+{
+	Var * var;
+	Type * type;
+
+	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		type = var->type;
+		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+			process(var);
+		}
+	}
+	process(&ROOT_PROC);
+}
+
+
 int main(int argc, char *argv[])
 {
 	Var * var, * data;
@@ -70,7 +85,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (6-Sep-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (15-Sep-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		
@@ -161,6 +176,7 @@ int main(int argc, char *argv[])
 	SYSTEM_PARSE = false;
 	if (!Parse(filename, true)) goto failure;
 	SYSTEM_PARSE = true;
+
 	Gen(INSTR_EPILOGUE, NULL, NULL, NULL);
 
 	// Report warning about logical errors
@@ -171,7 +187,8 @@ int main(int argc, char *argv[])
 
 	ROOT_PROC.instr = CODE;
 
-	ProcUse(&ROOT_PROC, 0);
+	// Now do extra checks in all procedures
+	// Some of the checks are postponed to have information from all procedures
 
 	VarGenerateArrays();
 
@@ -189,8 +206,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	//***** Translation
+//	ProcessUsedProc(&ProcCheck);
 
+	VarUse();
+	ProcUse(&ROOT_PROC, 0);
+	if (ERROR_CNT > 0) goto failure;
+
+	//***** Translation
+	ProcessUsedProc(&ProcTranslate);
+/*
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
 		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
@@ -198,9 +222,9 @@ int main(int argc, char *argv[])
 		}
 	}
 	ProcTranslate(&ROOT_PROC);
-
+*/
 	//***** Optimalization
-
+/*
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
 		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
@@ -208,6 +232,8 @@ int main(int argc, char *argv[])
 		}
 	}
 	Optimize(&ROOT_PROC);
+*/
+	ProcessUsedProc(&ProcOptimize);
 
 	if (VERBOSE) {
 		printf("============== Optimized ==============\n");
@@ -215,7 +241,6 @@ int main(int argc, char *argv[])
 	}
 
 	VarUse();
-	ProcUse(&ROOT_PROC, 0);
 
 	//==== Assign offsets to structure items
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {

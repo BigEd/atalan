@@ -412,6 +412,19 @@ screen:array(39,239) of byte
 screen = 0		; clear the screen (fill with 0)
 ::::::::::::::::
 
+===============
+File references
+===============
+
+Wherever reference to array is expected, it is possible to specify reference to
+file, that contains contents of that array using file keyword.
+
+For example:
+:::::::::::::::::::::::::::
+set'font file "baloon.fnt"
+:::::::::::::::::::::::::::
+
+Reference to file is relative to location of the source file.
 
 *********
 Operators
@@ -420,6 +433,7 @@ Operators
 :::::::::::
 * / mod        Multiplication, division, modulus
 + -            Addition, substraction
+sqrt           Square root
 lo hi          Low/high byte of a word (lo $abcd = $cd, hi $abcd = $ab)
 not            Binary negation
 and            Binary and 
@@ -537,7 +551,7 @@ Loops
 Loops are written like:
 
 :::::::::::::::::::::::::::::::::::
-["for" var [":" range] ["where" filter]]["while" cond | "until" cond] code_block
+["for" var [":" range] ["step" step]["where" filter]]["while" cond | "until" cond] code_block
 :::::::::::::::::::::::::::::::::::
 
 ===
@@ -575,6 +589,14 @@ x:1..60000
 for x until KEY = Q 	
 "You hit [x]."
 ::::::::::::::::::::::::::::
+
+====
+Step
+====
+
+When iterationg over variable, it is possible to specify value that
+will be added to the variable in every step.
+If the step specification is ommited, 1 is used.
 
 =====
 Where

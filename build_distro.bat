@@ -82,6 +82,8 @@ cd atalan\examples
 
 ..\bin\atalan interrupts
 
+..\bin\atalan bit_sieve
+
 cd ..
 cd ..
 

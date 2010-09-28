@@ -259,20 +259,22 @@ void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	// This simplifies further code processign.
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
-		if (arg1->mode == MODE_CONST) {
-			var = arg1; arg1 = arg2; arg2 = var;
+		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
+			if (arg1->mode == MODE_CONST) {
+				var = arg1; arg1 = arg2; arg2 = var;
 
-			// Change oriantation of non commutative relational operators
-			// This is different from NOT operation.
+				// Change oriantation of non commutative relational operators
+				// This is different from NOT operation.
 
-			switch(op) {
-			case INSTR_IFLE: op = INSTR_IFGE; break;
-			case INSTR_IFGE: op = INSTR_IFLE; break;
-			case INSTR_IFGT: op = INSTR_IFLT; break;
-			case INSTR_IFLT: op = INSTR_IFGT; break;
-			default: break;
+				switch(op) {
+				case INSTR_IFLE: op = INSTR_IFGE; break;
+				case INSTR_IFGE: op = INSTR_IFLE; break;
+				case INSTR_IFGT: op = INSTR_IFLT; break;
+				case INSTR_IFLT: op = INSTR_IFGT; break;
+				default: break;
+				}
+
 			}
-
 		}
 	}
 	InstrInsert(CODE, NULL, op, result, arg1, arg2);
@@ -330,6 +332,13 @@ Result:
 		if (arg1->type == NULL || arg1->type->variant != TYPE_INT) return NULL;
 
 		switch(op) {
+			case INSTR_SQRT:
+				if (arg1->n >= 0) {
+					r = VarNewInt((UInt32)sqrt(arg1->n));
+				} else {
+					// Error: square root of negative number
+				}
+				break;
 			case INSTR_LO:
 				r = VarNewInt(arg1->n & 0xff);
 				break;
@@ -423,7 +432,7 @@ Bool VarMatchesType(Var * var, RuleArg * pattern)
 
 	// Pattern does not expect any index, but we have some
 	} else {
-		if (var->mode == MODE_ELEMENT && VarIsArrayElement(var)) return false;
+		if (VarIsArrayElement(var)) return false;
 	}
 
 	if (type == vtype) return true;
@@ -917,7 +926,7 @@ void PrintVarVal(Var * var)
 		if (type->variant == TYPE_INT && !VarIsConst(var)) {
 			if (type->range.min == 0 && type->range.max == 255) {
 			} else {
-				printf(":%ld..%ld", type->range.min, type->range.max);
+//				printf(":%ld..%ld", type->range.min, type->range.max);
 			}
 		}
 	}
@@ -983,7 +992,7 @@ void PrintVar(Var * var)
 	printf("  R%ld W%ld\n", var->read, var->write);
 }
 
-void InstrPrint(Instr * i)
+void InstrPrintInline(Instr * i)
 {
 	Var * inop;
 	Bool r = false, a1 = false;
@@ -1020,6 +1029,11 @@ void InstrPrint(Instr * i)
 			PrintVarVal(i->arg2);
 		}
 	}
+}
+
+void InstrPrint(Instr * i)
+{
+	InstrPrintInline(i);
 	printf("\n");
 }
 

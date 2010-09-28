@@ -148,8 +148,8 @@ x "Hello"...	  does not make new-line
 
 	
 - platforms to www menu
-- scope solving
-- sophisticated error reporting
+x scope solving
+x sophisticated error reporting
 - type should be Var too 
 
 ==========

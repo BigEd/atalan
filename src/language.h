@@ -56,6 +56,7 @@ typedef enum {
 	TOKEN_AND,
 	TOKEN_OR,
 	TOKEN_NOT,
+	TOKEN_SQRT,
 	TOKEN_WHILE,
 	TOKEN_UNTIL,
 	TOKEN_WHERE,
@@ -191,6 +192,7 @@ Undefined name is used for positional argument, because otherwise arguments have
 
 typedef struct TypeTag Type;
 typedef struct InstrTag Instr;
+typedef struct ExpTag Exp;
 typedef struct InstrBlockTag InstrBlock;
 //typedef struct InstrEnumTag InstrEnum;
 
@@ -277,6 +279,8 @@ typedef enum {
 #define VarProcInterrupt   32		// this procedure is used from interrupt
 #define VarProcAddress     64		// procedure address is required (this means, we are not allowed to inline it)
 
+#define VarLabelDefined    32
+
 typedef unsigned int VarIdx;
 typedef char * Name;
 
@@ -313,6 +317,7 @@ struct VarTag {
 	Var *   current_val;	// current value asigned during optimalization
 							// TODO: Maybe this may be variable value.
 	Instr * src_i;
+	Exp * dep;
 	UInt16	read;			// how many times some instruction reads this variable (if 0, this is unused)
 	UInt16	write;			// how many times some instruction writes this variable (if 1 this is constant)
 	Var  *  next;			// next variable in chain
@@ -328,6 +333,8 @@ typedef enum {
 	INSTR_IFGE,
 	INSTR_IFGT,
 	INSTR_IFLE,
+	INSTR_IFOVERFLOW,
+	INSTR_IFNOVERFLOW,
 
 	INSTR_PROLOGUE,
 	INSTR_EPILOGUE,
@@ -339,6 +346,8 @@ typedef enum {
 	INSTR_SUB,
 	INSTR_MUL,
 	INSTR_DIV,
+	INSTR_SQRT,
+
 	INSTR_AND,
 	INSTR_OR,
 
@@ -368,10 +377,16 @@ typedef enum {
 	INSTR_LINE,				// reference line in the source code
 	INSTR_INCLUDE,
 	INSTR_MULA,				// templates for 8 - bit multiply 
-	INSTR_MULA16,                           // templates for 8 - bit multiply 
+	INSTR_MULA16,           // templates for 8 - bit multiply 
 
 	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
 	INSTR_DIVCARRY,
+
+	// Following 'instructions' are used in expressions
+	INSTR_VAR,
+	INSTR_ELEMENT,			// access array element (left operand is array, right is index)
+	INSTR_LIST,				// create list of two elements
+
 	INSTR_CNT
 } InstrOp;
 
@@ -449,6 +464,7 @@ Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);
 Var * VarFindInProc(char * name, VarIdx idx);
 Var * VarProcScope();
+Var * VarFindMode(Name name, VarIdx idx, VarMode mode);
 
 Var * VarFindInt(Var * scope, UInt32 n);
 Var * VarMacroArg(UInt8 i);
@@ -497,10 +513,21 @@ void ProcUse(Var * proc, UInt8 flag);
 
 ***********************************************************/
 
-#define IS_INSTR_BRANCH(x) ((x)>=INSTR_IFEQ && (x)<=INSTR_IFLE)
+#define IS_INSTR_BRANCH(x) ((x)>=INSTR_IFEQ && (x)<=INSTR_IFNOVERFLOW)
 #define IS_INSTR_JUMP(x) (IS_INSTR_BRANCH(x) || (x) == INSTR_GOTO)
 
 InstrOp OpNot(InstrOp op);
+
+typedef struct ExpTag Exp;
+
+struct ExpTag {
+	InstrOp   op;			// operation
+	union {
+		Exp * arg[2];  // op != INSTR_VAR
+		Var * var;			// op == INSTR_VAR
+	};
+//	Exp * next;
+};
 
 /*
 Compiler instruction.
@@ -512,6 +539,13 @@ struct InstrTag {
 
 	//--- dest
 	Var * result;
+//	union {
+//		Var * arg[2];
+//		struct {
+//			UInt16 line_no;
+//			char * line;
+//		};
+//	};
 	union {
 		Var * arg1;
 		UInt16 line_no;
@@ -522,8 +556,18 @@ struct InstrTag {
 	};
 
 	Instr * next, * prev;
+	Instr * src1, * src2;
 };
 
+/*
+For instructions, where arg1 or arg2 = result, source points to instruction, that previously set the result.
+
+1.		ror x,x,1
+2.		ror x,x,1   source = 1
+3.		ror x,x,1   source = 2
+4.      let a,x
+
+*/
 
 struct InstrBlockTag {
 
@@ -547,6 +591,8 @@ struct InstrBlockTag {
 
 void InstrInit();
 void InstrPrint(Instr * i);
+void InstrPrintInline(Instr * i);
+
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
 
@@ -585,6 +631,8 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end);
 void VarUse();
 
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2);
+
+UInt16 SetBookmarkLine(Instr * i);
 
 /***********************************************************
 
@@ -654,13 +702,16 @@ struct BlockTag {
 
 void ParseInit();
 Bool Parse(char * name, Bool main_file);
+void ProcCheck(Var * proc);
 
 /*************************************************************
 
  Optimize phase
 
 *************************************************************/
-void Optimize(Var * proc);
+void ProcOptimize(Var * proc);
+void GenerateBasicBlocks(InstrBlock * block);
+Bool OptimizeValues(Var * proc);
 
 /*************************************************************
 

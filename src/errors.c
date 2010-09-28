@@ -46,13 +46,13 @@ static UInt8 ERR_ARG_POS;
 
 static void ReportError(char * kind, char * text, UInt16 bookmark)
 {
-	UInt16 i, token_pos;
+	UInt16 i, token_pos, indent, line_cnt;
 	char c, * t, * n;
 	char * line;
 	char buf[2048];
 	char * o;
 	Var * var;
-
+	
 	Bool name = false;
 	if (*text == '$') {
 		name = true;
@@ -66,9 +66,18 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
+	line_cnt = 0;
+	PrintColor(RED);
+	if (SRC_FILE != NULL) {
+		indent = fprintf(STDERR, "%s(%d) %s error: ", SRC_FILE->name, i, kind);
+	} else {
+		indent = fprintf(STDERR, "%s error: ", kind);
+	}
+
 	// Format error message
 	t = text; o = buf;
-	while((c = *t++) != 0) {
+	do {
+		c = *t++;
 		if (c == '[') {
 			c = *t++;
 			// Get argument and print it's property
@@ -92,15 +101,23 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			if (c != ']') {
 				InternalError("Invalid format of argument in error message %s", text);
 			}
+		} else if (c == '\n' || c == 0) {
+			*o++ = 0;
+
+			if (line_cnt != 0) {
+				for(i=0; i<indent; i++) fprintf(STDERR, " ");
+			}
+			fprintf(STDERR, "%s\n", buf);
+			line_cnt++;
+			o = buf;
 		} else {
 			*o++ = c;
 		}
-	}
-	*o++ = 0;
+	} while(c != 0);
 
-	PrintColor(RED);
-	fprintf(STDERR, "%s(%d) %s error: ", SRC_FILE->name, i, kind);
-	fprintf(STDERR, "%s", buf);
+//	*o++ = 0;
+
+//	fprintf(STDERR, "%s", buf);
 
 	if (name) fprintf(STDERR, " \'%s\'", LEX.name);
 	fprintf(STDERR, "\n\n");
@@ -122,21 +139,24 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 		while(*line == SPC || *line == TAB) {
 			line++;
-			token_pos--;
+			if (token_pos > 0) token_pos--;
 		}
 
 		fprintf(STDERR, "%s", line);
-		for(i=0; i<token_pos; i++) {
-			c = line[i];
-			if (c != 9) c = 32;
-			fprintf(STDERR, "%c", c);
+
+		if (token_pos > 0) {
+			for(i=0; i<token_pos; i++) {
+				c = line[i];
+				if (c != 9) c = 32;
+				fprintf(STDERR, "%c", c);
+			}
+			// There can be some spaces ot tabs before at the token pos
+			while((c = line[i]) == SPC || c == TAB) {
+				fprintf(STDERR, "%c", c);
+				i++;
+			}
+			fprintf(STDERR, "^\n");
 		}
-		// There can be some spaces ot tabs before at the token pos
-		while((c = line[i]) == SPC || c == TAB) {
-			fprintf(STDERR, "%c", c);
-			i++;
-		}
-		fprintf(STDERR, "^\n");
 	}
 	PrintColor(RED+GREEN+BLUE);
 }
@@ -190,6 +210,18 @@ UInt16 SetBookmark()
 {
 	BOOKMARK_LINE_NO = LINE_NO;
 	BOOKMARK_LINE_POS = TOKEN_POS;
+	return 1;
+}
+
+UInt16 SetBookmarkLine(Instr * i)
+{
+	while(i != NULL && i->op != INSTR_LINE) i = i->prev;
+	if (i == NULL) return 0;
+	LINE_NO = i->line_no;
+	BOOKMARK_LINE_NO  = i->line_no;
+	SRC_FILE = i->result;
+	strcpy(LINE, i->line);
+	BOOKMARK_LINE_POS = 0;
 	return 1;
 }
 

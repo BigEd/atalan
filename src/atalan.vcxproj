@@ -84,6 +84,8 @@
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="optimize.c" />
+    <ClCompile Include="opt_blocks.c" />
+    <ClCompile Include="opt_values.c" />
     <ClCompile Include="parser.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="common.c" />
