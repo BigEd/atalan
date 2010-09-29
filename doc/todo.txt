@@ -32,19 +32,11 @@ Error reporting
 
 - xor, or & and self (produces 0, self, 0)
 
-x invalid array index detection
-x assign type inferencing
-x multiple return function assign type inferencing
-x repeated assign inferencing (merge type - only for flexible types)
-x var.min, var.max provides access to bounds
 
 - linear transformation operator   a = RANDOM in 10..30
 
-x for may parse expression at the beginning (variable name may be deduced)
-
 - fix UNTIL x and y  (we must replace AND and OR in negated expressions)
 - support default values for function arguments
-x support  10 < x < 20
 
 - support macro parameters in type parsing (%A, %B before array indices) and result type
   (only when parsing rule)
@@ -52,8 +44,6 @@ x support  10 < x < 20
 - loops with variable should test the bounds first
 
 - for i until p(i) = 5
-
-x in display_list, we do not use DLI, because it's a type (and we cannot evaluate type)
 
 - support for bool (or 0..1 types)
 - Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
@@ -80,9 +70,6 @@ if x,y = 3,4 then
 	while tile = 7
 		tile = random and 7
 ::::::::::::::::::::::
-
-x context of enum type for array (STRIG(0), STRIG(1))
-x shift characters in font
 
 ::::::::::::::::::::::::::
 draw'tile:proc
