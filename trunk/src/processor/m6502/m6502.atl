@@ -1562,7 +1562,7 @@ rule print     = instr
 rule format    = instr
 	call _std_print_adr
 
-rule str_arg ,%A,%B:byte  = "   dta b(%B),c'%A'"
+rule str_arg ,%A,%B:byte  = "   dta b(%B),%'A"
 rule var_arg ,%A:byte   = "   dta b(129),a(%A)"
 rule var_arg ,%A:card   = "   dta b(130),a(%A)"
 rule var_arg ,%A:adr    = "   dta b(130),a(%A)"

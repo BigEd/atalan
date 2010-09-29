@@ -47,10 +47,6 @@ void EmitStr(char * str)
 	if (str != NULL) {
 		s = str;	
 		while(c = *s++) {		
-			if (c == '\'') {
-				EmitChar('_');
-				c = '_';
-			}
 			EmitChar(c);
 		}
 	}
@@ -63,13 +59,59 @@ void EmitInt(long n)
 	EmitStr(buf);
 }
 
+void EmitStrConst(char * str)
+{
+	char * s, c;
+	Bool in_quotes = false;
+	Bool empty = true;
+
+	if (str != NULL) {
+		s = str;	
+		while(c = *s++) {		
+			if (c == '\'') {
+				if (in_quotes) {
+					EmitStr("\'");
+					in_quotes = false;
+				}
+				if (!empty) EmitStr(",");
+				EmitStr("39");
+				empty = false;
+			} else {
+				if (!in_quotes) {
+					if (!empty) EmitStr(",");
+					EmitStr("c\'");
+					in_quotes = true;
+				}
+				EmitChar(c);
+				empty = false;
+			}
+		}
+		if (in_quotes) {
+			EmitStr("\'");
+		}
+	}
+}
+
+
 void EmitVarName(Var * var)
 {
-	EmitStr(var->name);
+	char * s, c;
+
+	s = var->name;
+	if (s != NULL) {
+		while(c = *s++) {		
+			if (c == '\'') {
+				EmitChar('_');
+				c = '_';
+			}
+			EmitChar(c);
+		}
+	}
+
 	if (var->idx != 0) EmitInt(var->idx-1);
 }
 
-void EmitVar(Var * var)
+void EmitVar(Var * var, UInt8 format)
 {
 	if (var != NULL) {
 		if (var->mode == MODE_SRC_FILE) {
@@ -77,9 +119,9 @@ void EmitVar(Var * var)
 
 		} else if (var->mode == MODE_ELEMENT) {
 			if (VarIsStructElement(var)) {
-				EmitVar(var->adr);
+				EmitVar(var->adr, format);
 				EmitStr("+");
-				EmitVar(var->var);
+				EmitVar(var->var, format);
 			} else {
 				InternalError("don't know how to emit array element");
 			}
@@ -95,7 +137,13 @@ void EmitVar(Var * var)
 		} else {
 			switch(var->type->variant) {
 			case TYPE_INT: EmitInt(var->n);	break;
-			case TYPE_STRING: EmitStr(var->str); break;
+			case TYPE_STRING: 
+				if (format == 1) {
+					EmitStrConst(var->str); 
+				} else {
+					EmitStr(var->str);
+				}
+				break;
 			default: break;
 			}
 		}
@@ -106,6 +154,7 @@ extern Var * MACRO_ARG[26];
 
 void EmitInstr2(Instr * instr, char * str)
 {
+	UInt8 format = 0;
 	char * s, c;
 	s = str;
 
@@ -116,25 +165,30 @@ void EmitInstr2(Instr * instr, char * str)
 	while(c = *s++) {		
 		if (c == '%') {
 			c = *s++;
+			if (c == '\'') {
+				format = 1;
+				c = *s++;
+			}
+			
 			// INSTR_LINE has special arguments
 
 			if (c >='A' && c<='Z') {
-				EmitVar(MACRO_ARG[c-'A']); continue;
+				EmitVar(MACRO_ARG[c-'A'], format); continue;
 			}
 
 			switch(c) {
 				case '0': 
-					EmitVar(instr->result); continue;
+					EmitVar(instr->result, format); continue;
 				case '1': 
 					if (instr->op != INSTR_LINE) {
-						EmitVar(instr->arg1); 
+						EmitVar(instr->arg1, format); 
 					} else {
 						EmitInt(instr->line_no);
 					}
 					continue;
 				case '2': 
 					if (instr->op != INSTR_LINE) {
-						EmitVar(instr->arg2); 
+						EmitVar(instr->arg2, format); 
 					} else {
 						EmitStr(instr->line);
 					}
