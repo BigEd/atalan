@@ -81,8 +81,9 @@ typedef enum {
 	TOKEN_USE,
 	TOKEN_REF,
 	TOKEN_STEP,
+	TOKEN_TUPLE,
 
-	TOKEN_LAST_KEYWORD = TOKEN_STEP,
+	TOKEN_LAST_KEYWORD = TOKEN_TUPLE,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -244,10 +245,12 @@ typedef enum {
 	MODE_ELEMENT = 7,	// Array element (references array and index) - type is type of array
 	MODE_SCOPE  = 8,	// Local scope
 	MODE_LABEL = 9,
-	MODE_SRC_FILE = 10	// variable representing source file
+	MODE_SRC_FILE = 10,	// variable representing source file
 						// scope   FILE that includes this file
 						// name    filename
 						// n       parse state
+	MODE_TUPLE = 11		// <adr,var>  (var may be another tuple)
+						// Type of tuple may be undefined, or it may be structure of types of variables in tuple
 } VarMode;
 
 typedef enum {
@@ -292,14 +295,14 @@ struct VarTag {
 	VarIdx  idx;	 // two variables with same name but different index may exist
 					 // 0 means no index, 1 means index 1 etc.
 					 // variable name "x1" is automatically converted to x,1
-	Var  *  scope;	 // procedure, in which this variable is declared
-					 // it may be named scope, instead
+	Var  *  scope;	 // scope, in which this variable has been declared
 	VarMode	mode;
 	VarSubmode submode;
 
 	UInt8   flags;
 	Var *	adr;	 // Address of variable in memory. For MODE_TYPE, this means alignment of variable of this type.
 					 // MODE_ELEMENT	Array to which this variable belongs
+					 // MODE_TUPLE      First variable of tuple
 
 	Type *  type;	 // Pointer to type variable (such variable must have MODE_TYPE)
 					 // MODE_ELEMENT:  Element type of array
@@ -307,17 +310,16 @@ struct VarTag {
 	int     value_nonempty;
 	union {
 		long	n;				// for const, or function default argument (other variants of value must be supported - array, struct, etc.)
-		InstrBlock * instr;		// instructions for procedure or array initi
+		InstrBlock * instr;		// instructions for procedure or array initialization
 		char * str;
 		Var * var;
-		Instr * lab_adr;		// label address
 		ParseState * parse_state;	// MODE_SRC_FILE
 	};
 	UInt32 seq_no;
 	Var *   current_val;	// current value asigned during optimalization
 							// TODO: Maybe this may be variable value.
 	Instr * src_i;
-	Exp * dep;
+	Exp *   dep;
 	UInt16	read;			// how many times some instruction reads this variable (if 0, this is unused)
 	UInt16	write;			// how many times some instruction writes this variable (if 1 this is constant)
 	Var  *  next;			// next variable in chain
