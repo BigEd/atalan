@@ -19,8 +19,6 @@ Error reporting
 ===============
 
 - Report unexpected indent
-
-
 - support constant expressions in enumerator definitions
 - dead code elimination in parsing (conditional compilation)
 
@@ -31,11 +29,7 @@ Error reporting
 	- combination with array 
 
 - xor, or & and self (produces 0, self, 0)
-
-
 - linear transformation operator   a = RANDOM in 10..30
-
-- fix UNTIL x and y  (we must replace AND and OR in negated expressions)
 - support default values for function arguments
 
 - support macro parameters in type parsing (%A, %B before array indices) and result type
@@ -82,22 +76,19 @@ draw'tile:proc
 
 - conditional expression
 
-x = if a then 3 else 4
+b = if a then 3 else 4
 
 - loop expression
 
-x = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
+b = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
  
 - use of constant expressions in integer definitions 
 
 - s(15..20, 7) = 5
    =>  for ?:15..20 ( s(?,7) = 5 )
    
-x MODE_LABEL
-x rules are hashed by instruction op 
 - custom defined instructions should be built-in
     
-x AND with const limits the type of resulting value (x & 0xff is 0..255, etc.)
 
 - a() = 0, a = 0
 - string initialized arrays

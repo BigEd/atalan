@@ -293,7 +293,7 @@ Purpose:
 static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
-	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use", "ref", "step"
+	"for", "in", "out", "instr", "times", "adr", "debug", "mod", "xor", "struct", "use", "ref", "step", "tuple"
 };
 
 
@@ -350,7 +350,10 @@ retry:
 	if (isalpha(c) || c == '_' || c == '\'') {
 		n = 0;
 		// Identifier may be closed in ''
-		c2 = 0; if (c == '\'') c2 = c;
+		c2 = 0; if (c == '\'') {
+			c2 = c;
+			c = LINE[LINE_POS++];
+		}
 		do {
 			if (n == 255) {
 				SyntaxError("identifier is too long");
@@ -359,7 +362,7 @@ retry:
 			LEX.name[n++] = c;
 			c = LINE[LINE_POS++];
 			if (c == c2) { LINE_POS++; break; }
-		} while(isalpha(c) || isdigit(c) || c == '_' || c == '\'');
+		} while(c2 != 0 || isalpha(c) || isdigit(c) || c == '_' || c == '\'');
 		LEX.name[n] = 0;
 		LINE_POS--;
 

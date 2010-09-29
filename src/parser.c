@@ -913,7 +913,6 @@ retry:
 	if (TOK == TOKEN_AND) {
 		var = STACK[TOP];
 		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
-//	if (!G_CONDITION_EXP && NextIs(TOKEN_AND)) {
 			NextToken();
 			ParsePlusMinus();
 			if (TOK) {
@@ -1151,6 +1150,22 @@ void ParseRel()
 	}
 }
 
+void ParseNot()
+{
+
+	Bool not = false;
+	while (NextIs(TOKEN_NOT)) not = !not;
+
+	if (not) {
+		not = G_BLOCK->not;
+		G_BLOCK->not = !not;
+		ParseRel();
+		G_BLOCK->not = not;
+	} else {
+		ParseRel();
+	}
+}
+
 void ParseAnd()
 {
 	// if x <> 2 and x <> 3 and x <> 4 then "x"
@@ -1161,10 +1176,15 @@ void ParseAnd()
 	//    if x <> 3
 	//       if x <> 4
 	//          "x" 
+	Token tok;
 
 retry:
-	ParseRel();
-	if (NextIs(TOKEN_AND)) {
+	ParseNot();
+
+	tok = TOKEN_AND;
+	if (G_BLOCK->not) tok = TOKEN_OR;
+
+	if ((!G_BLOCK->not && NextIs(TOKEN_AND)) || (G_BLOCK->not && NextIs(TOKEN_OR))) {
 		if (G_BLOCK->t_label != NULL) {
 			GenLabel(G_BLOCK->t_label);
 			G_BLOCK->t_label = NULL;
@@ -1201,10 +1221,15 @@ void ParseCondition()
 	//@f1
 
 	Var * body_label = NULL;
-
+	Token tok;
 retry:
 	ParseAnd();
-	if (NextIs(TOKEN_OR)) {
+	// If the condition is negated (either using NOT or UNTIL), meaning of AND and OR is switched
+
+	tok = TOKEN_OR;
+	if (G_BLOCK->not) tok = TOKEN_AND;
+
+	if (NextIs(tok)) {
 
 		// If the condition was more complex and generated true label,
 		// the true label would point to this jump

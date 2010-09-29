@@ -2,6 +2,11 @@
 News
 ****
 
+- NEW: Support NOT
+- Atari: all keyboard scan codes
+- FIX: AND,OR in UNTIL
+- FIX: Error when printing apostrophe
+
 ===========
 28-Sep-2010
 ===========
