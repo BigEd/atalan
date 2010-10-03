@@ -15,75 +15,6 @@ extern Var * VARS;		// global variables
 extern Var   ROOT_PROC;
 
 
-/*
-Bool OptimizePeephole(Var * proc)
-
-Peephole optimization.
-Remove following instruction patterns:
-
-- let a,a
-
-TODO: Isn't the following removed by Value analysis?
-
-- let a,b
-  let b,a		-> is superfluous
-
-Currently, peephole optimizer is not used, as optimization performed by it are done by
-other types of optimization.
-
-{
-	Instr * instr[PEEPHOLE_SIZE];
-	Instr * i;
-	UInt16 cnt = 0;
-	UInt32 n;
-	Bool modified = false;
-	InstrBlock * blk;
-
-	memset(instr, 0, PEEPHOLE_SIZE * sizeof(Instr *));
-
-	n = 0;
-	blk = proc->instr;
-	for(i = blk->first; i != NULL; i = i->next) {
-		n++;
-		if (cnt < PEEPHOLE_SIZE) {
-			instr[cnt++] = i;
-		} else {
-			memcpy(&instr[0], &instr[1], sizeof(Instr *) * (PEEPHOLE_SIZE-1));
-			instr[PEEPHOLE_SIZE-1] = i;
-		}
-
-		// let a,a
-
-		if (i->op == INSTR_LET) {
-			if (i->result == i->arg1) {
-				if (VERBOSE) {
-					printf("Removing %ld:", n);
-					InstrPrint(i);
-				}
-//				i = InstrPrev(&en);
-				i = InstrDelete(blk, i);
-				modified = true;
-				cnt--;
-			}
-		}
-
-		if (cnt >= 2) {
-
-			// let a,b
-			// let b,a		-> is superfluous
-
-			if (instr[0]->op == INSTR_LET && instr[1]->op == INSTR_LET) {
-				if (instr[0]->result == instr[1]->arg1 && instr[0]->arg1 == instr[1]->result) {
-//					i = InstrPrev(&en);
-					i = InstrDelete(blk, i);
-					modified = true;
-				}
-			}
-		}
-	}
-	return modified;
-}
-*/
 // flag is set to 1, if the variable is live
 
 void VarMark(Var * var, Bool state)
@@ -251,10 +182,17 @@ Bool OptimizeLive(Var * proc)
 		// At the beginning, all variables are dead (except procedure output variables for tail blocks)
 
 		FOR_EACH_VAR(var)
-			if (blk->to == NULL && !VarIsOut(var)) {
+
+			if (StrEqual(var->name, "s")) {
+				printf("");
+			}
+
+			if (blk->to == NULL && var->submode == SUBMODE_ARG_OUT) {
+				var->flags = 1;		// procedure output arguments are live in last block
+			} else if (blk->to == NULL && !VarIsOut(var)) {
 				var->flags = 0;
 			} else if (VarIsOut(var)) {
-				var->flags = 1;		// out variables are always live
+				var->flags = 1;		// out variables are always live, procedure output arguments are line in last block
 			} else {
 				var->flags = 0;
 				MarkBlockAsUnprocessed(proc->instr);

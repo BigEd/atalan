@@ -223,6 +223,16 @@ Purpose:
 	return rule;
 }
 
+Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	Instr i;
+	i.op = op;
+	i.result = result;
+	i.arg1 = arg1;
+	i.arg2 = arg2;
+	return EmitRule(&i);
+}
+
 extern Bool RULE_MATCH_BREAK;
 
 Bool EmitInstr(Instr * i)

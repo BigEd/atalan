@@ -969,9 +969,9 @@ rule mod %A:byte, %B:card, %C:byte = instr
 
 rule and _a,_a,const %A:byte  = "   and #%A"
 rule and _a,_a,%A:byte        = "   and %A"
-rule and _a, %A:byte(_x)      = "   and %A,x"
-rule and _a, %A:byte(_y)      = "   and %A,y"
-rule and _a, @%A:byte(_y)     = "   and (%A),y"
+rule and _a,_a,%A:byte(_x)      = "   and %A,x"
+rule and _a,_a,%A:byte(_y)      = "   and %A,y"
+rule and _a,_a,@%A:byte(_y)     = "   and (%A),y"
 
 rule and %A:byte,%B:byte,%C:byte = instr
 	let _a,%B
@@ -1029,9 +1029,9 @@ rule and %A:card, %B:card, %C:card = instr
 
 rule or _a,_a,const %A:byte  = "   ora #%A"
 rule or _a,_a,%A:byte        = "   ora %A"
-rule or _a, %A:byte(_x)      = "   ora %A,x"
-rule or _a, %A:byte(_y)      = "   ora %A,y"
-rule or _a, @%A:byte(_y)     = "   ora (%A),y"
+rule or _a,_a,%A:byte(_x)      = "   ora %A,x"
+rule or _a,_a,%A:byte(_y)      = "   ora %A,y"
+rule or _a,_a,@%A:byte(_y)     = "   ora (%A),y"
 
 rule or  %A:byte,%B:byte,%C:byte = instr
   let _a,%B
@@ -1084,9 +1084,9 @@ rule or %A:card, %B:card, %C:card = instr
 
 rule xor _a,_a,const %A:byte  = "   eor #%A"
 rule xor _a,_a,%A:byte        = "   eor %A"
-rule xor _a, %A:byte(_x)      = "   eor %A,x"
-rule xor _a, %A:byte(_y)      = "   eor %A,y"
-rule xor _a, @%A:byte(_y)     = "   eor (%A),y"
+rule xor _a,_a,%A:byte(_x)      = "   eor %A,x"
+rule xor _a,_a,%A:byte(_y)      = "   eor %A,y"
+rule xor _a,_a,@%A:byte(_y)     = "   eor (%A),y"
 
 rule xor  %A:byte,%B:byte,%C:byte = instr
 	let _a,%B
@@ -1570,6 +1570,6 @@ rule var_arg ,%A:long   = "   dta b(131),a(%A)"
 rule data ,%A    = "   dta b(%A)"
 rule align ,%A    = "   .align %A"
 rule file ,%A     = "   ins '%A'"
-
+rule org  ,%A     = "   org %A"
 rule ptr , %A    = "   dta a(%A)"
 rule debug  = "   brk"  "   dta b(0)"

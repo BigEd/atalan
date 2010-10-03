@@ -4,6 +4,19 @@ TODO
 
 proc :type   (type must be structure type, or proc type or macro type)
 
+=======
+Options
+=======
+
+Options are compile-time constants.
+It is possible to specify them from command line or when importing module.
+Module declares an option together with it's type and default value.
+It can then use the option when compiling.
+Options are defined for assebler use too.
+
+option stereo:bool = false
+  
+
 ================
 Type inferencing
 ================
@@ -90,7 +103,7 @@ b = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
 - custom defined instructions should be built-in
     
 
-- a() = 0, a = 0
+- a(..) = 0, a = 0
 - string initialized arrays
 - a(..50)
 - a(50..)
@@ -116,11 +129,8 @@ x const %A:byte
   This means offseting arrays based on this variable.
   There cannot be aby other computation with the variable.
 
-  
 - shallow binding
 		 
-- check undefined labels (also we should specify type label when assigning it)
-
 - prints on same line are not entered?
 x "Hello"...	  does not make new-line
 
@@ -274,7 +284,6 @@ x enums
   jmpeq dst, src, src
 
 - relational operators (= <> > < >= <=)
-x logical operators (not, and or)
 
 - bit operations
 

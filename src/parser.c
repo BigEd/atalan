@@ -1257,21 +1257,11 @@ void ParseLabel(Var ** p_label)
 {
 // Labels are global in procedure
 
-	Var * proc;
 	Var * var = NULL;
-	Var * scope;
 
 	ExpectToken(TOKEN_ID);
 	if (TOK == TOKEN_ID) {
-
-		proc = VarProcScope();
-		var = VarFindScope(proc, LEX.name, 0);
-		if (var == NULL) {
-			scope = SCOPE;
-			SCOPE = proc;
-			var = VarNewLabel(LEX.name);
-			SCOPE = scope;
-		}
+		var = FindOrAllocLabel(LEX.name, 0);
 		NextToken();
 	}
 	*p_label = var;
@@ -2133,6 +2123,10 @@ Purpose:
 				EnterSubscope(var);
 				InstrBlockPush();
 				ParseBlock();
+				item = VarFindScope(SCOPE, "_exit", 32767);
+				if (item != NULL) {
+					GenLabel(item);
+				}
 				var->instr = InstrBlockPop();
 				ExitScope();
 			} else {
@@ -2563,11 +2557,11 @@ Var * PopTop()
 	return var;
 }
 
-void ParseCall(Var * proc)
+void ParseArgs(Var * proc, VarSubmode submode)
 {
 	Var * arg;
 	Var * val;
-	arg = FirstArg(proc, SUBMODE_ARG_IN);
+	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
 		EnterBlock();
 		while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
@@ -2579,16 +2573,47 @@ void ParseCall(Var * proc)
 
 			if (TOP > 0) {
 				val = PopTop();
-				Gen(INSTR_LET, arg, val, NULL);
+				if (VarIsTmp(val)) {
+					GenLastResult(arg);
+				} else {
+					Gen(INSTR_LET, arg, val, NULL);
+				}
 			} else {
-				ErrArg(arg);
-				ErrArg(proc);
-				SyntaxError("Missing argument [A] in call of procedure [B]");
+				if (submode == SUBMODE_ARG_IN) {
+					ErrArg(arg);
+					ErrArg(proc);
+					SyntaxError("Missing argument [A] in call of procedure [B]");
+
+				// Output arguments (in return) do not have to be specified all
+				} else {
+					break;
+				}
 			}
-			arg = NextArg(proc, arg, SUBMODE_ARG_IN);
+			arg = NextArg(proc, arg, submode);
 		}
 	}
+}
+
+void ParseCall(Var * proc)
+{
+	ParseArgs(proc, SUBMODE_ARG_IN);
 	Gen(INSTR_CALL, proc, NULL, NULL);
+}
+
+void ParseReturn()
+{
+	Var * proc;
+	Var * label;
+
+	NextToken();
+	proc = VarProcScope();
+	ParseArgs(proc, SUBMODE_ARG_OUT);
+
+	// Return is implemented as jump to end of procedure
+	// Optimizer may later move return insted of jump (if there is no cleanup)
+
+	label = FindOrAllocLabel("_exit", 32767);
+	GenGoto(label);
 }
 
 void ParseMacro(Var * macro)
@@ -2706,6 +2731,10 @@ void ParseCommands()
 
 		case TOKEN_USE:
 			ParseUse();
+			break;
+
+		case TOKEN_RETURN:
+			ParseReturn();
 			break;
 
 		case TOKEN_INSTR:

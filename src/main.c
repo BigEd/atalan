@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (15-Sep-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (3-Oct-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		
@@ -214,25 +214,6 @@ int main(int argc, char *argv[])
 
 	//***** Translation
 	ProcessUsedProc(&ProcTranslate);
-/*
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
-			ProcTranslate(var);
-		}
-	}
-	ProcTranslate(&ROOT_PROC);
-*/
-	//***** Optimalization
-/*
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
-			Optimize(var);
-		}
-	}
-	Optimize(&ROOT_PROC);
-*/
 	ProcessUsedProc(&ProcOptimize);
 
 	if (VERBOSE) {

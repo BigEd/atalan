@@ -47,6 +47,7 @@ type instrs:enum
 	data
 	file
 	align
+	org
 	hi
 	lo
 	ptr
