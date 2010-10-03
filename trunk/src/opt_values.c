@@ -137,98 +137,6 @@ Purpose:
 	NEXT_VAR
 }
 
-Bool InstrEquivalent(Instr * i1, Instr * i2);
-
-Bool VarEquivalent(Var * v1, Var * v2)
-{
-	Bool eq = false;
-	Instr * i1, * i2;
-	// Two references to array using index variable are not same
-
-	if (v1 == v2) {
-		if (v1 == NULL) return true;
-		if (v1->mode == MODE_ELEMENT) {
-			if (v1->var->mode != MODE_CONST) return false;
-		}
-		return true;
-	}
-
-	i1 = v1->src_i; i2 = v2->src_i;
-	if (i1 != NULL && i2 != NULL) {
-		if (v1 == i1->arg1) v1->src_i = i1->src1;
-		if (v1 == i1->arg2) v1->src_i = i1->src2;
-//		v1->src_i = i1->src1;
-//		v2->src_i = i2->src1;
-		if (v2 == i2->arg1) v2->src_i = i2->src1;
-		if (v2 == i2->arg2) v2->src_i = i2->src2;
-		eq = InstrEquivalent(i1, i2);
-		v1->src_i = i1; v2->src_i = i2;
-	}
-
-	//TODO: Compare values (there may be named constant with same value as unnamed constant and it will be different var)
-	//TODO: Exclude IN, OUT variables
-	return eq;
-}
-
-Bool InstrEquivalent(Instr * i1, Instr * i2) 
-/*
-Purpose:
-	Test, whether the two instructions have same effect or not.
-	Current state of variables (src_i) is used to perform the test.
-*/
-{
-	Bool eq = false;
-
-	// If either instruction is NULL, they are not equivalent
-	if (i1 == NULL || i2 == NULL) return false;
-
-	if (i1 == i2) return true;
-
-	if (i1->op == i2->op) {
-
-		// If the instructions have source, check source equivalence
-//		if (i1->source != NULL && i2->source != NULL) {
-//			eq = InstrEquivalent(i1->source, i2->source);
-//			if (!eq) return false;
-//		}
-
-		eq =  VarEquivalent(i1->arg1, i2->arg1)
-			&& VarEquivalent(i1->arg2, i2->arg2)
-			&& VarEquivalent(i1->result, i2->result);
-
-		if (eq) return true;
-	}
-
-//	if (i1->op == i2->op && VarEquivalent(i1->result, i2->result) && VarEquivalent(i1->arg1, i2->arg1) && VarEquivalent(i1->arg2, i2->arg2)) return true;
-
-	// Let is equivalent, if arg1->src_i is same let
-	if (i2->op == INSTR_LET) {
-		eq = InstrEquivalent(i1, i2->arg1->src_i);
-	}
-	if (!eq) {
-		if (i1->op == INSTR_LET) {
-			eq = InstrEquivalent(i1->arg1->src_i, i2);
-		}
-	}
-/*
-	if (!eq) {
-		if (i1->op == i2->op) {
-
-			// If the instructions have source, check source equivalence
-			if (i1->source != NULL && i2->source != NULL) {
-				eq = InstrEquivalent(i1->source, i2->source);
-				if (!eq) return false;
-			}
-
-			eq =  VarEquivalent(i1->arg1, i2->arg1)
-			   && VarEquivalent(i1->arg2, i2->arg2)
-			   && VarEquivalent(i1->result, i2->result);
-		}
-	}
-*/
-	return eq;
-}
-
 /*********************************
   Expressions
 **********************************/
@@ -465,6 +373,25 @@ Bool ExpEquivalentInstr(Exp * exp, Instr * i)
 	return r;
 }
 
+Bool CodeModifiesVar(Instr * from, Instr * to, Var * var)
+{
+	Instr * i;
+	Var * result;
+	for(i = from; i != NULL && i != to; i = i->next) {
+		if (i->op != INSTR_LINE) {
+			result = i->result;
+			if (result != NULL)  {
+				if (result == var) return true;
+				if (var->mode == MODE_ELEMENT) {
+					if (result == var->adr) return true;
+					if (result == var->var) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 Bool OptimizeValues(Var * proc)
 /*
    1. If assigning some value to variable (let) and the variable already contains such value, remove the let instruction
@@ -490,6 +417,8 @@ Bool OptimizeValues(Var * proc)
 		PrintProc(proc);
 	}
 
+	VarUse();
+
 	modified = false;
 	n = 1;
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
@@ -497,7 +426,9 @@ Bool OptimizeValues(Var * proc)
 
 		for(i = blk->first; i != NULL; i = i->next, n++) {
 retry:
+			// Instruction may be NULL here, if we have deleted the last instruction in the block.
 			if (i == NULL) break;
+			// Line instructions are not processed.
 			if (i->op == INSTR_LINE) continue;
 
 			// Create tree of expressions.
@@ -542,7 +473,7 @@ retry:
 					m2 = false;
 					m3 = false;
 					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
-						m2 = InstrEquivalent(i, src_i);						
+//						m2 = InstrEquivalent(i, src_i);						
 //						printf("-%d\n", n);
 						m3 = ExpEquivalentInstr(result->dep, i);
 /*
@@ -587,23 +518,23 @@ retry:
 					m2 = false;
 
 					if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
-					
-						src_op = arg1->src_i->op;
+						src_i = arg1->src_i;					
+						src_op = src_i->op;
 
 						// Try to replace LO b,n LET a,b  => LO a,n LO a,n
 
 						if (src_op == INSTR_LO || src_op == INSTR_HI) {
 							if (op == INSTR_LET) {
 								op = src_op;
-								arg1 = arg1->src_i->arg1;
+								arg1 = src_i->arg1;
 								m2 = true;
 							}
 						} else if (src_op == INSTR_LET) {
 							// If instruction uses register, do not replace with instruction that does not use it
-							if (! (FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(arg1->src_i->arg1->submode, SUBMODE_REG)) ) {
+							if (! (FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
-								if (!(arg1->mode == MODE_VAR && arg1->src_i->arg1->mode == MODE_ELEMENT)) {
-									arg1 = arg1->src_i->arg1;
+								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
+									arg1 = src_i->arg1;
 									m2 = true;
 								}
 							}
@@ -611,10 +542,29 @@ retry:
 					}
 
 					arg2 = i->arg2;
-					if (arg2 != NULL && FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL && arg2->src_i->op == INSTR_LET) {
-						arg2 = arg2->src_i->arg2;
-						m2 = true;
+					if (arg2 != NULL && FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL ) {					
+						src_i = arg2->src_i;
+						src_op = src_i->op;
+
+						if (src_op == INSTR_LET) {
+							if (! (FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
+								// Do not replace simple variable with array access
+								if (arg2->read == 1 || !(arg2->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
+									if (src_i->arg1->mode != MODE_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
+										arg2 = src_i->arg1;
+										m2 = true;
+									}
+								}
+							}
+						}
 					}
+
+
+//					arg2 = i->arg2;
+//					if (arg2 != NULL && FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL && arg2->src_i->op == INSTR_LET) {
+//						arg2 = arg2->src_i->arg2;
+//						m2 = true;
+//					}
 
 					// let x,x is always removed
 					if (op == INSTR_LET && result == arg1) {
@@ -622,8 +572,8 @@ retry:
 					}
 
 					if (m2) {
-						i2.op = op; i2.result = result; i2.arg1 = arg1; i2.arg2 = arg2;
-						if (EmitRule(&i2)) {
+//						i2.op = op; i2.result = result; i2.arg1 = arg1; i2.arg2 = arg2;
+						if (EmitRule2(op, result, arg1, arg2)) {			//&i2
 							i->op   = op;
 							i->arg1 = arg1;
 							i->arg2 = arg2;

@@ -2,10 +2,17 @@
 News
 ****
 
+==========
+3-Oct-2010
+==========
+
+- OPT: Value optimization can elimitate some variable stores replacing them by more complex addressing modes 
 - NEW: Support NOT
+- NEW: RETURN allows returning from procedure including return values specifications
 - Atari: all keyboard scan codes
 - FIX: AND,OR in UNTIL
 - FIX: Error when printing apostrophe
+- FIX: Support initialized arrays at specified address
 
 ===========
 28-Sep-2010

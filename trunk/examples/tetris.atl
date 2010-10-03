@@ -7,7 +7,7 @@
 ;This if GR.0 screen 40 characters width and 24 characters height
 ;We force it to address $8000 to make it aligned correctly.
 
-s@$8000:array(0..39,0..23) of byte
+out s@$8000:array(0..39,0..23) of byte
 
 ;Display list is defined as constant array.
 ;We do not specify size of the array, so it is cimputed automatically.
@@ -15,11 +15,6 @@ s@$8000:array(0..39,0..23) of byte
 ;First line specifies the pointer to start of the data (see the reference to s).
  
 const dl:array = 3 times $70, $42, s, 23 times $02, $41, dl
-
-;We use custom font, so we declare variable to hole the font and initialize it
-;(at compilation time) with file.
-
-const tetris'font:font = file "tetris.fnt"
 
 ; Position of well on the screen (Left Margin, Right Margin, ...)
 const 
@@ -182,7 +177,7 @@ test'collision:proc tile:tile x:x y:y >coll:0..1 =
 		for k
 			c = tiles(ti, tile)
 			ti = ti + 1
-			if c <> 0 if s(x+k,y+j) <> 0 then coll = 1
+			if c <> 0 if s(x+k,y+j) <> 0 then return 1
 
 
 ;Initialize graphics.
@@ -191,7 +186,7 @@ test'collision:proc tile:tile x:x y:y >coll:0..1 =
 sdlstl = dl
 COLOR0(2) = 0
 COLOR0(5) = 0
-set'font tetris'font
+set'font file "tetris.fnt"
 
 start'game@
 

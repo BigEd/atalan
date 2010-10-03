@@ -696,6 +696,18 @@ a,b = sumdiv 10 3
 "Sum is [a], div is [b]" 
 :::::::::::::::::::::::::::::::
 
+======
+Return
+======
+
+Procedure may return to it's caller from using return statement.
+It is possible to specify result values as return arguments.
+
+:::::::::::::::::::::::::::::::
+sumdiv:proc a,b:byte >sum:byte >div:byte =
+	return a + b a - b
+::::::::::::::::::::::::::::::::
+
 =================
 Nested procedures
 =================

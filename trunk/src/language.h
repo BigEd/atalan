@@ -81,6 +81,7 @@ typedef enum {
 	TOKEN_USE,
 	TOKEN_REF,
 	TOKEN_STEP,
+	TOKEN_RETURN,
 	TOKEN_TUPLE,
 
 	TOKEN_LAST_KEYWORD = TOKEN_TUPLE,
@@ -364,6 +365,7 @@ typedef enum {
 	INSTR_DATA,
 	INSTR_FILE,
 	INSTR_ALIGN,
+	INSTR_ORG,				// set the destination address of compilation
 	INSTR_HI,
 	INSTR_LO,
 	INSTR_PTR,
@@ -458,13 +460,15 @@ void ExitScope();
 Var * VarNewInt(long n);
 Var * VarNewStr(char * str);
 Var * VarNewLabel(char * name);
+Var * FindOrAllocLabel(char * name, UInt16 idx);
+
 Var * VarNewTmp(long idx, Type * type);
 Var * VarNewTmpLabel();
 Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);
-Var * VarFindInProc(char * name, VarIdx idx);
+//Var * VarFindInProc(char * name, VarIdx idx);
 Var * VarProcScope();
 Var * VarFindMode(Name name, VarIdx idx, VarMode mode);
 
@@ -728,6 +732,8 @@ Bool OptimizeValues(Var * proc);
 void PrintColor(UInt8 color);
 
 Rule * EmitRule(Instr * instr);
+Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
+
 Bool EmitOpen(char * filename);
 void EmitClose();
 Bool EmitInstr(Instr * code);

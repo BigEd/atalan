@@ -246,6 +246,25 @@ Var * VarNewLabel(char * name)
 	return var;
 }
 
+Var * FindOrAllocLabel(char * name, UInt16 idx)
+{
+	Var * var = NULL;
+	Var * proc;
+	Var * scope;
+
+	proc = VarProcScope();
+	var = VarFindScope(proc, name, idx);
+	if (var == NULL) {
+		scope = SCOPE;
+		SCOPE = proc;
+		var = VarNewLabel(name);
+		var->idx = idx;
+		SCOPE = scope;
+	}
+	return var;
+}
+
+
 void VarToLabel(Var * var)
 {
 	var->type = &TLBL;
@@ -326,12 +345,10 @@ Var * VarProcScope()
 	}
 	return s;
 }
-
-Var * VarFindInProc(char * name, VarIdx idx)
 /*
+Var * VarFindInProc(char * name, VarIdx idx)
 Purpose:
 	Find variable in current scope.
-*/
 {
 	Var * var = NULL;
 	Var * s = SCOPE;
@@ -344,7 +361,7 @@ Purpose:
 
 	return var;
 }
-
+*/
 
 Var * VarFind(char * name, VarIdx idx)
 {
@@ -421,7 +438,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		if (type = var->type) {
 			if (type->variant == TYPE_ARRAY) {
-				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL) {
+				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {
 					
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -482,6 +499,21 @@ Purpose:
 			}
 		}
 	NEXT_VAR
+
+	// Generate initialized arrays at specified addresses
+
+	FOR_EACH_VAR(var)
+		type = var->type;
+		if (type != NULL && type->variant == TYPE_ARRAY) {
+			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr != NULL) {					
+				Gen(INSTR_ORG, NULL, var->adr, NULL);
+				GenLabel(var);
+				GenBlock(var->instr);
+			}
+		}
+	NEXT_VAR
+
+
 }
 
 void VarResetUse()
