@@ -212,9 +212,16 @@ int main(int argc, char *argv[])
 	ProcUse(&ROOT_PROC, 0);
 	if (ERROR_CNT > 0) goto failure;
 
+	//***** Analysis
+	ProcessUsedProc(GenerateBasicBlocks);
+	ProcessUsedProc(CheckValues);
+
 	//***** Translation
-	ProcessUsedProc(&ProcTranslate);
-	ProcessUsedProc(&ProcOptimize);
+	ProcessUsedProc(ProcTranslate);
+
+	//***** Optimization
+	ProcessUsedProc(GenerateBasicBlocks);		// We must generate basic blocks again, as translation may have generated labels and jumps
+	ProcessUsedProc(ProcOptimize);
 
 	if (VERBOSE) {
 		printf("============== Optimized ==============\n");
@@ -285,6 +292,8 @@ int main(int argc, char *argv[])
 	} // verbose
 
 	EmitLabels();
+
+	//TODO: ProcessUsedProc
 	if (!EmitProc(&ROOT_PROC)) goto failure;
 	EmitProcedures();
 	EmitAsmIncludes();

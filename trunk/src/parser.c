@@ -184,10 +184,6 @@ range:
 				} else {
 					SyntaxError("expected constant expression");
 				}
-//				NextToken();
-//				if (TOK == TOKEN_INT) {
-//					type->range.max = LEX.n;
-//				}
 			}
 		} else {
 			type->range.max = type->range.min;
@@ -196,8 +192,6 @@ range:
 
 		if (type->range.min > type->range.max) {
 			SyntaxError("range minimum bigger than maximum");
-		} else {
-//			NextToken();
 		}
 const_list:
 		// Parse type specific constants
@@ -618,15 +612,16 @@ Purpose:
 	Var * idx, * idx2, * item;
 	UInt16 bookmark;
 	Bool prev_cond;
+	VarMode mode = MODE_ELEMENT;
 
-	// This is always () block
+	// Array element access uses always () block
 	EnterBlock();
 
 //	NextIs(TOKEN_OPEN_P);
 
 	top = TOP;
 
-	// First dimension
+	// First dimension (or first element of tuple)
 
 	if (arr->type != NULL) {
 		if (arr->type->variant == TYPE_ARRAY) {
@@ -641,14 +636,41 @@ Purpose:
 	bookmark = SetBookmark();
 	prev_cond = G_CONDITION_EXP;
 	G_CONDITION_EXP = false;
-	ParseSubExpression(idx_type);	//Root();
+
+	// It may be (..<n>), use min as default
+	if (TOK == TOKEN_DOTDOT) {
+		mode = MODE_RANGE;
+		idx  = VarNewInt(idx_type->range.min);
+		
+	} else {
+
+		ParseSubExpression(idx_type);
+		if (TOK) {
+			idx = STACK[top];
+			CheckArrayBound(0, arr, idx_type, idx, bookmark);
+		}
+	}
+
+	TOP = top;
+	bookmark = SetBookmark();
+
+	// <min>..<max>
+	if (NextIs(TOKEN_DOTDOT)) {
+		mode = MODE_RANGE;
+		if (TOK == TOKEN_COMMA || TOK == TOKEN_BLOCK_END) {
+			idx2 = VarNewInt(idx_type->range.max);
+		} else {
+			ParseSubExpression(idx_type);
+			idx2 = STACK[top];
+			if (TOK) {
+				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
+			}
+		}
+		idx = VarNewRange(idx, idx2);
+	}
+
 	if (TOK) {
-		idx = STACK[top];
-
-		CheckArrayBound(0, arr, idx_type, idx, bookmark);
-
 		// Second dimension
-
 		idx_type = NULL;
 		if (arr->type != NULL && arr->type->variant == TYPE_ARRAY) idx_type = arr->type->dim[1];
 
@@ -676,9 +698,9 @@ Purpose:
 	// Result is temporary variable created by InstrBinary, 
 	// arg1 = array, arg2 = item
 
-	//TODO: Try to find simmilar array access (same array, same index)
-
 	item = VarNewElement(arr, idx, ref);
+
+	TOP = top;
 
 	return item;
 }
@@ -825,9 +847,9 @@ indices:
 
 					item = ParseArrayElement(var, ref);
 
-					if (VarIsTmp(STACK[TOP-1])) G_TEMP_CNT--;
-					STACK[TOP-1] = item;
-
+//					if (VarIsTmp(STACK[TOP-1])) G_TEMP_CNT--;
+					STACK[TOP] = item;
+					TOP++;
 					return;
 				}
 			}// else {
@@ -1606,8 +1628,6 @@ Syntax:
 			nmask = 0xff;
 			while(n > nmask) nmask = (nmask << 8) | 0xff;
 
-//			nmask = ((n / 256) + 1) * 256 - 1;
-//			nmask = TypeSize(var->type) * 256 -1;
 			if (n == nmask && (step->mode != MODE_CONST || step->n > 255)) {
 				InternalGen(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
 				goto var_done;
@@ -1646,160 +1666,6 @@ done:
 	VarFree(max);
 	ExitScope();
 }
-/*
-void ParseLoop()
-{
-
-	InstrBlock * cond, * body;
-
-	//		goto loop_label
-	//f_label@
-	//body_label@
-	//		<body>
-	//loop_label@
-	//		<condition>
-	//false_label@
-
-	if (TOK == TOKEN_UNTIL || TOK == TOKEN_WHILE) {
-		BeginBlock(TOK);
-		if (TOK == TOKEN_WHILE) {		//TOKEN_WHILE
-			G_BLOCK->not = true;
-		}
-		NextToken();
-
-		//-----
-		InstrBlockPush();
-		ParseCondition();
-		cond = InstrBlockPop();
-		if (TOK == TOKEN_ERROR) return;
-
-		InstrBlockPush();
-		ParseBlock();
-		body = InstrBlockPop();
-		if (TOK == TOKEN_ERROR) return;
-
-		// Some loops do not have body, we do not generate goto & loop_label for them
-
-		if (body != NULL) {
-			GenGoto(G_BLOCK->loop_label);
-		}
-
-		if (G_BLOCK->f_label != NULL) {
-			GenLabel(G_BLOCK->f_label);
-		}
-
-		GenBlock(body);
-
-		if (body != NULL) {
-			GenLabel(G_BLOCK->loop_label);
-		}
-		GenBlock(cond);
-
-		if (G_BLOCK->t_label != NULL) {
-			GenLabel(G_BLOCK->t_label);
-		}
-		EndBlock();
-	}
-}
-*/
-/*
-void ParseExpression(Var * result)
-{
-	
-	Var * var, * op, * res;
-	Var * args[3];
-	TypeVariant vara;
-
-	long priority, cnt;
-
-	STACK[0] = NULL;	// zero pointer is bound
-	TOP = 0;		// current top stack
-
-	do {
-		NextToken();
-		var = NULL;
-
-		// If there is an operator with missing argument on top of stack, we should try
-		// parsing the expression, even if there is EOL
-
-		if (TOK == TOKEN_EOL) {
-			op = STACK[TOP];
-			if (VarType(op) == TYPE_MACRO) {
-				continue;
-			}
-		} else if (TOK == TOKEN_INT) {
-			var = VarNewInt(LEX.n);
-		} else {
-			var = VarFind(LEX.name, 0);
-		}
-
-		// Get priority of the variable.
-		// If the variable contains macro, it has priority defined by macro (address field)
-		// Other variables get maximal priority (32000).
-		// If we have no variable, it gets lowest priority, which will force emitting of all
-		// operators on stack.
-
-		priority = MINIMAL_PRIORITY;
-		if (var != NULL) {
-			priority = MAXIMAL_PRIORITY;
-			if (VarType(var) == TYPE_MACRO) {
-				priority = var->adr;
-			}
-		}		
-
-		vara = VarType(var);
-
-		while (TOP > 3
-			   && (op = STACK[TOP-1])!=NULL
-			   && op->type->variant == TYPE_MACRO
-			   && op->adr >= priority
-		){
-
-		    //cnt = VarParamCount(op);
-			op = STACK[TOP-1];
-		    // Macros without instructions are just discarded
-
-			cnt = VarParamCount(op);
-
-			// For macros without arguments, just remove the macro
-			if (cnt == 0) {
-				if (op->instr->op == INSTR_BEGIN) {
-				}
-				STACK[TOP-1] = STACK[TOP];
-				TOP--; 
-				continue; 
-			} else if (cnt == 3) {
-				// When emitting last operator of expression, use result variable.
-				// Alloc new temprary variable otherwise.
-				if (priority == 0 && TOP == 3) {
-					res = result;
-				} else {
-					res = VarNewTemp(result->type);
-				}
-
-				// Create array of operands and apply the macro
-				args[0] = STACK[TOP-2];
-				args[1] = STACK[TOP];
-				args[2] = res;
-				GenMacro(op, args);
-
-				// Pop used variables from stack and store the reference to result there
-				TOP--;
-				TOP--;
-				STACK[TOP] = res;
-			}
-		}
-
-		TOP++;
-		STACK[TOP] = var;
-
-		PrintStack();
-
-	} while(var != NULL);
-
-	
-}
-*/
 
 void VarFree(Var * var)
 {
@@ -1965,6 +1831,72 @@ Bool VarIsImplemented(Var * var)
 	return rule != NULL;
 }
 
+Int32 ByteMask(Int32 n)
+/*
+Purpose:
+	Return power of $ff ($ff, $ffff, $ffffff or $ffffffff) bigger than specified number.
+*/
+{
+	Int32 nmask;
+	nmask = 0xff;
+	while(n > nmask) nmask = (nmask << 8) | 0xff;
+	return nmask;
+}
+
+
+void GenArrayInit(Var * arr, Var * init)
+/*
+Purpose:
+	Generate array initialization loop.
+Arguments:
+	arr		Reference to array or array element or array slice
+*/
+{
+	Type * type;
+	Var * idx, * label, * range, * stop;
+	Int32 nmask;
+	Int32 stop_n;
+	Var * min1, * max1;
+
+	type = arr->type;
+	idx = VarNewTmp(0, type->dim[0]);
+	label = VarNewTmpLabel();
+
+	if (arr->mode == MODE_ELEMENT) {
+		range = arr->var;
+		if (range->mode == MODE_RANGE) {
+			min1 = range->adr;
+			max1 = range->var;
+			arr = arr->adr;
+		} else {
+			//TODO: Array assignment
+		}
+	} else {
+		min1 = VarNewInt(type->dim[0]->range.min);
+		max1 = VarNewInt(type->dim[0]->range.max);
+	}
+
+	if (max1->mode == MODE_CONST) {
+		stop_n = max1->n;
+	
+		nmask = ByteMask(stop_n);
+		if (nmask == stop_n) {
+			stop_n = 0;
+		} else {
+			stop_n++;
+		}
+		stop = VarNewInt(stop_n);
+	} else {
+		stop = max1;
+	}
+
+	Gen(INSTR_LET, idx, min1, NULL);
+	Gen(INSTR_LABEL, label, NULL, NULL);
+	Gen(INSTR_LET, VarNewElement(arr, idx, false), init, NULL);
+	Gen(INSTR_ADD, idx, idx, VarNewInt(1));
+	Gen(INSTR_IFNE, label, idx, stop);
+}
+
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type)
 /*
 Purpose:
@@ -1975,7 +1907,7 @@ Purpose:
 	Bool is_assign;
 	Bool flexible;
 	UInt16 cnt, j, i, stack;
-	Var * var,  * item;
+	Var * var,  * item, * adr, * tuple;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type = NULL;
 	UInt16 bookmark;
@@ -2032,16 +1964,36 @@ Purpose:
 				NextToken();
 				is_assign = true;
 			} else {
+				adr = NULL; tuple = NULL;
 				NextToken();
-				if (TOK == TOKEN_INT) {
-					var->adr = VarNewInt(LEX.n);
+				//@
+				if (TOK == TOKEN_OPEN_P) {
+					EnterBlock();
+					do {
+						ParseVariable(&item);
+						if (TOK) {
+							if (adr == NULL) {
+								adr = item;
+							} else {
+								if (tuple == NULL) {
+									adr = tuple = VarNewTuple(adr, item);
+								} else {
+									tuple->var = VarNewTuple(tuple->var, item);
+								}
+							}
+						}
+					} while(NextIs(TOKEN_COMMA));
+					if (!NextIs(TOKEN_BLOCK_END)) {
+						SyntaxError("expected closing parenthesis");
+					}
+				} else if (TOK == TOKEN_INT) {
+					adr = VarNewInt(LEX.n);
 					NextToken();
 				} else if (TOK == TOKEN_ID) {
-					var->adr = VarFindScope(REGSET, LEX.name, 0);
-					if (var->adr == NULL) {
-						var->adr = VarFind2(LEX.name, 0);
-						if (var->adr != NULL) {
-						} else {
+					adr = VarFindScope(REGSET, LEX.name, 0);
+					if (adr == NULL) {
+						adr = VarFind2(LEX.name, 0);
+						if (adr == NULL) {
 							SyntaxError("$undefined regset or variable used as address");
 						}
 					} else {
@@ -2050,6 +2002,7 @@ Purpose:
 				} else {
 					SyntaxError("expected integer or register set name");
 				}
+				var->adr = adr;
 			}
 		}
 
@@ -2099,8 +2052,12 @@ Purpose:
 				}
 			} else {
 				// If type has not been defined, but this is alias, use type of the aliased variable
-				if (var->adr != NULL && var->adr->mode == MODE_VAR) {
-					var->type = var->adr->type;
+				if (var->adr != NULL) {
+					if (var->adr->mode == MODE_VAR) {
+						var->type = var->adr->type;
+					} else if (var->adr->mode == MODE_TUPLE) {
+						is_assign = true;
+					}
 				}
 			}
 		}
@@ -2232,10 +2189,15 @@ Purpose:
 										}
 									}
 
-									if (VarIsTmp(item)) {
-										GenLastResult(var);
+									// Array assignment
+									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE) {
+										GenArrayInit(var, item);
 									} else {
-										Gen(INSTR_LET, var, item, NULL);
+										if (VarIsTmp(item)) {
+											GenLastResult(var);
+										} else {
+											Gen(INSTR_LET, var, item, NULL);
+										}
 									}
 								}
 								VarFree(item);

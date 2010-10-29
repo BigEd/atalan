@@ -50,6 +50,24 @@ void VarInit()
 	REG_CNT = 0;
 }
 
+Var * VarNewRange(Var * min, Var * max)
+{
+	Var * var = VarAlloc(MODE_RANGE, NULL, 0);
+
+	var->adr = min;
+	var->var = max;
+	return var;
+}
+
+Var * VarNewTuple(Var * left, Var * right)
+{
+	Var * var = VarAlloc(MODE_TUPLE, NULL, 0);
+
+	var->adr = left;
+	var->var = right;
+	return var;
+}
+
 Var * VarNewElement(Var * arr, Var * idx, Bool ref)
 /*
 Purpose:
@@ -195,7 +213,7 @@ Bool VarIsStructElement(Var * var)
 
 Bool VarIsArrayElement(Var * var)
 {
-	return var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
+	return var != NULL && var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
 }
 
 

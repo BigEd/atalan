@@ -22,12 +22,15 @@ _y@xy:0..255
 out _c@flag:0..1  ; marked as out to prevent optimizer from removing let _c,0 instructions
 _z@flag:0..1
 out _void@void:0..255 ; this virtual register is used as result of compare operation
+_ac@(_a,_c)
 
 type
    byte:0..255
    word:0..65535
    card:0..65535
    long:0..$ffffff
+   byte2:0..65535
+   
 ;   ptr:0..65535     ;ptr defines size of pointer and memory limits
 
 ;==============================
@@ -38,6 +41,7 @@ type
 
 rule alloc %A:struct(), %B                         = "   .ds %B"
 rule alloc %A:array(card) of byte, %B            = "   .ds %B"
+rule alloc %A:array(byte) of card, %B            = "%A_lo:" "   .ds %B" "%A_hi:" "   .ds %B" 
 rule alloc %A:array(byte,byte) of byte, %B, %C   = "   .ds %B*%C"
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
@@ -143,6 +147,14 @@ rule let %A:byte,%B:byte(%C:byte) = instr
 rule let %A:byte(%B:byte),%C:byte(%D:byte) = instr 
 	let _a,%C(%D)
 	let %A(%B), _a
+
+;======= 2-byte array with one byte index
+
+;rule let %A:byte2, %C:byte2(%D:byte) = instr
+;	let %A(0), %C.lo(%D)
+;	let %A(1), %C.hi(%D)
+	
+	
 
 ;2D Array (2x byte index, byte value)
 ;We use indexing using Y register.

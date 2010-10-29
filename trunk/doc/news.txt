@@ -1,6 +1,9 @@
-****
+﻿****
 News
 ****
+
+- NEW: Check phase
+- NEW: Initializing array or slice of array with constant
 
 ==========
 3-Oct-2010

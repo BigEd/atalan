@@ -37,6 +37,7 @@ Purpose:
 	nb = MemAllocStruct(InstrBlock);
 	nb->first = i;
 	nb->last  = block->last;
+	nb->next  = block->next;
 
 	prev = i->prev;
 	block->last = prev;
@@ -52,6 +53,11 @@ Purpose:
 }
 
 void ReplaceVar(InstrBlock * block, Var * from, Var * to)
+/*
+Purpose:
+	Replace use of variable 'from' with variable 'to' in specified block.
+	When this procedure ends, 'from' variable is no more referenced in the block.
+*/
 {
 	Instr * i;
 	InstrBlock * nb;
@@ -64,59 +70,72 @@ void ReplaceVar(InstrBlock * block, Var * from, Var * to)
 	}
 }
 
-void GenerateBasicBlocks(InstrBlock * block)
+void GenerateBasicBlocks(Var * proc)
+/*
+Purpose:
+	Split the procedure blocks to basic blocks.
+	Blocks are linked in chain using next.
+*/
 {
 	InstrBlock * nb, * dst;
 	Instr * i, * i2;
 	InstrOp op;
 	Var * label;
+	InstrBlock * blk, * next_blk;
 
-	// Split the block to basic blocks
-	// Blocks are linked in chain using next
+	blk = proc->instr;
+	while(blk != NULL) {
+		next_blk = blk->next;
+		nb = blk;
 
-	nb = block;
-	for (i = block->first; i != NULL; i = i->next) {
-retry:
-		op = i->op;
-		// Label starts new basic block
-		if (op == INSTR_LABEL) {
-			if (i->prev != NULL) {
-				nb = SplitBlock(nb, i);
-			}
-			label = i->result;
-			nb->label = label;
-			label->instr = nb;
-			i = nb->first->next;
-			InstrDelete(nb, nb->first);		// we do not need the label instruction anymore
+		for (i = blk->first; i != NULL; i = i->next) {
+	retry:
+			op = i->op;
+			// Label starts new basic block
+			if (op == INSTR_LABEL) {
+				if (i->prev != NULL) {
+					nb = SplitBlock(nb, i);
+				}
+				label = i->result;
+				nb->label = label;
+				label->instr = nb;
+				i = nb->first->next;
+				InstrDelete(nb, nb->first);		// we do not need the label instruction anymore
 
-			// Merge consecutive labels
-			while (i != NULL && i->op == INSTR_LABEL) {
-				i2 = i;
-				ReplaceVar(block, i->result, nb->label);
-				i = i->next;
-				InstrDelete(nb, i2);
-			}
-			if (i == NULL) {
-				break;
-			}
-			goto retry;
-		// Jump ends basic block
-		} else if (IS_INSTR_JUMP(op)) {
-			if (i->next != NULL) {
-				i = i->next;
-				nb = SplitBlock(nb, i);
+				// If there is another label(s) after this label, replace the use of second label by the first label
+				// to prevent creation of empty blocks.
+				while (i != NULL && i->op == INSTR_LABEL) {
+					i2 = i;
+					ReplaceVar(blk, i->result, nb->label);
+					i = i->next;
+					InstrDelete(nb, i2);
+				}
+				if (i == NULL) {
+					break;
+				}
 				goto retry;
+			// Jump ends basic block
+			} else if (IS_INSTR_JUMP(op)) {
+				if (i->next != NULL) {
+					i = i->next;
+					nb = SplitBlock(nb, i);
+					goto retry;
+				}
 			}
 		}
+		blk = next_blk;
+	}
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		blk->to      = NULL;
+		blk->cond_to = NULL;
+		blk->callers = NULL;
+		blk->from    = NULL;
 	}
 
 	// Create caller lists for blocks for goto and if instructions
 
-	for(nb = block; nb != NULL; nb = nb->next) {
-		i = nb->last;
-		if (i == NULL) continue;
-		op = i->op;
-
+	for(nb = proc->instr; nb != NULL; nb = nb->next) {
 		// Continue with instruction in next block 
 		// (this is not true for block ending with GOTO, but that is handled in following condition)
 
@@ -125,6 +144,10 @@ retry:
 			nb->to = nb->next;
 			dst->from = nb;
 		}
+
+		i = nb->last;
+		if (i == NULL) continue;
+		op = i->op;
 
 		// If this is conditional jump or jump, register it as caller to destination block
 
@@ -140,8 +163,10 @@ retry:
 			nb->next_caller = dst->callers;
 			dst->callers = nb;
 		}
-
 	}
+
+	printf("************* Blocks **************\n");
+	PrintProc(proc);
 
 	// TODO: Dead code blocks
 /*

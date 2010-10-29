@@ -53,7 +53,7 @@ void ResetValues()
 }
 
 Bool VarUsesVar(Var * var, Var * test_var);
-
+/*
 Bool ExprUsesVar(Instr * i, Var * var)
 {
 	Bool b;
@@ -74,7 +74,7 @@ Bool ExprUsesVar(Instr * i, Var * var)
 	}
 	return b;
 }
-
+*/
 void ResetValue(Var * res)
 /*
 Purpose:
@@ -406,7 +406,7 @@ Bool OptimizeValues(Var * proc)
 */
 {
 	Bool modified, m2, m3;
-	Instr * i, i2, * src_i;
+	Instr * i, * src_i;
 	UInt32 n;
 	Var * r, * result, * arg1, * arg2;
 	InstrBlock * blk;
@@ -433,7 +433,7 @@ retry:
 
 			// Create tree of expressions.
 			// Instruction has reference to instructions, whose result is used as argument to this instruction
-
+/*
 			if (i->arg1 != NULL) {
 				src_i = i->arg1->src_i;
 				// Do not add temporary let instructions into the tree.
@@ -449,7 +449,7 @@ retry:
 				}
 				i->src2 = src_i;
 			}
-
+*/
 			// When label is encountered, we must reset all values, because we may come from other places
 			if (i->op == INSTR_LABEL || i->op == INSTR_CALL || i->op == INSTR_FORMAT || i->op == INSTR_PRINT) {
 				ResetValues();
@@ -460,9 +460,15 @@ retry:
 			// We are only interested in instructions that have result
 			if (result != NULL) {
 
+				//TODO: Should be solved by blocks (when blocks are parsed, there can not be jump instruction nor label)
 				if (IS_INSTR_JUMP(i->op)) {
 					// jump istructions use label as result, we do not want to remove jumps
 				} else {
+
+					// Remove equivalent instructions.
+					// If the instruction sets it's result to the same value it already contains,
+					// remove the instruction.
+
 					arg1 = i->arg1;
 					src_i = result->src_i;
 
@@ -470,24 +476,9 @@ retry:
 					// If result is equal to arg1, instructions are not equivalent, because they accumulate the result,
 					// (for example sequence of mul a,a,2  mul a,a,2
 
-					m2 = false;
 					m3 = false;
 					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
-//						m2 = InstrEquivalent(i, src_i);						
-//						printf("-%d\n", n);
 						m3 = ExpEquivalentInstr(result->dep, i);
-/*
-						if (!m2 && m3) {
-							printf("Exp remove %d\n", n);
-							printf("Result: "); PrintExp(result->dep); 
-							printf("\n");
-						}
-						if (m2 && !m3) {
-							printf("Exp not remove %d\n", n);
-							printf("Result: "); PrintExp(result->dep); 
-							printf("\n");
-						}
-*/
 					}
 					 
 					if (m3) {
@@ -514,11 +505,13 @@ retry:
 						ResetVarDep(result);
 					}
 
+					// Try to replace arguments of operation by it's source (or eventually constant)
+
 					op = i->op;
 					m2 = false;
 
 					if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
-						src_i = arg1->src_i;					
+						src_i = arg1->src_i;
 						src_op = src_i->op;
 
 						// Try to replace LO b,n LET a,b  => LO a,n LO a,n
@@ -559,21 +552,13 @@ retry:
 						}
 					}
 
-
-//					arg2 = i->arg2;
-//					if (arg2 != NULL && FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL && arg2->src_i->op == INSTR_LET) {
-//						arg2 = arg2->src_i->arg2;
-//						m2 = true;
-//					}
-
 					// let x,x is always removed
 					if (op == INSTR_LET && result == arg1) {
 						goto delete_instr;
 					}
 
 					if (m2) {
-//						i2.op = op; i2.result = result; i2.arg1 = arg1; i2.arg2 = arg2;
-						if (EmitRule2(op, result, arg1, arg2)) {			//&i2
+						if (EmitRule2(op, result, arg1, arg2)) {
 							i->op   = op;
 							i->arg1 = arg1;
 							i->arg2 = arg2;
@@ -601,8 +586,8 @@ retry:
 
 					// We have evaluated the instruction, change it to LET <result>,r
 					if (r != NULL) {
-						i2.op = INSTR_LET; i2.result = i->result; i2.arg1 = r; i2.arg2 = NULL;
-						if (EmitRule(&i2)) {
+//						i2.op = INSTR_LET; i2.result = i->result; i2.arg1 = r; i2.arg2 = NULL;
+						if (EmitRule2(INSTR_LET, i->result, r, NULL)) {
 							i->op = INSTR_LET;
 							i->arg1 = r;
 							i->arg2 = NULL;
@@ -611,8 +596,8 @@ retry:
 						}
 					}
 					result->src_i = i;
-					// Create dependency tree (we only create it for instructions with result)
 
+					// Create dependency tree
 					Dependency(i);
 
 				} // BRANCH
@@ -622,3 +607,56 @@ retry:
 	return modified;
 }
 
+Var * SrcVar(Var * var)
+{
+	if (var != NULL) {
+		while (FlagOff(var->submode, SUBMODE_IN) && var->src_i != NULL && var->src_i->op == INSTR_LET) var = var->src_i->arg1;
+	}
+	return var;
+}
+
+void CheckValues(Var * proc)
+/*
+Purpose:
+	Check procedure before translation.
+*/
+{
+	Instr * i;
+	UInt32 n;
+	Var * r, * result, * arg1, * arg2;
+	InstrBlock * blk;
+	InstrOp op;
+
+	VarUse();
+	n = 1;
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		ResetValues();
+		for(i = blk->first; i != NULL; i = i->next, n++) {
+
+			op = i->op;
+			// Line instructions are not processed.
+			if (op == INSTR_LINE) continue;
+
+			result = i->result;
+			if (result != NULL && result->mode != MODE_LABEL) {
+				arg1 = SrcVar(i->arg1);
+				arg2 = SrcVar(i->arg2);
+
+				r = InstrEvalConst(op, arg1, arg2);
+
+				// We have evaluated the instruction, change it to LET <result>,r
+				if (r != NULL) {
+					i->op = INSTR_LET;
+					i->arg1 = r;
+					i->arg2 = NULL;
+				}
+
+				ResetValue(i->result);
+
+				if (i->op == INSTR_LET) {
+					result->src_i = i;
+				}
+			}
+		}
+	}
+}
