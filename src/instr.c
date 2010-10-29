@@ -480,6 +480,10 @@ Bool VarMatchesType(Var * var, RuleArg * pattern)
 		// Procedure type is only same, if it is exactly the same
 		return false;
 
+	} else if (type->variant == TYPE_STRUCT) {
+		if (vtype != NULL) {
+			if (vtype->variant != TYPE_STRUCT) return false;
+		}
 	}
 	return true;
 }
@@ -784,65 +788,88 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 	return true;
 }
 
-Bool ProcTranslate(Var * proc)
+void ProcTranslate(Var * proc)
+/*
+Purpose:
+	Translate generic instructions to instructions directly translatable to processor instructions.
+*/
 {
-	Instr * i;	//, * to;
+	Instr * i, * first_i, * next_i;	//, * to;
 	InstrBlock * blk;
-	Bool modified;
+	Bool modified, untranslated;
 	UInt8 step = 0;
 	UInt32 ln;
 	Var * a = NULL;
 	Instr i2;
 
-	if (proc->instr == NULL) return true;
-
-	CODE = NULL;
+	// We perform as many translation steps as necessary
+	// Some translation rules may use other translation rules, so more than one step may be necessary.
+	// Translation ends either when there has not been any modification in last step or after
+	// defined number of steps (to prevent infinite loop in case of invalid set of translation rules).
 
 	do {
 		modified = false;
-		InstrBlockPush();
+		untranslated = false;
+		ln = 1;
+		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
-		for(ln = 1, i = proc->instr->first; i != NULL; i = i->next, ln++) {
+			// The translation is done by using procedures for code generating.
+			// We detach the instruction list from block and set the block as destination for instruction generator.
+			// In this moment, the code generating stack must be empty anyways.
 
-			if (!InstrTranslate(i, &modified)) {
+			first_i = blk->first;
+			blk->first = blk->last = NULL;
+			CODE = blk;
+			i = first_i;
 
-				// If this is commutative instruction, try the other order of rules
+			while(i != NULL) {
 
-				if (i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL) {
-					i2.op = i->op;
-					i2.result = i->result;
-					i2.arg1 = i->arg2;
-					i2.arg2 = i->arg1;
-					if (InstrTranslate(&i2, &modified)) continue;						
+				if (!InstrTranslate(i, &modified)) {
+
+					// If this is commutative instruction, try the other order of rules
+
+					if (i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL) {
+						i2.op = i->op;
+						i2.result = i->result;
+						i2.arg1 = i->arg2;
+						i2.arg2 = i->arg1;
+						if (InstrTranslate(&i2, &modified)) goto next;
+					}
+
+					// No emit rule nor rule for translating instruction found,
+					// try to simplify the instruction by first calculating the element value to temporary variable
+					// and using the variable instead.
+
+					if (VarIsArrayElement(i->arg1)) {
+						a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
+						Gen(INSTR_LET, a, i->arg1, NULL);
+						Gen(i->op, i->result, a, i->arg2);
+						modified = true;
+					} else if (VarIsArrayElement(i->arg2)) {
+						a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
+						Gen(INSTR_LET, a, i->arg2, NULL);
+						Gen(i->op, i->result, i->arg1, a);
+						modified = true;
+					} else if (VarIsArrayElement(i->result)) {
+						a = VarNewTmp(102, i->result->type);
+						Gen(i->op, a, i->arg1, i->arg2);
+						Gen(INSTR_LET, i->result, a, NULL);
+						modified = true;
+
+					//==== We were not able to find translation for the instruction, emit it as it is
+					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
+					} else {
+						Gen(i->op, i->result, i->arg1, i->arg2);
+						untranslated = true;
+					}
 				}
-
-				// No emit rule nor rule for translating instruction found,
-				// try to simplify the instruction.
-
-				if (i->arg1 != NULL && i->arg1->mode == MODE_ELEMENT) {
-					a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
-					Gen(INSTR_LET, a, i->arg1, NULL);
-					Gen(i->op, i->result, a, i->arg2);
-					modified = true;
-				} else if (i->arg2 != NULL && i->arg2->mode == MODE_ELEMENT) {
-					a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
-					Gen(INSTR_LET, a, i->arg2, NULL);
-					Gen(i->op, i->result, i->arg1, a);
-					modified = true;
-				} else if (i->result != NULL && i->result->mode == MODE_ELEMENT) {
-					a = VarNewTmp(102, i->result->type);
-					Gen(i->op, a, i->arg1, i->arg2);
-					Gen(INSTR_LET, i->result, a, NULL);
-					modified = true;
-
-				} else {
-					Gen(i->op, i->result, i->arg1, i->arg2);
-				}
+next:
+				next_i = i->next;
+				InstrFree(i);
+				i = next_i;
+				ln++;
 			}
-		}
-		blk = InstrBlockPop();
-		InstrBlockFree(proc->instr);
-		proc->instr = blk;
+		} // block
 
 		if (VERBOSE) {
 			// Do not print unmodified step (it would be same as previous step already printed)
@@ -854,7 +881,6 @@ Bool ProcTranslate(Var * proc)
 		step++;
 	} while(modified && step < MAX_RULE_UNROLL);
 
-	return modified;
 }
 
 /****************************************************************

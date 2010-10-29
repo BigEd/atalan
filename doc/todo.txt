@@ -2,7 +2,69 @@
 TODO
 ****
 
+x@(a,b)
+
+
 proc :type   (type must be structure type, or proc type or macro type)
+
+=====
+Flags
+=====
+
+Compiler should know about flags (i.e. one bit registers).
+Setting the flags is side-effect - side effect instruction is not emitted,
+but is taken into account when optimizing etc.
+
+Side effect instruction belongs to instruction it is following.
+(TODO: Theoretically, there may be situation, when side effect precedes the actual operation).
+
+1. When removing instruction, all it's side effects must be removed too
+2. When moving instruction, all side efeects must follow it. 
+
+C
+Z
+N
+
+- modifying the flag according to instruction
+
+  - Z is usually
+	   
+		sub z, var, 0
+
+Z and N generally just reflect state of last operation.
+
+Carry is special in that it's value extends the value of result.
+So we may be even interested in operation on Carry.
+
+For example:
+
+add result, x:1..10, y:1..10  is guaranteed to set the carry to 0.
+
+
+We need to declare for an instruction:
+
+  - it sets the flag
+	- if uses the flag as an input
+	
+Alternative approach:
+
+Special support for flags.
+Flags are common concept in microprocessors and they are all very common.
+So maybe we may bilt-in the support for flags.
+
+Fo example, we may support distinct versions of add & adc (add with carry).
+
+Z
+N
+C
+
+We may also deduct about flags if we know their meaning.
+
+For example:
+
+let _a, x   may mark the z flag as 0, if it known, range of variable does not allow for 0
+
+
 
 =======
 Options
@@ -15,7 +77,6 @@ It can then use the option when compiling.
 Options are defined for assebler use too.
 
 option stereo:bool = false
-  
 
 ================
 Type inferencing
@@ -53,7 +114,7 @@ Error reporting
 - for i until p(i) = 5
 
 - support for bool (or 0..1 types)
-- Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
+- Rule should use parse block to parse code
 - define assembler in platform file using ASSEMBLER constant
 
 - platform:atari		- must be first assignment in file
@@ -102,8 +163,9 @@ b = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
    
 - custom defined instructions should be built-in
     
+- a(..) = 0, a() = 0, a = 0		-> set all elements of a to 0
+- array assignment a(23) = sprite
 
-- a(..) = 0, a = 0
 - string initialized arrays
 - a(..50)
 - a(50..)
@@ -115,12 +177,9 @@ b = for i:0..10 where s(i) <> 0 (if s(i) = 3 return i)
    a(10..+1) = "ahoj"  -> insert 4 bytes instead of one
 x   a(10) = "ahoj" 
 
-- array assignment a(23) = sprite
 - constant arrays (initialization)
-- sqrt,sin,cos,... -> translation operators
+- sin,cos,... -> translation operators
  
-
-x const %A:byte
 - detect possibily to invert for loop
   Input or output registers musn't be accessed.
   (RANDOM is exception - it is input which does not require an order)
@@ -129,15 +188,9 @@ x const %A:byte
   This means offseting arrays based on this variable.
   There cannot be aby other computation with the variable.
 
-- shallow binding
-		 
-- prints on same line are not entered?
-x "Hello"...	  does not make new-line
-
-	
+- shallow binding		 
+- prints on same line are not entered?	
 - platforms to www menu
-x scope solving
-x sophisticated error reporting
 - type should be Var too 
 
 ==========
@@ -299,8 +352,6 @@ x enums
 	- multi-rule matches
 	- match variables (%2, %3, %4, ...)
 	
-- inline functions
-
 - freevar token
 - newvar  token
 
@@ -330,32 +381,6 @@ Unit Test
 ******************
 OPTIMIZE
 ******************
-
--code move 
-
-  tya
-   and #7
-   tax
-   lda mask,x
-   sta _4
-   lda #<tab
-   sta _arr
-   lda #>tab
-   clc
-   adc _s0__k+1
-   sta _arr+1
-   lda _4
-   sta (_arr),y
-   iny
-   jne _lbl3
-   inc _s0__k+1
-_lbl3:
-
-here 
-   lda mask,x  (even tay, and#7, tax, lda mask,x) may be moved insted of lda _4
-   
-   under condition that there is only one lda _4 (or it is done for all of them)
-  
 
 - try to use TSX, TXS for on extra register (if the function does not call other functions)
 - try to use pha pla in loops
