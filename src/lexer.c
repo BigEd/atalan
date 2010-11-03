@@ -39,9 +39,6 @@ typedef struct {
 
 } BlockStyle;
 
-/*
-Context rememberend when nesting files.
-*/
 
 char PROJECT_DIR[MAX_PATH_LEN];
 char SYSTEM_DIR[MAX_PATH_LEN];

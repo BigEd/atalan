@@ -222,7 +222,7 @@ Bool OptimizeLive(Var * proc)
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_CALL && op != INSTR_PRINT && op != INSTR_FORMAT) {
-					if (result->flags == 0 && !VarIsLabel(result) && !VarIsArray(result) && FlagOff(result->submode, SUBMODE_REF)) {
+					if (result->flags == 0 && !VarIsLabel(result) && !VarIsArray(result) && FlagOff(result->submode, SUBMODE_REF|SUBMODE_OUT)) {
 						if (VERBOSE) {
 							printf("removed dead %ld:", n); InstrPrint(i);
 						}

@@ -83,6 +83,9 @@ Purpose:
 	Var * label;
 	InstrBlock * blk, * next_blk;
 
+//	printf("************* Before Blocks **************\n");
+//	PrintProc(proc);
+
 	blk = proc->instr;
 	while(blk != NULL) {
 		next_blk = blk->next;
@@ -97,10 +100,13 @@ Purpose:
 					nb = SplitBlock(nb, i);
 				}
 				label = i->result;
-				nb->label = label;
-				label->instr = nb;
-				i = nb->first->next;
-				InstrDelete(nb, nb->first);		// we do not need the label instruction anymore
+				// Label at the beginning of the block, which already has a label
+				if (nb->label == NULL) {
+					nb->label = label;
+					label->instr = nb;
+					i = nb->first->next;
+					InstrDelete(nb, nb->first);		// we do not need the label instruction anymore
+				}
 
 				// If there is another label(s) after this label, replace the use of second label by the first label
 				// to prevent creation of empty blocks.
@@ -165,8 +171,8 @@ Purpose:
 		}
 	}
 
-	printf("************* Blocks **************\n");
-	PrintProc(proc);
+//	printf("************* Blocks **************\n");
+//	PrintProc(proc);
 
 	// TODO: Dead code blocks
 /*
