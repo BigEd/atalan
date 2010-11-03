@@ -2446,7 +2446,6 @@ Purpose:
 	Var * var, * var2;
 	Bool in_var;
 	Bool no_eol;
-//	Bool eol;
 
 	do {
 		no_eol = false;
@@ -2468,6 +2467,11 @@ Purpose:
 				start = end;
 				while ((c = *end) && c != ']') end++;
 				*end = 0;
+
+				//TODO: Set the string as input source (enclose in parenthesis) - we may only set the position in line to token
+				//TODO: Parse expression
+				//TODO: Insert expression before the string (block for insertion should be passed to string parse routine)
+
 				var = VarFind2(start, 0);
 				if (var != NULL) {
 					Gen(INSTR_VAR_ARG, NULL, var, NULL);
@@ -2483,8 +2487,6 @@ Purpose:
 			NextToken();
 		}
 
-//		eol = false;
-
 		if (FlagOn(flags, STR_NO_EOL)) {
 			no_eol = true;
 		} else if (TOK == TOKEN_COMMA) {
@@ -2498,16 +2500,13 @@ Purpose:
 			Gen(INSTR_DATA, NULL, var2, NULL);
 		}
 
-		} while (TOK == TOKEN_STRING);
+	} while (TOK == TOKEN_STRING);
 
 
 	// Generate ending 0 byte
 	var2 = VarNewInt(0);
 	Gen(INSTR_DATA, NULL, var2, NULL);
 
-//	if (TOK != TOKEN_ERROR) {
-//		NextToken();
-//	}
 }
 
 Var * PopTop()
