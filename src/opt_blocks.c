@@ -70,6 +70,53 @@ Purpose:
 	}
 }
 
+void LinkBlocks(Var * proc)
+{
+	InstrBlock * nb, * blk, * dst;
+	Instr * i;
+	InstrOp op;
+	Var * label;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		blk->to      = NULL;
+		blk->cond_to = NULL;
+		blk->callers = NULL;
+		blk->from    = NULL;
+	}
+
+	// Create caller lists for blocks for goto and if instructions
+
+	for(nb = proc->instr; nb != NULL; nb = nb->next) {
+		// Continue with instruction in next block 
+		// (this is not true for block ending with GOTO, but that is handled in following condition)
+
+		dst = nb->next;
+		if (dst != NULL) {
+			nb->to = nb->next;
+			dst->from = nb;
+		}
+
+		i = nb->last;
+		if (i == NULL) continue;
+		op = i->op;
+
+		// If this is conditional jump or jump, register it as caller to destination block
+
+		if (IS_INSTR_JUMP(op)) {
+			label = i->result;
+			dst = label->instr;
+
+			if (op == INSTR_GOTO) {
+				nb->to = dst;
+			} else {
+				nb->cond_to = dst;
+			}
+			nb->next_caller = dst->callers;
+			dst->callers = nb;
+		}
+	}
+}
+
 void GenerateBasicBlocks(Var * proc)
 /*
 Purpose:
@@ -77,11 +124,10 @@ Purpose:
 	Blocks are linked in chain using next.
 */
 {
-	InstrBlock * nb, * dst;
 	Instr * i, * i2;
 	InstrOp op;
 	Var * label;
-	InstrBlock * blk, * next_blk;
+	InstrBlock * blk, * next_blk, * nb;
 
 //	printf("************* Before Blocks **************\n");
 //	PrintProc(proc);
@@ -132,44 +178,7 @@ Purpose:
 		blk = next_blk;
 	}
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		blk->to      = NULL;
-		blk->cond_to = NULL;
-		blk->callers = NULL;
-		blk->from    = NULL;
-	}
-
-	// Create caller lists for blocks for goto and if instructions
-
-	for(nb = proc->instr; nb != NULL; nb = nb->next) {
-		// Continue with instruction in next block 
-		// (this is not true for block ending with GOTO, but that is handled in following condition)
-
-		dst = nb->next;
-		if (dst != NULL) {
-			nb->to = nb->next;
-			dst->from = nb;
-		}
-
-		i = nb->last;
-		if (i == NULL) continue;
-		op = i->op;
-
-		// If this is conditional jump or jump, register it as caller to destination block
-
-		if (IS_INSTR_JUMP(op)) {
-			label = i->result;
-			dst = label->instr;
-
-			if (op == INSTR_GOTO) {
-				nb->to = dst;
-			} else {
-				nb->cond_to = dst;
-			}
-			nb->next_caller = dst->callers;
-			dst->callers = nb;
-		}
-	}
+	LinkBlocks(proc);
 
 //	printf("************* Blocks **************\n");
 //	PrintProc(proc);
@@ -195,4 +204,34 @@ Purpose:
 	}
 */
 	//TODO: Blocks with labels, that are not jumped to (data labels) may be merged together
+}
+
+void OptimizeJumps(Var * proc)
+{
+	InstrBlock * blk, * blk_to;
+	Instr * i, * cond_i;
+
+	blk = proc->instr;
+	while(blk != NULL) {
+		blk_to = blk->to;
+		if (blk_to != NULL) {
+			i = blk_to->first;
+			cond_i = blk->last;
+			if (i != NULL && i->op == INSTR_GOTO) {
+				if (blk_to->next == blk->cond_to) {
+					if (IS_INSTR_BRANCH(cond_i->op)) {
+						cond_i->op = OpNot(cond_i->op);
+						cond_i->result = i->result;
+						blk->cond_to = i->result->instr;
+
+						InstrBlockFree(blk_to);
+					}
+				}
+			}
+		}
+		blk = blk->next;
+	}
+
+	// Recreate destinations
+	LinkBlocks(proc);
 }

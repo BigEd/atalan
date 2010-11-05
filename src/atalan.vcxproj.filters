@@ -47,6 +47,9 @@
     <ClCompile Include="opt_values.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="opt_live.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">

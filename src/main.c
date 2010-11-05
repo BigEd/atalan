@@ -221,6 +221,7 @@ int main(int argc, char *argv[])
 
 	//***** Optimization
 	ProcessUsedProc(GenerateBasicBlocks);		// We must generate basic blocks again, as translation may have generated labels and jumps
+	ProcessUsedProc(OptimizeJumps);
 	ProcessUsedProc(ProcOptimize);
 
 	if (VERBOSE) {
