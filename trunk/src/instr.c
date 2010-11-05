@@ -110,6 +110,7 @@ void InstrBlockFree(InstrBlock * blk)
 			next = i->next;
 			InstrFree(i);
 		}
+		blk->first = blk->last = NULL;
 	}
 }
 

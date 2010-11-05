@@ -1418,10 +1418,13 @@ rule let _c, 1  = "   sec"
 
 rule ifeq %A, _Z, 0  = "   jne %A"
 rule ifeq %A, _Z, 1  = "   jeq %A"
+rule ifne %A, _Z, 0  = "   jeq %A"
 rule ifne %A, _Z, 1  = "   jne %A"
 
 rule ifeq %A, _C, 0  = "   jcc %A"
 rule ifeq %A, _C, 1  = "   jcs %A"
+rule ifne %A, _C, 0  = "   jcs %A"
+rule ifne %A, _C, 1  = "   jcc %A"
 
 ;CMP,CPX,CPY
 
