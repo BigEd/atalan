@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
 	}
 
 done:	
- 	exit(result);
+  	exit(result);
 
 failure:
 	result = -2;

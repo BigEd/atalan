@@ -157,23 +157,34 @@ Input:
 {
 	
 	Var * var;
-	Type * type = NULL;
+	Type * type = NULL, * variant_type = NULL;
 	long last_n = 0;
 	long i;
 	Type * elmt;
 	Bool id_required;
 
+next:
 	if (NextIs(TOKEN_ENUM)) {
 		type = TypeAlloc(TYPE_INT);
 		type->range.flexible = true;
 		if (TOK == TOKEN_INT) goto range;
 		goto const_list;
 
-	} else if (TOK == TOKEN_INT) {
+	} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
 		type = TypeAlloc(TYPE_INT);
 range:
-		type->range.min = LEX.n;
-		NextToken();
+		ExpectExpression(NULL);
+		if (TOK) {
+			var = PopTop();
+			if (var->mode == MODE_CONST) {
+				type->range.min = var->n;
+			} else {
+				SyntaxError("expected constant expression");
+			}
+		}
+
+//		type->range.min = LEX.n;
+//		NextToken();
 		if (TOK == TOKEN_DOTDOT) {
 			NextToken();
 			ExpectExpression(NULL);
@@ -318,6 +329,18 @@ const_list:
 			}
 		}
 	}
+
+	if (variant_type != NULL) {
+		variant_type->dim[1] = type;
+		type = variant_type;
+	}
+
+	if (NextIs(TOKEN_OR)) {
+		variant_type = TypeAlloc(TYPE_VARIANT);
+		variant_type->dim[0] = type;
+		goto next;
+	}
+
 	return type;
 }
 
@@ -856,7 +879,7 @@ indices:
 			//	NextToken();
 			//}
 		} else {
-//			SyntaxError("expected operand");
+			SyntaxError("expected operand");
 			return;
 		}
 		STACK[TOP] = var;
@@ -866,7 +889,12 @@ indices:
 
 void ParseUnary()
 {
-	if (NextIs(TOKEN_HI)) {
+	if (NextIs(TOKEN_MINUS)) {
+		// Unary minus before X is interpreted as 0 - X
+		STACK[TOP++] = VarNewInt(0);
+		ParseOperand();
+		InstrBinary(INSTR_SUB);
+	} else if (NextIs(TOKEN_HI)) {
 		ParseOperand();
 		InstrUnary(INSTR_HI);
 	} else if (NextIs(TOKEN_LO)) {
@@ -1852,12 +1880,14 @@ Arguments:
 	arr		Reference to array or array element or array slice
 */
 {
-	Type * type;
-	Var * idx, * label, * range, * stop;
+	Type * type, * src_type;
+	Var * idx, * src_idx, * label, * range, * stop, * label_done;
 	Int32 nmask;
 	Int32 stop_n;
-	Var * min1, * max1;
+	Var * min1, * max1, * src_min, * src_max;
+	Var * dst_arr;
 
+	src_idx = NULL;
 	type = arr->type;
 	idx = VarNewTmp(0, type->dim[0]);
 	label = VarNewTmpLabel();
@@ -1867,13 +1897,26 @@ Arguments:
 		if (range->mode == MODE_RANGE) {
 			min1 = range->adr;
 			max1 = range->var;
-			arr = arr->adr;
 		} else {
-			//TODO: Array assignment
+			min1 = arr->var;
+			max1 = VarNewInt(arr->adr->type->dim[0]->range.max);
 		}
+		dst_arr = arr->adr;
 	} else {
 		min1 = VarNewInt(type->dim[0]->range.min);
 		max1 = VarNewInt(type->dim[0]->range.max);
+		dst_arr = arr;
+	}
+
+	src_type = init->type;
+	
+	// This is copy instruction (source is array)
+	if (src_type->variant == TYPE_ARRAY) {		
+		src_min = VarNewInt(src_type->dim[0]->range.min);
+		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
+		src_idx = VarNewTmp(0, type->dim[0]);
+		init = VarNewElement(init, src_idx, false);
+		label_done = VarNewTmpLabel();
 	}
 
 	if (max1->mode == MODE_CONST) {
@@ -1891,10 +1934,20 @@ Arguments:
 	}
 
 	Gen(INSTR_LET, idx, min1, NULL);
-	Gen(INSTR_LABEL, label, NULL, NULL);
-	Gen(INSTR_LET, VarNewElement(arr, idx, false), init, NULL);
+	if (src_idx != NULL) {
+		Gen(INSTR_LET, src_idx, src_min, NULL);
+	}
+	GenLabel(label);
+	Gen(INSTR_LET, VarNewElement(dst_arr, idx, false), init, NULL);
+	if (src_idx != NULL) {
+		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
+		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
+	}
 	Gen(INSTR_ADD, idx, idx, VarNewInt(1));
 	Gen(INSTR_IFNE, label, idx, stop);
+	if (src_idx != NULL) {
+		GenLabel(label_done);
+	}
 }
 
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type)
@@ -2190,7 +2243,7 @@ Purpose:
 									}
 
 									// Array assignment
-									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE) {
+									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 										GenArrayInit(var, item);
 									} else {
 										if (VarIsTmp(item)) {
