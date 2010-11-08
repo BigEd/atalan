@@ -2,8 +2,10 @@
 News
 ****
 
+- NEW: Signed integers assignment, add, sub, print
 - NEW: Check phase
 - NEW: Initializing array or slice of array with constant
+- NEW: Assigning array to position at array (p(3) = x)
 
 ==========
 3-Oct-2010

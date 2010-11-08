@@ -29,10 +29,15 @@
 ;ENDPT   116,117   $74,$75
 ;COUNTR  126,127   $7E,$7F  COUNTR tells how many points have to be plotted before the line is finished.
 
+_SYS_PRINT_SIGNED = 1
+
 _putchr_proc_adr = $653  ;+$654 
 ?argptr =   $32		;$33
 ?varptr	=	$34
 ?size	=	$15		;15		//$16 BUFADR
+		.IF _SYS_PRINT_SIGNED = 1 
+?sign = $16
+		.ENDIF
 ?aux2	=	$38
 ?aux	=	$39
 
@@ -47,12 +52,24 @@ _stdbuf    = $600		;TODO: use LINBUF ($247-$26E)  (100,101 can point to it)
 
 ;Argument list:
 ;	0	end of list
-;	1..127  Constant string
-;   128     EOL
-;   129     one byte integer reference
+;	1..127  Constant string of specified lenght
+; 128     EOL
+
+;   7 6 5 4 3 2 1 0 
+;  |0| | | | | | | |		String of length 0..127
+;  |1|0|0| | | | | |    Pointer to unsigned integer of length 1..31 bytes
+;  |1|0|1| | | | | |    Pointer to signed integer of length 1..31 bytes
+
+;         ---- ptr to unsigned integer ---- (7-bit set)
+; 129     one byte integer reference
 ;	130     two byte integer reference
 ;	131     three byte integer eference
 ;	132     four byte integer reference
+;         ---- ptr to signed -----  (5-bit set)
+; 161     one byte
+; 162     two byte
+; 163     three byte
+; 164     four byte
 
 _std_print_adr .proc
 
@@ -92,17 +109,43 @@ command
 
 		;Write n-byte integer variable
 
-		and #$7f
-;		sec
-;		sbc #128
+		and #$7f		; zero top bit (it's always 1)
 		sta ?size
-		beq eol
+		beq eol			;size 0 means end of line (0 byte integer would be nonsense)
+
+    ;Read address of the variable
 
 		jsr _read_byte
 		sta ?varptr		
 		jsr _read_byte
 		sta ?varptr+1
 
+		.IF _SYS_PRINT_SIGNED = 1 
+		;signed number has bit 5 set
+		lda #0
+		sta ?sign
+		
+		lda ?size
+    and #32		;%00100000
+    beq unsigned
+
+		lda ?size	;size uses only 4 bits
+		and #31		;%00011111
+		sta ?size
+    
+    tay				;test, whether the integer is negative (i.e. top byte is negative)
+    dey
+    lda (?varptr),y
+    bpl unsigned
+		 
+    dec ?sign				;sign = $ff  (-1)
+		
+		lda #'-'
+		jsr _std_putchr
+		
+unsigned
+		.ENDIF
+		    
 		jsr _std_bin_to_bcd
 		jsr _std_print_hex
 		clc
@@ -260,6 +303,8 @@ hex     dta c"0123456789ABCDEF"
 ;Arbitrary size (up to 127 bytes) are supported.
 ;In:
 ;	?varptr	pointer to binary number
+; a   0 means unsigned number
+;     $ff means signed number
 ;	?size	number of bytes
 ;Out:
 ;	?size	on output, returns size of resulting bcd number
@@ -288,7 +333,10 @@ zero	sta _stdbuf-1,y
 bytes
 		dec ?aux
 		ldy ?aux
-		lda (?varptr),y		
+		lda (?varptr),y	
+		.IF _SYS_PRINT_SIGNED = 1 
+		eor ?sign
+		.ENDIF	
 		sta ?aux2
 		sec				;set top bit to 1
 		bcs loop		
@@ -301,7 +349,7 @@ bcd_mul2
 		adc	_stdbuf,x			;buf2(x) = buf2(x) * 2 + carry
 		sta _stdbuf,x
 		inx
-		dey
+		dey								;TODO: cpx ?size
 		bne bcd_mul2
 			
 		clc
@@ -310,6 +358,21 @@ loop	rol ?aux2		;divide by two, if result is 0, end
 		
 		lda ?aux
 		bne bytes
+	
+		.IF _SYS_PRINT_SIGNED = 1 
+		;If this is negative number, add 1
+		;In case sign is $ff, asl will set the C to 1, otherwise to 0	
+		lda ?sign
+		asl
+		ldx #0
+carry1
+		lda _stdbuf,x
+		adc #0
+		sta _stdbuf,x
+		inx
+		bcs carry1
+		.ENDIF
+					
 		cld		
 		
 		lda #<_stdbuf

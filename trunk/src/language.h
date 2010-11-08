@@ -207,6 +207,7 @@ typedef enum {
 	TYPE_ARRAY,
 	TYPE_LABEL,		// label in code (all labels share same type
 	TYPE_ADR,		// adress (or reference) to 
+	TYPE_VARIANT,
 	TYPE_UNDEFINED
 } TypeVariant;
 
