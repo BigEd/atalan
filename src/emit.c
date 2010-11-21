@@ -240,6 +240,8 @@ Bool EmitInstr(Instr * i)
 	Rule * rule;
 	Instr * to;
 
+	if (i->op == INSTR_REF) return true;
+
 	rule = EmitRule(i);
 
 	if (rule != NULL) {

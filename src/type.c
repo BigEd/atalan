@@ -396,3 +396,109 @@ Bool TypeIsBool(Type * type)
 	if (type->variant != TYPE_INT) return false;
 	return type->range.min == 0 && type->range.max == 1;
 }
+
+//TODO: Merge the two functions
+//      Difference betwen TYPE_PROC handling
+
+Bool VarMatchType(Var * var, Type * type)
+/*
+Purpose:
+	Return 0, if the variable matches the type.
+*/
+{
+	Type * vtype;
+	Type * rtype;
+	Var * result;
+
+	if (var == NULL) return false;
+	if (type == NULL) return true;
+
+	rtype = type;
+	vtype = var->type;
+
+	if (vtype == NULL) return true;		// variable with no type specified matches everything
+
+	if (vtype->variant == TYPE_PROC) {
+		// Find the result of the function
+	
+		result = FirstArg(var, SUBMODE_ARG_OUT);
+
+		if (result == NULL) return false;		// this is function with no argument
+
+		rtype = result->type;
+	}
+
+	// Integer type
+	if (type->variant == TYPE_INT) {
+		if (vtype->variant != TYPE_INT) return false;
+		if (var->mode == MODE_CONST) {
+			if (var->n < type->range.min) return false;
+			if (var->n > type->range.max) return false;
+		} else if (var->mode == MODE_VAR || var->mode == MODE_ARG || var->mode == MODE_ELEMENT) {
+			if (vtype->range.min < type->range.min) return false;
+			if (vtype->range.max > type->range.max) return false;
+		} else {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+Bool VarMatchesType(Var * var, Type * type)
+{
+	Type * vtype = var->type;
+
+	if (type == vtype) return true;
+	// If pattern has no defined type, it fits
+	if (type == NULL) return true;
+
+	if (type->variant == TYPE_VARIANT) {
+		return VarMatchesType(var, type->dim[0]) || VarMatchesType(var, type->dim[1]);
+
+	} else if (type->variant == TYPE_INT) {
+		if (vtype != NULL) {
+			// If variable is constant, the check is different
+			if (var->mode == MODE_CONST) {
+				if (vtype->variant == TYPE_INT) {
+					if (var->n < type->range.min) return false;
+					if (var->n > type->range.max) return false;
+				}
+			} else if (var->mode == MODE_ELEMENT) {
+				// Specified variable is element, but the type is not array
+				if (type->variant != TYPE_ARRAY) return false;
+			} else {
+				if (vtype->variant != TYPE_INT) return false;
+				if (type->range.max < vtype->range.max) return false;
+				if (type->range.min > vtype->range.min) return false;
+			}
+		}
+	} else if (type->variant == TYPE_ARRAY) {
+		if (vtype == NULL) return false;
+		if (vtype->variant != TYPE_ARRAY) return false;
+
+		// Match first index, second index, return type
+
+		return TypeIsSubsetOf(vtype->dim[0], type->dim[0])
+			&& TypeIsSubsetOf(vtype->dim[1], type->dim[1])
+			&& TypeIsSubsetOf(vtype->element, type->element);
+		
+	} else if (type->variant == TYPE_ADR) {
+		if (vtype != NULL) {
+			if (vtype->variant != TYPE_ADR) return false;
+		}
+	} else if (type->variant == TYPE_PROC) {
+
+		// Interrupt routines types will be based on some other type
+		if (vtype->base == NULL && type->base == NULL) return true;
+
+		// Procedure type is only same, if it is exactly the same
+		return false;
+
+	} else if (type->variant == TYPE_STRUCT) {
+		if (vtype != NULL) {
+			if (vtype->variant != TYPE_STRUCT) return false;
+		}
+	}
+	return true;
+}

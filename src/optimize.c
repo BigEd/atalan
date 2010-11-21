@@ -234,8 +234,8 @@ Bool ArgNeedsSpill(Var * arg, Var * var)
 Bool InstrSpill(Instr * i, Var * var)
 {
 	Bool spill = false;
-
-	if (i->op == INSTR_PRINT || i->op == INSTR_FORMAT) return true;
+	//TODO: What about call?
+//	if (i->op == INSTR_PRINT || i->op == INSTR_FORMAT) return true;
 
 	if (var->mode == MODE_ELEMENT) {
 

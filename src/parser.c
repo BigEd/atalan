@@ -530,50 +530,6 @@ UInt8 ParseArgNo()
 	return arg_no;
 }
 
-Bool VarMatchType(Var * var, Type * type)
-/*
-Purpose:
-	Return 0, if the variable matches the type.
-*/
-{
-	Type * vtype;
-	Type * rtype;
-	Var * result;
-
-	if (var == NULL) return false;
-	if (type == NULL) return true;
-
-	rtype = type;
-	vtype = var->type;
-
-	if (vtype == NULL) return true;		// variable with no type specified matches everything
-
-	if (vtype->variant == TYPE_PROC) {
-		// Find the result of the function
-	
-		result = FirstArg(var, SUBMODE_ARG_OUT);
-
-		if (result == NULL) return false;		// this is function with no argument
-
-		rtype = result->type;
-	}
-
-	// Integer type
-	if (type->variant == TYPE_INT) {
-		if (vtype->variant != TYPE_INT) return false;
-		if (var->mode == MODE_CONST) {
-			if (var->n < type->range.min) return false;
-			if (var->n > type->range.max) return false;
-		} else if (var->mode == MODE_VAR || var->mode == MODE_ARG || var->mode == MODE_ELEMENT) {
-			if (vtype->range.min < type->range.min) return false;
-			if (vtype->range.max > type->range.max) return false;
-		} else {
-			return false;
-		}
-	}
-
-	return true;
-}
 
 void CheckArrayBound(UInt16 no, Var * arr, Type * idx_type, Var * idx, UInt16 bookmark)
 /*
@@ -958,8 +914,8 @@ retry:
 void ParseBinaryAnd()
 {
 	Var * var;
-retry:
 	ParsePlusMinus();
+retry:
 	if (TOK == TOKEN_AND) {
 		var = STACK[TOP];
 		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
@@ -975,8 +931,8 @@ retry:
 
 void ParseBinaryOr()
 {
-retry:
 	ParseBinaryAnd();
+retry:
 	if (!G_CONDITION_EXP && NextIs(TOKEN_OR)) {
 		ParseBinaryAnd();
 		if (TOK) {
@@ -2158,12 +2114,11 @@ Purpose:
 						// We may assign strings to array references
 						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
 
-							//TODO: Read the variable from definition of format procedure
-							item = VarFind("_arr", 0);
-
 							// Call format routine (set adrees argument)
-							Gen(INSTR_LET_ADR, item, var, NULL);
-							Gen(INSTR_FORMAT, NULL, NULL, NULL);
+//							item = VarFind("_arr", 0);
+//							Gen(INSTR_LET_ADR, item, var, NULL);
+
+							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
 							ParseString(STR_NO_EOL);
 						} else {
 							SyntaxError("string may be assigned only to variable");
@@ -2757,7 +2712,8 @@ void ParseCommands()
 			break;
 
 		case TOKEN_STRING: 
-			Gen(INSTR_PRINT, NULL, NULL, NULL);
+//			Gen(INSTR_PRINT, NULL, NULL, NULL);
+			GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
 			ParseString(0); 
 			break;
 		case TOKEN_ID: 
