@@ -845,12 +845,16 @@ rule mul %A:card,%B:byte, 32768    = instr
 	let %A(0), _a
 
 _sys_mul8:proc m1@_a m2@_x >_TEMPW2:0..65025
+
 ;System routine for multiplication.
 
 rule mul %A:card, %B:byte, %C:byte = instr
-	let _a, %B
+	let _a, %B			;TODO: let _sys_mul8.m1, %B
 	let _x, %C
 	call _sys_mul8
+	ref _a					;mul trashes _a and _x
+	ref _x          ;x is in fact 0, but we do not have a way of defining this for now
+									;something like ASSERT would be interesting
 	let %A, _TEMPW2
 	
 rule mul %A:card, %B:card, 2    = instr
@@ -868,6 +872,8 @@ rule mul %A:card, %B:card, %C:card = instr
 	let _TEMPW1, %B
 	let _TEMPW2, %C
 	call _sys_mul16
+	ref _a
+	ref _x
 	let %A, _TEMPL1
 
 ;*********** Square root
@@ -877,6 +883,7 @@ rule mul %A:card, %B:card, %C:card = instr
 rule sqrt %A:card, %B:card = instr
 	let _TEMPW1, %B
 	call _sys_sqrt16
+	ref _x
 	let %A, _a
 	
 ;*********** Division
