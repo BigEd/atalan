@@ -212,8 +212,6 @@ char * g_InstrName[INSTR_CNT] =
 	"or",   // INSTR_OR,
 
 	"",   // INSTR_ALLOC,
-	"",   // INSTR_PRINT,
-	"",   // INSTR_FORMAT,
 	"",   // INSTR_PROC,
 	"",   // INSTR_ENDPROC,
 	"",   // INSTR_CALL,
@@ -392,6 +390,30 @@ Bool CodeModifiesVar(Instr * from, Instr * to, Var * var)
 	return false;
 }
 
+void ProcValuesUse(Var * proc)
+{
+	Instr * i;
+	InstrBlock * blk;
+
+	if (FlagOff(proc->flags, VarProcessed)) {
+		SetFlagOn(proc->flags, VarProcessed);
+		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+			for(i = blk->first; i != NULL; i = i->next) {
+				if (i->op == INSTR_CALL) {
+					ProcValuesUse(i->result);
+				} else if (IS_INSTR_JUMP(i->op)) {
+					// jump instructions do have result, but it is label we jump to
+				} else {
+					if (i->result != NULL) {
+						ResetValue(i->result);
+					}
+				}
+			}
+		}
+		SetFlagOff(proc->flags, VarProcessed);
+	}
+}
+
 Bool OptimizeValues(Var * proc)
 /*
    1. If assigning some value to variable (let) and the variable already contains such value, remove the let instruction
@@ -411,6 +433,7 @@ Bool OptimizeValues(Var * proc)
 	Var * r, * result, * arg1, * arg2;
 	InstrBlock * blk;
 	InstrOp op, src_op;
+	char buf[32];
 
 	if (VERBOSE) {
 		printf("------ optimize values -----\n");
@@ -451,8 +474,9 @@ retry:
 			}
 */
 			// When label is encountered, we must reset all values, because we may come from other places
-			if (i->op == INSTR_LABEL || i->op == INSTR_CALL || i->op == INSTR_FORMAT || i->op == INSTR_PRINT) {
-				ResetValues();
+			if (i->op == INSTR_CALL) {
+				ProcValuesUse(i->result);
+//				ResetValues();
 			}
 
 			result = i->result;
@@ -601,7 +625,20 @@ retry:
 					Dependency(i);
 
 				} // BRANCH
-			} // result != NULL
+			} else { // result != NULL
+				if (i->op == INSTR_VAR_ARG) {
+					arg1 = i->arg1;
+					if (arg1 != NULL) {
+						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
+					}
+					if (arg1->mode == MODE_CONST) {
+						i->op = INSTR_STR_ARG;
+						sprintf(buf, "%d", arg1->n);
+						i->arg1 = VarNewStr(buf);
+						i->arg2 = VarNewInt(StrLen(buf));
+					}
+				}
+			}
 		}
 	} // block
 	return modified;

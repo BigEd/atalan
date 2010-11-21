@@ -66,8 +66,6 @@ cd atalan\examples
 
 ..\bin\atalan loop
 
-..\bin\atalan unit_test
-
 ..\bin\atalan hello_font
 
 ..\bin\atalan count_2sec
@@ -83,6 +81,8 @@ cd atalan\examples
 ..\bin\atalan interrupts
 
 ..\bin\atalan bit_sieve
+
+..\bin\atalan unit_test
 
 cd ..
 cd ..

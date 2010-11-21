@@ -356,8 +356,6 @@ typedef enum {
 	INSTR_OR,
 
 	INSTR_ALLOC,
-	INSTR_PRINT,
-	INSTR_FORMAT,
 	INSTR_PROC,
 	INSTR_ENDPROC,
 	INSTR_CALL,
@@ -440,6 +438,9 @@ Bool TypeIsBool(Type * type);
 UInt32 TypeSize(Type * type);
 UInt32 TypeAdrSize();
 UInt32 TypeStructAssignOffsets(Type * type);
+
+Bool VarMatchType(Var * var, Type * type);
+Bool VarMatchesType(Var * var, Type * type);
 
 extern Type TVOID;
 extern Type TINT;		// used for int constants
@@ -750,4 +751,6 @@ void EmitAsmIncludes();
 
 extern Bool VERBOSE;
 extern Var * INTERRUPT;
+extern Var * MACRO_PRINT;		// Print macro
+extern Var * MACRO_FORMAT;		// Format macro
 

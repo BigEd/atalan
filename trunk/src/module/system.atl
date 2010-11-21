@@ -37,8 +37,6 @@ type instrs:enum
 	or
 	
 	alloc
-	print			;print string argument
-	format
 	proc			;procedure entry
 	endproc		;procedure exit
 	call			;call procedure

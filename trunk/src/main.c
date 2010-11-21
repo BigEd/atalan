@@ -22,6 +22,8 @@ extern Var   ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * CODE;
 Var * INTERRUPT;
+Var * MACRO_PRINT;
+Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 
 void ProcessUsedProc(void (*process)(Var * proc))
@@ -165,6 +167,9 @@ int main(int argc, char *argv[])
 
 	if (!Parse("m6502", false)) goto failure;
 	if (!Parse("atari", false)) goto failure;
+
+	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);
+	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);
 
 	VarInitRegisters();
 
@@ -320,7 +325,7 @@ int main(int argc, char *argv[])
 	}
 
 done:	
-  	exit(result);
+   	exit(result);
 
 failure:
 	result = -2;

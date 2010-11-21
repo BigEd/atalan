@@ -46,8 +46,8 @@ Anything after ; to the end of line is comment.
 Identifiers
 ===========
 
-Identifiers must start with letter and may contain numbers, underline and apostrophes.
-Identifier may be enclosed in apostrophes. In such case, it may contain any characters including apostrophe. 
+Identifiers must start with letter and may contain numbers, underlines and apostrophes.
+Identifier may be enclosed in apostrophes. In such case, it may contain any character except apostrophe or newline. 
 
 Example:
 :::::::::::::
@@ -56,6 +56,8 @@ x1 x2
 x'pos
 'RH-'
 'else'		; this is identifier, even if else is keyword
+x x' x''  ; three different identifiers
+'*'
 :::::::::::::
 
 ======
