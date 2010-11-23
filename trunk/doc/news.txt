@@ -3,13 +3,17 @@ News
 ****
 
 - NEW: Signed integers assignment, add, sub, print
-- NEW: Check phase
+- OPT: Check phase (optimize values before translation)
 - NEW: Initializing array or slice of array with constant
 - NEW: Assigning array to position at array (p(3) = x)
 
 - NEW: Print variable arguments with known value are replaced by strings 
 - FIX: print & format is now implemented as macro, not instruction
 
+- OPT: Reuse variables in independent functions 
+- OPT: Replace printing of constant values by printing of strings
+- OPT: Skip jumps ( bne _loop1  jmp _loop2  _loop2: => beq _loop2)
+ 
 ==========
 3-Oct-2010
 ==========
