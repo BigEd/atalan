@@ -50,6 +50,12 @@
     <ClCompile Include="opt_live.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mem_heap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_var_use.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">

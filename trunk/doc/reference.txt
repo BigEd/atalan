@@ -458,7 +458,7 @@ and or            Logical operators
 is  isn't         Same as '=' '&lt;&gt;' (lower priority). [TODO]
 :::::::::::
 
-Relational operator may be chained, so it is possible to write for example 10<x<100
+Relational operator may be chained, so it is possible to write for example 10&lt;x&lt;100
 etc.
 
 Logical operators are evaluated using short circuit evaluation.
@@ -659,7 +659,7 @@ Procedures
 **********
 
 Procedures can be defined using proc type. After the proc keyword follows block
-defining procedure arguments. Arguments marked using "<" are output arguments (
+defining procedure arguments. Arguments marked using "&lt;" are output arguments (
 results).
 
 

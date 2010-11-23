@@ -9,8 +9,8 @@ C64 etc.
 Atalan is work in progress, it can however already generate working code.
 
 Atalan is cross-platform development system. Compiler runs on desktop machine
-(currently Windows, but it is developed just using ANSI C, so porting should be
-straightforward).
+(Windows, Linux, OSX - it is developed just using ANSI C, so porting to other 
+systems should be straightforward).
 
 It generates source code for 6502 assembler (MADS). It does not however use 
 any special features, so other assemblers could be used too.
