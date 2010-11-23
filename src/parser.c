@@ -2115,9 +2115,6 @@ Purpose:
 						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
 
 							// Call format routine (set adrees argument)
-//							item = VarFind("_arr", 0);
-//							Gen(INSTR_LET_ADR, item, var, NULL);
-
 							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
 							ParseString(STR_NO_EOL);
 						} else {

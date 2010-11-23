@@ -46,10 +46,10 @@ int main(int argc, char *argv[])
 	Var * var, * data;
 	Type * type;
 	Int16 i;
-	TypeVariant tv;
+//	TypeVariant tv;
 	Bool assembler = true;
 	int result = 0;
-	UInt32 size, n, adr;
+//	UInt32 size, n, adr;
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
 	char * s;
@@ -173,6 +173,10 @@ int main(int argc, char *argv[])
 
 	VarInitRegisters();
 
+	//TODO: Read the var heap definition from configuration
+
+	HeapAddBlock(&VAR_HEAP, 128, 128);
+
 	// Parse the file. This also generates main body of the program (_ROOT procedure).
 	// TODO: Root procedure may be just specifal type of procedure.
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
@@ -246,6 +250,10 @@ int main(int argc, char *argv[])
 
 	//==== Assign addresses to variables
 
+	ProcessUsedProc(ProcClearProcessed);
+	ProcessUsedProc(AllocateVariables);
+
+/*
 	adr = 128;
 	n = 1;
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
@@ -263,7 +271,7 @@ int main(int argc, char *argv[])
 		}
 		n++;
 	}
-
+*/
 	if (TOK == TOKEN_ERROR) goto failure;
 
 	EmitOpen(filename);

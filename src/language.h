@@ -408,6 +408,26 @@ arg2       pointer to text of line
 
 */
 
+typedef struct MemBlockTag MemBlock;
+
+struct MemBlockTag {
+	UInt32 adr;
+	UInt32 size;
+};
+
+typedef struct MemHeapTag MemHeap;
+
+struct MemHeapTag {
+	UInt32 count;
+	UInt32 capacity;
+	MemBlock * block;
+};
+
+void HeapInit(MemHeap * heap);
+void HeapCleanup(MemHeap * heap);
+void HeapAddBlock(MemHeap * heap, UInt32 adr, UInt32 size);
+Bool HeapAllocBlock(MemHeap * heap, UInt32 size, UInt32 * p_adr);
+
 /*************************************************************
 
   Type
@@ -516,6 +536,8 @@ void PrintVar(Var * var);
 void PrintVarName(Var * var);
 
 void ProcUse(Var * proc, UInt8 flag);
+
+void ProcessUsedProc(void (*process)(Var * proc));
 
 /***********************************************************
 
@@ -726,6 +748,9 @@ Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
 void OptimizeJumps(Var * proc);
 
+void ProcClearProcessed(Var * proc);
+void AllocateVariables(Var * proc);
+
 /*************************************************************
 
  Emit phase
@@ -753,4 +778,5 @@ extern Bool VERBOSE;
 extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro
+extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
 

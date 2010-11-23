@@ -83,10 +83,12 @@
     <ClCompile Include="instr.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="mem_heap.c" />
     <ClCompile Include="optimize.c" />
     <ClCompile Include="opt_blocks.c" />
     <ClCompile Include="opt_live.c" />
     <ClCompile Include="opt_values.c" />
+    <ClCompile Include="opt_var_use.c" />
     <ClCompile Include="parser.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="common.c" />
