@@ -747,6 +747,7 @@ void GenerateBasicBlocks(Var * proc);
 Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
 void OptimizeJumps(Var * proc);
+void DeadCodeElimination(Var * proc);
 
 void ProcClearProcessed(Var * proc);
 void AllocateVariables(Var * proc);

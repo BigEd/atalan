@@ -12,7 +12,9 @@ News
 
 - OPT: Reuse variables in independent functions 
 - OPT: Replace printing of constant values by printing of strings
-- OPT: Skip jumps ( bne _loop1  jmp _loop2  _loop2: => beq _loop2)
+- OPT: Skip jumps ( bne _l1  jmp _l2  _l2@ => beq _l2)
+- OPT: Jump foldng (goto L1  L1@ goto L2@ => goto L2)
+- OPT: Dead code elimination
  
 ==========
 3-Oct-2010
