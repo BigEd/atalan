@@ -493,6 +493,13 @@ done:
 	return q;
 }
 
+InstrBlock * FindLoopDominator(Var * proc, InstrBlock * header)
+{
+	InstrBlock * prev = NULL, * blk;
+	for(blk = proc->instr; blk != header; blk = blk->next) prev = blk;
+	return prev;
+}
+
 void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 /*
 1. Find loop (starting with inner loops)
@@ -536,9 +543,9 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	// When processing, we assign var to register
 	for(regi = 1; regi < REG_CNT; regi++) REG[regi]->var = NULL;
 
-	if (header->seq_no == 41) {
-		printf("");
-	}
+//	if (header->seq_no == 41) {
+//		printf("");
+//	}
 
 	while(top_var = FindMostUsedVar()) {
 
@@ -597,8 +604,9 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		// before the start of the loop.
 		// We only do this, if the variable is not initialized inside the loop.
 		if (FlagOn(top_var->flags, VarUninitialized) || init) {
-			// TODO: Create new block for initialization
-			blk = header->from;		// TODO: We may have come from multiple places
+
+			blk = FindLoopDominator(proc, header);
+
 			i2 = blk->last;
 
 			// Loops with condition at the beginning may start with jump to condition

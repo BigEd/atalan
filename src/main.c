@@ -232,6 +232,7 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(GenerateBasicBlocks);		// We must generate basic blocks again, as translation may have generated labels and jumps
 	ProcessUsedProc(OptimizeJumps);
 	ProcessUsedProc(ProcOptimize);
+	ProcessUsedProc(DeadCodeElimination);
 
 	if (VERBOSE) {
 		printf("============== Optimized ==============\n");

@@ -87,18 +87,21 @@ void LinkBlocks(Var * proc)
 	// Create caller lists for blocks for goto and if instructions
 
 	for(nb = proc->instr; nb != NULL; nb = nb->next) {
+
+		op = INSTR_VOID;
+		i = nb->last;
+		if (i != NULL) op = i->op;
+
 		// Continue with instruction in next block 
-		// (this is not true for block ending with GOTO, but that is handled in following condition)
+		// This is not true for block ending with GOTO
 
 		dst = nb->next;
-		if (dst != NULL) {
+		if (dst != NULL && op != INSTR_GOTO) {
 			nb->to = nb->next;
 			dst->from = nb;
 		}
 
-		i = nb->last;
-		if (i == NULL) continue;
-		op = i->op;
+//		if (op == INSTR_VOID) continue;
 
 		// If this is conditional jump or jump, register it as caller to destination block
 
@@ -207,16 +210,33 @@ Purpose:
 }
 
 void OptimizeJumps(Var * proc)
+/*
+Purpose:
+	Optimize jumps.
+
+	1. Sequence like:
+
+	    ifeq x,y,l2
+	    jmp l1
+	    label l2@
+
+	   will be translated to
+
+	   ifne x,y,l1
+
+*/
 {
 	InstrBlock * blk, * blk_to;
 	Instr * i, * cond_i;
+	Var * label;
 
 	blk = proc->instr;
-	while(blk != NULL) {
+	while (blk != NULL) {
 		blk_to = blk->to;
 		if (blk_to != NULL) {
 			i = blk_to->first;
 			cond_i = blk->last;
+
 			if (i != NULL && i->op == INSTR_GOTO) {
 				if (blk_to->next == blk->cond_to) {
 					if (IS_INSTR_BRANCH(cond_i->op)) {
@@ -228,10 +248,52 @@ void OptimizeJumps(Var * proc)
 					}
 				}
 			}
+
+			// Jump to jump
+			if (cond_i != NULL && IS_INSTR_JUMP(cond_i->op)) {
+retry:
+				label = cond_i->result;
+				blk_to = label->instr;
+				i = blk_to->first;
+				while (i != NULL && i->op == INSTR_LINE) i = i->next;
+				if (i != NULL && i->op == INSTR_GOTO && i->result != cond_i->result) {
+					cond_i->result = i->result;
+					goto retry;
+				}
+			}
 		}
 		blk = blk->next;
 	}
 
 	// Recreate destinations
 	LinkBlocks(proc);
+}
+
+void DeadCodeElimination(Var * proc)
+{
+	InstrBlock * blk, * prev_blk;
+
+	LinkBlocks(proc);
+
+	// First block of procedure is not dead, as it is an entry point to the procedure
+
+	prev_blk = proc->instr;
+	if (prev_blk != NULL) blk = prev_blk->next;
+
+	while (blk != NULL) {
+		if (blk->from == NULL && blk->callers == NULL) {
+			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
+				//TODO: We should solve alignment using some other means (probably block, or label, should have alignment)
+				if (blk->first == NULL || blk->first->op != INSTR_ALIGN) {
+					prev_blk->next = blk->next;
+					InstrBlockFree(blk);
+					MemFree(blk);
+					blk = prev_blk;
+				}
+			}
+		}
+		prev_blk = blk;
+		blk = blk->next;
+	}
+
 }
