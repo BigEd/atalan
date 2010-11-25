@@ -2,6 +2,8 @@
 ;ATALAN ATARI Platform definition
 ;********************************
 
+use "m6502"
+
 in timer@20:byte
 
 ;***********************
@@ -152,38 +154,38 @@ out SKCTL@$d20f:byte   ; audio control
 ;Keyboard
 
 key:enum
-  A = 63
-  B = 21
-  C = 18
-  D = 58
-  E = 42
-  F = 56
-  G = 61
-  H = 57
-  I = 13
-  J = 1
-  K = 5
-  L = 0
-  M = 37
-  N = 35
-  O = 8
-  P = 10
-  Q = 47
-  R = 40
-  S = 62
-  T = 45
-  U = 11
-  V = 16
-  W = 46
-  X = 22
-  Y = 43
-  Z = 23
-  SPACE = 33 
-  RETURN = 12
-  ESC = 28
-  TAB = 44
-  DEL = 52
-  '0' = 50
+	A = 63
+	B = 21
+	C = 18
+	D = 58
+	E = 42
+	F = 56
+	G = 61
+	H = 57
+	I = 13
+	J = 1
+	K = 5
+	L = 0
+	M = 37
+	N = 35
+	O = 8
+	P = 10
+	Q = 47
+	R = 40
+	S = 62
+	T = 45
+	U = 11
+	V = 16
+	W = 46
+	X = 22
+	Y = 43
+	Z = 23
+	SPACE = 33 
+	RETURN = 12
+	ESC = 28
+	TAB = 44
+	DEL = 52
+	'0' = 50
 	'1' = 31
 	'2' = 30
 	'3' = 26
@@ -210,7 +212,7 @@ key:enum
 	F3   = 83
 	F4   = 84
 	HELP = 17
-  none = 255
+	none = 255
 	
 in CH@764:key  ;last pressed character
 

@@ -165,8 +165,8 @@ int main(int argc, char *argv[])
 	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
 
-	if (!Parse("m6502", false)) goto failure;
-	if (!Parse("atari", false)) goto failure;
+//	if (!Parse("m6502", false)) goto failure;
+	if (!Parse(PLATFORM, false)) goto failure;
 
 	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);
 	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);
