@@ -1,20 +1,41 @@
-*****************************
+﻿*****************************
 ATALAN Compiler Optimizations
 *****************************
 
 Atalan compiler performs extensive code optimizations. As 6502 family processors are
-very irregular, common methods had to be tailored and some special techniques had to be developed.
+very irregular, common optimization methods had to be tailored 
+and some special techniques had to be developed to fit the 6502 instruction set.
 
 For example, due to low number of registers (A,X,Y) and their specialized functions,
 usual register allocation technique could not be used.
+
+===========================
+Local variable optimization
+===========================
+
+Procedure local variables and arguments are internaly allocated as global variables.
+Atalan analyzes procedure call chain and if possible, reuses global variable
+space to several procedures.
+ 
 
 ===================
 Local optimizations
 ===================
 
-- constant folding and propagation
+- constant folding
+- constant propagation
+- common subexpression elimination
 - live variable analysis
 - optimal operation is chosen according to variable range
+
+==========================
+Control flow optimizations
+==========================
+
+- unused procedure removal
+- goto elimination (eliminate goto to goto)
+- dead code elimination
+- conditional jump around jump simplification
 
 ==================
 Loop optimizations

@@ -318,25 +318,12 @@ IDEAS
 6502 backend
 ============
 
-x all conditional if's
-x 16bit arithmetics
 - constant array offset may be implemented as lda array+offset (even for big arrays!!)
-- large arrays
-- mul, div (byte, card)
-- all card comparisons
-- multiply, divide
-x enums
 - variable is referenced together with it's offset (offset is in bytes, or bits - as specified in struct)
-
-- parse condition (for if, while, ...)
-   - <x> | [not] <x> [= <> > < >= <=] <y> [and] [or]  
-   - ( )
       
 - rule may be special procedure with argument list and token list
 
   jmpeq dst, src, src
-
-- relational operators (= <> > < >= <=)
 
 - bit operations
 

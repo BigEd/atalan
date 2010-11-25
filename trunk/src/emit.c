@@ -92,6 +92,12 @@ void EmitStrConst(char * str)
 	}
 }
 
+void EmitHex(UInt8 c)
+{
+	char h[16] = "0123456789abcdef";
+	EmitChar(h[(c >> 4) & 0xf]);
+	EmitChar(h[c & 0xf]);
+}
 
 void EmitVarName(Var * var)
 {
@@ -99,12 +105,23 @@ void EmitVarName(Var * var)
 
 	s = var->name;
 	if (s != NULL) {
-		while(c = *s++) {		
+		// If identifier starts with number, we prefix _N
+		c = *s;
+		if (c >='0' && c <= '9') {
+			EmitChar('_');
+			EmitChar('N');
+		}
+
+		while(c = *s++) {
 			if (c == '\'') {
 				EmitChar('_');
 				c = '_';
+			} if (c == '_' || (c >= 'a' && c <= 'z') || (c>='A' && c<='Z') || (c>='0' && c<='9')) {
+				EmitChar(c);
+			} else {
+				EmitChar('x');
+				EmitHex(c);
 			}
-			EmitChar(c);
 		}
 	}
 
