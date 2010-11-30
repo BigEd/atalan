@@ -2,14 +2,18 @@
 News
 ****
 
+- OPT: when comparing variable that has only two possible value and one of them is 0, always compare to zero
+
+==========
+30-Nov-2010
+==========
+
+- NEW: bitand, bitor, bitxor, bitnot operators
 - NEW: Signed integers assignment, add, sub, print
-- OPT: Check phase (optimize values before translation)
 - NEW: Initializing array or slice of array with constant
 - NEW: Assigning array to position at array (p(3) = x)
-
-- NEW: Print variable arguments with known value are replaced by strings 
-- FIX: print & format is now implemented as macro, not instruction
-
+- NEW: print & format is now implemented as macro, not instruction
+- OPT: Check phase (optimize values before translation)
 - OPT: Reuse variables in independent functions 
 - OPT: Variable merge (let a,5  let x,a  dead a => let x,5)
 - OPT: Replace printing of constant values by printing of strings

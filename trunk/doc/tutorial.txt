@@ -18,9 +18,13 @@ If you write variable name enclosed in square brackets inside string, it's
 contents will be printed.
 
 :::::::::::::::::::::::::::::::::::
-a,b:0..255
 a = 10
 b = 20
 c = a + b
 "Sum of [a] and [b] is [c]."
 :::::::::::::::::::::::::::::::::::
+
+Note, that is is not necessary to declaer variables. Type of variable is
+inferred from the expressions.
+
+ 

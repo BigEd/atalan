@@ -437,9 +437,9 @@ Operators
 + -            Addition, substraction
 sqrt           Square root
 lo hi          Low/high byte of a word (lo $abcd = $cd, hi $abcd = $ab)
-not            Binary negation
-and            Binary and 
-or xor         Binary or and exlusive or
+bitnot         Binary negation
+bitand         Binary and 
+bitor bitxor   Binary or and exlusive or
 ( )            Parentheses
 :::::::::::
 

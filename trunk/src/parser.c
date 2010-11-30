@@ -167,6 +167,7 @@ next:
 	if (NextIs(TOKEN_ENUM)) {
 		type = TypeAlloc(TYPE_INT);
 		type->range.flexible = true;
+		type->is_enum        = true;
 		if (TOK == TOKEN_INT) goto range;
 		goto const_list;
 

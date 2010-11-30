@@ -427,6 +427,49 @@ void ProcValuesUse(Var * proc)
 	}
 }
 
+Bool VarIsZeroNonzero(Var * var, Var ** p_zero)
+/*
+Purpose:
+	Test, if variable may have just two values, 0 and some other.
+	This is basically true for 0..1 integers or enums with 0 and oother value.
+*/
+{
+	Type * t;
+	Var * zero = NULL, * non_zero = NULL;
+	Var * item;
+
+	if (var == NULL) return false;
+	t = var->type;
+	if (t->variant == TYPE_INT) {
+		if (t->is_enum) {
+
+			for(item = VarFirstLocal(t->owner); item != NULL; item = VarNextLocal(t->owner, item)) {
+				if (item->mode == MODE_CONST) {
+					if (item->n == 0) {
+						zero = item;
+					} else {
+						if (non_zero != NULL) {
+							// There are two different non-zero constants!
+							if (non_zero->n != item->n) {
+								zero = NULL;
+								break;
+							}
+						} else {
+							non_zero = item;
+						}
+					}
+				}
+			}
+		} else {
+			if ((t->range.min == 0 && t->range.max == 1) || (t->range.min == -1 && t->range.max == 0)) {
+				zero = VarNewInt(0);
+			}
+		}
+	}
+	*p_zero = zero;
+	return zero != NULL;
+}
+
 Bool OptimizeValues(Var * proc)
 /*
    1. If assigning some value to variable (let) and the variable already contains such value, remove the let instruction
@@ -500,6 +543,7 @@ retry:
 
 				//TODO: Should be solved by blocks (when blocks are parsed, there can not be jump instruction nor label)
 				if (IS_INSTR_JUMP(i->op)) {
+
 					// jump istructions use label as result, we do not want to remove jumps
 				} else {
 
@@ -675,7 +719,7 @@ Purpose:
 {
 	Instr * i;
 	UInt32 n;
-	Var * r, * result, * arg1, * arg2;
+	Var * r, * result, * arg1, * arg2, * zero;
 	InstrBlock * blk;
 	InstrOp op;
 
@@ -688,6 +732,19 @@ Purpose:
 			op = i->op;
 			// Line instructions are not processed.
 			if (op == INSTR_LINE) continue;
+
+			// Try to convert compare with non-zero to compare versus zero
+			// If we compare variable that has only two possible values and one of them is 0, we want
+			// to always compare with the zero, because on most platforms, that test is more effective.
+
+			if (op == INSTR_IFEQ || op == INSTR_IFNE) {
+				arg1 = i->arg1;
+				arg2 = i->arg2;
+				if ((arg2->mode == MODE_CONST && arg2->n != 0) && VarIsZeroNonzero(arg1, &zero)) {
+					i->op = OpNot(i->op);
+					i->arg2 = zero;
+				}
+			}
 
 			result = i->result;
 			if (result != NULL && result->mode != MODE_LABEL) {
