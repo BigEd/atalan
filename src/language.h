@@ -226,6 +226,7 @@ typedef struct {
 struct TypeTag {
 	TypeVariant  variant;	// int, struct, proc, array
 	Bool         flexible;	// (read: inferenced)
+	Bool		 is_enum;	// MODE_INTEGER is enum
 	Type * base;			// type, on which this type is based (may be NULL)
 	Var * owner;			// original owner of this type
 	union {

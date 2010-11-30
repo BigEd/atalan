@@ -18,6 +18,13 @@ Atalan analyzes procedure call chain and if possible, reuses global variable
 space to several procedures.
  
 
+===============================
+Instruction level optimizations
+===============================
+
+- multiplication, division and module is performed using shift or and when applicable
+- when comparing variable that has only two possible value and one of them is 0, always compare to zero
+
 ===================
 Local optimizations
 ===================
@@ -27,6 +34,7 @@ Local optimizations
 - common subexpression elimination
 - live variable analysis
 - optimal operation is chosen according to variable range
+- variable merging  
 
 ==========================
 Control flow optimizations
@@ -36,6 +44,7 @@ Control flow optimizations
 - goto elimination (eliminate goto to goto)
 - dead code elimination
 - conditional jump around jump simplification
+- procedure arguments are implemented using 'global' variables (no stack)
 
 ==================
 Loop optimizations

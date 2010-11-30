@@ -6,7 +6,8 @@ Atalan is new high level programming language for MOS Technology 6502 microproce
 It is meant to be used for development on 8bit computers like Atari 800,
 C64 etc.
 
-Atalan is work in progress, it can however already generate working code.
+Atalan is work in progress, it can however already generate working code. In fact,
+in most cases it generates excellent code.
 
 Atalan is cross-platform development system. Compiler runs on desktop machine
 (Windows, Linux, OSX - it is developed just using ANSI C, so porting to other 
