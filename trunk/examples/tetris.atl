@@ -213,8 +213,8 @@ down'lock = 0
 ;New tile is always generated on same position.
 
 x,y = 19,1
-tile = RANDOM and 7
-next'tile = RANDOM and 7
+tile = RANDOM bitand 7
+next'tile = RANDOM bitand 7
 score = 0
 
 draw'tile next'tile NEXT_LEFT NEXT_TOP
@@ -311,7 +311,7 @@ else
 	;Next tile becomes falling tile and we generate and draw new next tile 
 	tile = next'tile
 	erase'tile next'tile NEXT_LEFT NEXT_TOP
-	next'tile = random and 7
+	next'tile = random bitand 7
 	draw'tile next'tile NEXT_LEFT NEXT_TOP
 	x,y = 19,1
 

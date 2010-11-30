@@ -174,10 +174,10 @@ Register declaration
 It is possible to place variable to specified address. This is usually used
 to define system and hardware registers.
 :::::::::::::
-PCOLR  @704:byte(4)		; player & missile graphics color (4 missiles)
-COLOR  @708:byte(5)		; playfield color
+PCOLR  @704:array(4)		; player & missile graphics color (4 missiles)
+COLOR  @708:array(5)		; playfield color
 SDLSTL @560:adr 			; address of beginning of display list
-STICK  @632:byte(4)
+STICK  @632:array(4)
 ::::::::::::::
 Value of some hardware registers changes automatically.
 It is necessary to mark such variables as 'in' or 'out'. 
@@ -212,7 +212,7 @@ It is possible to specify type too.
 :::::::::::::::::::::::::::
 @712 = 0				; set background color to black 
 @$230:adr = my_dlist
-@buf:byte(100) = 0		; set 100 bytes at address stored in variable buf to 0 (memset)
+@buf:array(100) = 0		; set 100 bytes at address stored in variable buf to 0 (memset)
 :::::::::::::::::::::::::::
  
 ======

@@ -215,8 +215,17 @@ Bool VarIsArrayElement(Var * var)
 {
 	return var != NULL && var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type->variant == TYPE_ARRAY;
 }
-
-
+/*
+Bool VarIsOut(Var * var)
+{
+	if (var == NULL) return false;
+	if (FlagOn(var->submode, SUBMODE_OUT)) return true;
+	if (var->mode == MODE_ELEMENT) {
+		return VarIsOut(var->adr);
+	}
+	return false;
+}
+*/
 Var * VarFindInt(Var * scope, UInt32 n)
 {
 	Var * var;

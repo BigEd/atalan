@@ -16,8 +16,8 @@ GRACTL = 0
 
 for i 
 	hpos(i)  = RANDOM
-	speed(i) = (RANDOM and 3) + 1
-	col(i)   = RANDOM or 3			;make the star color light enough 
+	speed(i) = (RANDOM mod 4) + 1
+	col(i)   = RANDOM bitor 3			;make the star color light enough 
 
 ;Setup sprite 0
 

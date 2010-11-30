@@ -2,6 +2,16 @@
 TODO
 ****
 
+TETRIS: Use random'tile routine with mod
+
+
+OPTIM: If comparing against value and there are only two options and one of them is ZERO,
+       always compare against zero. 
+
+   lda STRIG
+   cmp #button__state__pressed
+   jne _lbl3
+
 x@(a,b)
 
 
@@ -381,7 +391,6 @@ _lbl48:
    A is not used anymore, so here ldx #1 would be better.
    Maybe we may have the information on next use from live analysis?
 
-- optimize jumps
 - optimize ldx #5 ldx #6  to ldx #5, inx
 - multiply byte by 10 (use temporary _arr ?)
 - optimize x + 0, y * 1,... (do it in eval const?)

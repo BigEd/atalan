@@ -118,9 +118,9 @@ void AllocateVariables(Var * proc)
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
 //			printf("%s -> %s", proc2->name, proc->name);
 			if (proc2 != proc && !ProcCallsProc(proc, proc2) && !ProcCallsProc(proc2, proc)) {
-				if (proc2 == &ROOT_PROC || proc == &ROOT_PROC) {
-					printf("***\n");
-				}
+//				if (proc2 == &ROOT_PROC || proc == &ROOT_PROC) {
+//					printf("***\n");
+//				}
 				HeapAddVariables(&heap, proc2);
 			} else {
 //				printf("... Dependent");

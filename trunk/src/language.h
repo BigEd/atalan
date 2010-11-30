@@ -76,7 +76,10 @@ typedef enum {
 	TOKEN_ADR2,
 	TOKEN_DEBUG,
 	TOKEN_MOD,
-	TOKEN_XOR,
+	TOKEN_BITNOT,
+	TOKEN_BITAND,
+	TOKEN_BITOR,
+	TOKEN_BITXOR,
 	TOKEN_STRUCT,
 	TOKEN_USE,
 	TOKEN_REF,
@@ -276,6 +279,7 @@ typedef enum {
 
 
 #define VarLive            1
+#define VarDead			   0		// this is in fact just 0 state of VarLive, it cannot be tested
 #define VarUninitialized   2
 #define VarLoop            4		// loop variable (incremented during loop)
 #define VarLoopDependent   8		// variable is dependent (even transitively) on some loop variable
@@ -289,6 +293,8 @@ typedef enum {
 typedef unsigned int VarIdx;
 typedef char * Name;
 
+typedef UInt8 VarFlags;
+
 struct VarTag {
 
 	// Variable identification (name,idx,scope)
@@ -301,7 +307,7 @@ struct VarTag {
 	VarMode	mode;
 	VarSubmode submode;
 
-	UInt8   flags;
+	VarFlags  flags;
 	Var *	adr;	 // Address of variable in memory. For MODE_TYPE, this means alignment of variable of this type.
 					 // MODE_ELEMENT	Array to which this variable belongs
 					 // MODE_TUPLE      First variable of tuple
@@ -558,26 +564,22 @@ struct ExpTag {
 		Exp * arg[2];  // op != INSTR_VAR
 		Var * var;			// op == INSTR_VAR
 	};
-//	Exp * next;
 };
 
 /*
+
 Compiler instruction.
+
+We use three-address instructions. in the form  result = arg1 op arg2.
+
 */
 
 struct InstrTag {
 	InstrOp op;
-	UInt8 flags[3];		// live
 
 	//--- dest
 	Var * result;
-//	union {
-//		Var * arg[2];
-//		struct {
-//			UInt16 line_no;
-//			char * line;
-//		};
-//	};
+
 	union {
 		Var * arg1;
 		UInt16 line_no;
@@ -587,8 +589,10 @@ struct InstrTag {
 		char * line;
 	};
 
+	Instr * next_use[3];		// next use of result, arg1, arg2
+	UInt8 flags[3];		// live
+
 	Instr * next, * prev;
-//	Instr * src1, * src2;
 };
 
 /*
@@ -742,10 +746,18 @@ void ProcCheck(Var * proc);
  Optimize phase
 
 *************************************************************/
+
+Bool VarUsesVar(Var * var, Var * test_var);
+Bool InstrUsesVar(Instr * i, Var * var);
+Int16 VarTestReplace(Var ** p_var, Var * from, Var * to);
+Int16 VarReplace(Var ** p_var, Var * from, Var * to);
+
 void ProcOptimize(Var * proc);
 void GenerateBasicBlocks(Var * proc);
 Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
+Bool OptimizeVarMerge(Var * proc);
+
 void OptimizeJumps(Var * proc);
 void DeadCodeElimination(Var * proc);
 
@@ -780,4 +792,5 @@ extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro
 extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
+extern Var * VARS;				// list of variables
 

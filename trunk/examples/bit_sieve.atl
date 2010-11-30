@@ -25,12 +25,12 @@ rtclock2 = 0
 
 for i:0..bmax flags(i)=$aa
 
-for i:3..sqrt max_prime step 2 where (flags(i/8) and mask(i mod 8) <> 0)
+for i:3..sqrt max_prime step 2 where (flags(i/8) bitand mask(i mod 8) <> 0)
 	for k:i*i..max_prime step 2*i
-		flags(k/8) = flags(k/8) and maskx(k mod 8)
+		flags(k/8) = flags(k/8) bitand maskx(k mod 8)
 
 count = 1
-for k:3..max_prime step 2 where (flags(k/8) and mask(k mod 8) <> 0) 
+for k:3..max_prime step 2 where (flags(k/8) bitand mask(k mod 8) <> 0) 
 	inc count
 
 t = rtclock2 * 256 + rtclock1

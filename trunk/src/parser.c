@@ -42,7 +42,7 @@ Var * ParseFile();
 // This variable is set to true, when we parse expression inside condition.
 // It modifies parsing behaviour concernign and, or and not.
 
-UInt8 G_CONDITION_EXP;
+//UInt8 G_CONDITION_EXP;
 
 #define STR_NO_EOL 1
 void ParseString(UInt32 flags);
@@ -590,7 +590,7 @@ Purpose:
 	Type * idx_type;
 	Var * idx, * idx2, * item;
 	UInt16 bookmark;
-	Bool prev_cond;
+//	Bool prev_cond;
 	VarMode mode = MODE_ELEMENT;
 
 	// Array element access uses always () block
@@ -613,8 +613,8 @@ Purpose:
 	}
 
 	bookmark = SetBookmark();
-	prev_cond = G_CONDITION_EXP;
-	G_CONDITION_EXP = false;
+//	prev_cond = G_CONDITION_EXP;
+//	G_CONDITION_EXP = false;
 
 	// It may be (..<n>), use min as default
 	if (TOK == TOKEN_DOTDOT) {
@@ -671,7 +671,7 @@ Purpose:
 
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
-	G_CONDITION_EXP = prev_cond;
+	//G_CONDITION_EXP = prev_cond;
 
 	//ParseParenthesis();
 	// Result is temporary variable created by InstrBinary, 
@@ -856,7 +856,7 @@ void ParseUnary()
 	} else if (NextIs(TOKEN_LO)) {
 		ParseOperand();
 		InstrUnary(INSTR_LO);
-	}  else if (NextIs(TOKEN_NOT)) {
+	}  else if (NextIs(TOKEN_BITNOT)) {
 		ParseOperand();
 		InstrUnary(INSTR_NOT);
 	} else if (NextIs(TOKEN_SQRT)) {
@@ -916,16 +916,16 @@ void ParseBinaryAnd()
 	Var * var;
 	ParsePlusMinus();
 retry:
-	if (TOK == TOKEN_AND) {
+	if (TOK == TOKEN_BITAND) {
 		var = STACK[TOP];
-		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
+//		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
 			NextToken();
 			ParsePlusMinus();
 			if (TOK) {
 				InstrBinary(INSTR_AND);
 			}
 			goto retry;
-		}
+//		}
 	}
 }
 
@@ -933,13 +933,13 @@ void ParseBinaryOr()
 {
 	ParseBinaryAnd();
 retry:
-	if (!G_CONDITION_EXP && NextIs(TOKEN_OR)) {
+	if (NextIs(TOKEN_BITOR)) {
 		ParseBinaryAnd();
 		if (TOK) {
 			InstrBinary(INSTR_OR);
 		}
 		goto retry;
-	} else if (NextIs(TOKEN_XOR)) {
+	} else if (NextIs(TOKEN_BITXOR)) {
 		ParseBinaryAnd();
 		if (TOK) {
 			InstrBinary(INSTR_XOR);
@@ -1123,9 +1123,9 @@ void ParseRel()
 	if (TOK == TOKEN_OPEN_P) {
 		ParseCondParenthesis();
 	} else {
-		G_CONDITION_EXP = true;
+//		G_CONDITION_EXP = true;
 		ParseExpression(NULL);
-		G_CONDITION_EXP = false;
+//		G_CONDITION_EXP = false;
 		v1 = STACK[0];
 
 		while ((op = RelInstrFromToken()) != INSTR_VOID) {
@@ -1139,9 +1139,9 @@ void ParseRel()
 
 			if (!G_BLOCK->not) op = OpNot(op);
 			NextToken();
-			G_CONDITION_EXP = true;
+//			G_CONDITION_EXP = true;
 			ParseExpression(v1);
-			G_CONDITION_EXP = false;
+//			G_CONDITION_EXP = false;
 			if (TOK != TOKEN_ERROR) {
 				if (G_BLOCK->f_label == NULL) {
 					G_BLOCK->f_label = VarNewTmpLabel();
@@ -2002,6 +2002,7 @@ Purpose:
 					adr = VarFindScope(REGSET, LEX.name, 0);
 					if (adr == NULL) {
 						adr = VarFind2(LEX.name, 0);
+						NextToken();
 						if (adr == NULL) {
 							SyntaxError("$undefined regset or variable used as address");
 						}
@@ -2770,7 +2771,7 @@ void ParseInit()
 	MemEmptyVar(G_BLOCKS);
 	G_BLOCK = &G_BLOCKS[0];
 	G_BLOCK->command = TOKEN_PROC;
-	G_CONDITION_EXP = 0;
+//	G_CONDITION_EXP = 0;
 	SYSTEM_PARSE = true;
 }
 

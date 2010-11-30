@@ -209,6 +209,16 @@ Purpose:
 	//TODO: Blocks with labels, that are not jumped to (data labels) may be merged together
 }
 
+Instr * FirstInstr(InstrBlock * blk)
+/*
+Purpose:
+	Return first non-line instruction in the block.
+*/{
+	Instr * i;
+	for (i = blk->first; i != NULL && i->op == INSTR_LINE; i = i->next);
+	return i;
+}
+
 void OptimizeJumps(Var * proc)
 /*
 Purpose:
@@ -218,7 +228,7 @@ Purpose:
 
 	    ifeq x,y,l2
 	    jmp l1
-	    label l2@
+	    label l2
 
 	   will be translated to
 
@@ -234,7 +244,7 @@ Purpose:
 	while (blk != NULL) {
 		blk_to = blk->to;
 		if (blk_to != NULL) {
-			i = blk_to->first;
+			i = FirstInstr(blk_to);		//for (i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
 			cond_i = blk->last;
 
 			if (i != NULL && i->op == INSTR_GOTO) {
@@ -254,8 +264,8 @@ Purpose:
 retry:
 				label = cond_i->result;
 				blk_to = label->instr;
-				i = blk_to->first;
-				while (i != NULL && i->op == INSTR_LINE) i = i->next;
+				
+				i = FirstInstr(blk_to);	//for(i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
 				if (i != NULL && i->op == INSTR_GOTO && i->result != cond_i->result) {
 					cond_i->result = i->result;
 					goto retry;
