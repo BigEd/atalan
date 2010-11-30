@@ -11,6 +11,7 @@ News
 - FIX: print & format is now implemented as macro, not instruction
 
 - OPT: Reuse variables in independent functions 
+- OPT: Variable merge (let a,5  let x,a  dead a => let x,5)
 - OPT: Replace printing of constant values by printing of strings
 - OPT: Skip jumps ( bne _l1  jmp _l2  _l2@ => beq _l2)
 - OPT: Jump foldng (goto L1  L1@ goto L2@ => goto L2)

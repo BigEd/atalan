@@ -78,42 +78,42 @@ if z <> 1 goto fail
 z = 99 mod y
 if z <> 0 goto fail
 
-",and",
+",bitand",
 
-z = x and y				;%00001010,  %00000011
+z = x bitand y				;%00001010,  %00000011
 if z<>2 goto fail
 
-z = x and 8
+z = x bitand 8
 if z<>8 goto fail
 
-z = 2 and x
+z = 2 bitand x
 if z <> 2 goto fail
 
-",or",
+",bitor",
 
-z = x or y				;%00001010,  %00000011
+z = x bitor y				;%00001010,  %00000011
 if z<>11 goto fail
 
-z = x or 131
+z = x bitor 131
 if z<>139 goto fail
 
-z = 65 or x
+z = 65 bitor x
 if z <> 75 goto fail
 
-",xor",
+",bitxor",
 
-z = x xor y				;%00001010,  %00000011
+z = x bitxor y				;%00001010,  %00000011
 if z<>9 goto fail
 
-z = x xor 131
+z = x bitxor 131
 if z<>137 goto fail
 
-z = 67 xor x					;%00001010, %01000011
+z = 67 bitxor x					;%00001010, %01000011
 if z <> 73 goto fail
 
-",not"
+",bitnot"
 
-z = not x
+z = bitnot x
 if z <> 245 goto fail
 
 "Operator precedence"

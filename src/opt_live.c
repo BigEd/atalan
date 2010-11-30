@@ -1,26 +1,36 @@
 /*
 
-Dead store elimination
+Dead store elimination & next use information computation
 
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
-removal of assignments to variables that are not subsequently read, either because the lifetime of the variable ends or because of a subsequent assignment that will overwrite the first value.
+Removal of assignments to variables that are not subsequently read, either because the lifetime of the variable ends 
+or because of a subsequent assignment that will overwrite the first value.
 
 */
 
 #include "language.h"
-extern Var * VARS;		// global variables
 
-// flag is set to 1, if the variable is live
+// We use variable flag VarLive to mark the variable as used.
+// src_i is used as next_use information for variable.
 
-void VarMark(Var * var, Bool state)
+#define VarMarkLive(V) VarMark((V), VarLive)
+#define VarMarkDead(V) VarMark((V), VarDead)
+
+//TODO: Could we use special value of next_use as live information?
+//      I.e. next_use != NULL means dead, otherwise live
+
+void VarMark(Var * var, VarFlags state)
 /*
 Purpose:
 	Mark variable as used or dead.
 
 	Reference to array using variable may not be marked as dead or alive, as 
 	it may in fact reference other variable than we think in case the variable is changes.
+Input:
+	var		Variable to mark as live or dead
+	state	VarLive or VarDead
 */
 {
 	Var * var2;
@@ -32,15 +42,16 @@ Purpose:
 
 		// Reference uses the array variable
 		if (var->submode == SUBMODE_REF) {
-			VarMark(var->adr, 1);
+			VarMarkLive(var->adr);
 		}
 			
-		VarMark(var->var, 1);
+		VarMarkLive(var->var);
 
 		// Array references with variable indexes are always live
 
-		if (var->var->mode != MODE_CONST) state = 1;
+		if (var->var->mode != MODE_CONST) state = VarLive;
 	} else {
+		// If variable is alias for some other variable, mark the other variable too
 		if (var->adr != NULL) {
 			if (var->adr->mode == MODE_VAR) {
 				VarMark(var->adr, state);
@@ -48,27 +59,17 @@ Purpose:
 		}
 	}
 
-	var->flags = state;
+	var->flags = (var->flags & ~VarLive) | state;
 
+	// Each element, which has this variable as an array is marked same
 	FOR_EACH_VAR(var2)
 		if (var2->mode == MODE_ELEMENT) {
 			if (var2->adr == var) {
-				var2->flags = state;
+				var2->flags = (var2->flags & ~VarLive) | state;
 			}
 		}
 	NEXT_VAR
 }
-
-void VarMarkLive(Var * var)
-{
-	VarMark(var, 1);
-}
-
-void VarMarkDead(Var * var)
-{
-	VarMark(var, 0);
-}
-
 
 // 0 dead
 // 1 live
@@ -129,6 +130,7 @@ done:
 
 void MarkProcLive(Var * proc)
 {
+	//TODO: We should actually step through the code, as procedure may access and modify global variables
 	Var * var;
 
 	var = VarFirstLocal(proc);
@@ -136,21 +138,18 @@ void MarkProcLive(Var * proc)
 		if (FlagOff(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
 			VarMarkDead(var);
 		} else {
-			if (FlagOn(var->submode, SUBMODE_ARG_IN)) VarMarkLive(var);
 			if (FlagOn(var->submode, SUBMODE_ARG_OUT)) VarMarkDead(var);
 		}
 		var = VarNextLocal(proc, var);
 	}
-}
 
-Bool VarIsOut(Var * var)
-{
-	if (var == NULL) return false;
-	if (FlagOn(var->submode, SUBMODE_OUT)) return true;
-	if (var->mode == MODE_ELEMENT) {
-		return VarIsOut(var->adr);
+	// Procedure may use same variable both for input and output (for example using aliasing)
+	// a:proc >x@_a <y@_a
+	// In such case, marking variable as live has precence.
+
+	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+		if (FlagOn(var->submode, SUBMODE_ARG_IN)) VarMarkLive(var);
 	}
-	return false;
 }
 
 Bool OptimizeLive(Var * proc)
@@ -180,49 +179,38 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-			if (var->mode == MODE_ELEMENT && StrEqual(var->adr->name, "count") && var->var->mode == MODE_CONST && var->var->n == 0) {
-				printf("");
-			}
+//			if (var->mode == MODE_ELEMENT && StrEqual(var->adr->name, "count") && var->var->mode == MODE_CONST && var->var->n == 0) {
+//				printf("");
+//			}
 
+			// Procedure output argument are live in last block
 			if (blk->to == NULL && var->submode == SUBMODE_ARG_OUT) {
-				var->flags = 1;		// procedure output arguments are live in last block
-			} else if (blk->to == NULL && !VarIsOut(var)) {
-				var->flags = 0;
-			} else if (VarIsOut(var)) {
-				var->flags = 1;		// out variables are always live, procedure output arguments are line in last block
+				SetFlagOn(var->flags, VarLive);
+			// 
+			} else if (blk->to == NULL && FlagOff(var->submode, SUBMODE_ARG_OUT)) {
+				SetFlagOff(var->flags, VarLive);
+
+			// Out variables are always live
+			} else if (FlagOn(var->submode, SUBMODE_OUT)) {
+				SetFlagOn(var->flags, VarLive);
 			} else {
-				var->flags = 0;
+				SetFlagOff(var->flags, VarLive);
 				MarkBlockAsUnprocessed(proc->instr);
 				if (VarIsLiveInBlock(proc, blk->to, var) == 1 || VarIsLiveInBlock(proc, blk->cond_to, var) == 1) {
-					var->flags = 1;
+					SetFlagOn(var->flags, VarLive);
 				}
 			}
 		NEXT_VAR
 
-		// Skip the data part (data etc.)
-		// At the end of main procedure (but possibly in others too) there is a set of constant data initialization
-		// and allocation.
-		// There are label instructions, to which it will not be jumped, but that are used to reference the data. (data labels)
-		// These labels would cause marking all variables as live, so we skip that part of code.
-/*
-		for(i = blk->last; i != NULL; i = i->prev, n--) {
-			op = i->op;
-			if (op != INSTR_INCLUDE && op != INSTR_LINE && op != INSTR_LABEL && op != INSTR_DATA && op != INSTR_PTR && op != INSTR_ALLOC 
-				&& op != INSTR_FILE && op != INSTR_ALIGN && op != INSTR_ARRAY_INDEX) break;
-		}
-*/
 		for(i = blk->last; i != NULL; i = i->prev, n--) {
 
 			op = i->op;
 			if (op == INSTR_LINE) continue;
 
-			// Mark arguments as live (used)
-			// We must first mark the arguments, as we do not want the instructions like add x, x, 1 to be removed (x is argument)
-
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
-					if (result->flags == 0 && !VarIsLabel(result) && !VarIsArray(result) && FlagOff(result->submode, SUBMODE_REF|SUBMODE_OUT)) {
+					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && FlagOff(result->submode, SUBMODE_REF|SUBMODE_OUT)) {
 						if (VERBOSE) {
 							printf("removed dead %ld:", n); InstrPrint(i);
 						}
@@ -234,28 +222,43 @@ Bool OptimizeLive(Var * proc)
 				}
 			}
 
-			// Mark result as dead
+			//===== Mark result as dead
+			//      Result must be marked first dead first, to properly handle instructions like x = x + 1
 
 			if (result != NULL) {
 				// For reference, the adr is marked live, reference is not marked dead, as we may not know, what adr there is
-				if (FlagOn(result->submode, SUBMODE_REF)) {
-					VarMarkLive(result->adr);
-				} else if (!VarIsOut(result)) {
+//				if (FlagOn(result->submode, SUBMODE_REF)) {
+//					VarMarkLive(result->adr);
+//				} else 
+				if (FlagOff(result->submode, SUBMODE_OUT)) {
 					VarMarkDead(result);
 				}
 				// Array indexes are marked live (even if value itself is marked dead)
-				if (result->mode == MODE_ELEMENT) {
-					VarMarkLive(result->var);
-				}
+//				if (result->mode == MODE_ELEMENT) {
+//					VarMarkLive(result->var);
+//				}
+				result->src_i = NULL;			// next use
 			}
 
+			//===== Mark arguments as live (used)
 
+			// For procedure call, we mark as live variable all variables used in that procedure
 			if (op == INSTR_CALL) {
 				MarkProcLive(i->result);
 			} else {
-				// Mark arguments as live (used)
 				VarMarkLive(i->arg1);
 				VarMarkLive(i->arg2);
+
+				// Mark next use of the parameter argument to this instruction
+
+				if (i->arg1 != NULL) {
+					i->next_use[1] = i->arg1->src_i;
+					i->arg1->src_i = i;
+				}
+				if (i->arg2 != NULL) {
+					i->next_use[2] = i->arg2->src_i;
+					i->arg2->src_i = i;
+				}
 			}
 		}
 	}

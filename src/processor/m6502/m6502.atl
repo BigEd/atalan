@@ -26,12 +26,12 @@ _ac@(_a,_c)
 
 type
    byte:0..255
-   word:0..65535
    card:0..65535
+   int:-32768..32767
    long:0..$ffffff
    sbyte:-128..127
    byte1:byte or sbyte
-   byte2:0..65535
+   byte2:card or int
    
 ;   ptr:0..65535     ;ptr defines size of pointer and memory limits
 
@@ -158,13 +158,7 @@ rule let %A:byte(%B:byte),%C:byte(%D:byte) = instr
 	let %A(%B), _a
 
 ;======= 2-byte array with one byte index
-
-;rule let %A:byte2, %C:byte2(%D:byte) = instr
-;	let %A(0), %C.lo(%D)
-;	let %A(1), %C.hi(%D)
 	
-	
-
 ;2D Array (2x byte index, byte value)
 ;We use indexing using Y register.
 
@@ -201,7 +195,8 @@ rule let %A:card,const %B:card = instr
   let _a, %Z
   let %A(1),_a
 
-rule let %A:card, %B:byte = instr
+;int <- byte,  card <- byte
+rule let %A:byte2, %B:byte = instr
 	let _a,%B
 	let %A(0), _a
 	let _a, 0
@@ -214,7 +209,7 @@ rule let %A:byte, %B:card = instr
 	let %A, _a
 
 
-rule let %A:card,%B:card   = instr
+rule let %A:byte2,%B:byte2   = instr
   let _a,%B(0)
   let %A(0),_a
   let _a,%B(1)
@@ -317,10 +312,14 @@ rule let_adr _a, %A(1) = "   lda #>%A"
 rule lo %A, %B = instr
   lo _a, %B  
   let %A, _a
-  
+
+rule lo _a, %A:byte2 = instr
+	let _a, %A(0)
+	  
 rule lo _a, %A(_y) = "   lda %A_lo,y"
 rule lo _a,const %A     = "   lda #<%A"
-rule lo _a,%A:card = "   lda %A"
+rule lo _a,%A:byte1 = "   lda %A"
+;rule lo _a,%A:card = "   lda %A"
 rule lo _x, %A     =  "   ldx %A"
 rule lo _y, %A     =  "   ldy %A"
 
@@ -844,11 +843,20 @@ rule mul %A:card,%B:byte, 32768    = instr
 	let _a, 0
 	let %A(0), _a
 
-_sys_mul8:proc m1@_a m2@_x >_TEMPW2:0..65025
+_sys_mul8:proc m1@_a m2@_x >r@_TEMPW2
 
 ;System routine for multiplication.
 
 rule mul %A:card, %B:byte, %C:byte = instr
+	let _a, %B			;TODO: let _sys_mul8.m1, %B
+	let _x, %C
+	call _sys_mul8
+	ref _a					;mul trashes _a and _x
+	ref _x          ;x is in fact 0, but we do not have a way of defining this for now
+									;something like ASSERT would be interesting
+	let %A, _TEMPW2
+
+rule mul %A:int, %B:sbyte, %C:sbyte = instr
 	let _a, %B			;TODO: let _sys_mul8.m1, %B
 	let _x, %C
 	call _sys_mul8
@@ -888,7 +896,7 @@ rule sqrt %A:card, %B:card = instr
 	
 ;*********** Division
 
-_sys_div8:proc a@_TEMPW1:card b@_a:byte >res@_a:byte
+_sys_div8:proc a@_TEMPW1:card b@_a:byte >res@_a:byte >remainder@_x:byte
 
 rule div %A:byte, %B:byte, 2       = instr
 	let _a, %B
@@ -1464,25 +1472,25 @@ rule let _a,_y      = "   tya"
 
 ;LDX
 
-rule let _x,const %A:byte   = "   ldx #%A"
-rule let _x,%A:byte        = "   ldx %A"
+rule let _x,const %A:byte1   = "   ldx #%A"
+rule let _x,%A:byte1        = "   ldx %A"
 rule let _x,%A(const %B) = "   ldx %A+%B"
-rule let _x,%A:byte(_y)       = "   ldx %A,y"
+rule let _x,%A:byte1(_y)       = "   ldx %A,y"
 
 ;LDY
-rule let _y,const% A:byte   = "   ldy #%A"
-rule let _y,%A:byte        = "   ldy %A"
+rule let _y,const% A:byte1   = "   ldy #%A"
+rule let _y,%A:byte1        = "   ldy %A"
 rule let _y,%A(const %B) = "   ldy %A+%B"
-rule let _y,%A:byte(_x)       = "   ldy %A,x"
+rule let _y,%A:byte1(_x)       = "   ldy %A,x"
 
 ;LDA
 
 rule let _a,const %A:byte1    = "   lda #%A"
 rule let _a,%A:byte1     = "   lda %A"
 
-rule let _a, %A:byte(0)  = "   lda %A"       ;would be handled by next rule but we do not want +0 there
-rule let _a,%A:byte(const %B)  = "   lda %A+%B"
-rule let _a, %A:byte(_x) = "   lda %A,x"
+rule let _a, %A:byte1(0)  = "   lda %A"       ;would be handled by next rule but we do not want +0 there
+rule let _a,%A:byte1(const %B)  = "   lda %A+%B"
+rule let _a, %A:byte1(_x) = "   lda %A,x"
 
 rule let _a, @%A(_y)  = "   lda (%A),y"
 

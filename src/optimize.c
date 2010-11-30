@@ -11,11 +11,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #define PEEPHOLE_SIZE 2
 //extern Bool VERBOSE;
-extern Var * VARS;		// global variables
 extern Var   ROOT_PROC;
-
-
-
 
 void VarIncRead(Var * var)
 {
@@ -736,10 +732,14 @@ void OptimizeCombined(Var * proc)
 {
 	Bool modified;
 	do {
-//		modified = OptimizePeephole(proc);
-		modified = OptimizeLive(proc);
-		modified |= OptimizeValues(proc);
+		do {
+			modified = OptimizeLive(proc);
+			modified |= OptimizeValues(proc);
+		} while(modified);
+
+		modified |= OptimizeVarMerge(proc);
 	} while(modified);
+
 }
 
 void ProcOptimize(Var * proc)

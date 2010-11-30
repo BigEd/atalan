@@ -15,8 +15,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-extern Var * VARS;		// global variables
-
 void ExpFree(Exp ** p_exp)
 {
 	Exp * exp;
@@ -53,28 +51,7 @@ void ResetValues()
 }
 
 Bool VarUsesVar(Var * var, Var * test_var);
-/*
-Bool ExprUsesVar(Instr * i, Var * var)
-{
-	Bool b;
 
-	if (i->src1 != NULL) {
-		b = ExprUsesVar(i->src1, var);
-	} else {
-		b = VarUsesVar(i->arg1, var);
-	}
-
-	if (!b) {
-		if (i->src2 != NULL) {
-			b = ExprUsesVar(i->src2, var);
-		} else {
-			b = VarUsesVar(i->arg2, var);
-//			b = (var == i->arg2);
-		}
-	}
-	return b;
-}
-*/
 void ResetValue(Var * res)
 /*
 Purpose:
@@ -114,6 +91,13 @@ Purpose:
 			}
 		}
 	NEXT_VAR
+
+	var = res->adr;
+	if (var != NULL) {
+		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+			ResetValue(var);
+		}
+	}
 }
 
 void ResetVarDep(Var * res)
@@ -127,6 +111,8 @@ Purpose:
 	Exp * exp;
 //	Bool b;
 
+//	ExpFree(&res->dep);
+
 	FOR_EACH_VAR(var)
 		exp = var->dep;
 		if (exp != NULL) {
@@ -135,6 +121,17 @@ Purpose:
 			}
 		}
 	NEXT_VAR
+
+	// If the variable is alias for some other variable,
+	// reset aliased variable too
+
+	var = res->adr;
+	if (var != NULL) {
+		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+			ResetVarDep(var);
+		}
+	}
+
 }
 
 /*********************************
@@ -229,7 +226,10 @@ char * g_InstrName[INSTR_CNT] =
 	">>",   // INSTR_ROR,				// bitwise rotate left
 	"",   // INSTR_DEBUG,
 	"mod",   // INSTR_MOD,
-	"xor",   // INSTR_XOR,
+	"bitnot",
+	"bitand",
+	"bitor"
+	"bitxor",   // INSTR_XOR,
 	"not",   // INSTR_NOT,
 
 	"",   // INSTR_LINE,				// reference line in the source code
@@ -394,18 +394,31 @@ void ProcValuesUse(Var * proc)
 {
 	Instr * i;
 	InstrBlock * blk;
+	Var * var;
 
 	if (FlagOff(proc->flags, VarProcessed)) {
 		SetFlagOn(proc->flags, VarProcessed);
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
-			for(i = blk->first; i != NULL; i = i->next) {
-				if (i->op == INSTR_CALL) {
-					ProcValuesUse(i->result);
-				} else if (IS_INSTR_JUMP(i->op)) {
-					// jump instructions do have result, but it is label we jump to
-				} else {
-					if (i->result != NULL) {
-						ResetValue(i->result);
+
+		// Some external procedures may be only declared, in such case,
+		// we just clear it's output variables
+
+		if (proc->instr == NULL) {
+			for (var = FirstArg(proc, SUBMODE_ARG_OUT); var != NULL; var = NextArg(proc, var, SUBMODE_ARG_OUT)) {
+				ResetValue(var);
+				ResetVarDep(var);
+			}
+		} else {
+			for(blk = proc->instr; blk != NULL; blk = blk->next) {
+				for(i = blk->first; i != NULL; i = i->next) {
+					if (i->op == INSTR_CALL) {
+						ProcValuesUse(i->result);
+					} else if (IS_INSTR_JUMP(i->op)) {
+						// jump instructions do have result, but it is label we jump to
+					} else {
+						if (i->result != NULL) {
+							ResetValue(i->result);
+							ResetVarDep(i->result);
+						}
 					}
 				}
 			}
@@ -476,6 +489,7 @@ retry:
 			// When label is encountered, we must reset all values, because we may come from other places
 			if (i->op == INSTR_CALL) {
 				ProcValuesUse(i->result);
+				continue;
 //				ResetValues();
 			}
 
@@ -501,6 +515,7 @@ retry:
 					// (for example sequence of mul a,a,2  mul a,a,2
 
 					m3 = false;
+
 					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
 						m3 = ExpEquivalentInstr(result->dep, i);
 					}
@@ -696,4 +711,77 @@ Purpose:
 			}
 		}
 	}
+}
+
+
+Bool OptimizeVarMerge(Var * proc)
+/*
+Purpose:
+	Optimize instruction sequences like:
+
+			let a,10
+			let b,a
+			dead a
+	to
+
+			let b,10
+*/{
+
+	Instr * i, * i2, ni;
+	Var * result, * arg1;
+	InstrBlock * blk;
+	InstrOp op;
+	Bool modified = false;
+	int q;
+	UInt32 n;
+
+	for (blk = proc->instr; blk != NULL; blk = blk->next) {
+		for (i = blk->first, n = 1; i != NULL; i = i->next, n++) {
+next:
+			if (i == NULL) break;
+			op = i->op;
+			if (op == INSTR_LET) {
+				result = i->result;
+				arg1   = i->arg1;
+				if ((arg1->mode == MODE_VAR || arg1->mode == MODE_ARG) && i->next_use[1] == NULL) {
+					for /*test*/ (i2 = i->prev; i2 != NULL; i2 = i2->prev) {
+
+						if (i2->op == INSTR_LINE) continue;
+
+						// Test, that it is possible to translate the instruction using new register
+
+						memcpy(&ni, i2, sizeof(Instr));
+						q = VarTestReplace(&ni.result, arg1, result);
+						q += VarTestReplace(&ni.arg1, arg1, result);
+						q += VarTestReplace(&ni.arg2, arg1, result);
+						if (q != 0 && EmitRule(&ni) == NULL) break;
+
+						// We sucesfully found source instruction, this means we can replace arg1 with result
+						if (i2->result == arg1 && !VarUsesVar(i2->arg1, arg1) && !VarUsesVar(i2->arg2, arg1)) {
+
+							//==== We have suceeded, replace the register
+							
+							if (VERBOSE) {
+								printf("Merging %ld", n); InstrPrint(i);
+							}
+
+							modified = true;
+
+							for (;i2 != i; i2 = i2->next) {
+								if (i2->op == INSTR_LINE) continue;
+								VarReplace(&i2->result, arg1, result);
+								VarReplace(&i2->arg1, arg1, result);
+								VarReplace(&i2->arg2, arg1, result);
+							}
+							i = InstrDelete(blk, i);
+							goto next;
+						}
+						if (InstrUsesVar(i2, result)) break;
+
+					} /* test */
+				}
+			}
+		}
+	}
+	return modified;
 }
