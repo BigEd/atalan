@@ -22,8 +22,10 @@ void VarIncRead(Var * var)
 			var->flags |= VarUninitialized;
 		}
 		if (var->mode == MODE_ELEMENT) {
-			var->adr->read++;
-			var->var->read++;
+			VarIncRead(var->adr);
+			VarIncRead(var->var);
+		} else {
+			if (var->adr != NULL) VarIncRead(var->adr);
 		}
 	}
 }
@@ -33,8 +35,10 @@ void VarIncWrite(Var * var)
 	if (var != NULL) {
 		var->write++;
 		if (var->mode == MODE_ELEMENT) {
-			var->adr->write++;
-			var->var->read++;
+			VarIncWrite(var->adr);
+			VarIncRead(var->var);
+		} else {
+			if (var->adr != NULL) VarIncRead(var->adr);
 		}
 	}
 }
@@ -111,10 +115,8 @@ void VarUse()
 	VarResetUse();
 
 	FOR_EACH_VAR(var)
-		if (var->type != NULL && var->type->variant == TYPE_PROC) {
-			if (var->instr != NULL) {
-				InstrVarUse(var->instr, NULL);
-			}
+		if (var->type != NULL && var->type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+			InstrVarUse(var->instr, NULL);
 		}
 	NEXT_VAR
 

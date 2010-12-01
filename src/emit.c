@@ -339,19 +339,11 @@ void EmitLabels()
 	Type * type;
 	UInt32 n;
 
-	n = 1;
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+	for(var = VarFirst(), n = 1; var != NULL; var = VarNext(var), n++) {
 		type = var->type;
 
-//		if (var->idx == 100) {
-//			PrintVar(var);
-//		}
-
-//		if ((var->name != NULL) && (strcmp("i", var->name) == 0) && (var->scope->mode == MODE_SCOPE) && (var->scope->idx == 6)) {
-//			PrintVar(var);
-//		}
-
-		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) goto skip;
+		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) continue;
+		if (var->scope == REGSET) continue;
 		if (
 			   (var->adr != NULL && var->adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
 			|| (var->mode == MODE_CONST && var->read > 0 && var->name != NULL > 0)
@@ -372,8 +364,6 @@ void EmitLabels()
 			instr.arg1 = ov;
 			EmitInstr(&instr);
 		}
-skip:
-		n++;
 	}
 }
 
