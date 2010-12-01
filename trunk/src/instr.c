@@ -770,6 +770,18 @@ Argument:
 	}
 }
 
+Var * VarReg(Var * var)
+{
+	Var * reg;
+
+	reg = var;
+	while(reg != NULL && reg->adr != NULL) {
+		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
+		reg = reg->adr;
+	}
+	return var;
+}
+
 Bool InstrTranslate(Instr * i, Bool * p_modified)
 {
 	Rule * rule;
@@ -806,6 +818,18 @@ Purpose:
 	UInt32 ln;
 	Var * a = NULL;
 	Instr i2;
+
+	// As first step, we translate all variables on register address to actual registers
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_LINE) continue;
+			i->result = VarReg(i->result);
+			i->arg1   = VarReg(i->arg1);
+			i->arg2   = VarReg(i->arg2);
+		}
+	}
+
 
 	// We perform as many translation steps as necessary
 	// Some translation rules may use other translation rules, so more than one step may be necessary.

@@ -55,12 +55,12 @@ Bool VarUsesVar(Var * var, Var * test_var);
 void ResetValue(Var * res)
 /*
 Purpose:
+	The value is modified in code to different value.
 	Set all references to specified value to NULL in all values.
 */
 {
 	Var * var;
 	Instr * i;
-//	Bool b;
 
 	FOR_EACH_VAR(var)
 		i = var->src_i;
@@ -74,17 +74,12 @@ Purpose:
 			// add r, p, q
 
 			if (i->op == INSTR_LET) {
-//				if (ExprUsesVar(i, res)) {
+				//TODO: Here may be error, when we get reference to instruction, which in fact uses the variable
 				if (i->arg1 == res) {
-//					printf("");
-//				}
-//				if (b) {
-//					var->src_i = NULL;
 					i->result->src_i = i->arg1->src_i;
 				}
 			} else {
 				//TODO: Only reset the instruction, if there is no source
-//				if (ExprUsesVar(i, res)) {
 				if (i->arg1 == res || i->arg2 == res) {
 					var->src_i = NULL;
 				}
@@ -92,12 +87,16 @@ Purpose:
 		}
 	NEXT_VAR
 
+	// If value is alias to some other value, reset it too
+	//TODO: How about element (non constant, let's say?)
 	var = res->adr;
 	if (var != NULL) {
 		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
 			ResetValue(var);
 		}
 	}
+
+	res->src_i = NULL;
 }
 
 void ResetVarDep(Var * res)
@@ -109,9 +108,6 @@ Purpose:
 {
 	Var * var;
 	Exp * exp;
-//	Bool b;
-
-//	ExpFree(&res->dep);
 
 	FOR_EACH_VAR(var)
 		exp = var->dep;
@@ -501,6 +497,7 @@ Bool OptimizeValues(Var * proc)
 	modified = false;
 	n = 1;
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		
 		ResetValues();
 
 		for(i = blk->first; i != NULL; i = i->next, n++) {
@@ -510,30 +507,9 @@ retry:
 			// Line instructions are not processed.
 			if (i->op == INSTR_LINE) continue;
 
-			// Create tree of expressions.
-			// Instruction has reference to instructions, whose result is used as argument to this instruction
-/*
-			if (i->arg1 != NULL) {
-				src_i = i->arg1->src_i;
-				// Do not add temporary let instructions into the tree.
-				if (src_i != NULL) {
-					if (src_i->op == INSTR_LET && src_i->src1 != NULL) src_i = src_i->src1;
-				}
-				i->src1 = src_i;
-			}
-			if (i->arg2 != NULL) {
-				src_i = i->arg2->src_i;
-				if (src_i != NULL) {
-					if (src_i->op == INSTR_LET && src_i->src1 != NULL) src_i = src_i->src1;
-				}
-				i->src2 = src_i;
-			}
-*/
-			// When label is encountered, we must reset all values, because we may come from other places
 			if (i->op == INSTR_CALL) {
 				ProcValuesUse(i->result);
 				continue;
-//				ResetValues();
 			}
 
 			result = i->result;
@@ -669,7 +645,6 @@ retry:
 
 					// We have evaluated the instruction, change it to LET <result>,r
 					if (r != NULL) {
-//						i2.op = INSTR_LET; i2.result = i->result; i2.arg1 = r; i2.arg2 = NULL;
 						if (EmitRule2(INSTR_LET, i->result, r, NULL)) {
 							i->op = INSTR_LET;
 							i->arg1 = r;
@@ -691,6 +666,9 @@ retry:
 						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
 					if (arg1->mode == MODE_CONST) {
+						if (VERBOSE) {
+							printf("Arg to const %ld:", n); InstrPrint(i);
+						}
 						i->op = INSTR_STR_ARG;
 						sprintf(buf, "%d", arg1->n);
 						i->arg1 = VarNewStr(buf);
