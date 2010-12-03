@@ -2119,8 +2119,11 @@ Purpose:
 							// Call format routine (set adrees argument)
 							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
 							ParseString(STR_NO_EOL);
+						} else if (var->mode == MODE_CONST) {
+							VarLetStr(var, LEX.name);
+							NextToken();
 						} else {
-							SyntaxError("string may be assigned only to variable");
+							SyntaxError("string may be assigned only to variable or to constant");
 						}
 					} else {
 
@@ -2390,6 +2393,8 @@ void ParseRule()
 	UInt8 i;
 	Rule * rule;
 //	Var * scope;
+	char buf[255];
+	char *s, *d, c;
 
 	op = ParseInstrOp();
 	if (TOK == TOKEN_ERROR) return;
@@ -2410,9 +2415,7 @@ void ParseRule()
 
 	if (NextIs(TOKEN_EQUAL)) {
 
-//		scope = SCOPE;
-//		SCOPE = RULE_SCOPE;
-//		EnterLocalScope();
+//		EnterBlock(TOKEN_VOID);
 
 		if (NextIs(TOKEN_INSTR)) {
 			InstrBlockPush();
@@ -2424,7 +2427,23 @@ void ParseRule()
 			if (TOK == TOKEN_STRING) {
 				InstrBlockPush();
 				do {
-					Gen(INSTR_EMIT, NULL, VarNewStr(LEX.name), NULL);
+
+					// Rule strings may are preprocessed so, that %/ is replaced by current path.
+					s = LEX.name;
+					d = buf;
+					do {
+						c = *s++;
+						if (c == '%' && s[0] == '/') {
+							strcpy(d, FILE_DIR);
+							d += strlen(FILE_DIR);
+							s++;
+						} else {
+							*d++ = c;
+						}
+					} while (c != 0);
+
+					Gen(INSTR_EMIT, NULL, VarNewStr(buf), NULL);
+
 					NextToken();
 				} while (TOK == TOKEN_STRING);
 				rule->to = InstrBlockPop();
@@ -2432,8 +2451,7 @@ void ParseRule()
 				SyntaxError("Expected instruction or string");
 			}
 		}
-//		ExitScope();
-//		SCOPE = scope;
+//		NextIs(TOKEN_BLOCK_END);
 	}
 
 	if (TOK != TOKEN_ERROR) {

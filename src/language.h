@@ -391,11 +391,15 @@ typedef enum {
 
 	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
 	INSTR_DIVCARRY,
+	INSTR_COMPILER,
+	INSTR_CODE_END,			// end of CODE segment and start of data segment
+	INSTR_DATA_END,			// end of data segment and start of variables segment
 
 	// Following 'instructions' are used in expressions
 	INSTR_VAR,
 	INSTR_ELEMENT,			// access array element (left operand is array, right is index)
 	INSTR_LIST,				// create list of two elements
+
 
 	INSTR_CNT
 } InstrOp;
@@ -491,6 +495,8 @@ Var * VarNewStr(char * str);
 Var * VarNewLabel(char * name);
 Var * FindOrAllocLabel(char * name, UInt16 idx);
 
+void VarLetStr(Var * var, char * str);
+
 Var * VarNewTmp(long idx, Type * type);
 Var * VarNewTmpLabel();
 Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
@@ -535,6 +541,8 @@ Var * VarNewTuple(Var * left, Var * right);
 void VarResetUse();
 
 void VarFree(Var * var);
+
+void VarEmitAlloc();
 
 #define FOR_EACH_VAR(v) for(v = VARS; v != NULL; v = v->next) {
 #define NEXT_VAR }
@@ -783,10 +791,13 @@ Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
 Bool EmitOpen(char * filename);
 void EmitClose();
 Bool EmitInstr(Instr * code);
+Bool EmitInstrOp(InstrOp op, Var * result, Var * arg1, Var * arg2); 
 Bool EmitProc(Var * proc);
 void EmitLabels();
 void EmitProcedures();
 void EmitAsmIncludes();
+void EmitOpenBuffer(char * buf);
+void EmitCloseBuffer();
 
 extern Bool VERBOSE;
 extern Var * INTERRUPT;

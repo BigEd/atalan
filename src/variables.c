@@ -255,13 +255,18 @@ Purpose:
 	return var;
 }
 
+void VarLetStr(Var * var, char * str)
+{
+	var->type = &TSTR;
+	var->value_nonempty = true;
+	var->str = StrAlloc(str);
+}
+
 Var * VarNewStr(char * str)
 {
 	Var * var;
 	var = VarAlloc(MODE_CONST, NULL, 0);
-	var->type = &TSTR;
-	var->value_nonempty = true;
-	var->str = StrAlloc(str);
+	VarLetStr(var, str);
 	return var;
 }
 
@@ -449,6 +454,50 @@ Int16 TypeDim(Type * type)
 	return d;
 }
 
+void VarEmitAlloc()
+/*
+Purpose:	
+	Emit instructions allocating variables, that are not placed at specific location.
+*/
+{
+	Var * var, *cnst, *cnst2;
+	Type * type, * dim;
+	UInt32 size;	//, i;
+	UInt8 d;
+
+	// Generate empty arrays
+
+	FOR_EACH_VAR(var)
+		type = var->type;
+		if (type != NULL) {
+			if (var->mode == MODE_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
+
+				size = 1;	// size of basic element (byte by default)
+				for(d=0; d<MAX_DIM_COUNT; d++) {			
+					dim = type->dim[d];
+					if (dim == NULL) break;
+					size *= dim->range.max - dim->range.min + 1;
+				}
+				if (d == 2) {
+					dim = type->dim[0];
+					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
+					dim = type->dim[1];
+					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
+					EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+					EmitInstrOp(INSTR_ALLOC, var, cnst, cnst2);
+//					Gen(INSTR_ALLOC, var, cnst, cnst2);
+				} else {
+					cnst = VarNewInt(size);
+					EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+					EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
+//					GenLabel(var);		// use the variable as label - this will set the address part of the variable
+//					Gen(INSTR_ALLOC, var, cnst, NULL);
+				}
+			}
+		}
+	NEXT_VAR
+}
+
 void VarGenerateArrays()
 /*
 Purpose:
@@ -457,10 +506,9 @@ Purpose:
 {
 	Var * var, *cnst, *cnst2, *type_var;
 	Type * type, * dim;
-	UInt32 size;	//, i;
 	UInt8 d;
 
-	// Generate initialized arrays
+	// Generate initialized arrays, where location is not specified
 
 	FOR_EACH_VAR(var)
 		if (type = var->type) {
@@ -493,35 +541,6 @@ Purpose:
 					dim = type->dim[1];
 					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
 					Gen(INSTR_ARRAY_INDEX, var, cnst, cnst2);
-				}
-			}
-		}
-	NEXT_VAR
-
-	// Generate empty arrays
-
-	FOR_EACH_VAR(var)
-		type = var->type;
-		if (type != NULL) {
-			if (var->mode == MODE_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
-
-				size = 1;	// size of basic element (byte by default)
-				for(d=0; d<MAX_DIM_COUNT; d++) {			
-					dim = type->dim[d];
-					if (dim == NULL) break;
-					size *= dim->range.max - dim->range.min + 1;
-				}
-				if (d == 2) {
-					dim = type->dim[0];
-					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
-					dim = type->dim[1];
-					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
-					GenLabel(var);		// use the variable as label - this will set the address part of the variable
-					Gen(INSTR_ALLOC, var, cnst, cnst2);
-				} else {
-					cnst = VarNewInt(size);
-					GenLabel(var);		// use the variable as label - this will set the address part of the variable
-					Gen(INSTR_ALLOC, var, cnst, NULL);
 				}
 			}
 		}
@@ -597,10 +616,11 @@ Arguments:
 	Var * var;
 	UInt16 bmk;
 
+	proc->read++;
+
 	if (proc->instr == NULL) return;
 	if (FlagOn(proc->flags, VarProcessed)) return;
 
-	proc->read++;
 	SetFlagOn(proc->flags, flag | VarProcessed);
 
 	if (ProcIsInterrupt(proc)) {

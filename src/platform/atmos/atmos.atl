@@ -1,0 +1,16 @@
+;********************************
+;ATALAN Atmos Platform definition
+;********************************
+
+use m6502
+
+;LoRes screen
+
+out scrlo@$BB80:array(0..39,0..23) of byte
+
+rule prologue = "   opt f+ h-" "_CODE_START equ $800" "   org [b($16, $16, $16, $24, $00, $00, $80, $C7, >_CODE_END, <_CODE_END, >_CODE_START, <_CODE_START, $00, $00)],_CODE_START"
+rule epilogue = "   rts"
+rule code_end = "_CODE_END equ *-1"     
+rule line      = ";### %0(%1) %2"
+
+const BIN_EXTENSION = "tap"

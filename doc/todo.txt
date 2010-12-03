@@ -2,15 +2,144 @@
 TODO
 ****
 
+===============================
+On chained relational operators
+===============================
+
+My programming language Atalan supports chained relational operators. I always 
+considered it a neat syntax, but practically no mainstream programming language supports it.
+
+It allows you to write
+::::::::::::::::
+if 5 <= x < 10 then "Voila!"
+::::::::::::::::
+instead of
+:::::::::::::::
+if 5 <= x and x < 10 then "Voila!"
+::::::::::::::
+
+The code using chained operators is obviously more readable.
+Imagine using something like sqrt(a*a + b*b) instead of just x.
+
+It also EXPLICITLY does not evaluate the expression x twice. 
+
+It is much better option than disabling this feature or even
+producing illogical code as C does.
+  
+So how hard is it to implement such tremendously usefull feature?
+Somewhere in your parser you will probably have code like this:
+
+:::::::::::::::::::
+void ParseRel()
+{
+    ....
+    left = ParseExpression();
+    if (next token is relational operator) {
+        right = ParseExpression();
+        GenerateConditionalJump(op, left, right);        
+		}
+}
+:::::::::::::::::::
+
+Now if you just change the 'if' to 'while' and assign right to left after generating 
+the conditional jump, your language suddenly supports chained relational operators.
+
+:::::::::::::::::::
+void ParseRel()
+{
+    ....
+    left = ParseExpression();
+    while (next token is relational operator) {
+        right = ParseExpression();
+        GenerateConditionalJump(op, left, right);
+				left = right;        
+		}
+}
+:::::::::::::::::::
+
+Given how easy it is to implement this in parser, one must wonder, what
+are the reasons for not including this feature in a programming language.
+ 
+
+=========================================
+On context sensitive relational operators
+=========================================
+
+In some languages (including spoken languages) relational operators 
+have different meaning in different contexts.
+They can act as an assignment operator or testing operator in conditions.
+I.e. we either state some condition to be true or test it.
+
+You can say "Tommorow I'm 38 years old" or "When I'm 38 years old..." 
+
+
+This notion may be stressed by use of some appropriate keyword for assignment. 
+BASIC for example uses 'LET'
+
+In such model, it is possible to write
+::::::
+LET a = 10
+IF  a = 10 THEN "Everything is O.K."
+::::::
+and the meaning is clear.
+
+Now if I can write
+::::
+IF a <= 5 THEN "Small" 
+::::
+why now allow
+::::
+LET a <= 5 
+::::
+?
+
+This would simply set the a to 5, if it was higher then 5 (thus 
+making the condition hold).
+
+Special care must be taken with not equal operator, as there is no clear 'other' value.
+::::::::::
+LET a <> 7
+::::::::::
+
+We may probably define new value as successor of the current value or 
+predecessor if sucessor is not available.
+ 
+
+Now quickly, what would following lines of code do?
+:::::::::::::::
+a < a			
+b > b
+b >= a
+:::::::::::::::
+
+Answer:
+
+:::::::::::::::
+a = a - 1
+b = b + 1
+if b < a then b = a
+:::::::::::::::
+
+We should add the third option to the set of possible meanings: assertions.
+::::::::::::
+ASSERT a < b 
+::::::::::::
+Sometimes we just want to state some fact.
+Most programming languages support assertions at least in the form of macro 
+or library.
+
+It would be best supported on language level, as the programmer's assertions
+may be used by compiler for optimisation and not only to check the assertion in runtime.
+Compiler may even decide not to test the assertion, if you are stating the obvious and
+it would probably provide for some nice warning: 
+:::::::::::
+Warning: You are stating the obvious.
+:::::::::::
+Such warning should be however turned off by default. You can not be too explicit.
+
+
+
 TETRIS: Use random'tile routine with mod
-
-
-OPTIM: If comparing against value and there are only two options and one of them is ZERO,
-       always compare against zero. 
-
-   lda STRIG
-   cmp #button__state__pressed
-   jne _lbl3
 
 x@(a,b)
 
@@ -381,12 +510,6 @@ OPTIMIZE
 
 - try to use TSX, TXS for on extra register (if the function does not call other functions)
 - try to use pha pla in loops
-
-- in TETRIS:
-   jne _lbl48
-   lda #1
-   tax
-_lbl48:
 
    A is not used anymore, so here ldx #1 would be better.
    Maybe we may have the information on next use from live analysis?

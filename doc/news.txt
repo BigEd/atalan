@@ -2,6 +2,14 @@
 News
 ****
 
+==========
+3-Dec-2010
+==========
+
+- NEW: -P option may be used to define target platform 
+- NEW: Compiler command is configured in processor file using rule
+- NEW: atari.asm moved to m6502.asm (it will be shared by multiple platforms)
+- NEW: Preliminary support for Oric Atmos platform
 - OPT: when comparing variable that has only two possible value and one of them is 0, always compare to zero
 
 ==========

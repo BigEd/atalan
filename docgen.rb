@@ -205,6 +205,9 @@ txt_file "backend.txt"
 $stdout = File.new($proj_folder + 'www/atari.html', 'w')
 txt_file "platform_atari.txt"
 
+$stdout = File.new($proj_folder + 'www/atmos.html', 'w')
+txt_file "platform_atmos.txt"
+
 $stdout = File.new($proj_folder + 'www/news.html', 'w')
 txt_file "news.txt"
 
