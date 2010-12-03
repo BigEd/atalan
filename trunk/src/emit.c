@@ -32,12 +32,28 @@ Purpose:
 #endif
 }
 
+char * G_BUF;		// buffer to output
+
+void EmitOpenBuffer(char * buf)
+{
+	G_BUF = buf;
+}
+
+void EmitCloseBuffer()
+{
+	*G_BUF++ = 0;
+}
+
 void EmitChar(char c)
 {
-	if (VERBOSE) {
-		printf("%c", c);
+	if (G_BUF != NULL) {
+		*G_BUF++ = c;
+	} else {
+		if (VERBOSE) {
+			printf("%c", c);
+		}
+		putc(c, G_OUTPUT);
 	}
-	putc(c, G_OUTPUT);
 }
 
 void EmitStr(char * str)
@@ -351,7 +367,6 @@ void EmitLabels()
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
 			instr.arg2 = NULL;
-//			instr.arg1.type = TYPE_INT;
 
 			if (var->mode != MODE_CONST) {
 				//n = var->adr; 
@@ -360,7 +375,6 @@ void EmitLabels()
 				n = var->n;
 				ov = VarNewInt(n);
 			}
-//			instr.arg1.type = TYPE_VAR;
 			instr.arg1 = ov;
 			EmitInstr(&instr);
 		}

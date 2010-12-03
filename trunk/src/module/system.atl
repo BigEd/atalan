@@ -65,7 +65,10 @@ type instrs:enum
 	ref
 	divc			; div with carry set - to prevent unfolding constants
 
-
+	compiler
+	code_end
+	data_end
+	
 ;=================
 ;Instruction flags
 ;=================

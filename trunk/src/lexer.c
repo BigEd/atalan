@@ -299,6 +299,7 @@ void NextToken()
 {
 	Int16 c, c2, n;
 	UInt16 top;
+	UInt16 nest;
 
 	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
 	// For blocks ended with stop token, return the stop_token instead
@@ -430,15 +431,48 @@ retry:
 		TOK = TOKEN_INT;
 
 	// String
+	// String may contain subexpressions in []
+	// ["] defines "
+	// [[    [
+	// ]]    ]
+
 	} else if (c == '\"') {
-		n = 0;
+		n = 0; nest = 0;
 		do {
-			if (n == 255) {
+			if (n >= 254) {
 				SyntaxError("string too long");
 				return;
 			}
+
 			c2 = LINE[LINE_POS++];
-			if (c2 == '\"') break;
+			if (c2 == '[') {
+				c2 = LINE[LINE_POS++];
+				// [[
+				if (c2 != '[') {
+					// ["]
+					if (c2 == '\"' && LINE[LINE_POS] == ']') {
+						LINE_POS++;
+						goto store;  // we must skip the test for string end
+					} else {
+						nest++;
+						LEX.name[n++] = '[';
+					}
+				}
+			} else if (c2 == ']') {
+				c2 = LINE[LINE_POS++];
+				// ]]
+				if (c2 != ']') {
+					if (nest == 0) {
+						SyntaxError("unexpected closing ] in string");
+					} else {
+						nest--;
+						LEX.name[n++] = ']';
+					}
+				}
+			}
+			
+			if (nest == 0 && c2 == '\"') break;
+store:
 			LEX.name[n++] = c2;
 		} while(1);
 		LEX.name[n] = 0;
@@ -533,16 +567,18 @@ ParseState * ParseStateLabel()
 
 void ParseStateGoto(ParseState * s)
 {
-	LEX.f     = s->file;
-	strcpy(LINE, s->line);
-	LINE_LEN  = s->line_len;
-	LINE_NO   = s->line_no;
-	LINE_POS  = s->line_pos;
-	PREV_LINE = s->prev_line;
-	TOK       = s->token;
+	if (s != NULL) {
+		LEX.f     = s->file;
+		strcpy(LINE, s->line);
+		LINE_LEN  = s->line_len;
+		LINE_NO   = s->line_no;
+		LINE_POS  = s->line_pos;
+		PREV_LINE = s->prev_line;
+		TOK       = s->token;
 
-	MemFree(s->line);
-	MemFree(s);
+		MemFree(s->line);
+		MemFree(s);
+	}
 }
 
 FILE * FindFile2(char * name, char * ext, char * base_dir)

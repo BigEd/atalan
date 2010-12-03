@@ -46,14 +46,11 @@ int main(int argc, char *argv[])
 	Var * var, * data;
 	Type * type;
 	Int16 i;
-//	TypeVariant tv;
 	Bool assembler = true;
 	int result = 0;
-//	UInt32 size, n, adr;
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
 	char * s;
-	UInt16 len;
 
 	VERBOSE = false;
 
@@ -87,7 +84,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (3-Oct-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (3-Nov-2010)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		
@@ -110,6 +107,11 @@ int main(int argc, char *argv[])
 					}
 
 				}
+		} else if (StrEqual(argv[i], "-P")) {
+			i++;
+			if (i<argc) {
+				strcpy(PLATFORM, argv[i]);
+			}
 		} else {
 			break;
 		}
@@ -118,10 +120,11 @@ int main(int argc, char *argv[])
 
     if (i == argc) {
         fprintf(STDERR, "Usage:\n"
-	"%s [-v][-a] file\n"
+	"%s [options] file\n"
 	"  -v Verbose output\n"
 	"  -I <SYSTEM_DIR> define include path (default: current catalog)\n"
-	"  -a Only generate assembler source code, but do not call assembler\n", argv[0]);
+	"  -a Only generate assembler source code, but do not call assembler\n"
+	"  -p <name>  Platform to use\n", argv[0]);
         exit(-1);
     }
 
@@ -254,47 +257,12 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(ProcClearProcessed);
 	ProcessUsedProc(AllocateVariables);
 
-/*
-	adr = 128;
-	n = 1;
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-
-		if ((var->write > 0 || var->read > 0) && var->type != NULL && !VarIsLabel(var)) {
-			tv = var->type->variant;
-			if (var->adr == NULL && (var->mode == MODE_VAR || var->mode == MODE_ARG)) {
-				size = TypeSize(var->type);		
-
-				if (size > 0) {
-					var->adr = VarNewInt(adr);
-					adr += size;
-				}
-			}
-		}
-		n++;
-	}
-*/
 	if (TOK == TOKEN_ERROR) goto failure;
 
 	EmitOpen(filename);
 
 	if (VERBOSE) {
-/*
-		printf("==== Types\n");
-		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-			if (var->adr == ADR_VOID && !var->value_nonempty && var->scope == &ROOT_PROC) {
-				PrintVar(var);
-			}
-		}
 
-		printf("==== Constants\n");
-		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-			if (VarIsConst(var)) {
-				if (var->name != NULL) {
-					PrintVar(var);
-				}
-			}
-		}
-*/
 		printf("==== Variables\n");
 
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
@@ -311,26 +279,27 @@ int main(int argc, char *argv[])
 	//TODO: ProcessUsedProc
 	if (!EmitProc(&ROOT_PROC)) goto failure;
 	EmitProcedures();
-	EmitAsmIncludes();
+	EmitAsmIncludes();	
+	EmitInstrOp(INSTR_CODE_END, NULL, NULL, NULL);
+	VarEmitAlloc();
 	EmitClose();
 
 	//==== Call the assembler
-
-	strcpy(path, PROJECT_DIR);
-	strcat(path, filename);
-
-	PlatformPath(command);
-	len = StrLen(command);
+	//     The command to call is defined using rule for INSTR_COMPILER.
+	//     Argument is filename (without extension) of the compiled file.
 
 	result = 0;
 	if (assembler) {
-#if defined(__UNIX__)
-		sprintf(command+len, MADS_COMMAND, path, path, path);
+	
+		PathMerge(path, PROJECT_DIR, filename);
+
+		var = VarFind("BIN_EXTENSION", 0);
+
+		EmitOpenBuffer(command);
+		EmitInstrOp(INSTR_COMPILER, VarNewStr(path), VarNewStr(var->str), NULL);
+		EmitCloseBuffer();
+
 		result = system(command);
-#else
-		sprintf(command+len, MADS_COMMAND, path, path, path);
-		result = system(command);
-#endif
 	}
 
 done:	

@@ -57,6 +57,7 @@ rule alloc %A:-128..127                          = "   .ds 1"
 
 _arr:adr
 
+;Temporary variables should be allocated dynamically
 _TEMPW1@$32:CARD
 _TEMPW2@$34:CARD
 _TEMPL1@$70:CARD		;Should be: 0..$7fffffff
@@ -1629,3 +1630,13 @@ rule file ,%A     = "   ins '%A'"
 rule org  ,%A     = "   org %A"
 rule ptr , %A    = "   dta a(%A)"
 rule debug  = "   brk"  "   dta b(0)"
+rule line      = ";### %0(%1) %2"
+
+rule include %A = "   icl '%A'"
+
+;compiler rule defines the command line used to compile generated asm source
+; %A  defines name of the source code file (including the path) without extension
+; %B  extension of resulting binary as defined by platform
+; %/  defines path to directory with currently parsed file
+
+rule compiler %A,%B = "%/mads  ["]%A.asm["] -o:["]%A.%B["] -x -l:["]%A.lst["]"
