@@ -1112,48 +1112,76 @@ InstrOp RelInstrFromToken()
 	return op;
 }
 
+void GenRel(InstrOp op, Var * left, Var * right)
+{
+	if (!G_BLOCK->not) op = OpNot(op);
+
+	if (G_BLOCK->f_label == NULL) {
+		G_BLOCK->f_label = VarNewTmpLabel();
+	}
+	Gen(op, G_BLOCK->f_label, left, right);
+}
+
+Var * VarFindAssociatedConst(Var * var, char * name)
+{
+	if (var == NULL) return NULL;
+	return VarFindScope(var->type->owner, name, 0);
+}
+
 void ParseRel()
 /*
 	relop: "=" | "<>" | "<" | "<=" | ">" | ">="
 	rel:  <exp> <relop> <exp> [<relop> <exp>]*
 */
 {
-	Var * v1;
+	Var * left, * right;
 	InstrOp op;
 
 	if (TOK == TOKEN_OPEN_P) {
 		ParseCondParenthesis();
 	} else {
-//		G_CONDITION_EXP = true;
 		ParseExpression(NULL);
-//		G_CONDITION_EXP = false;
-		v1 = STACK[0];
+		left = STACK[0];
 
-		while ((op = RelInstrFromToken()) != INSTR_VOID) {
+		op = RelInstrFromToken();
 
-			// For normal operation, we jump to false label when the condition does NOT apply
-			// For example for if:
-			// if <cond>
-			//     <block>
-			//
-			// must skip the <block>.			
+		// No relation operator follows the expression, this must be test of boolean variable
+		if (op == INSTR_VOID) {
 
-			if (!G_BLOCK->not) op = OpNot(op);
-			NextToken();
-//			G_CONDITION_EXP = true;
-			ParseExpression(v1);
-//			G_CONDITION_EXP = false;
-			if (TOK != TOKEN_ERROR) {
-				if (G_BLOCK->f_label == NULL) {
-					G_BLOCK->f_label = VarNewTmpLabel();
-				}
-				Gen(op, G_BLOCK->f_label, v1, STACK[0]);
-				VarFree(v1);
-				v1 = STACK[0];		//
-									//VarFree(STACK[0]);
+			right = VarFindAssociatedConst(left, "true");
+			if (right != NULL) {
+				op = INSTR_IFEQ;
+			} else {
+				right = VarFindAssociatedConst(left, "false");
+				if (right != NULL) op = INSTR_IFNE;
 			}
+			if (op != INSTR_VOID) {
+				GenRel(op, left, right);
+			} else {
+				SyntaxError("variable is not of boolean type");
+			}
+
+		// var <relop> var [<relop> var]
+		} else {
+			do {
+
+				// For normal operation, we jump to false label when the condition does NOT apply
+				// For example for if:
+				// if <cond>
+				//     <block>
+				//
+				// must skip the <block>.			
+
+				NextToken();
+				ParseExpression(left);
+				right = STACK[0];
+				if (TOK != TOKEN_ERROR) {
+					GenRel(op, left, right);
+					left = right;
+				}
+				op = RelInstrFromToken();
+			} while (op != INSTR_VOID);
 		}
-		VarFree(v1);
 	}
 }
 

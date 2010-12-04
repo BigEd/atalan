@@ -216,6 +216,7 @@ key:enum
 	F4   = 84
 	HELP = 17
 	none = 255
+	false = 255
 	
 in CH@764:key  ;last pressed character
 

@@ -320,9 +320,9 @@ Will print x:13..100.
 It is possible to define custom associated variable with name of some built-in constant. 
 It does not change the type of the variable. Built-in constant will be unavailable.  
 
-*****
-Enums
-*****
+***********
+Enumerators
+***********
 
 Enumerations are integer types, that define list of named values, that may be assign
 to them.
@@ -341,6 +341,24 @@ color: enum
 	pink
 	purple
 :::::::::::::::::::::::::::::::::::
+
+********
+Booleans
+********
+
+Any integer type may be defined as bool by defining associated constant
+'true' and/or 'false'. Variable of bool type may be tested just using variable 
+name, no relational operator is required.
+
+Both true and false constant may have arbitrary value (it must not be 0 or 1).
+
+::::::::::::::::::::::
+button_state:enum (pressed = 0, not'pressed = 1, true = 0)
+
+left_button:button_state
+
+if left_button then "Left pressed."
+:::::::::::::::::::::::
 
 
 *****************
@@ -777,8 +795,12 @@ Procedures at specified address
 
 It is possible to define routines in ROM using @ syntax.
 
+This is especially usefull with procedure arguments with defined location (either
+in register or at some adress).
+
 :::::::::::::::::::::::
 reset@$E034:proc
+out_char@$E75f:proc c@_a
 :::::::::::::::::::::::
 
 *******
