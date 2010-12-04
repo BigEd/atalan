@@ -105,6 +105,14 @@ type regset:enum
 
 type interrupt:proc
 
+;============
+;Boolean type
+;============
+
+type bool: enum 
+	false = 0
+	true = 1
+
 ;=================
 ;Predefined macros
 ;=================

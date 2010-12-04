@@ -3,6 +3,12 @@ News
 ****
 
 ==========
+4-Dec-2010
+==========
+
+- NEW: Support for bool in conditions (built in bool type, custom definable bool types)
+
+==========
 3-Dec-2010
 ==========
 

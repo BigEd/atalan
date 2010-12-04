@@ -38,10 +38,10 @@ nx:x			; new x position of tile
 ny:y      ; new y position of tile
 steps:0..20
 action'delay:0..10
-collision:0..1	;bool
+collision:bool
 j:0..3
 k:0..3
-down'lock:0..1
+down'lock:bool
 tile, next'tile:0..18
 ntile:tile
 score:0..30000
@@ -170,14 +170,14 @@ erase'tile:proc(tile:tile x:x y:y) =
 			if c <> 0 then s(x+k,y+j) = 0
 			ti = ti + 1
 
-test'collision:proc tile:tile x:x y:y >coll:0..1 =	
-	coll = 0
+test'collision:proc tile:tile x:x y:y >coll:bool =	
+	coll = false
 	ti = 0
 	for j 
 		for k
 			c = tiles(ti, tile)
 			ti = ti + 1
-			if c <> 0 if s(x+k,y+j) <> 0 then return 1
+			if c <> 0 if s(x+k,y+j) <> 0 then return true
 
 
 ;Initialize graphics.
@@ -207,7 +207,7 @@ for x:LM..RM
 	s(x,BM) = WALL_CHR
 			
 action'delay = 0
-down'lock = 0
+down'lock = false
 
 ;Generate a new tile
 ;New tile is always generated on same position.
@@ -223,8 +223,7 @@ loop@
 
 steps = 20
 	
-if STICK(0) = down then
-	if down'lock = 0 then	steps = 1
+if STICK(0) = down and not down'lock then steps = 1
 	
 while steps > 0
 
@@ -233,7 +232,7 @@ while steps > 0
 	nx = x
 	ntile = tile
 
-	if STICK(0) <> down then down'lock = 0
+	if STICK(0) <> down then down'lock = false
 	
 	;Move or rotate the tile (there is minimum delay between two actions)
 	if action'delay > 0
@@ -258,15 +257,14 @@ while steps > 0
 	;move the tile to new position, if there is no collision
 
 	;collision = test'collision ntile nx y	
-	if test'collision ntile nx y = 0 then
+	if not test'collision ntile nx y then
 		x = nx
 		tile = ntile
 	
 	dec steps
 
 	;Tile falls faster, if user keeps joystick down
-	if STICK(0) = down then
-		if down'lock = 0 then
+	if STICK(0) = down and not down'lock then
 			if steps > 5 then steps = 0
 			 
 
@@ -274,7 +272,7 @@ while steps > 0
 			
 ;collision = test'collision	tile x y+1
 
-if test'collision(tile x y+1) = 0 then
+if not test'collision(tile x y+1) then
 	inc y
 else
 	draw'tile tile x y 
@@ -284,10 +282,10 @@ else
 	y,ny = 21
 	
 	while y >= 1
-		collision = 0
-		for x where s(x,y) = 0 collision = 1
+		collision = false
+		for x where s(x,y) = 0 collision = true
 						
-		if collision <> 0 then
+		if collision then
 			for x s(x,ny) = s(x, y)
 			dec ny
 			dec y 
@@ -306,7 +304,7 @@ else
 	s(29,1) = "SCORE: [score]"
 	
 	;If player holds down, we do not want the new tile to start falling fast
-	if STICK(0) = down then down'lock = 1
+	if STICK(0) = down then down'lock = true
 
 	;Next tile becomes falling tile and we generate and draw new next tile 
 	tile = next'tile
@@ -317,7 +315,7 @@ else
 
 	;If the new tile collides immediatelly, the game is over
 		
-	if test'collision tile x y <> 0 then goto game'over
+	if test'collision tile x y then goto game'over
 		
 goto loop
 
