@@ -408,6 +408,17 @@ rule add %A:card,%B:card,%C:byte = instr
 	add _a, _a, 0
 	let %A(1), _a
 
+rule add %A:card, %B:byte, const %C:card = instr
+	let _a, %B
+	lo %Z, %C           ; %Z is macro local variable
+	let _c, 0
+	add _a, _a, %Z
+	let %A(0), _a
+	let _a, 0
+	hi %Z, %C           ; %Z is macro local variable
+	add _a, _a, %Z
+	let %A(1), _a
+
 rule add %A:card, %B:card, const %C:card = instr
 	let _a, %B(0)
 	lo %Z, %C           ; %Z is macro local variable
