@@ -511,7 +511,7 @@ Purpose:
 	// Generate initialized arrays, where location is not specified
 
 	FOR_EACH_VAR(var)
-		if (type = var->type) {
+		if ((type = var->type)) {
 			if (type->variant == TYPE_ARRAY) {
 				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {
 					
