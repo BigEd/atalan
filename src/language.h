@@ -565,7 +565,7 @@ void ProcessUsedProc(void (*process)(Var * proc));
 
 InstrOp OpNot(InstrOp op);
 
-typedef struct ExpTag Exp;
+// typedef struct ExpTag Exp;
 
 struct ExpTag {
 	InstrOp   op;			// operation
