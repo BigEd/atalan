@@ -445,6 +445,7 @@ retry:
 			}
 
 			c2 = LINE[LINE_POS++];
+str_chr:
 			if (c2 == '[') {
 				c2 = LINE[LINE_POS++];
 				// [[
@@ -467,6 +468,7 @@ retry:
 					} else {
 						nest--;
 						LEX.name[n++] = ']';
+						goto str_chr;
 					}
 				}
 			}
