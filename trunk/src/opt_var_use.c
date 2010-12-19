@@ -98,6 +98,29 @@ void HeapAddVariables(MemHeap * heap, Var * scope)
 	}
 }
 
+void HeapRemoveVariables(MemHeap * heap, Var * scope)
+{
+	Var * var, * vadr;
+	UInt32 size, adr;
+
+	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
+		if (var->mode == MODE_SCOPE) {
+			HeapRemoveVariables(heap, var);
+		} else {
+			if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+				size = TypeSize(var->type);
+				vadr = var->adr;
+				if (size > 0 && vadr != NULL) {
+					if (vadr->type->variant == TYPE_INT) {
+						adr  = vadr->n;
+						HeapRemoveBlock(heap, adr, size);
+					}
+				}
+			}
+		}
+	}
+}
+
 extern Var   ROOT_PROC;
 
 void AllocateVariables(Var * proc)
@@ -105,12 +128,11 @@ void AllocateVariables(Var * proc)
 	Var * proc2;
 	Type * type;
 	MemHeap heap;
-//	UInt32 size, adr;
 	
 	HeapInit(&heap);
 
 	//==== Find space already allocated for other procedure variables that can be reused
-	//     We can resue variables from procedures, that this procedure 
+	//     We can reuse variables from procedures, that this procedure 
 	//     does not call (even indirectly) and which does not call this procedure.
 
 	for(proc2 = VarFirst(); proc2 != NULL; proc2 = VarNext(proc2)) {
@@ -118,10 +140,14 @@ void AllocateVariables(Var * proc)
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
 //			printf("%s -> %s", proc2->name, proc->name);
 			if (proc2 != proc && !ProcCallsProc(proc, proc2) && !ProcCallsProc(proc2, proc)) {
-//				if (proc2 == &ROOT_PROC || proc == &ROOT_PROC) {
+//				if (/*StrEqual(proc->name, "copyblock") &&*/ StrEqual(proc->name, "drawmainscreen")) {
 //					printf("***\n");
 //				}
 				HeapAddVariables(&heap, proc2);
+//				if (StrEqual(proc->name, "drawmainscreen")) {
+//					HeapPrint(&heap);
+//				}
+
 			} else {
 //				printf("... Dependent");
 			}
@@ -129,6 +155,30 @@ void AllocateVariables(Var * proc)
 		}
 	}
 
+	//==== Remove space allocated by procedures we are calling or which call us
+
+	//TODO: Procedure must not have body (may be external) and still define arguments
+
+	for(proc2 = VarFirst(); proc2 != NULL; proc2 = VarNext(proc2)) {
+		type = proc2->type;
+
+//		if (StrEqual(proc2->name, "copyblock") && StrEqual(proc->name, "drawmainscreen")) {
+//			printf("***");
+//		}
+
+		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
+			if (proc2 != proc && (FlagOn(proc2->flags, VarProcInterrupt) || ProcCallsProc(proc, proc2) || ProcCallsProc(proc2, proc))) {
+//				if (StrEqual(proc->name, "drawmainscreen")) {
+//					HeapPrint(&heap);
+//				}
+				HeapRemoveVariables(&heap, proc2);
+//				if (StrEqual(proc->name, "drawmainscreen")) {
+//					HeapPrint(&heap);
+//				}
+			}
+		}
+	}
+	
 	//==== Allocate space for all variables, that has not been assigned yet
 
 	AllocateVariablesFromHeap(proc, &heap);

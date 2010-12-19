@@ -14,3 +14,4 @@ rule code_end = "_CODE_END equ *-1"
 rule line      = ";### %0(%1) %2"
 
 const BIN_EXTENSION = "tap"
+type VARHEAP:128..255   

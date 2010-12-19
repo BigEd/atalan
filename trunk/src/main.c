@@ -52,6 +52,11 @@ int main(int argc, char *argv[])
 	UInt16 filename_len;
 	char * s;
 
+
+#ifdef DEBUG
+//	HeapUnitTest();
+#endif
+
 	VERBOSE = false;
 
 	// Default platform is "atari"
@@ -178,7 +183,15 @@ int main(int argc, char *argv[])
 
 	//TODO: Read the var heap definition from configuration
 
-	HeapAddBlock(&VAR_HEAP, 128, 128);
+	var = VarFindScope(&ROOT_PROC, "varheap", 0);
+	if (var != NULL) {
+		HeapAddType(&VAR_HEAP, var->type);
+		HeapAddBlock(&VAR_HEAP, DATA_SEGMENT, DATA_SEGMENT_CAPACITY);
+	} else {
+		InternalError("Platform does not define varheap");
+		goto done;
+	}
+//	HeapAddBlock(&VAR_HEAP, 128, 128);
 
 	// Parse the file. This also generates main body of the program (_ROOT procedure).
 	// TODO: Root procedure may be just specifal type of procedure.

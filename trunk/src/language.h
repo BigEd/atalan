@@ -437,7 +437,19 @@ struct MemHeapTag {
 void HeapInit(MemHeap * heap);
 void HeapCleanup(MemHeap * heap);
 void HeapAddBlock(MemHeap * heap, UInt32 adr, UInt32 size);
+void HeapRemoveBlock(MemHeap * heap, UInt32 adr, UInt32 size);
 Bool HeapAllocBlock(MemHeap * heap, UInt32 size, UInt32 * p_adr);
+void HeapAddType(MemHeap * heap, Type * type);
+
+void HeapUnitTest();
+void HeapPrint(MemHeap * heap);
+
+#define DATA_SEGMENT          0x1000000
+#define DATA_SEGMENT_CAPACITY 0x1000000
+
+// Variables that do not fit into defined variable space are stored in data segment.
+// Data segment is allocated directly after CODE segment, however we reserve dynamic space for it at
+// specified address.
 
 /*************************************************************
 
