@@ -1005,11 +1005,19 @@ Parse expression, performing evaluation if possible.
 If result mode is MODE_CONST, no code is to be generated.
 */
 {
+	Type * type;
+
 	if (result == NULL) {
 		RESULT_TYPE = NULL;
 	} else {
 		if (result->mode == MODE_ELEMENT) {
-			RESULT_TYPE = result->adr->type->element;
+			type = result->adr->type;
+			if (type->variant == TYPE_ARRAY) {
+				RESULT_TYPE = type->element;
+			} else if (type->variant == TYPE_ADR) {
+
+			} else {
+			}
 		} else {
 			RESULT_TYPE = result->type;
 		}

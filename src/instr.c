@@ -532,7 +532,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 	case RULE_VARIABLE:
 		if (arg->mode == MODE_CONST) return false;
-		if (FlagOn(arg->submode, SUBMODE_REG)) return false; 
+		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 	
@@ -988,10 +988,21 @@ void PrintVarVal(Var * var)
 
 }
 
+void PrintVarArgs(Var * var)
+{
+	Var * arg;
+	printf("(");
+	for(arg = var->next; arg != NULL; arg = arg->next) {
+		if (arg->mode == MODE_ARG && arg->scope == var) {
+			printf(" %s", arg->name);
+		}
+	}
+	printf(")");
+}
+
 void PrintVar(Var * var)
 {
 	Type * type;
-	Var * arg;
 
 	if (FlagOn(var->submode, SUBMODE_REF)) {
 		printf("@");
@@ -1018,16 +1029,11 @@ void PrintVar(Var * var)
 		if (type != NULL) {
 			if (type->variant == TYPE_PROC) {
 				printf(":proc");
+				PrintVarArgs(var);
 			} else if (type->variant == TYPE_MACRO) {
 				printf(":macro");
+				PrintVarArgs(var);
 			}
-			printf("(");
-			for(arg = var->next; arg != NULL; arg = arg->next) {
-				if (arg->mode == MODE_ARG && arg->scope == var) {
-					printf(" %s", arg->name);
-				}
-			}
-			printf(")");
 		}
 
 		if (VarIsConst(var)) {
