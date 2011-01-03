@@ -1,0 +1,14 @@
+;********************************
+;ATALAN Atmos Platform definition
+;********************************
+; changed by Marcel Cevani 03.01.2011
+; Generates NROM-128 romlayout (1 x 16Kib bank + 1 x 8Kib Chr bank)
+
+use n6502
+type  ZPVARS:000..255   
+ 
+rule prologue       =  " opt h-" " .byte('N', 'E', 'S', $1A, $01, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $C000"  "RESET:" 
+rule epilogue       =  " rts"  
+rule code_end       =  " .align $FFFA,$00" "NMI:" "RTI" " org $FFFA" " .dw NMI" " .dw RESET" " .dw 0"
+rule line           = ";### %0(%1) %2"
+const BIN_EXTENSION = "nes"
