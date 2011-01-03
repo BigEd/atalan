@@ -56,14 +56,24 @@ extern Var * LAST_VAR;
 
 void ParseVariable(Var ** p_var)
 {
-	Var * var;
-	var = VarFind2(LEX.name, 0);
+	Bool spaces;
+	Var * var = NULL, * scope;
+	do {
+		scope = var;
+		if (scope != NULL) {
+			var = VarFindScope(scope, LEX.name, 0);
+		} else {
+			var = VarFind2(LEX.name, 0);
+		}
+		spaces = Spaces();
+		if (var == NULL) {
+			SyntaxError("Unknown variable");
+		} else {
+			NextToken();
+		}
+	} while(!spaces && NextIs(TOKEN_DOT));
+
 	*p_var = var;
-	if (var == NULL) {
-		SyntaxError("Unknown variable");
-	} else {
-		NextToken();
-	}
 }
 
 void ParseArgList(VarMode mode, Type * to_type)
@@ -2000,9 +2010,17 @@ Purpose:
 	Var * var,  * item, * adr, * tuple, * scope, * idx, * min, * max;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type = NULL;
+	TypeVariant typev;
 	UInt16 bookmark;
 
 	is_assign = false;
+	scope = NULL;
+
+	// Force use of current scope
+	// For example .X will try to find X in current scope, not in any other parent scope
+	if (!Spaces() && NextIs(TOKEN_DOT)) {
+		scope = SCOPE;
+	}
 
 	if (TOK != TOKEN_ID) {
 		SyntaxError("expected identifier");
@@ -2013,7 +2031,6 @@ Purpose:
 
 	// Comma separated list of identifiers
 	cnt = 0;
-	scope = NULL;
 	do {
 retry:
 		var = NULL;
@@ -2051,7 +2068,7 @@ retry:
 					goto retry;
 				} else {
 					goto no_dot;
-					SyntaxError("Dot expected after scope name");
+//					SyntaxError("Dot expected after scope name");
 				}
 			}
 		}
@@ -2249,9 +2266,11 @@ dot:
 		for(j = 0; j<cnt; j++) {
 			var = vars[j];
 			type = var->type;
+			typev = TYPE_UNDEFINED;
+			if (type != NULL) typev = type->variant;
 
 			// Procedure or macro is defined using parsing code
-			if (type != NULL && (type->variant == TYPE_PROC || type->variant == TYPE_MACRO)) {
+			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
 				EnterSubscope(var);
 				InstrBlockPush();
 				ParseBlock();
@@ -2260,6 +2279,10 @@ dot:
 					GenLabel(item);
 				}
 				var->instr = InstrBlockPop();
+				ExitScope();
+			} else if (typev == TYPE_SCOPE) {
+				EnterSubscope(var);
+				ParseBlock();
 				ExitScope();
 			} else {
 
@@ -2839,6 +2862,8 @@ void ParseId()
 {
 	Var * var;		// may be global?
 
+	//TODO: Procedures & macros in scope or struct
+//	ParseVariable(&var);
 	var = VarFind2(LEX.name, 0);
 	if (var != NULL) {
 		if (var->type != NULL) {

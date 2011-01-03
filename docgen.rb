@@ -175,7 +175,7 @@ def ata_example(filenames)
   puts "<table>"
   filenames.each { |filename|
     puts "<tr>"
-    puts "  <td>#{filename}</td><td><a href=\"examples/#{filename}.atl\">#{filename}.atl</a></td>"
+    puts "  <td><a href=\"examples/#{filename}.html\">#{filename}</a></td><td><a href=\"examples/#{filename}.atl\">#{filename}.atl</a></td>"
     puts "  <td><a href=\"examples/#{filename}.asm\">#{filename}.asm</a></td>"
     puts "  <td><a href=\"examples/#{filename}.xex\">#{filename}.xex</a></td>"
     puts "</tr>"
@@ -264,7 +264,7 @@ txt_file "reference.txt"
 
 $stdout = File.new($proj_folder + 'www/examples.html', 'w')
 #txt_file "examples.txt"
-ata_example ["hello_world","loop","unit_test","hello_font","rainbow","esieve","count_2sec","stars","tetris","interrupts","bit_sieve"]
+ata_example ["hello_world","loop","unit_test","hello_font","rainbow","esieve","count_2sec","stars","tetris","interrupts","bit_sieve","pmg"]
 
 
 

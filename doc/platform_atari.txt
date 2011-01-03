@@ -1,4 +1,4 @@
-*********************
+﻿*********************
 ATALAN Atari platform
 *********************
 
@@ -40,6 +40,63 @@ Printing strings is done using standard OS routine.
 When printing into arrays, it is supposed the array is displayed
 on screen and conversion to ATARI screen codes is performed.
 
+************
+PMG
+************
+
+Atari has hardware support for sprites: players and missiles.
+
+=======
+Players
+=======
+
+There are four players numbered 0 to 3.
+Player properties are accessed using player(x).property syntax.
+
+Following properties are defined:
+:::::::::
+x        X position of a player ($d000..$d003)
+color    hardware color (use in DLI or when system VBI is turned off) ($d012..$d015)  
+scolor   system color (704..707)
+size     width of the sprite ($d008..$d00b)
+gfx      byte with current player data ($d00d..$d010)
+bitmap   array with bitmap for the player
+:::::::::
+=========
+Missiles
+=========
+
+There are four missiles numbered 0 to 3.
+Missile properties are accessed using missile(x).property syntax.
+Every missile has same color as appropriate player (unless specified differently).
+You may set the color either by using player(x).color or misile(x).color.
+::::::::
+x        X position of a player ($d000..$d003)
+bitmap   all missiles share the same bitmap (2 bits for each missile)
+size     size of bitmaps ($d00c)
+gfx      byte with current missiles data
+color    Missile color.
+::::::::
+=====================
+Bitmap initialization
+=====================
+
+To use PMG, it is necessary to define PMG memory and set it to appropriate register.
+It is also necessary to allow DMA for PMG. This is done by setting two registers.
+
+As registers, specifying this are not used only for PMG, they are not part of
+PMG namespace.
+
+Following piece of code performs necessary initialization.
+
+::::::::::::::::::
+init'pmgbase
+
+DMACTL = playfield + dl + players + missiles + hires_sprites
+GRACTL = players + missiles
+::::::::::::::::::
+
+It also defines width of playfield, and use of hires sprites.
 
 ************************
 Fonts

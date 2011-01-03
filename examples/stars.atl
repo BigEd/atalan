@@ -2,6 +2,8 @@
 ; Demo program for ATALAN programming language
 ;(c) 2010 Rudla Kudla
 
+use atari
+
 i:0..242				; number of lines with stars
 hpos:array(242) of byte
 speed:array(242) of 1..4
@@ -9,8 +11,8 @@ col:array(242) of color
 
 ;Turn off screen, so we have nice black deep space
 
-DMACTL = 0
-GRACTL = 0
+DMACTL = off
+GRACTL = off
 
 ;Initialize start positions, speeds and colors
 
@@ -21,8 +23,8 @@ for i
 
 ;Setup sprite 0
 
-player_gfx(0) = 1
-player_size(0) = 0
+player(0).gfx = %00000001
+player(0).size = 0
 
 until STRIG(0) = pressed
 
@@ -30,14 +32,12 @@ until STRIG(0) = pressed
 		wait'line
 		
 	for i
-		player_col2(0) = col(i)
-		player_x(0) = hpos(i)
+		player(0).color = col(i)
+		player(0).x = hpos(i)
 		hpos(i) = hpos(i) + speed(i)
 		wait'line
 
 ;Turn off sprite and turn on screen
 
-player_gfx(0) = 0
-player_gfx(1) = 0
-GRACTL = 0
-DMACTL = 34
+player(0).gfx = 0
+DMACTL = dl + playfield 

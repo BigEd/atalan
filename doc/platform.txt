@@ -1,0 +1,13 @@
+*******************************
+How to define your own platform
+*******************************
+
+To create new platform for Atalan, it is necessary to create platform module.
+
+Platform module for platform named XXX is stored in file
+:::::::::::::::: 
+%SYSTEM%/platform/XXX/XXX.atl
+::::::::::::::::
+directory.
+
+ 
