@@ -38,12 +38,18 @@ Input:
 
 	// If this is array access variable, mark indices as live (used)
 
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == MODE_DEREF) {
+		VarMarkLive(var->var);
+	} if (var->mode == MODE_ELEMENT) {
 
-		// Reference uses the array variable
-		if (var->submode == SUBMODE_REF) {
+		if (var->adr->mode == MODE_DEREF) {
 			VarMarkLive(var->adr);
 		}
+
+		// Reference uses the array variable
+//		if (var->submode == SUBMODE_REF) {
+//			VarMarkLive(var->adr);
+//		}
 			
 		VarMarkLive(var->var);
 
@@ -152,6 +158,15 @@ void MarkProcLive(Var * proc)
 	}
 }
 
+Bool VarDereferences(Var * var)
+{
+	if (var != NULL) {
+		if (var->mode == MODE_DEREF) return true;
+		if (var->mode == MODE_ELEMENT) return VarDereferences(var->adr) || VarDereferences(var->var);
+	}
+	return false;
+}
+
 Bool OptimizeLive(Var * proc)
 {
 	Bool modified = false;
@@ -210,7 +225,7 @@ Bool OptimizeLive(Var * proc)
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
-					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && FlagOff(result->submode, SUBMODE_REF|SUBMODE_OUT)) {
+					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && FlagOff(result->submode, /*SUBMODE_REF|*/SUBMODE_OUT)) {
 						if (VERBOSE) {
 							printf("removed dead %ld:", n); InstrPrint(i);
 						}

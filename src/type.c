@@ -14,6 +14,7 @@ GLOBAL Type TINT;		// used for int constants
 GLOBAL Type TSTR;
 GLOBAL Type TLBL;
 GLOBAL Type TBYTE;		//0..255
+GLOBAL Type TSCOPE;
 
 Type * TypeAlloc(TypeVariant variant)
 {
@@ -266,6 +267,9 @@ Purpose:
 {
 	if (type == master) return true;
 	if (type == NULL || master == NULL) return false;
+	if (master->variant == TYPE_VARIANT) {
+		return TypeIsSubsetOf(type, master->dim[0]) || TypeIsSubsetOf(type, master->dim[1]);
+	} 
 	if (type->variant != master->variant) return false;
 	if (type->variant == TYPE_INT) {
 		if (type->range.max > master->range.max) return false;
@@ -288,6 +292,11 @@ Type * TypeByte()
 Type * TypeLongInt()
 {
 	return &TINT;
+}
+
+Type * TypeScope()
+{
+	return &TSCOPE;
 }
 
 Var * NextItem(Var * scope, Var * arg, VarSubmode submode)
@@ -321,8 +330,17 @@ UInt32 TypeSize(Type * type)
 		case TYPE_ADR:
 			size = TypeAdrSize();
 			break;
+
 		case TYPE_STRUCT:
 			size = TypeStructSize(type->owner);
+			break;
+
+		case TYPE_ARRAY:
+			size = TypeSize(type->element);
+			size *= type->dim[0]->range.max - type->dim[0]->range.min + 1;
+			if (type->dim[1] != NULL) {
+				size *= type->dim[1]->range.max - type->dim[1]->range.min + 1;
+			}
 			break;
 		default: break;
 		}
@@ -375,19 +393,27 @@ void TypeInit()
 	TINT.range.min = -(long)2147483648L;
 	TINT.range.max = 2147483647L;
 	TINT.base      = NULL;
+	TINT.owner   = NULL;
 
 	TBYTE.variant = TYPE_INT;
 	TBYTE.range.min = 0;
 	TBYTE.range.max = 255;
 	TBYTE.base      = NULL;
+	TBYTE.owner     = NULL;
 
 	TSTR.variant = TYPE_STRING;
 	TSTR.base      = NULL;
+	TSTR.owner     = NULL;
 
 	TLBL.variant = TYPE_LABEL;
 	TLBL.range.min = -(long)2147483648L;
 	TLBL.range.max = 2147483647L;
 	TLBL.base      = NULL;
+	TLBL.owner     = NULL;
+
+	TSCOPE.variant = TYPE_SCOPE;
+	TSCOPE.base    = NULL;
+	TSCOPE.owner   = NULL;
 }
 
 Bool TypeIsBool(Type * type)

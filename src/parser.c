@@ -35,7 +35,7 @@ Var * PopTop();
 void ParseCall(Var * proc);
 void ParseMacro(Var * macro);
 Type * ParseType();
-Var * ParseArrayElement(Var * arr, Bool ref);
+Var * ParseArrayElement(Var * arr);
 Var * ParseStructElement(Var * arr);
 Var * ParseFile();
 
@@ -319,12 +319,13 @@ const_list:
 			type->element = TypeByte();
 		}
 
-
 	} else if (TOK == TOKEN_ID) {
 		ParseVariable(&var);
 		if (TOK != TOKEN_ERROR) {
 			if (mode == MODE_TYPE) {
 				type = TypeDerive(var->type);
+				// For integer type, constants may be defined
+				if (type->variant == TYPE_INT) goto const_list;
 			} else {
 				type = var->type;
 			}
@@ -561,12 +562,29 @@ Syntax:
 	Var * idx = NULL;
 	Var * item;
 
-	if (arr->type->variant == TYPE_STRUCT) {
+	if (arr->mode == MODE_ELEMENT && arr->adr->mode == MODE_SCOPE) {
+		NextIs(TOKEN_DOT);
+		if (TOK == TOKEN_ID) {
+			item = VarFindScope(arr->adr, LEX.name, 0);
+			if (item != NULL) {
+				if (item->type->variant == TYPE_ARRAY) {
+					idx = VarNewElement(item, arr->var);
+//					idx->type = idx->type->element;
+				} else {
+					SyntaxError("$Variable is not an array.");
+				}
+			} else {
+				SyntaxError("$Scope does not contain member with name");
+			}
+			NextToken();
+		}
+
+	} else if (arr->type->variant == TYPE_STRUCT) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
 			item = VarFindScope(arr->type->owner, LEX.name, 0);
 			if (item != NULL) {
-				idx = VarNewElement(arr, item, false);
+				idx = VarNewElement(arr, item);
 			} else {
 				SyntaxError("$Structure does not contain member with name");
 			}
@@ -580,7 +598,7 @@ Syntax:
 	return idx;
 }
 
-Var * ParseArrayElement(Var * arr, Bool ref)
+Var * ParseArrayElement(Var * arr)
 /*
 Purpose:
 	Parse access to array element.
@@ -664,7 +682,7 @@ Purpose:
 				if (VarIsTmp(idx2)) G_TEMP_CNT--;
 				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 
-				idx = VarNewElement(idx, idx2, false);
+				idx = VarNewElement(idx, idx2);
 			} else {
 				SyntaxError("Array has only one dimension");
 			}
@@ -678,7 +696,8 @@ Purpose:
 	// Result is temporary variable created by InstrBinary, 
 	// arg1 = array, arg2 = item
 
-	item = VarNewElement(arr, idx, ref);
+	item = VarNewElement(arr, idx);
+
 
 	TOP = top;
 
@@ -719,8 +738,13 @@ void ParseOperand()
 		// @id denotes reference to variable
 		} else if (TOK == TOKEN_ADR) {
 			NextToken();
-			ref = true;
-			goto id;
+			var = VarFind2(LEX.name, 0);
+			if (var != NULL) {
+				var = VarNewDeref(var);
+			} else {
+				SyntaxError("$unknown variable");
+			}
+			goto no_id;
 		} else if (arg_no = ParseArgNo2()) {
 			var = VarMacroArg(arg_no-1);
 			goto indices;
@@ -729,7 +753,7 @@ void ParseOperand()
 			var = VarNewInt(LEX.n);
 			NextToken();
 		} else if (TOK == TOKEN_ID) {
-id:
+
 			var = VarFind2(LEX.name, 0);
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
@@ -753,7 +777,7 @@ id:
 				//TODO: Try to search using edit distance
 				return;
 			}
-
+no_id:
 			// Assign address
 			if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
 				NextToken();
@@ -825,7 +849,7 @@ indices:
 				// 
 				} else if (TOK == TOKEN_OPEN_P) {
 
-					item = ParseArrayElement(var, ref);
+					item = ParseArrayElement(var);
 
 //					if (VarIsTmp(STACK[TOP-1])) G_TEMP_CNT--;
 					STACK[TOP] = item;
@@ -1319,7 +1343,7 @@ void ParseGoto()
 		if (VarIsLabel(var)) {
 			GenGoto(var);
 		} else {
-			var = VarNewElement(var, VarNewInt(0), true);
+			var = VarNewDeref(var);				//TODO: MODE_DEREF
 			GenGoto(var);
 		}
 	}
@@ -1811,6 +1835,13 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 		dim = type->dim[1];
 		if (dim != NULL) {
 			*p_dim2 = VarNewInt(dim->range.max - dim->range.min + 1);
+
+		// Array of array
+		} else {
+			if (type->element != NULL && type->element->variant == TYPE_ARRAY) {
+				dim = type->element->dim[0];
+				*p_dim2 = VarNewInt(dim->range.max - dim->range.min + 1);
+			}
 		}
 	} else if (type->variant == TYPE_STRUCT) {
 		size = TypeSize(type);
@@ -1838,7 +1869,7 @@ Bool VarIsImplemented(Var * var)
 	// Macros and procedures are considered imp
 
 	v = var->type->variant;
-	if (v == TYPE_MACRO || v == TYPE_PROC || v == TYPE_LABEL) return true;
+	if (v == TYPE_MACRO || v == TYPE_PROC || v == TYPE_LABEL || v == TYPE_SCOPE) return true;
 
 	// Register variables are considered implemented.
 	if (var->adr != NULL && var->adr->scope == REGSET) return true;
@@ -1873,7 +1904,7 @@ Arguments:
 	arr		Reference to array or array element or array slice
 */
 {
-	Type * type, * src_type;
+	Type * type, * src_type, * idx1_type;
 	Var * idx, * src_idx, * label, * range, * stop, * label_done;
 	Int32 nmask;
 	Int32 stop_n;
@@ -1882,10 +1913,21 @@ Arguments:
 
 	src_idx = NULL;
 	type = arr->type;
-	idx = VarNewTmp(0, type->dim[0]);
 	label = VarNewTmpLabel();
+	idx1_type = NULL;
+
+	if (type->variant == TYPE_ARRAY) {
+		idx1_type = type->dim[0]	;
+	}
 
 	if (arr->mode == MODE_ELEMENT) {
+
+		// If this is array of array, we may need to initialize index variable differently
+		
+		if (arr->adr->mode == MODE_ELEMENT) {
+			idx1_type = arr->adr->type->dim[0];
+		}
+
 		range = arr->var;
 		if (range->mode == MODE_RANGE) {
 			min1 = range->adr;
@@ -1901,14 +1943,16 @@ Arguments:
 		dst_arr = arr;
 	}
 
+	idx = VarNewTmp(0, idx1_type);
+
 	src_type = init->type;
 	
 	// This is copy instruction (source is array)
 	if (src_type->variant == TYPE_ARRAY) {		
 		src_min = VarNewInt(src_type->dim[0]->range.min);
 		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
-		src_idx = VarNewTmp(0, type->dim[0]);
-		init = VarNewElement(init, src_idx, false);
+		src_idx = VarNewTmp(0, src_type->dim[0]);
+		init = VarNewElement(init, src_idx);
 		label_done = VarNewTmpLabel();
 	}
 
@@ -1931,7 +1975,7 @@ Arguments:
 		Gen(INSTR_LET, src_idx, src_min, NULL);
 	}
 	GenLabel(label);
-	Gen(INSTR_LET, VarNewElement(dst_arr, idx, false), init, NULL);
+	Gen(INSTR_LET, VarNewElement(dst_arr, idx), init, NULL);
 	if (src_idx != NULL) {
 		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
 		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
@@ -1953,7 +1997,7 @@ Purpose:
 	Bool is_assign;
 	Bool flexible;
 	UInt16 cnt, j, i, stack;
-	Var * var,  * item, * adr, * tuple;
+	Var * var,  * item, * adr, * tuple, * scope, * idx, * min, * max;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type = NULL;
 	UInt16 bookmark;
@@ -1969,22 +2013,51 @@ Purpose:
 
 	// Comma separated list of identifiers
 	cnt = 0;
+	scope = NULL;
 	do {
+retry:
 		var = NULL;
 
 		// Either find an existing variable or create new one
 		if (to_type == NULL) {
-			var = VarFind2(LEX.name, 0);
+			if (scope == NULL) {
+				var = VarFind2(LEX.name, 0);
+			} else {
+//				PrintScope(scope);
+				var = VarFindScope(scope, LEX.name, 0);
+			}
 		}
 		//TODO: Type with same name already exists
 		if (var == NULL) {			
-			var = VarAlloc(MODE_UNDEFINED, LEX.name, 0);
+			var = VarAllocScope(scope, MODE_UNDEFINED, LEX.name, 0);
+
+//			if (scope != NULL) {
+//				PrintScope(scope);
+//			}
+
 			// We need to prevent the variable from finding itself in case it has same name as type from outer scope
 			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
 			// Real mode is assigned when the variable type is parsed.
 			var->submode = submode;
+//			if (scope != NULL) {
+//				var->scope = scope;
+//			}
+		} else {
+			if (var->mode == MODE_SCOPE) {
+				NextToken();
+				scope = var;
+
+				if (NextIs(TOKEN_DOT)) {
+					goto retry;
+				} else {
+					goto no_dot;
+					SyntaxError("Dot expected after scope name");
+				}
+			}
 		}
 		NextToken();
+	// Parse array and struct indices
+no_dot:
 		ErrArg(var);
 
 		//===== Array index like ARR(x, y)
@@ -1992,14 +2065,15 @@ Purpose:
 		if (mode != MODE_CONST && mode != MODE_ARG && mode != MODE_TYPE && !Spaces()) {
 			if (TOK == TOKEN_OPEN_P) {
 				if (var->mode != MODE_UNDEFINED) {
-					var = ParseArrayElement(var, false);
+					var = ParseArrayElement(var);
 				} else {
 					SyntaxErrorBmk("Array variable [A] is not declared", bookmark);
 				}
+				if (TOK) goto no_dot;
 			} else if (TOK == TOKEN_DOT) {
 				var = ParseStructElement(var);
+				if (TOK) goto no_dot;
 			}
-
 		}
 
 		//===== Address
@@ -2010,6 +2084,11 @@ Purpose:
 				NextToken();
 				is_assign = true;
 			} else {
+
+				// (var,var,...)   tuple
+				// int (concrete address)
+				// variable (some variable)
+
 				adr = NULL; tuple = NULL;
 				NextToken();
 				//@
@@ -2036,12 +2115,32 @@ Purpose:
 					adr = VarNewInt(LEX.n);
 					NextToken();
 				} else if (TOK == TOKEN_ID) {
+
 					adr = VarFindScope(REGSET, LEX.name, 0);
 					if (adr == NULL) {
 						adr = VarFind2(LEX.name, 0);
 						NextToken();
 						if (adr == NULL) {
 							SyntaxError("$undefined regset or variable used as address");
+						} else {
+dot:
+							if (NextIs(TOKEN_DOT)) {
+								if (TOK == TOKEN_ID) {
+									adr = VarFindScope(adr, LEX.name, 0);
+									NextToken();
+									goto dot;
+								} else {
+									SyntaxError("Expected variable name");
+								}
+							}
+
+							if (adr->mode == MODE_SCOPE) {
+								SyntaxError("scope can not be used as address");
+							} 
+							// name(slice)
+							if (TOK == TOKEN_OPEN_P) {
+								adr = ParseArrayElement(adr);
+							}
 						}
 					} else {
 						NextToken();
@@ -2066,14 +2165,24 @@ Purpose:
 
 	if (NextIs(TOKEN_COLON)) {
 
-		is_assign = true;
+		// Scope
+		if (NextIs(TOKEN_SCOPE)) {
+			mode = MODE_SCOPE;
+			type = TypeScope();
+			is_assign = true;
+		} else {
+			is_assign = true;
 
-		// Parsing may create new constants, arguments atc. so we must enter subscope, to assign the
-		// type elements to this variable
-		EnterSubscope(var);
-		bookmark = SetBookmark();
-		type = ParseType2(mode);
-		ExitScope();
+			// Parsing may create new constants, arguments atc. so we must enter subscope, to assign the
+			// type elements to this variable
+			scope = SCOPE;
+			SCOPE = var;
+//			EnterSubscope(var);
+			bookmark = SetBookmark();
+			type = ParseType2(mode);
+//			ExitScope();
+			SCOPE = scope;
+		}
 	}
 
 	// Set the parsed type to all new variables (we do this, even if a type was not parsed)
@@ -2099,11 +2208,30 @@ Purpose:
 				}
 			} else {
 				// If type has not been defined, but this is alias, use type of the aliased variable
-				if (var->adr != NULL) {
-					if (var->adr->mode == MODE_VAR) {
-						var->type = var->adr->type;
-					} else if (var->adr->mode == MODE_TUPLE) {
+				adr = var->adr;
+				if (adr != NULL) {
+					if (adr->mode == MODE_VAR) {
+						var->type = adr->type;
+					} else if (adr->mode == MODE_TUPLE) {
 						is_assign = true;
+					} else if (adr->mode == MODE_ELEMENT) {
+						is_assign = true;
+						var->type = adr->type;
+						idx = adr->var;
+
+						// For array ranges, define type as array(0..<range_size>) of <array_element>
+
+						if (idx->mode == MODE_RANGE) {
+							min = idx->adr; max = idx->var;
+							if (min->mode == MODE_CONST && max->mode == MODE_CONST) {
+								var->type = TypeAlloc(TYPE_ARRAY);
+								var->type->dim[0] = TypeAllocInt(0, max->n - min->n);
+								var->type->element = adr->adr->type->element;
+							} else {
+								SyntaxError("Address can not use variable slices");
+							}
+						}
+
 					}
 				}
 			}
@@ -2372,10 +2500,18 @@ void ParseInstr2()
 	};
 }
 
+RuleArg * NewRuleArg()
+{
+	RuleArg * arg;
+	arg = MemAllocStruct(RuleArg);
+	return arg;
+}
+
 void ParseRuleArg2(RuleArg * arg)
 {
 	Var * var = NULL;
-	RuleArg * idx;
+	RuleArg * idx, * arr,  * idx2;
+//	RuleIndexVariant idx_var;
 
 //	if (LEX.line_no == 213) {
 //		arg_no = 0;
@@ -2400,19 +2536,50 @@ void ParseRuleArg2(RuleArg * arg)
 		return;
 	}
 
-	// Parese type after the argument (if present)
+	// Parse type after the argument (if present)
 	if (NextIs(TOKEN_COLON)) {
 		if (arg->variant == RULE_ANY) arg->variant = RULE_VARIABLE;
 		arg->type =	ParseType();
 	}
 
-	if (NextIs(TOKEN_OPEN_P)) {
+	// Parse Range
+	if (NextIs(TOKEN_DOTDOT)) {
+		arr = NewRuleArg();
+		MemMove(arr, arg, sizeof(RuleArg));
+		arg->variant = RULE_RANGE;
+		arg->arr     = arr;
+		arg->arg_no  = 0;
+
+		arg->index = NewRuleArg();
+		ParseRuleArg2(arg->index);
+		return;
+	}
+
+	// Parse array subscripts
+	while (NextIs(TOKEN_OPEN_P)) {
+
+		// Current argument will be changed to RULE_ELEMENT, so we must copy it to rule for array
+		arr = NewRuleArg();
+		MemMove(arr, arg, sizeof(RuleArg));
+		arg->variant = RULE_ELEMENT;
+		arg->arr     = arr;
+		arg->arg_no  = 0;
+
+		// Parse indexes (there can be comma separated list of indexes)
 		idx = arg;
 		do {
-			idx->index = MemAllocStruct(RuleArg);
+			idx->index = NewRuleArg();
 			ParseRuleArg2(idx->index);
-			idx = idx->index;
-		} while(NextIs(TOKEN_COMMA));
+
+			if (!NextIs(TOKEN_COMMA)) break;
+
+			idx2 = NewRuleArg();
+			idx2->variant = RULE_TUPLE;
+			idx2->arr     = idx->index;
+			idx->index    = idx2;
+			idx = idx2;
+
+		} while(true);
 
 		if (TOK != TOKEN_ERROR && !NextIs(TOKEN_CLOSE_P)) {
 			SyntaxError("expected closing brace");

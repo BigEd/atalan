@@ -294,7 +294,7 @@ void DeadCodeElimination(Var * proc)
 		if (blk->from == NULL && blk->callers == NULL) {
 			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
 				//TODO: We should solve alignment using some other means (probably block, or label, should have alignment)
-				if (blk->first == NULL || blk->first->op != INSTR_ALIGN) {
+				if (blk->first == NULL || (blk->first->op != INSTR_ALIGN && blk->first->op != INSTR_ARRAY_INDEX)) {
 					prev_blk->next = blk->next;
 					InstrBlockFree(blk);
 					MemFree(blk);

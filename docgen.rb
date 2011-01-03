@@ -2,6 +2,15 @@
 
 $proj_folder = "P:/Atalan/"
 
+def load_file(filename)
+# Read text file (eventually removing UTF-8 BOM chars and return it as list of lines
+  arr = IO.readlines(filename)
+  if arr[0] =~ /\A\xEF\xBB\xBF(.*)/
+    arr[0] = $1
+  end
+  return arr
+end
+
 def put_file(filename)
   head = IO.readlines($proj_folder + "www_src/" + filename) 
   head.each{|line|
@@ -171,8 +180,77 @@ def ata_example(filenames)
     puts "  <td><a href=\"examples/#{filename}.xex\">#{filename}.xex</a></td>"
     puts "</tr>"
   }
+  
   puts "</table>"
   put_file("footer.html") 
+  
+ filenames.each { |filename|
+    f = load_file("examples/#{filename}.atl")
+    $stdout = File.new($proj_folder + "www/examples/" + filename + ".html", "w")
+puts <<XXXX
+<html>
+<head>
+<META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=utf-8">
+<link rel=StyleSheet type="text/css"
+      href="../template/main.css">
+<title>Atalan example: #{filename}.atl</title>
+</head>
+<body>
+<pre class='code'>
+XXXX
+
+f.each { |line| 
+
+  if line =~ /(\s*\A;.*)/ 
+    line = "<i>" + line + "</i>"
+  else
+    line.gsub!(/\//, '<b>/</b>')
+    line.gsub!(/\(/, '<b>(</b>')
+    line.gsub!(/\)/, '<b>)</b>')
+    line.gsub!(/out/, '<b>out</b>')
+    line.gsub!(/(in)\s/, '<b>in</b>')
+    line.gsub!(/const/, '<b>const</b>')
+    line.gsub!(/for/, '<b>for</b>')
+    line.gsub!(/if/, '<b>if</b>')
+    line.gsub!(/else/, '<b>else</b>')
+    line.gsub!(/then/, '<b>then</b>')
+    line.gsub!(/step/, '<b>step</b>')
+    line.gsub!(/where/, '<b>where</b>')
+    line.gsub!(/while/, '<b>while</b>')
+    line.gsub!(/until/, '<b>until</b>')
+    line.gsub!(/array/, '<b>array</b>')
+    line.gsub!(/type/, '<b>type</b>')
+    line.gsub!(/file/, '<b>file</b>')
+    line.gsub!(/inc/, '<b>inc</b>')
+    line.gsub!(/dec/, '<b>dec</b>')
+
+    line.gsub!(/sqrt/, '<b>sqrt</b>')
+    line.gsub!(/\b(and)/, '<b>and</b>')
+    line.gsub!(/\b(or)/, '<b>or</b>')
+    line.gsub!(/\b(not)/, '<b>not</b>')
+
+    line.gsub!(/\b(bitand)/, '<b>bitand</b>')
+    line.gsub!(/\b(bitor)/, '<b>bitor</b>')
+    line.gsub!(/\b(bitnot)/, '<b>bitnot</b>')
+
+    line.gsub!(/=/, '<b>=</b>')
+    line.gsub!(/\.\./, '<b>..</b>')
+    line.gsub!(/\+/, '<b>+</b>')
+    line.gsub!(/\-/, '<b>-</b>')
+    line.gsub!(/\*/, '<b>*</b>')
+
+  end
+  puts line
+}
+
+
+puts <<XXXX
+</pre>
+</body>
+</html>
+XXXX
+  }
+   
 end
 
 $stdout = File.new($proj_folder + 'www/index.html', 'w')

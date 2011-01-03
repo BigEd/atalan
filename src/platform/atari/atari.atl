@@ -79,8 +79,24 @@ in STICK@632:array(0..3) of stick'state
 
 ; DMA
 
-out DMACTL@559:byte
+type dma'type:byte (narrow_playfield = 1, playfield = 2, wide_playfield = 3, missiles = 4, players = 8, hires_sprites = 16, dl = 32, off = 0)
+out DMACTL@559:dma'type
 
+;BIT(S)  PATTERN  VALUE  RESULT
+;0,1     ------00  0     No playfield
+;        ------01  1     Narrow playfield
+;        ------10  2     Regular playfield
+;        ------11  3     Wide playfield
+;2       -----0--  0     Missiles off
+;        -----1--  4     Missiles on
+;3       ----0---  0     Players off
+;        ----1---  8     Players on
+;4       ---0----  0     Double height players
+;        ---1---- 16     Regular height players
+;5       --0-----  0     ANTIC off
+;        --1----- 32     ANTIC on
+;6,7     --------        Not used
+ 
 color:0..255
 	Black                    =   0
 	Rust                     =  16
@@ -128,7 +144,8 @@ out player_col2@$d012:array(3) of color
 out missile_size@$d00c:byte
 out missile_x@$d004:array(3) of byte
 
-out GRACTL@$d01d:byte
+out GRACTL@$d01d:0..255 (missiles = 1, players = 2, trigger_latch = 4)
+
 out GTICTLS@$26f:byte
 out GTIACTL@$d01b:byte
 

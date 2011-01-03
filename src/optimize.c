@@ -221,7 +221,8 @@ Bool ArgNeedsSpill(Var * arg, Var * var)
 	Bool spill = false;
 	if (arg != NULL) {
 		if (arg->mode == MODE_ELEMENT) {
-			if (arg->adr == var->adr && FlagOn(arg->submode, SUBMODE_REF)) {
+			if (arg->adr->mode == MODE_DEREF && arg->adr->var == var->adr) {
+//			if (arg->adr == var->adr && FlagOn(arg->submode, SUBMODE_REF)) {
 				spill = true;
 			}			
 		}
@@ -305,9 +306,10 @@ Purpose:
 //				if (FlagOn(var->var->flags, VarLoopDependent)) continue;
 			}
 
-			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG | SUBMODE_REF) 
+			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG /*| SUBMODE_REF*/) 
 //			 && (var->mode != MODE_ELEMENT || FlagOff(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG))
 			 && var->mode != MODE_CONST 
+			 && var->mode != MODE_DEREF
 			 && var->type != NULL && var->type->variant != TYPE_PROC
 			 && !VarIsLabel(var) 
 			 && !VarIsArray(var)

@@ -414,6 +414,13 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 {
 	Type * type = pattern->type;
 	Type * vtype = var->type;
+//	RuleArg * idx, * idx2;
+
+//	if (pattern->variant == RULE_ELEMENT) {
+//		if (!VarIsArrayElement(var)) return false;		// pattern expects element, and variable is not an element
+//		if (!ArgMatch(pattern->index, var->var)) return false;
+//		return ArgMatch(pattern->arr, var->adr);
+//	}
 
 	// Pattern expects reference to array with one or more indices
 	if (pattern->index != NULL) {
@@ -423,74 +430,21 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 				// We may treat it as normal variable
 //				printf("");
 			} else {
+				// 1D index
 				if (!ArgMatch(pattern->index, var->var)) return false;
-				//TODO: Match type of array item (we suppose byte not)
+//				if (!VarMatchesType(var->adr, type)) return false;
 				return true;
 			}
 		} else {
 			return false;
 		}
 
-	// Pattern does not expect any index, but we have some
+	// Pattern does not expect any index, but we have some, so there is no match
 	} else {
 		if (VarIsArrayElement(var)) return false;
 	}
 
 	return VarMatchesType(var, type);
-/*
-	if (type == vtype) return true;
-
-	// If pattern has no defined type, it fits
-	if (type == NULL) return true;
-
-	if (type->variant == TYPE_VARIANT) {
-
-	} else if (type->variant == TYPE_INT) {
-		if (vtype != NULL) {
-			// If variable is constant, the check is different
-			if (var->mode == MODE_CONST) {
-				if (vtype->variant == TYPE_INT) {
-					if (var->n < type->range.min) return false;
-					if (var->n > type->range.max) return false;
-				}
-			} else if (var->mode == MODE_ELEMENT) {
-				// Specified variable is element, but the type is not array
-				if (type->variant != TYPE_ARRAY) return false;
-			} else {
-				if (vtype->variant != TYPE_INT) return false;
-				if (type->range.max < vtype->range.max) return false;
-				if (type->range.min > vtype->range.min) return false;
-			}
-		}
-	} else if (type->variant == TYPE_ARRAY) {
-		if (vtype == NULL) return false;
-		if (vtype->variant != TYPE_ARRAY) return false;
-
-		// Match first index, second index, return type
-
-		return TypeIsSubsetOf(vtype->dim[0], type->dim[0])
-			&& TypeIsSubsetOf(vtype->dim[1], type->dim[1])
-			&& TypeIsSubsetOf(vtype->element, type->element);
-		
-	} else if (type->variant == TYPE_ADR) {
-		if (vtype != NULL) {
-			if (vtype->variant != TYPE_ADR) return false;
-		}
-	} else if (type->variant == TYPE_PROC) {
-
-		// Interrupt routines types will be based on some other type
-		if (vtype->base == NULL && type->base == NULL) return true;
-
-		// Procedure type is only same, if it is exactly the same
-		return false;
-
-	} else if (type->variant == TYPE_STRUCT) {
-		if (vtype != NULL) {
-			if (vtype->variant != TYPE_STRUCT) return false;
-		}
-	}
-	return true;
-*/
 }
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg)
@@ -503,6 +457,24 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 	atype = arg->type;
 	
 	switch(pattern->variant) {
+	case RULE_RANGE:
+		if (arg->mode != MODE_RANGE) return false;		// pattern expects element, and variable is not an element
+		if (!ArgMatch(pattern->index, arg->var)) return false;
+		return ArgMatch(pattern->arr, arg->adr); 
+		break;
+
+	case RULE_TUPLE:
+		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
+		if (!ArgMatch(pattern->index, arg->var)) return false;
+		return ArgMatch(pattern->arr, arg->adr); 
+		break;
+
+	case RULE_ELEMENT:
+		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
+		if (!ArgMatch(pattern->index, arg->var)) return false;
+		return ArgMatch(pattern->arr, arg->adr); 
+		break;
+
 	case RULE_CONST:	// var
 		if (!VarIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
@@ -537,14 +509,29 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 		break;
 	
 	case RULE_DEREF:
-		if (arg->mode == MODE_CONST) return false;
-		if (FlagOff(arg->submode, SUBMODE_REF)) return false;
+		if (arg->mode != MODE_DEREF) return false;
+//		if (arg->mode == MODE_CONST) return false;
+//		if (FlagOff(arg->submode, SUBMODE_REF)) return false;
+		arg = arg->var;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
+	// We get array as an argument. We are interested in the type of it's element.
+//	case RULE_ARRAY_ARG:
+//		if (arg->mode == MODE_ELEMENT) return false;
+//		if (atype->variant != TYPE_ARRAY) return false;
+//		while(atype->element->variant == TYPE_ARRAY) atype = atype->element;
+//		if (pattern->type != NULL) {
+//			if (!TypeIsSubsetOf(atype->element, pattern->type)) return false;
+//			if (!VarMatchesPattern(arg, pattern)) return false; 
+//			printf("");
+//		}
+//		break;
+
 	case RULE_ARG:
+		if (arg->mode == MODE_DEREF) return false;
 		if (FlagOn(arg->submode, SUBMODE_REG)) return false; 
-		if (FlagOn(arg->submode, SUBMODE_REF)) return false;
+//		if (FlagOn(arg->submode, SUBMODE_REF)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
@@ -561,9 +548,9 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 		// For array element variable store array into the macro argument
 
 		pvar = arg;
-		if (arg->mode == MODE_ELEMENT && !VarIsStructElement(arg)) {
-			pvar = arg->adr;
-		}
+//		if (arg->mode == MODE_ELEMENT && !VarIsStructElement(arg)) {
+//			pvar = arg->adr;
+//		}
 
 		j = pattern->arg_no-1;
 		if (MACRO_ARG[j] == NULL) {
@@ -574,9 +561,9 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 		// Set the index items
 
-		if (pattern->index != NULL) {
-			if (!ArgMatch(pattern->index, arg->var)) return false;
-		}
+//		if (pattern->index != NULL) {
+//			if (!ArgMatch(pattern->index, arg->var)) return false;
+//		}
 	}
 	return true;
 }
@@ -661,7 +648,7 @@ Purpose:
 			arg = FindArg(macro, var->var, args);	// index
 
 			if (arr != var->adr || arg != var->var) {
-				var = VarNewElement(arr, arg, FlagOn(var->submode, SUBMODE_REF));
+				var = VarNewElement(arr, arg);
 			}
 		} else {
 
@@ -771,6 +758,10 @@ Argument:
 }
 
 Var * VarReg(Var * var)
+/*
+Purpose:
+	Return register that is aliased by this variable or NULL.
+*/
 {
 	Var * reg;
 
@@ -829,7 +820,6 @@ Purpose:
 			i->arg2   = VarReg(i->arg2);
 		}
 	}
-
 
 	// We perform as many translation steps as necessary
 	// Some translation rules may use other translation rules, so more than one step may be necessary.
@@ -942,8 +932,10 @@ void PrintVarVal(Var * var)
 
 	if (var == NULL) return;
 
-	if (FlagOn(var->submode, SUBMODE_REF)) {
+	if (var->mode == MODE_DEREF) {
+//	if (FlagOn(var->submode, SUBMODE_REF)) {
 		printf("@");
+		var = var->var;
 	}
 
 	if (var->name == NULL) {
@@ -966,10 +958,14 @@ void PrintVarVal(Var * var)
 				printf(")");
 			}
 		} else {
-			switch(var->type->variant) {
-			case TYPE_INT: printf("%ld", var->n); break;
-			case TYPE_STRING: printf("'%s'", var->str); break;
-			default: break;
+			if (var->mode == MODE_RANGE) {
+				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
+			} else {
+				switch(var->type->variant) {
+				case TYPE_INT: printf("%ld", var->n); break;
+				case TYPE_STRING: printf("'%s'", var->str); break;
+				default: break;
+				}
 			}
 		}
 	} else {
@@ -1004,9 +1000,13 @@ void PrintVar(Var * var)
 {
 	Type * type;
 
-	if (FlagOn(var->submode, SUBMODE_REF)) {
+	if (var->mode == MODE_DEREF) {
 		printf("@");
+		var = var->var;
 	}
+//	if (FlagOn(var->submode, SUBMODE_REF)) {
+//		printf("@");
+//	}
 
 	if (var->mode == MODE_ELEMENT) {
 		PrintVarName(var->adr);

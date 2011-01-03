@@ -20,6 +20,8 @@ void * MemAllocEmpty(long size);
 #define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
 #define MemFree(adr) free(adr)
 
+#define MemMove(dest, src, size) memmove(dest, src, size)
+
 char * StrAlloc(char * str);
 char * StrAllocLen(char * str, UInt16 len);
 #define StrCopy(dest, src) strcpy(dest, src);
