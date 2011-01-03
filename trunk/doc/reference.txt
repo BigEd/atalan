@@ -215,7 +215,17 @@ This syntax may be laso used to define variable as an alias for some other varia
 (place the two variables to same location). This feature is most commonly used
 when definining headers of external procedures. 
 
+Slices of existing arrays may be defined using address.
+
+:::::::::::::::::
+memory:array (0..7) of array (0..255) of byte
+bitmap@memory(4..7)
+:::::::::::::::::
   
+Variable bitmap will have type 'array(0..3) of array(0..255) of byte' which will
+be automatically deduced by compiler.
+Acessing it will have the same effect as accessing the memory array.
+ 
 ===================
 Variable assignment
 ===================
@@ -408,7 +418,7 @@ Arrays
 Array is defined using keyword array.
 
 ::::::::::::::::
-name:array [(min..max|count)[,(min..max|count)]] of byte
+name:array [(min..max|count)[,(min..max|count)]] [of type]
 ::::::::::::::::
 
 If the array size is defined using single value, the value defines maximal index.
@@ -417,6 +427,8 @@ So x:array(31) defines array of 32 elements (index 0..31).
 
 Array can be defined as one or two dimensional.
 
+If the type of the array is ommitted, it is byte.
+ 
 ==============
 Initialization
 ==============
@@ -454,6 +466,24 @@ scr:array(39,23) of byte
 arr(0,0) = 65
 ::::::::::::::::
 
+=========
+2D arrays
+=========
+
+2D arrays are organized so, that first index represents X coordinate and
+second index Y coordinate on 2D grid.
+This is to provide comfortable means of working with display data.
+
+Following example defines 'screen' of 24 lines with 40 columns and sets the character in the middle of the screen to 'A'.
+
+::::::::::::::::::::::::::::
+screen:array(0..39,0..23) of byte
+
+x = 19
+y = 11
+screen(x,y) = 65
+::::::::::::::::::::::::::::
+
 ===================
 Range access [TODO]
 ===================
@@ -478,6 +508,37 @@ set'font file "baloon.fnt"
 :::::::::::::::::::::::::::
 
 Reference to file is relative to location of the source file.
+
+
+******
+Scopes
+******
+
+It is possible to define explicitly named scopes.
+When scope is defined, variables may be defined in this scope using
+dot syntax like scope.name.
+
+:::::::::::::
+sprite:scope
+
+sprite.x: array (0..3) of byte
+sprite.color: array(0..3) of byte
+
+sprite.x(0) = 100
+sprite.color(0) = red 
+:::::::::::::
+
+==============
+Indexed scopes
+==============
+
+When referencing scope variable of array type, it is posible to specify index 
+after the name of the scope instead of the name of variable.
+So assignments from previous example may be written as
+:::::::::::::::::
+sprite(0).x = 100
+sprite(0).color = red 
+:::::::::::::::::
 
 *********
 Operators

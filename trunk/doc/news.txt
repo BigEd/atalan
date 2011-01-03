@@ -3,6 +3,14 @@ News
 ****
 
 ==========
+3-Jan-2011
+==========
+
+- NEW: Scope type
+- NEW: Array of array (massive rewriting of rules matching)
+- NEW: Slice addresses
+
+==========
 4-Dec-2010
 ==========
 

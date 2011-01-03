@@ -32,7 +32,9 @@ type
    sbyte:-128..127
    byte1:byte or sbyte
    byte2:card or int
-   
+   byte1arr:array(card) of byte1
+   _byte1arr2D:array(card,card) of byte1
+
 ;   ptr:0..65535     ;ptr defines size of pointer and memory limits
 
 ;==============================
@@ -42,14 +44,15 @@ type
 ;rule alloc %A:0..255  = ".ds 1"
 
 rule alloc %A:struct(), %B                         = "   .ds %B"
-rule alloc %A:array(card) of byte, %B            = "   .ds %B"
+rule alloc %A:array(card) of byte1, %B            = "   .ds %B"
 rule alloc %A:array(byte) of card, %B            = "%A_lo:" "   .ds %B" "%A_hi:" "   .ds %B" 
-rule alloc %A:array(byte,byte) of byte, %B, %C   = "   .ds %B*%C"
+rule alloc %A:array(byte,byte) of byte1, %B, %C   = "   .ds %B*%C"
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
 rule alloc %A:long                               = "   .ds 3"
 rule alloc %A:adr                                = "   .ds 2"
 rule alloc %A:-128..127                          = "   .ds 1"
+
 
 ;========================
 ;Temporary variables
@@ -124,46 +127,75 @@ rule let %A:sbyte, %B:sbyte = instr
 ;We use indexing using X register.
 ;Optimizer may later change it to Y.
 
-rule let %A:byte(const %B:byte),%C:byte  = instr
+rule let %A:byte1arr(const %B:byte),%C:byte  = instr
   let _a,%C
   let %A(%B),_a    ;with constant, we do not need to load index register X
   
 ;Prevent compiler from generation extra code, when we are already assigning _a register.
 
-rule let _a,%A:byte(%B:byte) = instr
+rule let _a,%A:byte1arr(%B:byte) = instr
   let _x,%B 
   let _a,%A(_x)
 
-rule let %A:byte(%B:byte), _a = instr
+rule let %A:byte1arr(%B:byte), _a = instr
   let _x,%B 
   let %A(_x),_a
 
-
-rule let %A:byte(%B:byte),%C:byte = instr
+rule let %A:byte1arr(%B:byte),%C:byte1 = instr
 	let _a,%C
 	let _x,%B
 	let %A(_x),_a
 
 ;Accessing one dimensional array using constant is optimized to direct access.
-rule let %A:byte,%B:byte(const %C) = instr
+rule let %A:byte1,%B:byte1arr(const %C) = instr
 	let _a,%B(%C)
 	let %A, _a
 	
-rule let %A:byte,%B:byte(%C:byte) = instr 
+rule let %A:byte1,%B:byte1arr(%C:byte) = instr 
 	let _x,%C
 	let _a,%B(_x)
 	let %A, _a
 
-rule let %A:byte(%B:byte),%C:byte(%D:byte) = instr 
+rule let %A:byte1arr(%B:byte),%C:byte1arr(%D:byte) = instr 
 	let _a,%C(%D)
 	let %A(%B), _a
 
-;======= 2-byte array with one byte index
+;======= Array of array (is simmilar to 2D array, but x & y are not switched)
+
+type arr_of_arr:array(byte) of array(byte) of byte1
+
+;rule alloc %A:array(byte) of array(byte) of byte1, %B, %C = "   .ds %B*%C"
+;rule arrindex %A:array(byte) of array(byte) of byte1,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C)" "%A_hi:  :%B dta h(%A + #*%C)"
+
+rule alloc %A:array(byte) of array(byte) of byte1, %B, %C = "   .ds %B*%C"
+rule arrindex %A:array(byte) of array(byte) of byte1,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C)" "%A_hi:  :%B dta h(%A + #*%C)"
+
+rule let %A:arr_of_arr(%B:byte)(%C:byte), %D:byte1 = instr
+	let _y, %B
+	lo _a, %A(_y)			;this accesses lower byte of array of pointers
+	let _arr(0), _a
+	hi _a, %A(_y)
+	let _arr(1), _a
+	let _y, %C
+	let _a, %D
+	let @_arr(_y), _a	
+
+rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
+	let _y, %C
+	lo _a, %A(_y)
+	let _c, 0
+	add _a, _a, %B
+	let %D(0), _a
+	hi _a, %A(_y)
+	add _a, _a, 0	
+	let %D(1), _a
+
+;======= 2D byte array
 	
 ;2D Array (2x byte index, byte value)
 ;We use indexing using Y register.
 
-rule let %A:byte(%B:byte, %C:byte), %D:byte = instr
+rule let %A:_byte1arr2D(%B:byte, %C:byte), %D:byte = instr
 	let _y, %C
 	lo _a, %A(_y)			;this accesses lower byte of array of pointers
 	let _arr(0), _a
@@ -173,7 +205,7 @@ rule let %A:byte(%B:byte, %C:byte), %D:byte = instr
 	let _a, %D
 	let @_arr(_y), _a	
 
-rule let %D:byte, %A:byte(%B:byte, %C:byte)  = instr
+rule let %D:byte, %A:_byte1arr2D(%B:byte, %C:byte)  = instr
 	let _y, %C
 	lo _a, %A(_y)
 	let _arr(0), _a
@@ -182,6 +214,18 @@ rule let %D:byte, %A:byte(%B:byte, %C:byte)  = instr
 	let _y, %B
 	let _a, @_arr(_y)	
 	let %D, _a
+
+rule let_adr %D:adr, %A:_byte1arr2D(%B:byte,%C:byte) = instr
+	let _y, %C
+	lo _a, %A(_y)
+	let _c, 0
+	add _a, _a, %B
+	let %D(0), _a
+	hi _a, %A(_y)
+	add _a, _a, 0	
+	let %D(1), _a
+
+;===========
 
 ;Convert 2-byte const to 1-byte
 rule let %A:byte, const %B:card = instr
@@ -247,7 +291,7 @@ rule let %A:long,const %B:long = instr
 
 ;===== Byte array with 2 byte index
 
-rule let %C:byte(%D:card), %A:byte = instr
+rule let %C:byte1arr(%D:card), %A:byte = instr
   let_adr _a, %C(0)
   let _arr(0), _a
   let_adr _a, %C(1)
@@ -258,7 +302,7 @@ rule let %C:byte(%D:card), %A:byte = instr
   let _a,%A
   let @_arr(_y), _a  
 
-rule let %C:byte(%D:card), _a = instr
+rule let %C:byte1arr(%D:card), _a = instr
   let _x,_a
   let_adr _a, %C(0)
   let _arr(0), _a
@@ -270,7 +314,7 @@ rule let %C:byte(%D:card), _a = instr
   let _a,_x
   let @_arr(_y), _a  
 
-rule let %A:byte, %C:byte(%D:card)  = instr
+rule let %A:byte, %C:byte1arr(%D:card)  = instr
   let_adr _a, %C(0)
   let _arr(0), _a
   let_adr _a, %C(1)
@@ -284,16 +328,6 @@ rule let %A:byte, %C:byte(%D:card)  = instr
 ;******** Let_adr
 	
 ;Compute address of specified element in array and store it to specified variable
-
-rule let_adr %D:adr, %A:byte(%B:byte,%C:byte) = instr
-	let _y, %C
-	lo _a, %A(_y)
-	let _c, 0
-	add _a, _a, %B
-	let %D(0), _a
-	hi _a, %A(_y)
-	add _a, _a, 0	
-	let %D(1), _a
 
 rule let_adr %A:adr, %B = instr
   let_adr _a, %B(0)
@@ -331,6 +365,7 @@ rule hi %A, %B = instr
   let %A, _a
 
 rule hi _a, %A(_y)      = "   lda %A_hi,y"
+rule hi _a, %A:arr_of_arr = "   lda #>%A"
 rule hi _a, const %A    = "   lda #>%A"
 rule hi _a,%A:card      = "   lda %A+1"
 rule hi _x, %A     =  "   ldx %A+1"
@@ -350,24 +385,24 @@ rule add %A:byte, %B:card, %C:byte = instr
   add _a,_a,%C
   let %A,_a
   
-rule add _a, _a, %A:byte(%B:byte) = instr
+rule add _a, _a, %A:byte1arr(%B:byte) = instr
 	let _x,%B
 	add _a, _a, %A(_x)
 
-rule add %A:byte(%B:byte),%C:byte(%D:byte),%E:byte(%F:byte) = instr
+rule add %A:byte1arr(%B:byte),%C:byte1arr(%D:byte),%E:byte1arr(%F:byte) = instr
 	let _a,%C(%D)
 	let _c,0
 	add _a, _a, %E(%F)
 	let %A(%B), _a
 
-rule add %A:byte(%B:byte),%C:byte,%D:byte = instr
+rule add %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
 	let _c,0
 	add _a, _a, %D
 	let _x,%B
 	let %A(_x),_a
 
-rule add %A:byte,%B:byte(%C:byte),%D:byte = instr
+rule add %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let _x,%C
 	let _a,%B(_x)
 	let _c,0
@@ -452,11 +487,12 @@ rule add _x,_x,1 = "   inx"
 rule add _y,_y,1 = "   iny"
 rule add _a,_a,const %A:byte1  = "   adc #%A"
 rule add _a,_a,%A:byte1 = "   adc %A"
-rule add _a,_a, %A:byte1(_x) =  "   adc %A,x"
+rule add _a,_a, %A(_x) =  "   adc %A,x"
+rule add _a,_a, %A(_y) =  "   adc %A,y"
 rule add _a,_a,%A(const %B) = "   adc %A+%B"
 
 rule add %A:byte1,%A,1 = "   inc %A"
-rule add %A:byte(const %B), %A(%B), 1 = "   inc %A+%B"
+rule add %A(const %B), %A(%B), 1 = "   inc %A+%B"
 
 ;*********** Sub
 
@@ -958,7 +994,7 @@ rule div %A:byte, %B:card, %C:byte = instr
 	call _sys_div8
 	let %A, _a
 
-rule div %A:byte(%B:card), %C:card, %D:byte = instr
+rule div %A:byte1arr(%B:card), %C:card, %D:byte = instr
 	let _TEMPW1, %C			;divident
 	let _a, %D          ;divisor
 	call _sys_div8
@@ -1017,9 +1053,9 @@ rule mod %A:byte, %B:card, %C:byte = instr
 
 rule and _a,_a,const %A:byte  = "   and #%A"
 rule and _a,_a,%A:byte        = "   and %A"
-rule and _a,_a,%A:byte(_x)      = "   and %A,x"
-rule and _a,_a,%A:byte(_y)      = "   and %A,y"
-rule and _a,_a,@%A:byte(_y)     = "   and (%A),y"
+rule and _a,_a,%A:byte1arr(_x)      = "   and %A,x"
+rule and _a,_a,%A:byte1arr(_y)      = "   and %A,y"
+rule and _a,_a,@%A:byte1arr(_y)     = "   and (%A),y"
 
 rule and %A:byte,%B:byte,%C:byte = instr
 	let _a,%B
@@ -1031,13 +1067,13 @@ rule and %A:byte,%B:card,%C:byte = instr
 	and _a,_a,%C
 	let %A,_a
 
-rule and %A:byte(%B:byte),%C:byte,%D:byte = instr
+rule and %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
 	and _a, _a, %D
 	let _x,%B
 	let %A(_x),_a
 
-rule and %A:byte,%B:byte(%C:byte),%D:byte = instr
+rule and %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let _x,%C
 	let _a,%B(_x)
 	and _a, _a, %D
@@ -1077,22 +1113,22 @@ rule and %A:card, %B:card, %C:card = instr
 
 rule or _a,_a,const %A:byte  = "   ora #%A"
 rule or _a,_a,%A:byte        = "   ora %A"
-rule or _a,_a,%A:byte(_x)      = "   ora %A,x"
-rule or _a,_a,%A:byte(_y)      = "   ora %A,y"
-rule or _a,_a,@%A:byte(_y)     = "   ora (%A),y"
+rule or _a,_a,%A:byte1arr(_x)      = "   ora %A,x"
+rule or _a,_a,%A:byte1arr(_y)      = "   ora %A,y"
+rule or _a,_a,@%A:byte1arr(_y)     = "   ora (%A),y"
 
 rule or  %A:byte,%B:byte,%C:byte = instr
   let _a,%B
   or _a,_a,%C
   let %A,_a
 
-rule or %A:byte(%B:byte),%C:byte,%D:byte = instr
+rule or %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
 	or _a, _a, %D
 	let _x,%B
 	let %A(_x),_a
 
-rule or %A:byte,%B:byte(%C:byte),%D:byte = instr
+rule or %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let _x,%C
 	let _a,%B(_x)
 	or _a, _a, %D
@@ -1132,22 +1168,22 @@ rule or %A:card, %B:card, %C:card = instr
 
 rule xor _a,_a,const %A:byte  = "   eor #%A"
 rule xor _a,_a,%A:byte        = "   eor %A"
-rule xor _a,_a,%A:byte(_x)      = "   eor %A,x"
-rule xor _a,_a,%A:byte(_y)      = "   eor %A,y"
-rule xor _a,_a,@%A:byte(_y)     = "   eor (%A),y"
+rule xor _a,_a,%A:byte1arr(_x)      = "   eor %A,x"
+rule xor _a,_a,%A:byte1arr(_y)      = "   eor %A,y"
+rule xor _a,_a,@%A:byte1arr(_y)     = "   eor (%A),y"
 
 rule xor  %A:byte,%B:byte,%C:byte = instr
 	let _a,%B
 	xor _a,_a,%C
 	let %A,_a
 
-rule xor %A:byte(%B:byte),%C:byte,%D:byte = instr
+rule xor %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let _a,%C
 	xor _a, _a, %D
 	let _x,%B
 	let %A(_x),_a
 
-rule xor %A:byte,%B:byte(%C:byte),%D:byte = instr
+rule xor %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let _x,%C
 	let _a,%B(_x)
 	xor _a, _a, %D
@@ -1432,18 +1468,25 @@ rule ifge %A,%B:card, %C:card   = instr
   ifeq %A, _C, 1         ; jcs %A
 
 
-
-
-	
+;==============================	
 ;Rules emmiting compiled output
+;==============================
 ;
 ;These rules are used in last step of compilation to transform compiler
 ;instructions to processor specific instructions.
 ;Some rule must match every compiler instruction possible in this stage.
-;(Note, that previous compilation stages are responsible to prepare the
+;(Previous compilation stages are responsible to prepare the
 ; code so, that this is true). 
+ 
 
+;Multiple precision integer support
+;----------------------------------
+;Array instructions may work either with array of bytes, addresses or with integers.
+;Accessing integer as array provides the possibility to access respective bytes 
+;in an integers and thus define multiple precision operations.
+;'rawbytes' type defines type to use for indexed instructions on the processor.
 
+type rawbytes:byte1arr or adr or -$8000'0000..$7fff'ffff
 
 ;CLC,SEC
 
@@ -1466,8 +1509,8 @@ rule ifne %A, _C, 1  = "   jcc %A"
 
 rule sub _void, _a, const %A:byte = "   cmp #%A"
 rule sub _void, _a, %A:byte       = "   cmp %A"
-rule sub _void, _a, %A:byte(1)    = "   cmp %A+1"
-rule sub _void, _a, %A:byte(0)    = "   cmp %A"
+rule sub _void, _a, %A:rawbytes(1)    = "   cmp %A+1"
+rule sub _void, _a, %A:rawbytes(0)    = "   cmp %A"
 
 rule sub _void, _x, const %A:byte = "   cpx #%A"
 rule sub _void, _x, %A:byte       = "   cpx %A"
@@ -1486,57 +1529,64 @@ rule let _a,_y      = "   tya"
 
 rule let _x,const %A:byte1   = "   ldx #%A"
 rule let _x,%A:byte1        = "   ldx %A"
-rule let _x,%A(const %B) = "   ldx %A+%B"
-rule let _x,%A:byte1(_y)       = "   ldx %A,y"
+rule let _x,%A:rawbytes(const %B) = "   ldx %A+%B"
+rule let _x,%A:rawbytes(_y)       = "   ldx %A,y"
 
 ;LDY
 rule let _y,const% A:byte1   = "   ldy #%A"
 rule let _y,%A:byte1        = "   ldy %A"
-rule let _y,%A(const %B) = "   ldy %A+%B"
-rule let _y,%A:byte1(_x)       = "   ldy %A,x"
+rule let _y,%A:rawbytes(const %B) = "   ldy %A+%B"
+rule let _y,%A:rawbytes(_x)       = "   ldy %A,x"
 
 ;LDA
 
 rule let _a,const %A:byte1    = "   lda #%A"
 rule let _a,%A:byte1     = "   lda %A"
 
-rule let _a, %A:byte1(0)  = "   lda %A"       ;would be handled by next rule but we do not want +0 there
-rule let _a,%A:byte1(const %B)  = "   lda %A+%B"
-rule let _a, %A:byte1(_x) = "   lda %A,x"
+rule let _a, %A:rawbytes(0)  = "   lda %A"       ;would be handled by next rule but we do not want +0 there
+rule let _a,%A:rawbytes(const %B)  = "   lda %A+%B"
+rule let _a, %A:rawbytes(_x) = "   lda %A,x"
+rule let _a, %A:rawbytes(_y) = "   lda %A,y"
 
-rule let _a, @%A(_y)  = "   lda (%A),y"
+rule let _a, @%A:rawbytes(_y)  = "   lda (%A),y"
 
 ;STA
 
 rule let %A:byte1,_a  = "   sta %A"
-rule let %A:byte(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
-rule let %A:card(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
-rule let %A:card(1),_a  = "   sta %A+1"       ;would be handled by next rule but we do not want +0 there
-rule let %A:byte(const %B),_a  = "   sta %A+%B"
+rule let %A:rawbytes(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
+;rule let %A:card(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
+;rule let %A:card(1),_a  = "   sta %A+1"       ;would be handled by next rule but we do not want +0 there
 
-rule let @%A(_y),_a  = "   sta (%A),y"
+;rule let %A:adr(0),_a  = "   sta %A"
+;rule let %A:adr(1),_a  = "   sta %A+1"
 
-rule let %A:byte(_x),_a  = "   sta %A,x"
-rule let %A:byte(_y),_a  = "   sta %A,y"
+
+rule let %A:rawbytes(const %B),_a  = "   sta %A+%B"
+
+rule let @%A:adr(_y),_a  = "   sta (%A),y"
+
+rule let %A:rawbytes(_x),_a  = "   sta %A,x"
+rule let %A:rawbytes(_y),_a  = "   sta %A,y"
 
 ;STX
-rule let %A(0),_x  = "   stx %A"
-rule let %A(const %B),_x  = "   stx %A+%B"
-rule let %A,_x  = "   stx %A"
-rule let %A:byte(_y),_x  = "   stx %A,y"
+rule let %A:rawbytes(0),_x  = "   stx %A"
+rule let %A:rawbytes(const %B),_x  = "   stx %A+%B"
+rule let %A:byte1,_x  = "   stx %A"
+rule let %A:rawbytes(_y),_x  = "   stx %A,y"
 
 ;STY
-rule let %A(0),_y  = "   sty %A"
-rule let %A(const %B),_y  = "   sty %A+%B"
-rule let %A,_y  = "   sty %A"
-rule let %A:byte(_x),_y  = "   sty %A,x"
+rule let %A:rawbytes(0),_y         = "   sty %A"
+rule let %A:rawbytes(const %B),_y  = "   sty %A+%B"
+rule let %A:byte1,_y                     = "   sty %A"
+rule let %A:rawbytes(_x),_y        = "   sty %A,x"
 
 ;LSR,ASL
 rule div _a,_a,1 = "   ;"
 rule div _a,_a,2 = "   lsr"
-rule div %A:byte,%A:byte,1 = "   ;"
-rule div %A:byte,%A:byte,2 = "   lsr %A"
-rule div %A:byte(1),%A:byte(1),2 = "   lsr %A+1"
+rule div %A:byte,%A,1 = "   ;"
+rule div %A:byte,%A,2 = "   lsr %A"
+rule div %A:rawbytes(1),%A(1),2 = "   lsr %A+1"
+;TODO: div a(const)
 rule divc _a,_a,2 = "   lsr"
 
 rule mul _a,_a,0 = "   lda #0"
@@ -1545,25 +1595,30 @@ rule mul _a,_a,2 = "   asl"
 rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
 rule mul %A:byte,%A:byte,1 = "   ;"
 rule mul %A:byte,%A:byte,2 = "   asl %A"
-rule mul %A:byte(0),%A:byte(0),2 = "   asl %A"
-rule mul %A:byte(1),%A:byte(1),2 = "   asl %A+1"
+rule mul %A:rawbytes(0),%A(0),2 = "   asl %A"
+rule mul %A:rawbytes(1),%A(1),2 = "   asl %A+1"
+rule mul %A:rawbytes(const %B),%A(%B),2  = "  asl %A+%B"
+;TODO: This should be rewritten as top level rule
 rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
 rule mul %A:card,%A:card,1 = "   ;"
 
 ;ROL, ROR
 
+;TODO: Support void (this optimisation should be in compiler)
 rule ror _a,_a,0 = "   ;"
 rule ror _a,_a,1 = "   ror"
 rule ror %A:byte,%A:byte,0 = "   ;"
 rule ror %A:byte,%A:byte,1 = "   ror %A"
-rule ror %A:byte(const %B:0..255),%A:byte(%B),1 = "   ror %A+%B"
+rule ror %A:rawbytes(const %B),%A(%B),1 = "   ror %A+%B"
 
 rule rol _a,_a,0 = "   ;"
 rule rol _a,_a,1 = "   rol"
 rule rol %A:byte,%A:byte,0 = "   ;"
 rule rol %A:byte,%A:byte,1 = "   rol %A"
-rule rol %A:byte(0),%A:byte(0),1 = "   rol %A"
-rule rol %A:byte(1),%A:byte(1),1 = "   rol %A+1"
+rule rol %A:rawbytes(0),%A(0),1 = "   rol %A"
+rule rol %A:rawbytes(const %B),%A(%B),1 = "   rol %A+%B"
+;rule rol %A:byte(1),%A:byte(1),1 = "   rol %A+1"
+
 
 ;SBC, DEX, DEY, DEC
 
@@ -1574,12 +1629,12 @@ rule sub _y,_y,1 = "   dey"
 
 rule sub %A:byte1,%A,1 = "   dec %A"
 
-rule sub %A(const %B), %A(%B), 1 = "   dec %A+%B"
+rule sub %A:rawbytes(const %B), %A(%B), 1 = "   dec %A+%B"
 
-rule sub _a,_a,%A(const %B) = "   sbc %A+%B"
+rule sub _a,_a,%A:rawbytes(const %B) = "   sbc %A+%B"
 
 ;JMP
-rule goto @%A(0)  = "   jmp (%A)"
+rule goto @%A(0)  = "   jmp (%A)"					;TODO: goto @%A
 rule goto %A     = "   jmp %A"
 
 ;type interrupt:proc
@@ -1595,14 +1650,15 @@ rule goto %A     = "   jmp %A"
 ;				arg1			constant with address (empty, if the address is not specified)
 
 rule vardef %A,%B   = "%A equ %B"
-
+rule vardef %A,%B(%C..%D) = "%A equ %B+%C*%B.elemsize"
 
 rule label %A   = "%A:"
 rule proc %A:proc     = "%A .proc"
 rule endproc %A:proc  = "   rts" ".endp"
 rule call %A:proc   = "   jsr %A"
 rule call %A = "jsr %A"
-rule arrindex %A:array (byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
+;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
+rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
 _std_print_out:proc
 _std_print_adr:proc a@_arr:adr

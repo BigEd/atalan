@@ -187,8 +187,10 @@ extern Var * MACRO_ARG[26];
 
 void EmitInstr2(Instr * instr, char * str)
 {
+	Var * var;
 	UInt8 format = 0;
 	char * s, c;
+	UInt32 n;
 	s = str;
 
 	if (instr->op == INSTR_LINE) {
@@ -203,10 +205,24 @@ void EmitInstr2(Instr * instr, char * str)
 				c = *s++;
 			}
 			
-			// INSTR_LINE has special arguments
-
 			if (c >='A' && c<='Z') {
-				EmitVar(MACRO_ARG[c-'A'], format); continue;
+				var = MACRO_ARG[c-'A'];
+				// Variable properties
+				if (*s == '.') {
+					s++;
+					if (_strnicmp(s, "elemsize", 8) == 0) {
+						s += 8;
+						if (var->type->variant == TYPE_ARRAY) {
+							n = TypeSize(var->type->element);
+						} else {
+							n = 0;
+						}
+						EmitInt(n);
+						continue;
+					}
+					s--;
+				}
+				EmitVar(var, format); continue;
 			}
 
 			switch(c) {
@@ -305,7 +321,6 @@ Bool EmitInstrBlock(InstrBlock * blk)
 	Bool r = true;
 	Instr * i;
 
-
 	if (blk != NULL) {
 		for(i = blk->first; r && i != NULL; i = i->next) {
 			r = EmitInstr(i);
@@ -350,7 +365,7 @@ void EmitClose()
 
 void EmitLabels()
 {
-	Var * var, * ov;
+	Var * var, * ov, * adr;
 	Instr instr;
 	Type * type;
 	UInt32 n;
@@ -360,10 +375,15 @@ void EmitLabels()
 
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) continue;
 		if (var->scope == REGSET) continue;
+
+		adr = var->adr;
 		if (
-			   (var->adr != NULL && var->adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
+			   (adr != NULL && adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
 			|| (var->mode == MODE_CONST && var->read > 0 && var->name != NULL > 0)
 		) {
+
+			if (adr != NULL && adr->mode == MODE_CONST && adr->n >= DATA_SEGMENT) continue;
+
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
 			instr.arg2 = NULL;

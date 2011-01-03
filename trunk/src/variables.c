@@ -29,7 +29,6 @@ char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
-
 void VarInit()
 {
 	UInt8 i;
@@ -56,6 +55,7 @@ Var * VarNewRange(Var * min, Var * max)
 
 	var->adr = min;
 	var->var = max;
+
 	return var;
 }
 
@@ -68,7 +68,22 @@ Var * VarNewTuple(Var * left, Var * right)
 	return var;
 }
 
-Var * VarNewElement(Var * arr, Var * idx, Bool ref)
+Var * VarNewDeref(Var * adr)
+{
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == MODE_DEREF && var->var == adr) return var;
+	}
+
+	var = VarAlloc(MODE_DEREF, NULL, 0);
+	var->var = adr;
+	if (adr->type != NULL && adr->type->variant == TYPE_ADR) {
+		var->type = adr->type->element;
+	}
+	return var;
+}
+
+Var * VarNewElement(Var * arr, Var * idx)
 /*
 Purpose:
 	Alloc new reference to array element.
@@ -83,12 +98,12 @@ Argument:
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->mode == MODE_ELEMENT) {
-			if (var->adr == arr && var->var == idx && (ref == FlagOn(var->submode, SUBMODE_REF)) ) return var;
+			if (var->adr == arr && var->var == idx /*&& (ref == FlagOn(var->submode, SUBMODE_REF))*/ ) return var;
 		}
 	}
 
 	item = VarAlloc(MODE_ELEMENT, NULL, 0);
-	if (ref) item->submode = SUBMODE_REF;
+//	if (ref) item->submode = SUBMODE_REF;
 	item->adr  = arr;
 
 	// Type of array element variable is type of array element
@@ -142,6 +157,7 @@ void EnterLocalScope()
 	Var * var;
 	SCOPE_IDX++;
 	var = VarAlloc(MODE_SCOPE, SCOPE_NAME, SCOPE_IDX);
+	var->type = TypeScope();
 	EnterSubscope(var);
 }
 
@@ -313,19 +329,17 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
-Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
-/*
-Purpose:
-	Alloc new variable.
-*/
+Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 {
 	Var * var;
+	if (scope == NULL) scope = SCOPE;
+
 	var = MemAllocStruct(Var);
 
 	var->mode = mode;
 	var->name  = StrAlloc(name);
 	var->idx   = idx;
-	var->scope = SCOPE;
+	var->scope = scope;
 	var->adr  = NULL;
 	var->next  = NULL;
 
@@ -336,6 +350,16 @@ Purpose:
 	}
 	LAST_VAR = var;
 	return var;
+
+}
+
+Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
+/*
+Purpose:
+	Alloc new variable.
+*/
+{
+	return VarAllocScope(SCOPE, mode, name, idx);
 }
 
 Var * VarFindScope(Var * scope, char * name, VarIdx idx)
@@ -352,6 +376,21 @@ Purpose:
 		}
 	}
 	return var;
+}
+
+void PrintScope(Var * scope)
+/*
+Purpose:
+	Find variable in specified scope, and parent scopes.
+	If scope is NULL, only global variables will be searched.
+*/
+{
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->scope == scope) {
+			PrintVar(var);
+		}
+	}
 }
 
 Var * VarFind2(char * name, VarIdx idx)
@@ -460,10 +499,11 @@ Purpose:
 	Emit instructions allocating variables, that are not placed at specific location.
 */
 {
-	Var * var, *cnst, *cnst2;
+	Var * var, *cnst, * type_var;
 	Type * type, * dim;
 	UInt32 size;	//, i;
 	UInt8 d;
+	Var * dim1, * dim2;
 
 	// Generate empty arrays
 
@@ -478,13 +518,22 @@ Purpose:
 					if (dim == NULL) break;
 					size *= dim->range.max - dim->range.min + 1;
 				}
-				if (d == 2) {
-					dim = type->dim[0];
-					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
-					dim = type->dim[1];
-					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
+
+				// Make array aligned (it type defines address, it is definition of alignment)
+				type_var = type->owner;
+				if (type_var->adr != NULL) {
+					EmitInstrOp(INSTR_ALIGN, NULL, type_var->adr, NULL);
+				}
+
+				ArraySize(type, &dim1, &dim2);
+
+				if (dim2 != NULL) {
+//					dim = type->dim[0];
+//					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
+//					dim = type->dim[1];
+//					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
 					EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-					EmitInstrOp(INSTR_ALLOC, var, cnst, cnst2);
+					EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
 //					Gen(INSTR_ALLOC, var, cnst, cnst2);
 				} else {
 					cnst = VarNewInt(size);
@@ -504,9 +553,9 @@ Purpose:
 	Generate instructions allocating space for arrays.
 */
 {
-	Var * var, *cnst, *cnst2, *type_var;
-	Type * type, * dim;
-	UInt8 d;
+	Var * var, *type_var;
+	Type * type;
+	Var * dim1, * dim2;
 
 	// Generate initialized arrays, where location is not specified
 
@@ -534,13 +583,9 @@ Purpose:
 		if (var->mode == MODE_VAR || var->mode == MODE_CONST) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
-				d = TypeDim(type);
-				if (d == 2) {
-					dim = type->dim[0];
-					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
-					dim = type->dim[1];
-					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
-					Gen(INSTR_ARRAY_INDEX, var, cnst, cnst2);
+				ArraySize(type, &dim1, &dim2);
+				if (dim2 != NULL) {
+					Gen(INSTR_ARRAY_INDEX, var, dim1, dim2);
 				}
 			}
 		}
@@ -558,7 +603,6 @@ Purpose:
 			}
 		}
 	NEXT_VAR
-
 
 }
 

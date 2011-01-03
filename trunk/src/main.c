@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
 	var = VarFindScope(&ROOT_PROC, "varheap", 0);
 	if (var != NULL) {
 		HeapAddType(&VAR_HEAP, var->type);
-		HeapAddBlock(&VAR_HEAP, DATA_SEGMENT, DATA_SEGMENT_CAPACITY);
+//		HeapAddBlock(&VAR_HEAP, DATA_SEGMENT, DATA_SEGMENT_CAPACITY);
 	} else {
 		InternalError("Platform does not define varheap");
 		goto done;
