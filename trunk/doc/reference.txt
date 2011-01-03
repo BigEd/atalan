@@ -528,6 +528,17 @@ sprite.x(0) = 100
 sprite.color(0) = red 
 :::::::::::::
 
+It is possible to have code parsed inside the defined scope using initialization.
+If there is dot before the a name, it will be searched or defined only in current
+scope.
+It may be used to force creating of name conflicting with outed definition. 
+
+:::::::::::::
+sprite:scope = 
+	x: array (0..3) of byte
+	.color: array(0..3) of byte		;see use of .
+:::::::::::::
+
 ==============
 Indexed scopes
 ==============

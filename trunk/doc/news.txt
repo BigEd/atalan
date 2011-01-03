@@ -9,6 +9,7 @@ News
 - NEW: Scope type
 - NEW: Array of array (massive rewriting of rules matching)
 - NEW: Slice addresses
+- Atari: PMG support, modified Stars.atl to use new PMG, new PMG.atl example
 
 ==========
 4-Dec-2010

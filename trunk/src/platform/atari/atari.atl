@@ -126,25 +126,67 @@ out COLBK@$d01a:color			;is alias for COLPF(4)
 ;Player Missile Graphics
 ;***********************
 
-type PMG@1024:array(2048) 
-type PMG_LOWRES@1024:array(1024)
+pmg:scope = 
+	type bitmap@2048:array(0..7) of array(0..255) of byte
+	type lowresbitmap@2048:array(0..7) of array(0..127) of byte
+	type xpos:byte					; x position of player or missile 
+	out memory:bitmap		    ; default bitmap memory for PMG 
+	out base@$D407:byte			; hi byte of address of byte of player missile bitmaps
+	out prior@$D01B:byte		; pmg priority register
+	out hitclr@$D01E:byte		; set to clear collisions
+
+		
+player:scope =
+	out x@$d000:array(3) of pmg.xpos
+	out gfx@$d00d:array(4) of byte
+	out scolor@704:array(3) of color			;we must define scolor before color, otherwise if would use player.color as array type
+	out .color@$d012:array(3) of color
+	out size@$d008:array(3) of 0..3
+	bitmap@pmg.memory(4..7)						  ;:array(0..3) of array(0..255) of byte
+	in field'collision@$d004:array(3)
+	in player'collision@$d00c:array(3)
+
+;We must define the color out of the scope because it collides with color type name.
+
+missile:scope =
+	out x@$d004:array(3) of pmg.xpos
+	out size@$d00c:byte
+	out gfx@$d001:byte
+	bitmap@pmg.memory(3)				;missile bitmap is stored in this location
+	in field'collision@$d000:array(3)
+	in player'collision@$d008:array(3)
+
+;Missile color is same as player color, so setting the missile color changes 
+;associated player color.
+
+out missile.color@$d012:array(3) of color
+	
+set'pmgbase:macro x:pmg.bitmap =
+	pmg.base = hi x
+
+init'pmgbase:macro =
+	set'pmgbase pmg.memory
+
+;out PMBASE@$D407:byte  
+
+;type PMG@1024:array(2048) 
+;type PMG_LOWRES@1024:array(1024)
 
 ;type PMG@1024:array(0..127,-2..6)
 ;There is unused memory at the beginning of the sprite array.
 
-out PMBASE@$D407:byte  
 ;Player-missile graphics
 
-out player_size@$d008:array(3) of byte
-out player_x@$d000:array(3) of byte
-out player_gfx@$d00d:array(3) of byte
-out player_color@704:array(3) of color			;shadow (slow) color
-out player_col2@$d012:array(3) of color
+;out player_size@$d008:array(3) of byte
+;out player_x@$d000:array(3) of byte
+;out player_gfx@$d00d:array(3) of byte
+;out player_color@704:array(3) of color			;shadow (slow) color
+;out player_col2@$d012:array(3) of color
 
-out missile_size@$d00c:byte
-out missile_x@$d004:array(3) of byte
+;out missile_size@$d00c:byte
+;out missile_x@$d004:array(3) of byte
 
-out GRACTL@$d01d:0..255 (missiles = 1, players = 2, trigger_latch = 4)
+out GRACTL@$d01d:0..255 (off = 0, missiles = 1, players = 2, trigger_latch = 4)
 
 out GTICTLS@$26f:byte
 out GTIACTL@$d01b:byte
