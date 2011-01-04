@@ -5,7 +5,7 @@
 ; Generates NROM-128 romlayout (1 x 16Kib bank + 1 x 8Kib Chr bank)
 
 use n6502
-type  ZPVARS:000..255   
+type  VARHEAP:000..255   
  
 rule prologue       =  " opt h-" " .byte('N', 'E', 'S', $1A, $01, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $C000"  "RESET:" 
 rule epilogue       =  " rts"  

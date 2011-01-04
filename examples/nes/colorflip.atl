@@ -12,6 +12,8 @@
 ; Max gfxsize  : 4Kib
 ;---------------------------------------------------------------------
 
+use nes
+
 ;-----defines for PPU unit (gfx chip)------------
 out PPU_REG1@$2000:byte
 out PPU_REG2@$2001:byte
@@ -23,9 +25,7 @@ color:0..8
 ;-----this function waits until we are in the VBlank intervall------------
 ; In this timewindow, it is possible to change gfx, without notable glitches
 waitvbl:proc =
-	read_again@ 
-	if PPU_STAT_REG bitand 128 = 0
-	   goto read_again
+	until PPU_STAT_REG bitand 128 <> 0 
 
 ; start of example
 start_example@
@@ -35,12 +35,12 @@ main@
 waitvbl
 if color = 0
    PPU_REG2 = 128
-if color= 1
+if color = 1
    PPU_REG2 = 64
-if color= 2
+if color = 2
    PPU_REG2 = 32
     
-color = color+ 1
+inc color
 
 if color = 3
    color = 0
