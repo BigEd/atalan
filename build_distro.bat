@@ -84,6 +84,8 @@ cd atalan\examples
 
 ..\bin\atalan unit_test
 
+..\bin\atalan pmg
+
 cd ..
 cd ..
 
