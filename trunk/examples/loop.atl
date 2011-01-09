@@ -39,7 +39,7 @@ for r sum = sum + r
 
 ;Loop over computed range
 
-in s:0..100 = 5
+in out s:0..100 = 5
 
 sum = 0
 for i:s..s+5 sum = sum + i

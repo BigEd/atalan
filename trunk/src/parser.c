@@ -2004,7 +2004,7 @@ Purpose:
 	Lexer contains name of the first defined variable.
 */
 {
-	Bool is_assign;
+	Bool is_assign, existed;
 	Bool flexible;
 	UInt16 cnt, j, i, stack;
 	Var * var,  * item, * adr, * tuple, * scope, * idx, * min, * max;
@@ -2014,6 +2014,7 @@ Purpose:
 	UInt16 bookmark;
 
 	is_assign = false;
+	existed   = true;
 	scope = NULL;
 
 	// Force use of current scope
@@ -2047,7 +2048,7 @@ retry:
 		//TODO: Type with same name already exists
 		if (var == NULL) {			
 			var = VarAllocScope(scope, MODE_UNDEFINED, LEX.name, 0);
-
+			existed = false;
 //			if (scope != NULL) {
 //				PrintScope(scope);
 //			}
@@ -2252,6 +2253,11 @@ dot:
 					}
 				}
 			}
+		} else {
+			if (type != NULL) {
+				ErrArg(var);
+				SyntaxError("Variable [A] already defined");
+			}
 		}
 	}
 
@@ -2268,6 +2274,20 @@ dot:
 			type = var->type;
 			typev = TYPE_UNDEFINED;
 			if (type != NULL) typev = type->variant;
+
+			ErrArgClear();
+			ErrArg(var);
+
+			if (var->mode == MODE_CONST && existed) {
+				SyntaxError("Assigning value to constant [A].");
+				continue;
+			} else if (var->mode == MODE_TYPE) {
+				SyntaxError("Assigning value to type [A].");
+				continue;
+			} else if (FlagOn(var->submode, SUBMODE_IN) && FlagOff(var->submode, SUBMODE_OUT)) {
+				SyntaxError("Assigning value to read only register [A].");
+				continue;
+			}
 
 			// Procedure or macro is defined using parsing code
 			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
@@ -2404,7 +2424,25 @@ dot:
 				}
 			}
 		}
-	} // idx
+	} else {
+		// No equal
+		var = vars[0];
+		if (existed && !is_assign && var != NULL && var->type != NULL) {
+//			NextToken();
+			switch(var->type->variant) {
+				case TYPE_PROC:
+					ParseCall(var);
+					is_assign = true;
+					break;
+				case TYPE_MACRO:
+					ParseMacro(var);
+					is_assign = true;
+					break;
+				default: break;
+			}
+		}
+	}
+	ErrArgClear();
 
 	if (TOK != TOKEN_ERROR) {
 		if (!is_assign) {
@@ -2891,7 +2929,6 @@ Syntax:
 	Decl: { [<assign>]* }
 */
 {
-	NextToken();
 	EnterBlock();		
 	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 		ParseAssign(mode, submode, NULL);
@@ -2930,18 +2967,30 @@ void ParseRef()
 
 void ParseCommands()
 {
+	VarSubmode submode;
 
 	while (TOK != TOKEN_BLOCK_END && TOK != TOKEN_EOF && TOK != TOKEN_ERROR && TOK != TOKEN_OUTDENT) {
 
 		switch(TOK) {
 		case TOKEN_CONST: 
+			NextToken();
 			ParseDeclarations(MODE_CONST, SUBMODE_EMPTY); break;
 		case TOKEN_TYPE2:  
+			NextToken();
 			ParseDeclarations(MODE_TYPE, SUBMODE_EMPTY); break;
-		case TOKEN_IN:    
-			ParseDeclarations(MODE_VAR, SUBMODE_IN); break;
+		case TOKEN_IN:
+			submode = SUBMODE_IN;
+			NextToken();
+			if (NextIs(TOKEN_OUT)) {
+				submode |= SUBMODE_OUT;
+			}
+			ParseDeclarations(MODE_VAR, submode); 
+			break;
 		case TOKEN_OUT:   
-			ParseDeclarations(MODE_VAR, SUBMODE_OUT);	break;
+			submode = SUBMODE_OUT;
+			NextToken();
+			ParseDeclarations(MODE_VAR, SUBMODE_OUT);	
+			break;
 
 		case TOKEN_USE:
 			ParseUse();
@@ -2957,12 +3006,15 @@ void ParseCommands()
 			break;
 
 		case TOKEN_STRING: 
-//			Gen(INSTR_PRINT, NULL, NULL, NULL);
 			GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
 			ParseString(0); 
 			break;
-		case TOKEN_ID: 
-			ParseId(); break;
+
+		case TOKEN_ID:
+		case TOKEN_DOT:
+			ParseAssign(MODE_VAR, SUBMODE_EMPTY, NULL); 
+			break;
+
 		case TOKEN_RULE: 
 			NextToken(); 
 			ParseRule(); break;

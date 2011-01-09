@@ -7,7 +7,7 @@ use "m6502"
 const BIN_EXTENSION = "xex"
 type VARHEAP:128..255   
 
-in timer@20:byte
+in out timer@20:byte
 
 ;***********************
 ;Random number generator
@@ -134,8 +134,13 @@ pmg:scope =
 	out base@$D407:byte			; hi byte of address of byte of player missile bitmaps
 	out prior@$D01B:byte		; pmg priority register
 	out hitclr@$D01E:byte		; set to clear collisions
-
-		
+;	out sprior@$26F:byte
+	setbase:macro x:pmg.bitmap =
+		pmg.base = hi x
+	initbase:macro =
+		setbase pmg.memory
+	
+			
 player:scope =
 	out x@$d000:array(3) of pmg.xpos
 	out gfx@$d00d:array(4) of byte
@@ -190,6 +195,8 @@ out GRACTL@$d01d:0..255 (off = 0, missiles = 1, players = 2, trigger_latch = 4)
 
 out GTICTLS@$26f:byte
 out GTIACTL@$d01b:byte
+
+out SPRIOR@$26F, PRIOR@$D01B:0..255 (PLPF = 1, PFPL = 4, PL01PFPL23= 16, ONE'COLOR'MISSILES = 16, MULTICOLOR'PLAYERS = 32)
 
 ;*******************************
 ;Sound
@@ -277,14 +284,13 @@ key:enum
 	none = 255
 	false = 255
 	
-in CH@764:key  ;last pressed character
+in out CH@764:key  ;last pressed character
 
-;wait'key:macro =
-;	CH = none
-;	until CH <> none
-;  CH = none
-
-;end
+wait'key:proc >k:key =
+	CH = none
+	until CH <> none
+	k = CH
+	CH = none
 
 ;*** DISPLAY LISTS
 

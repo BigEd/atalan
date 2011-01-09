@@ -464,7 +464,6 @@ Bool VarIsLabel(Var * var)
 	return var->type != NULL && var->type->variant == TYPE_LABEL;
 }
 
-//TODO: VarIsConst
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;

@@ -2,6 +2,11 @@
 News
 ****
 
+- NEW: Report error when assigning a value to const, type, or in register
+- NEW: Report error on duplicit declaration
+- NEW: Call procedures and macros with scoped name (pmg.init)
+
+
 ==========
 3-Jan-2011
 ==========

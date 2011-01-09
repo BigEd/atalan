@@ -165,6 +165,7 @@ void PlatformPath(char * path);
 extern UInt32 ERROR_CNT;
 extern UInt32 LOGIC_ERROR_CNT;
 
+void ErrArgClear();
 void ErrArg(Var * var);
 void SyntaxErrorBmk(char * text, UInt16 bookmark);
 void SyntaxError(char * text);
