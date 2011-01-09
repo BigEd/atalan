@@ -225,6 +225,11 @@ UInt16 SetBookmarkLine(Instr * i)
 	return 1;
 }
 
+void ErrArgClear()
+{
+	ERR_ARG_POS = 0;
+}
+
 void ErrArg(Var * var)
 {
 	ERR_ARGS[ERR_ARG_POS++] = var;
