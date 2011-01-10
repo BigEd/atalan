@@ -15,6 +15,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+void PrintExp(Exp * exp);
+Bool VarUsesVar(Var * var, Var * test_var);
+
 void ExpFree(Exp ** p_exp)
 {
 	Exp * exp;
@@ -33,7 +36,7 @@ Purpose:
 	if (exp->op == INSTR_VAR) {
 		if (exp->var == var) return true;
 		// If variables are aliases (have same address)
-		if (var->adr == exp->var || exp->var->adr == var) return true;
+		if (var->adr == exp->var || exp->var->adr == var || (var->adr != NULL && exp->var->adr == var->adr)) return true;
 		return false;
 	} else {
 		return ExpUsesValue(exp->arg[0], var) || ExpUsesValue(exp->arg[1], var);
@@ -99,6 +102,31 @@ Purpose:
 	res->src_i = NULL;
 }
 
+Bool VarIsAlias(Var * var, Var * alias)
+/*
+Purpose:
+	Return true, if the two variables are alias for same memory location.
+	This may also mean than one variable is array and the other is element of that array.
+*/
+{
+	if (var == NULL || alias == NULL) return false;
+	if (var == alias) return true;
+	if (var->adr != NULL && (var->adr->mode == MODE_VAR || var->adr->mode == MODE_ARG)) if (VarIsAlias(var->adr, alias)) return true;
+	if (alias->adr != NULL &&  (alias->adr->mode == MODE_VAR || alias->adr->mode == MODE_ARG)) if (VarIsAlias(var, alias->adr)) return true;
+	return false;
+}
+
+void ResetVarDepRoot(Var * res)
+{
+	Var * var;
+
+	FOR_EACH_VAR(var)
+		if (VarIsAlias(var, res)) {
+			ExpFree(&var->dep);
+		}
+	NEXT_VAR
+}
+
 void ResetVarDep(Var * res)
 /*
 Purpose:
@@ -110,12 +138,22 @@ Purpose:
 	Exp * exp;
 
 	FOR_EACH_VAR(var)
-		exp = var->dep;
-		if (exp != NULL) {
-			if (ExpUsesValue(exp, res)) {
-				ExpFree(&var->dep);
+
+//		if (var->adr != NULL && StrEqual(var->adr->name, "_arr")) {
+//			printf("");
+//			PrintExp(var->dep);
+//		}
+
+//		if (VarIsAlias(var, res)) {
+//			ExpFree(&var->dep);
+//		} else {
+			exp = var->dep;
+			if (exp != NULL) {
+				if (ExpUsesValue(exp, res)) {
+					ExpFree(&var->dep);
+				}
 			}
-		}
+//		}
 	NEXT_VAR
 
 	// If the variable is alias for some other variable,
@@ -127,7 +165,6 @@ Purpose:
 			ResetVarDep(var);
 		}
 	}
-
 }
 
 /*********************************
@@ -399,9 +436,12 @@ void ProcValuesUse(Var * proc)
 		// we just clear it's output variables
 
 		if (proc->instr == NULL) {
-			for (var = FirstArg(proc, SUBMODE_ARG_OUT); var != NULL; var = NextArg(proc, var, SUBMODE_ARG_OUT)) {
-				ResetValue(var);
-				ResetVarDep(var);
+			for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+				if (var->mode != MODE_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
+					ResetValue(var);
+					ResetVarDep(var);
+					ResetVarDepRoot(var);
+				}
 			}
 		} else {
 			for(blk = proc->instr; blk != NULL; blk = blk->next) {

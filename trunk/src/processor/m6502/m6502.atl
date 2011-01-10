@@ -1661,7 +1661,7 @@ rule call %A = "jsr %A"
 rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
 _std_print_out:proc
-_std_print_adr:proc a@_arr:adr
+_std_print_adr:proc a@_arr:adr @_arr
 
 std_print:macro = instr
 	call _std_print_out
@@ -1675,7 +1675,7 @@ std_format:macro a:adr = instr
 	ref _a
 	ref _x
 	ref _y
-	
+
 ;rule print     = instr
 ;	call std_print
 	

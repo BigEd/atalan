@@ -353,6 +353,19 @@ Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 
 }
 
+Var * VarAllocScopeTmp(Var * scope, VarMode mode)
+/*
+Purpose:
+	Alloc new temporary variable in specified scope.
+*/
+{
+	Var * var;
+	var = VarAllocScope(scope, mode, NULL, 0);
+	var->idx = TMP_IDX; 
+	TMP_IDX++;
+	return var;
+}
+
 Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
 /*
 Purpose:

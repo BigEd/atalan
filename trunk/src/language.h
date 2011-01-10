@@ -316,7 +316,6 @@ typedef UInt8 VarFlags;
 struct VarTag {
 
 	// Variable identification (name,idx,scope)
-
 	Name	name;
 	VarIdx  idx;	 // two variables with same name but different index may exist
 					 // 0 means no index, 1 means index 1 etc.
@@ -334,6 +333,7 @@ struct VarTag {
 					 // MODE_ELEMENT:  Element type of array
 
 	int     value_nonempty;
+	// TODO: Replace value_nonempty just with flag VarDefined
 	union {
 		long	n;				// for const, or function default argument (other variants of value must be supported - array, struct, etc.)
 		InstrBlock * instr;		// instructions for procedure or array initialization
@@ -350,6 +350,23 @@ struct VarTag {
 	UInt16	write;			// how many times some instruction writes this variable (if 1 this is constant)
 	Var  *  next;			// next variable in chain
 };
+
+/*
+
+Variable address
+================
+
+Address of variable may be:
+
+MODE_CONST          Integer definining location of variable in main memory.
+MOVE_VAR,MODE_ARG   This variable is alias for the variable specified in adr.
+MODE_TUPLE          List of variables. One bigger variable may be defined as list of smaller variables.
+
+MODE_LABEL          Address.
+                    Address alone may have adress, which specifies memory bank, in which the adress should be located.
+					Address may be named. (For example labels).
+
+*/
 
 typedef enum {
 	INSTR_VOID = 0,
@@ -533,6 +550,7 @@ Var * VarNewTmp(long idx, Type * type);
 Var * VarNewTmpLabel();
 Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
 Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx);
+Var * VarAllocScopeTmp(Var * scope, VarMode mode);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);

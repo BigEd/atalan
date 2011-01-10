@@ -87,6 +87,7 @@ Purpose:
 */
 {
 	VarSubmode submode = SUBMODE_EMPTY;
+	Var * var, * adr;
 
  	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
 
@@ -98,6 +99,18 @@ Purpose:
 		}
 		if (NextIs(TOKEN_HIGHER)) {
 			submode = SUBMODE_ARG_OUT;
+		}
+
+		// Variables preceded by @ define local variables used in the procedure.
+		if (NextIs(TOKEN_ADR)) {
+			ParseVariable(&adr);
+			if (TOK) {
+				var = VarAllocScopeTmp(to_type->owner, MODE_VAR);
+				var->type = adr->type;
+				var->adr  = adr;
+				NextIs(TOKEN_EOL);
+				continue;
+			}
 		}
 
 		if (TOK == TOKEN_ID) {
@@ -2103,12 +2116,14 @@ no_dot:
 				is_assign = true;
 			} else {
 
+				NextToken();
+
 				// (var,var,...)   tuple
 				// int (concrete address)
 				// variable (some variable)
 
 				adr = NULL; tuple = NULL;
-				NextToken();
+
 				//@
 				if (TOK == TOKEN_OPEN_P) {
 					EnterBlock();
