@@ -81,8 +81,6 @@ int main(int argc, char *argv[])
 	GetApplicationDir(argv[0], SYSTEM_DIR);
 	PathParent(SYSTEM_DIR);
 
-//	printf("System dir: %s\n", SYSTEM_DIR);
-
 	InitErrors();
 
 	//

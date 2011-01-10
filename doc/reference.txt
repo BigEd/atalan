@@ -785,6 +785,7 @@ Procedures can be defined using proc type. After the proc keyword follows block
 defining procedure arguments. Arguments marked using "&lt;" are output arguments (
 results).
 
+Arguments marked "&gt;" are input arguments. Input arguments are default. 
 
 :::::::::::::::::::::::
 name ":" "proc" args = code
@@ -874,6 +875,20 @@ in register or at some adress).
 reset@$E034:proc
 out_char@$E75f:proc c@_a
 :::::::::::::::::::::::
+
+===============================
+Definition of trashed variables
+===============================
+
+When defining header of procedure that is external (either at specified address or defined in
+associated assembler file), it is possible to list variables used (trashed) by the procedure.
+
+Such variables are listed between procedure arguments with @ prefix. It is important to
+mark registers the procedure uses too.
+
+::::::::::::::::::::::::::::
+_std_print_adr:proc a@_arr:adr @_arr @_a @_x @_y
+:::::::::::::::::::::::::::: 
 
 *******
 Modules
