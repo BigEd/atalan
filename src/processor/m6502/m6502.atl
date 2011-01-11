@@ -272,6 +272,12 @@ rule let %A:adr, %B = instr
   hi _a, %B
   let %A(1), _a
 
+rule let %A:card, %B:adr = instr
+  let _a, %B(0)
+  let %A(0), _a
+  let _a, %B(1)
+  let %A(1), _a
+
 rule let %A:card, _a = instr
 	let %A(0), _a
 	let %A(1), 0
