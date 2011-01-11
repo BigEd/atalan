@@ -1,16 +1,17 @@
-ATLDESTS= fifteen.xex
+ATLDESTS= fifteen.xex test.xex
 
 all: $(ATLDESTS)
 
 fifteen.xex: fifteen.asm
 	mads $< -i:../../src -o:$@ -x
-	dd if=$@ of=$@.in bs=1 skip=2
-	cp little15music.obj $@
-	cat $@.in >>$@
-	rm $@.in
+%.bin: %.asm
+	mads $< -p:a2600 -i:../../src -o:$@ -x
+
+%.xex: %.asm
+	mads $< -i:../../src -o:$@ -x
 
 %.asm: %.atl
-	../../src/atalan -a -I ../../src $<
+	../../src/atalan  -a -I ../../src $<
 
 clean:
 	rm -fv *.xex *.asm
