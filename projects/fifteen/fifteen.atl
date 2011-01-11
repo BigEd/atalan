@@ -13,18 +13,53 @@
 ; Well, SuperFortuna took 2 months...
 ; Greetings 4 All, especially 4 Rudolf Kudla, author of Atalan.
 ;
-; There is very tight memory gap between end of code and addres $93e0,
-; which is used by the RMT player.
 ; The code is compiled with optimizations off, because of some bugs in optimizer.
 
 ; This HACK is for passing tables into procedures.
-mem@$0000:array(60000) of byte
+use atari rmt
+;
 
 ; Screen 208 lines long (well, 200, but last 8 are the first 8 repeated)
-screen@$A0b0:array(39, 199) of byte
-
 PORTB@$d301:byte
 
+screen@$A0b0:array(39, 199) of byte
+
+mem@$0000:array(60000) of byte
+
+vcnt:byte
+
+textbuf:array(14) of byte
+besttime:array(14) of byte
+
+playfield@$610:array(3,3) of byte
+
+k:0..3
+l:0..3
+
+xbtmp@$600:byte
+ybtmp@$601:byte
+xctmp@$602:card
+ctmp1@$604:card
+btmp1@$606:byte
+btmp2@$607:byte
+
+CONSOL@53279:byte
+
+dir:byte
+play:byte
+piccnt:byte= RANDOM bitand 3
+
+tsec:byte
+tdsec:byte
+tmin:byte
+tdmin:byte
+moves:card
+bmoves:card
+currcol:byte
+currentbuf:adr
+tmp1:byte
+xtilesize:byte
+ytilesize:byte
 ; GR8 dl.
 const dl:array of byte = ( 2 times $70, $4f,  screen ,
 	32 times $f,
@@ -45,70 +80,68 @@ const dl:array of byte = ( 2 times $70, $4f,  screen ,
 	$41, dl
 	)
 	
-vcnt@$613:byte
 
+const buf1: array(4608) = file "einstein-tongue.pbm"
+const buf2: array(4608) = file "miner.pbm"
+const buf3: array(4608) = file "johnromero.pbm"
+const buf4: array(4608) = file "clinteastwood.pbm"
+const leafh: array(47) = file "leafhoriz.pbm"
+const leafv: array(47) = file "leafvert.pbm"
+const mains: array(2800) = file "15.pbm"
+const fonts: array = file "STENCILstr.FNT"
+const musmod:array = file "little15stripped.rmt"
+
+col:byte
 set_col:dli =
 	if vcnt = 0
 		inc vcnt
 		wait'line
-		player_col2(3) = $9e
+		player(3).color = $9e
 		COLPF(3) = $96
-		player_x(3)=180
-		missile_x(2)=166
-		missile_x(3)=172
+		player(3).x=180
+		missile(2).x=166
+		missile(3).x=172
 		wait'line
-		player_col2(3) = $8e
+		player(3).color = $8e
 		COLPF(3) = $86
 		wait'line
-		player_col2(3) = $5e
+		player(3).color = $5e
 		COLPF(3) = $56
 		wait'line
-		player_col2(3) = $4e
+		player(3).color = $4e
 		COLPF(3) = $46
 	else if vcnt = 1
 		wait'line
 		COLPF(3) = $4e
-		player_x(3)=166
-		missile_x(2)=192
-		missile_x(3)=200
+		player(3).x=166
+		missile(2).x=192
+		missile(3).x=200
 		inc vcnt
 	else if vcnt = 2
-		wait'line
-		player_col2(3) = $4c
-		wait'line
-		player_col2(3) = $4a
-		wait'line
-		player_col2(3) = $48
-		wait'line
-		player_col2(3) = $46
-		wait'line
-		player_col2(3) = $44
-		wait'line
-		player_col2(3) = $42
+		col=$4c
+		while col>$40
+			wait'line
+			player(3).color = col
+			col=col-2
 		inc vcnt
 	else if vcnt = 3
 		wait'line
-		player_col2(3) = $56
+		player(3).color = $56
 		COLPF(3) = $56
 		wait'line
 		COLPF(3) = $84
-		player_col2(3) = $86
+		player(3).color = $86
 		wait'line
 		COLPF(3) = $94
-		player_col2(3) = $96
+		player(3).color = $96
 		inc vcnt
 	else if vcnt = 4
 		wait'line
 		COLPF(3) = $9a
-		player_col2(3) = $9c
+		player(3).color = $9c
 		inc vcnt
 ; Guess what is this.	
-pmg_mem@$9c00:array(0..1023) of byte
-
-textbuf@$a000:array(14,0)
-besttime@$a010:array(14,0)
-
-playfield@$9d70:array(3,3) of byte
+;pmg_mem@$9c00:array(0..1023) of byte
 
 const
 	D_UP=0
@@ -119,112 +152,64 @@ const
 	XOFF=1
 	YOFF=8
 
-; Fixed variables, this leads to leave some room for automatic temporal variables.
-; There are 128-230 allocated locations on ZP.
-; 237-255 are used by RMT player
-i@$600:byte
-j@$601:byte
-k@$602:0..3
-l@$603:0..3
-
-const buf1: array(23, 191) = file "einstein-tongue.pbm"
-const buf2: array(23, 191) = file "miner.pbm"
-const buf3: array(23, 191) = file "johnromero.pbm"
-const buf4: array(23, 191) = file "clinteastwood.pbm"
-const leafh: array(47) = file "leafhoriz.pbm"
-const leafv: array(47) = file "leafvert.pbm"
-const mains: array(2800) = file "15.pbm"
-const fonts: array(1024) = file "STENCIL.FNT"
-
-xbtmp@$604:byte
-ybtmp@$605:byte
-xctmp@$606:card
-yctmp@$608:card
-ctmp1@$60a:card
-bptr@$60c:card
-btmp1@$60e:byte
-btmp2@$60f:byte
-
-CONSOL@53279:byte
-
-mus_init@$9700: proc
-mus_play@$9703: proc
-mus_p3@$9706: proc
-mus_silence@$9709:proc
-mus_setpokey@$970c:proc
-
-dir@$610:byte
-play@$611:byte
-piccnt@$612:byte= RANDOM bitand 3
-
-tsec@$614:byte
-tdsec@$615:byte
-tmin@$616:byte
-tdmin@$617:byte
-moves@$618:card
-bmoves@$61a:card
-currcol@$61c:byte
-currentbuf@$61d:adr
-tmp@$61f:byte
-xtilesize@$620:byte
-ytilesize@$621:byte
 
 sleep: proc time:byte =
-	tmp = timer
-	tmp = tmp + time
-	while timer<>tmp
+	tmp1 = timer
+	tmp1 = tmp1 + time
+	while timer<>tmp1
 
 
 copyblock: proc srcbm:adr xbm:byte ybm:card wbm:byte xscr:byte yscr:byte xsize:byte ysize:byte=
-	bptr(0)=srcbm(0)
-	bptr(1)=srcbm(1)
-	i=0
+	ct:card=0
+	i:byte=0
 	while i<xsize 
 		; destination coords
-		xbtmp=i
-		xbtmp=xbtmp+xscr
+		xbtmp=i +xscr 
 		ybtmp=yscr
-		; source coords
-		xctmp=xbm+i
-		yctmp=ybm
-		; addr of source bitmaps
-		ctmp1 = bptr
-		ctmp1= ctmp1+ xctmp
-		ctmp1= ctmp1+ yctmp
-		for j:1..ysize
-			screen(xbtmp,ybtmp)=mem(ctmp1)
-			ctmp1 = ctmp1 + wbm
+		;addr of source bitmaps
+		
+		;ct:adr = srcbm + xbm + i + ybm ;does not work
+		ct = srcbm
+		ct = ct + ybm
+		ct = ct + xbm
+		ct = ct + i
+		;ct = ct + ybm
+		; for j:1..ysize does not work
+		j:byte=ysize
+		while j>0
+			screen(xbtmp,ybtmp)=mem(ct)
+			ct = ct + wbm
 			inc ybtmp
+			dec j
 
 		inc i
 
 ; before call text must be in textbuf array
 text:proc xt:byte yt:byte len:byte=
 	ii:byte=0
+	jj:card
 	while ii<len
-		ctmp1=textbuf(ii)
-		ctmp1=ctmp1*8
-		btmp1= xt+ii
-		copyblock fonts 0 ctmp1 1 btmp1 yt 1 8
+		jj=textbuf(ii)
+		if jj>=96 jj=jj-32
+		jj=jj*8
+		;btmp1= xt+ii
+		copyblock fonts 0 jj 1 xt+ii yt 1 8
 		inc ii
 		
 
 copytile: proc xbm:byte ybm:byte xscr:byte yscr:byte xsize:byte ysize:byte=
-	ctmp1=ybm*24
-	ctmp1=ctmp1*48
-	xbm=xbm*6
-	copyblock currentbuf xbm ctmp1 24 xscr yscr xsize ysize
+
+	copyblock currentbuf xbm*6 ybm*1152 24 xscr yscr xsize ysize
 
 eraserect: proc xscr:byte yscr:byte width:byte height:byte  =
 	i=0
 	while i<width
-		xbtmp=i+xscr
 		ybtmp=yscr
-		j=0
-		while j<height
-			screen(xbtmp,ybtmp)=$ff
+		j=height
+		while j>0
+			screen(i+xscr,ybtmp)=$ff
 			inc ybtmp
-			inc j
+			dec j
 		inc i
 
 findempty: proc >x:byte >y:byte =
@@ -362,13 +347,13 @@ movetile: proc xs:byte ys:byte m:byte show:byte =
 
 	
 clrscr:proc =
-	i=0
-	while i<40
-		j=0
-		while j<200
+	i=40
+	while i>0
+		dec i
+		j=200
+		while j>0
+			dec j
 			screen(i,j)=255
-			inc j
-		inc i
 
 
 changepicture: proc >c:byte =
@@ -378,7 +363,6 @@ changepicture: proc >c:byte =
 	if piccnt=1
 		currentbuf=buf2
 		c=$0e
-
 	if piccnt=2
 		currentbuf=buf3
 		c=$3a
@@ -407,9 +391,9 @@ inittiles: proc =
 			playfield(k,l)=tile
 
 setboardcolor: proc col:byte =
-	player_color(0)=col
-	player_color(1)=col
-	player_color(2)=col
+	player(0).scolor=col
+	player(1).scolor=col
+	player(2).scolor=col
 
 
 changecolor: proc col:byte =
@@ -419,41 +403,40 @@ changecolor: proc col:byte =
 	xbtmp=currcol bitand $f
 	ybtmp=currcol bitand $f0
 
-	if xbtmp < btmp1 ; fade in
-		while btmp1 > xbtmp
+	;if xbtmp < btmp1 ; fade in
+	while btmp1 <> xbtmp
+		if xbtmp<btmp1
+			;if xbtmp < btmp1 ; fade in
 			xbtmp = xbtmp + 2
-			currcol = btmp2
-			currcol = currcol + xbtmp
-			setboardcolor currcol
-			sleep 1
-	else ; fade out
-		while btmp1 < xbtmp
-			xbtmp = xbtmp -2
-			currcol = ybtmp
-			currcol = currcol + xbtmp
-			setboardcolor currcol
-			sleep 1
+		else
+			; fade out
+			xbtmp = xbtmp - 2
+		currcol = btmp2
+		currcol = currcol + xbtmp
+		setboardcolor currcol
+		sleep 1
 
 
 drawmainscreen: proc=
 	copyblock mains 0 0 14 26 0 14 200
-	j=0
-	for i:0..3 
-		;while j<192
-		xbtmp=i*6
-		inc xbtmp
-		copyblock leafh 0 0 6 xbtmp 0 6 8
-		xbtmp=8+j
-		copyblock leafv 0 0 1 0 xbtmp 1 48
-		xbtmp=8+j
-		copyblock leafv 0 0 1 25 xbtmp 1 48
+	j=8
+	ii:byte=1
+	kk:byte
+	while ii<24
+		;xbtmp=i*6+1
+		copyblock leafh 0 0 6 ii 0 6 8
+		kk=0
+		; copyblock gets much overhead when calling
+		while kk<=25
+			copyblock leafv 0 0 1 kk j 1 48
+			kk=kk+25
 		j=j+48
-	while 1=1
+		ii=ii+6
 
-	tmp:byte = changepicture
+	tmp1 = changepicture
 	showboard
 	currcol=0
-	changecolor tmp
+	changecolor tmp1
 
 shuffletiles: proc =
 	c:byte=0
@@ -463,83 +446,72 @@ shuffletiles: proc =
 	movetile x y dir 2
 	cnt=countgoodtiles
 	if c<50 inc c
-	if cnt>0 or c<50 goto loop
+	if cnt>14 or c<50 goto loop
 		
 
 cycle:vbi =
 	if play = 1
-		mus_play
+		music'play
 	vcnt=0
 
 fillpmg: proc =
-	ctmp1 = $180
+	;ctmp1:card = $180
 	; while ctmp1<$400 - no rule
-	while ctmp1<=$3ff
-		pmg_mem(i)=$0
-		inc ctmp1
+	for j:3..7
+		for i:0..255
+			pmg(j).memory(i)=$0
 
-	for i:16..111
-		ctmp1=$200
-		ctmp1 = ctmp1+i
-		pmg_mem(ctmp1)=$ff
-		ctmp1=ctmp1+ $80
-		pmg_mem(ctmp1)=$ff
-		ctmp1=ctmp1+ $80
-		pmg_mem(ctmp1)=$ff
-		ctmp1=ctmp1+ $80
+	for i:32..223
+		pmg(4).memory(i)=$ff
+		pmg(5).memory(i)=$ff
+		pmg(6).memory(i)=$ff
 
-	for i:12..115
-		ctmp1=$180
-		ctmp1=ctmp1 + i
-		pmg_mem(ctmp1)=$ff
-		ctmp1=ctmp1+ $200
-		pmg_mem(ctmp1)=$fe
 
-	for i:75..79
-		ctmp1=$380
-		ctmp1= ctmp1+ i
-		pmg_mem(ctmp1)=$00
+	for i:24..231
+		pmg(3).memory(i)=$ff
+		pmg(7).memory(i)=$fe
+
+	for i:150..159
+		pmg(7).memory(i)=$00
 
 windowpmg:proc =
 	; this compiles wrong!
 	;for i:60..72
 		;ctmp1=$200 + i
 		;pmg_mem(ctmp1)=$55
-	for i:0..17
-		ctmp1=$237
-		ctmp1 = ctmp1 +i
-		pmg_mem(ctmp1)=$fc
-		ctmp1 = ctmp1 +$80
-		pmg_mem(ctmp1)=$0
-		ctmp1 = ctmp1 +$80
-		pmg_mem(ctmp1)=$3f
+	for i:$6e..$91
+		pmg(4).memory(i)=$fc
+		pmg(5).memory(i)=$0
+		pmg(6).memory(i)=$3f
 
 setpmg: proc=
 
+	init'pmgbase
 	fillpmg
 
-	PMBASE= $9c
-	GRACTL=3
+	;PMBASE= $9c
+
 
 	GTICTLS=$18
 
-	player_x(0)=52
-	player_x(1)=84
-	player_x(2)=116
-	player_x(3)=166
-	player_size(0)=3
-	player_size(1)=3
-	player_size(2)=3
-	player_size(3)=3
-	missile_x(0)=152
-	missile_x(1)=160
-	player_x(3)=166
-	missile_x(2)=192
-	missile_x(3)=200
-	player_color(3)=$98
+	player(0).x=52
+	player(1).x=84
+	player(2).x=116
+	player(3).x=166
+	player(0).size=3
+	player(1).size=3
+	player(2).size=3
+	player(3).size=3
+	missile(0).x=152
+	missile(1).x=160
+	player(3).x=166
+	missile(2).x=192
+	missile(3).x=200
+	player(3).scolor=$98
 	COLOR0(3)=$96
-	missile_size=$ff
-	DMACTL =  $2e
+	missile.size=$ff
+	DMACTL = playfield + dl + players + missiles + hires_sprites
+	GRACTL = players + missiles
 
 	; cegfaultplayer_pos(0)=32
 	
@@ -576,28 +548,31 @@ update_timer:proc =
 		tsec=9
 
 drawbesttime:proc =
-	if besttime(0,0) <> 0
+	if besttime(0) <> 0
 		tcnt:byte
 		tcnt=0
+		tmpb:byte
 		while tcnt<14
-			textbuf(tcnt)=besttime(tcnt)
+			tmpb= besttime(tcnt)
+			textbuf(tcnt)=tmpb
+			
 			inc tcnt
 		text 26 181 14
 
-		textbuf(0,0)="IN [bmoves] MOVES!   "
+		textbuf="IN [bmoves] MOVES!   "
 		text 27 192 13
 
 
 initscreen: proc=
 
-	;DMACTL=0
+	DMACTL=0
 	sdlstl = dl
 	currentbuf=buf1
 	
 	;textbuf(0,0)="OPTION:shuffle"
 	;text 26 167 14
 
-	mus_setpokey
+	;mus_setpokey
 
 	setpmg
 	play=0
@@ -605,15 +580,14 @@ initscreen: proc=
 	on'dli set_col
 
 titlescreen: proc=
-	;DMACTL=0
+	DMACTL=0
 	clrscr
 	piccnt = RANDOM bitand 3
 	inittiles
 	drawmainscreen
 	fillpmg
-	DMACTL =  $2e
+	DMACTL = playfield + dl + players + missiles + hires_sprites
 
-	mus_setpokey
 	CH=62
 
 	COLOR0(1) = $c0
@@ -636,12 +610,10 @@ titlescreen: proc=
 	if CH=62
 		CH = none
 		if play = 1
-			mus_silence
+			music'off
 			play = 0
 		else
-			_x= $0
-			_y= $9a
-			mus_init
+			music'init musmod
 			play=1
 			
 	if CONSOL = 3
@@ -665,7 +637,7 @@ game: proc=
 	; GAME INIT
 	showboard
 	play=0
-	mus_silence
+	music'off
 	eraserect 26 140 14 60
 
 	cnt=countgoodtiles
@@ -679,29 +651,30 @@ game: proc=
 	CH = none
 	
 	cnt=countgoodtiles
-	textbuf(0,0)="Good tiles:[cnt] "
+	;textbuf="Good tiles:[cnt] "
+	textbuf="Good tiles:[cnt] "
 	text 27 141 13
 
 	update_timer
-	textbuf(0,0)="Time: [tdmin][tmin]:[tdsec][tsec]"
+	textbuf="Time: [tdmin][tmin]:[tdsec][tsec]"
 	text 27 152 11
 
 	if cnt=16
-		textbuf(0,0)="            "
+		textbuf="            "
 		text 7 86 12
 		text 7 102 12
 		text 7 114 12
 		windowpmg
-		textbuf(0,0)=" Well done! "
+		textbuf=" Well done! "
 		text 7 94 12
-		textbuf(0,0)=" Time:[tdmin][tmin]:[tdsec][tsec] "
+		textbuf=" Time:[tdmin][tmin]:[tdsec][tsec] "
 		text 7 106 12
 		if moves<bmoves
-			besttime(0,0)="BESTTIME:[tdmin][tmin]:[tdsec][tsec]"
+			besttime="BESTTIME:[tdmin][tmin]:[tdsec][tsec]"
 			sleep 100
-			textbuf(0,0)=" NEW RECORD!"
+			textbuf=" NEW RECORD!"
 			text 7 94 12
-			textbuf(0,0)=" [moves] MOVES!    "
+			textbuf=" [moves] MOVES!    "
 			text 7 106 12
 			bmoves=moves
 			dir=0
@@ -721,7 +694,7 @@ game: proc=
 		CH=28
 		goto gameend
 
-	textbuf(0,0)="Moves: [moves]     "
+	textbuf="Moves: [moves]     "
 	text 27 163 12
 
 	ss:stick'state = STICK(0)
@@ -747,6 +720,7 @@ game: proc=
 
 ; switch off basic
 PORTB = PORTB bitor 2
+music'init musmod
 initscreen
 besttime(0)=0
 bmoves=999
