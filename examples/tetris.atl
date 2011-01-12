@@ -329,4 +329,6 @@ s(19,11) = "OVER"
 
 until STRIG(0) = pressed
 
+erase'tile next'tile NEXT_LEFT NEXT_TOP
+
 goto start'game
