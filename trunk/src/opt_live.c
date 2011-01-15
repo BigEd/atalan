@@ -167,6 +167,15 @@ Bool VarDereferences(Var * var)
 	return false;
 }
 
+Bool VarIsLocal(Var * var, Var * scope)
+{
+	while (var != NULL) {
+		if (var->scope == scope) return true;
+		var = var->scope;
+	}
+	return false;
+}
+
 Bool OptimizeLive(Var * proc)
 {
 	Bool modified = false;
@@ -194,25 +203,30 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-//			if (var->mode == MODE_ELEMENT && StrEqual(var->adr->name, "count") && var->var->mode == MODE_CONST && var->var->n == 0) {
-//				printf("");
-//			}
+			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
+				printf("");
+			}
 
-			// Procedure output argument are live in last block
-			if (blk->to == NULL && var->submode == SUBMODE_ARG_OUT) {
-				SetFlagOn(var->flags, VarLive);
-			// 
-			} else if (blk->to == NULL && FlagOff(var->submode, SUBMODE_ARG_OUT)) {
-				SetFlagOff(var->flags, VarLive);
-
-			// Out variables are always live
-			} else if (FlagOn(var->submode, SUBMODE_OUT)) {
+			// Non-local variables are always considered live
+			if (!VarIsLocal(var, proc)) {
 				SetFlagOn(var->flags, VarLive);
 			} else {
-				SetFlagOff(var->flags, VarLive);
-				MarkBlockAsUnprocessed(proc->instr);
-				if (VarIsLiveInBlock(proc, blk->to, var) == 1 || VarIsLiveInBlock(proc, blk->cond_to, var) == 1) {
+				// Procedure output argument are live in last block
+				if (blk->to == NULL && var->submode == SUBMODE_ARG_OUT) {
 					SetFlagOn(var->flags, VarLive);
+				// Local variables in last block
+				} else if (blk->to == NULL && FlagOff(var->submode, SUBMODE_ARG_OUT) /*&& VarIsLocal(var, proc)*/) {
+					SetFlagOff(var->flags, VarLive);
+
+				// Out variables are always live
+				} else if (FlagOn(var->submode, SUBMODE_OUT)) {
+					SetFlagOn(var->flags, VarLive);
+				} else {
+					SetFlagOff(var->flags, VarLive);
+					MarkBlockAsUnprocessed(proc->instr);
+					if (VarIsLiveInBlock(proc, blk->to, var) == 1 || VarIsLiveInBlock(proc, blk->cond_to, var) == 1) {
+						SetFlagOn(var->flags, VarLive);
+					}
 				}
 			}
 		NEXT_VAR
