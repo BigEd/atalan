@@ -1,4 +1,4 @@
-*********************
+﻿*********************
 Atalan Compiler Usage
 *********************
 
@@ -13,6 +13,8 @@ You may specify following switches (each after minus):
 - -v Verbose (will write lot of internal information on screen)
 - -a Do not call assembler after compilation
 - -p <platform>  Define for which platform is the program compiled.
+- -o <level>     Optimization level (0..9)
+                 0 = no omptimizations
 
 For example to compile example stars.atl, type
 ::::::::::::::::::

@@ -2,6 +2,7 @@
 News
 ****
 
+- NEW: -o option
 - NEW: in sequence variables
 - NEW: @var in procedure header declaration marks variables used by the procedure
 - NEW: Report error when assigning a value to const, type, or in register
