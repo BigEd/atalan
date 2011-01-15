@@ -190,12 +190,17 @@ Input & output
 In and out keywords may be used to define, that variable represents input or
 output register on system, where registers are mapped into memory.
 
-in defines input register. This means, that value of variable may change between
+'in' defines input register. This means, that value of variable may change between
 reads and it is therefore necessary to always read the value from register (optimizer
-will not remove reads to the register in any case).
+will not cache values from this register).
 
-out specifies the register is used for output. Writing to that register has 
+'in sequence' defines input register, that works as sequence. Reading
+this register has some kind of side effect (for example increments some internal pointer etc).
+Optimizer will not remove reading from the register even if the red value is never used.
+
+'out' specifies the register is used for output. Writing to that register has 
 some side effect. Optimizer may not remove any write to such regiser.
+
 =================
 Variable location
 =================

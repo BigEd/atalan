@@ -229,10 +229,12 @@ Bool OptimizeLive(Var * proc)
 						if (VERBOSE) {
 							printf("removed dead %ld:", n); InstrPrint(i);
 						}
-						i = InstrDelete(blk, i);
-						modified = true;
-						if (i == NULL) break;		// we may have removed last instruction in the block
-						continue;
+						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
+							i = InstrDelete(blk, i);
+							modified = true;
+							if (i == NULL) break;		// we may have removed last instruction in the block
+							continue;
+						}
 					}
 				}
 			}

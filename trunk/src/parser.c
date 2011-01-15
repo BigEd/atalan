@@ -2996,12 +2996,15 @@ void ParseCommands()
 		case TOKEN_IN:
 			submode = SUBMODE_IN;
 			NextToken();
+			if (NextIs(TOKEN_SEQUENCE)) {
+				submode |= SUBMODE_IN_SEQUENCE;
+			}
 			if (NextIs(TOKEN_OUT)) {
 				submode |= SUBMODE_OUT;
 			}
 			ParseDeclarations(MODE_VAR, submode); 
 			break;
-		case TOKEN_OUT:   
+		case TOKEN_OUT:  
 			submode = SUBMODE_OUT;
 			NextToken();
 			ParseDeclarations(MODE_VAR, SUBMODE_OUT);	
