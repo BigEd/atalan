@@ -25,6 +25,7 @@ Var * INTERRUPT;
 Var * MACRO_PRINT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
+UInt8 OPTIMIZE;
 
 void ProcessUsedProc(void (*process)(Var * proc))
 {
@@ -80,6 +81,7 @@ int main(int argc, char *argv[])
 
 	GetApplicationDir(argv[0], SYSTEM_DIR);
 	PathParent(SYSTEM_DIR);
+	OPTIMIZE = 255;
 
 	InitErrors();
 
@@ -95,8 +97,13 @@ int main(int argc, char *argv[])
 			VERBOSE = true;
 		} else if (StrEqual(argv[i], "-A")) {
 			assembler = false;
+		} else if (StrEqual(argv[i], "-O0")) {
+			OPTIMIZE = 0;
 		} else if (StrEqual(argv[i], "-O")) {
-
+			i++;
+			if (i<argc) {
+				OPTIMIZE = argv[i][0] - '0';
+			}
 		} else if (StrEqual(argv[i], "-I")) {
 			i++;
 			if (i<argc)
@@ -127,7 +134,9 @@ int main(int argc, char *argv[])
 	"  -v Verbose output\n"
 	"  -I <SYSTEM_DIR> define include path (default: current catalog)\n"
 	"  -a Only generate assembler source code, but do not call assembler\n"
-	"  -p <name>  Platform to use\n", argv[0]);
+	"  -p <name>  Platform to use\n"
+	"  -o <num>   Optimization level (0..9) 0 = no optimization\n"
+	, argv[0]);
         exit(-1);
     }
 
@@ -244,9 +253,12 @@ int main(int argc, char *argv[])
 
 	//***** Optimization
 	ProcessUsedProc(GenerateBasicBlocks);		// We must generate basic blocks again, as translation may have generated labels and jumps
-	ProcessUsedProc(OptimizeJumps);
-	ProcessUsedProc(ProcOptimize);
-	ProcessUsedProc(DeadCodeElimination);
+
+	if (OPTIMIZE > 0) {
+		ProcessUsedProc(OptimizeJumps);
+		ProcessUsedProc(ProcOptimize);
+		ProcessUsedProc(DeadCodeElimination);
+	}
 
 	if (VERBOSE) {
 		printf("============== Optimized ==============\n");
