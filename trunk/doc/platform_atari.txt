@@ -62,6 +62,7 @@ size     width of the sprite ($d008..$d00b)
 gfx      byte with current player data ($d00d..$d010)
 bitmap   array with bitmap for the player
 :::::::::
+
 =========
 Missiles
 =========
@@ -77,9 +78,9 @@ size     size of bitmaps ($d00c)
 gfx      byte with current missiles data
 color    Missile color.
 ::::::::
-=====================
-Bitmap initialization
-=====================
+=========================
+PMG memory initialization
+=========================
 
 To use PMG, it is necessary to define PMG memory and set it to appropriate register.
 It is also necessary to allow DMA for PMG. This is done by setting two registers.
@@ -98,10 +99,37 @@ GRACTL = players + missiles
 
 It also defines width of playfield, and use of hires sprites.
 
+=====================================
+Specifying PMG memory address manualy
+=====================================
+
+Atalan will assign memory address to PMG automatically. If you want to specify
+some specific address in memory, you can do this by declaring address of pmg.memory
+variable.
+
+::::::::::::::::::::::::::
+pmg.memory@$8000
+::::::::::::::::::::::::::
+
 ************************
 Fonts
 ************************
 
+Font is 1024 bytes (128 chars, 8 bytes per character) aligned on one-kb boundary
+Font will be usually defined using const array and file initializer.
+To use such font use set'font macro.
+
+::::::
+const myfont:font = file "file.fnt"
+set'font myfont	    
+:::::::
+
+If you set the font only at one place (i.e. you are using just one font), you can
+specify the file directly.
+
+::::::
+set'font file "file.fnt"	    
+::::::
 
 **********
 Interrupts
