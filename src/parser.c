@@ -2010,6 +2010,82 @@ Arguments:
 	}
 }
 
+Var * ParseAdr()
+/*
+Purpose:
+	Parse address specified after the @ symbol in variable definition.
+*/
+{
+	Var * adr, * tuple, * item;
+
+	NextToken();
+
+	// (var,var,...)   tuple
+	// int (concrete address)
+	// variable (some variable)
+
+	adr = NULL; tuple = NULL;
+
+	//@
+	if (TOK == TOKEN_OPEN_P) {
+		EnterBlock();
+		do {
+			ParseVariable(&item);
+			if (TOK) {
+				if (adr == NULL) {
+					adr = item;
+				} else {
+					if (tuple == NULL) {
+						adr = tuple = VarNewTuple(adr, item);
+					} else {
+						tuple->var = VarNewTuple(tuple->var, item);
+					}
+				}
+			}
+		} while(NextIs(TOKEN_COMMA));
+		if (!NextIs(TOKEN_BLOCK_END)) {
+			SyntaxError("expected closing parenthesis");
+		}
+	} else if (TOK == TOKEN_INT) {
+		adr = VarNewInt(LEX.n);
+		NextToken();
+	} else if (TOK == TOKEN_ID) {
+
+		adr = VarFindScope(REGSET, LEX.name, 0);
+		if (adr == NULL) {
+			adr = VarFind2(LEX.name, 0);
+			NextToken();
+			if (adr == NULL) {
+				SyntaxError("$undefined regset or variable used as address");
+			} else {
+dot:
+				if (NextIs(TOKEN_DOT)) {
+					if (TOK == TOKEN_ID) {
+						adr = VarFindScope(adr, LEX.name, 0);
+						NextToken();
+						goto dot;
+					} else {
+						SyntaxError("Expected variable name");
+					}
+				}
+
+				if (adr->mode == MODE_SCOPE) {
+					SyntaxError("scope can not be used as address");
+				} 
+				// name(slice)
+				if (TOK == TOKEN_OPEN_P) {
+					adr = ParseArrayElement(adr);
+				}
+			}
+		} else {
+			NextToken();
+		}
+	} else {
+		SyntaxError("expected integer or register set name");
+	}
+	return adr;
+}
+
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type)
 /*
 Purpose:
@@ -2020,7 +2096,7 @@ Purpose:
 	Bool is_assign, existed;
 	Bool flexible;
 	UInt16 cnt, j, i, stack;
-	Var * var,  * item, * adr, * tuple, * scope, * idx, * min, * max;
+	Var * var,  * item, * adr, * scope, * idx, * min, * max;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type = NULL;
 	TypeVariant typev;
@@ -2115,73 +2191,13 @@ no_dot:
 				NextToken();
 				is_assign = true;
 			} else {
-
-				NextToken();
-
-				// (var,var,...)   tuple
-				// int (concrete address)
-				// variable (some variable)
-
-				adr = NULL; tuple = NULL;
-
-				//@
-				if (TOK == TOKEN_OPEN_P) {
-					EnterBlock();
-					do {
-						ParseVariable(&item);
-						if (TOK) {
-							if (adr == NULL) {
-								adr = item;
-							} else {
-								if (tuple == NULL) {
-									adr = tuple = VarNewTuple(adr, item);
-								} else {
-									tuple->var = VarNewTuple(tuple->var, item);
-								}
-							}
-						}
-					} while(NextIs(TOKEN_COMMA));
-					if (!NextIs(TOKEN_BLOCK_END)) {
-						SyntaxError("expected closing parenthesis");
-					}
-				} else if (TOK == TOKEN_INT) {
-					adr = VarNewInt(LEX.n);
-					NextToken();
-				} else if (TOK == TOKEN_ID) {
-
-					adr = VarFindScope(REGSET, LEX.name, 0);
-					if (adr == NULL) {
-						adr = VarFind2(LEX.name, 0);
-						NextToken();
-						if (adr == NULL) {
-							SyntaxError("$undefined regset or variable used as address");
-						} else {
-dot:
-							if (NextIs(TOKEN_DOT)) {
-								if (TOK == TOKEN_ID) {
-									adr = VarFindScope(adr, LEX.name, 0);
-									NextToken();
-									goto dot;
-								} else {
-									SyntaxError("Expected variable name");
-								}
-							}
-
-							if (adr->mode == MODE_SCOPE) {
-								SyntaxError("scope can not be used as address");
-							} 
-							// name(slice)
-							if (TOK == TOKEN_OPEN_P) {
-								adr = ParseArrayElement(adr);
-							}
-						}
-					} else {
-						NextToken();
-					}
+				adr = ParseAdr();
+				is_assign = true;
+				if (var->adr == NULL) {
+					var->adr = adr;
 				} else {
-					SyntaxError("expected integer or register set name");
+					SyntaxError("Address of variable [A] has been already defined.");
 				}
-				var->adr = adr;
 			}
 		}
 
