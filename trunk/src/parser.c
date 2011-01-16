@@ -2322,6 +2322,11 @@ no_dot:
 
 			// Procedure or macro is defined using parsing code
 			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
+
+				if (var->instr != NULL) {
+					SyntaxError("Procedure has already been defined");
+				}
+
 				EnterSubscope(var);
 				InstrBlockPush();
 				ParseBlock();

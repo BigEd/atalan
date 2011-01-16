@@ -867,6 +867,22 @@ subw:addw =
 	k = i - j
 :::::::::::::::::::::::
 
+=================================
+Forward declaration of procedures
+=================================
+
+It is possible to declare the procedure header in advance and later define it's
+body.
+Although recursive functions are not supported, it is usefull in some special
+situations like when assigning address of procedure to variable. 
+
+:::::::::::::::::::::::::::
+sum:proc e,f:byte >s:byte 
+
+sum =
+  s = e + f
+:::::::::::::::::::::::::::
+
 ===============================
 Procedures at specified address
 ===============================
