@@ -2246,7 +2246,7 @@ no_dot:
 				var->type = type;
 
 				// Definition of named constant assigned to type (name:xxx = 34)
-				if (var->mode == MODE_CONST) {
+				if (var->mode == MODE_CONST && FlagOff(submode, SUBMODE_PARAM)) {
 					if (var->type != NULL) {
 						TypeAddConst(var->type, var);
 					}
@@ -2315,7 +2315,7 @@ no_dot:
 			} else if (var->mode == MODE_TYPE) {
 				SyntaxError("Assigning value to type [A].");
 				continue;
-			} else if (FlagOn(var->submode, SUBMODE_IN) && FlagOff(var->submode, SUBMODE_OUT)) {
+			} else if (var->mode == MODE_VAR && FlagOn(var->submode, SUBMODE_IN) && FlagOff(var->submode, SUBMODE_OUT)) {
 				SyntaxError("Assigning value to read only register [A].");
 				continue;
 			}
@@ -3008,6 +3008,9 @@ void ParseCommands()
 	while (TOK != TOKEN_BLOCK_END && TOK != TOKEN_EOF && TOK != TOKEN_ERROR && TOK != TOKEN_OUTDENT) {
 
 		switch(TOK) {
+		case TOKEN_PARAM: 
+			NextToken();
+			ParseDeclarations(MODE_CONST, SUBMODE_PARAM); break;
 		case TOKEN_CONST: 
 			NextToken();
 			ParseDeclarations(MODE_CONST, SUBMODE_EMPTY); break;
