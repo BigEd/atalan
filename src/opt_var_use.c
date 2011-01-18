@@ -49,6 +49,10 @@ done:
 }
 
 void AllocateVariablesFromHeap(Var * scope, MemHeap * heap)
+/*
+Purpose:
+	Allocate procedure local variables using specified heap.
+*/
 {
 	Var * var;
 	UInt32 size, adr;

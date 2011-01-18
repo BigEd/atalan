@@ -765,3 +765,63 @@ void ProcOptimize(Var * proc)
 	OptimizeLoops(proc);
 	OptimizeCombined(proc);
 }
+
+void ProcInline(Var * proc)
+/*
+Purpose:
+	Replace every call to function that should be inlined with actual code from the function.
+*/
+{
+	Instr * i, * next;
+	InstrBlock * blk;
+	Var * subproc, * var;
+	InstrBlock * subblk;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_CALL) {
+				subproc = i->result;
+
+				// We inline procedures that are called just once and have some body (so we have something to inline)
+				if (subproc->read == 1 && subproc->instr != NULL) {
+					// To inline a procedure, we just insert it's code at the place of call
+					// Parameters have already been stored into appropriate input registers
+					// The scope of the procedure should be made local scope in this procedure.
+
+					// When we know, there is just one call, we may link the code of the procedure to new place.
+					// If there were multiple places where procedure could be called, we would have to make a copy (and copy of local variables too).
+					// There is no such case currently.
+
+					subblk = subproc->instr;
+
+					next = i->next;
+					i->next = subblk->first;
+					subblk->first->prev = i;
+
+					if (next != NULL) {
+						next->prev = subblk->last;
+						subblk->last->next = next;
+					}
+
+					i = InstrDelete(blk, i);
+
+					// Detach the block from procedure
+					MemFree(subblk);
+//					subblk->first = NULL;
+//					subblk->last = NULL;
+//					InstrBlockFree(subblk);
+					subproc->instr = NULL;
+					subproc->read--;
+
+					// Reown procedure local variables
+
+					for(var = VarFirstLocal(subproc); var != NULL; var = VarNextLocal(subproc, var)) {
+						var->scope = proc;
+					}
+
+//					PrintProc(proc);
+				}
+			}
+		}
+	}
+}

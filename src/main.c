@@ -244,6 +244,12 @@ int main(int argc, char *argv[])
 	ProcUse(&ROOT_PROC, 0);
 	if (ERROR_CNT > 0) goto failure;
 
+	if (OPTIMIZE > 0) {
+		// It is important to call the inline optimisation before the code is broken to basic blocks.
+		// It makes code inserting easier.
+		ProcessUsedProc(ProcInline);
+	}
+
 	//***** Analysis
 	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
