@@ -222,8 +222,6 @@ int main(int argc, char *argv[])
 	// Now do extra checks in all procedures
 	// Some of the checks are postponed to have information from all procedures
 
-	VarGenerateArrays();
-
 	if (VERBOSE) {
 		PrintHeader("Parsed");
 		PrintProc(&ROOT_PROC);
@@ -243,6 +241,9 @@ int main(int argc, char *argv[])
 	VarUse();
 	ProcUse(&ROOT_PROC, 0);
 	if (ERROR_CNT > 0) goto failure;
+
+	VarUse();
+	VarGenerateArrays();
 
 	if (OPTIMIZE > 0) {
 		// It is important to call the inline optimisation before the code is broken to basic blocks.
