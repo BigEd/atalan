@@ -519,6 +519,11 @@ Int16 TypeDim(Type * type)
 	return d;
 }
 
+Bool VarIsUsed(Var * var)
+{
+	return var != NULL && (var->read > 0 || var->write > 0);
+}
+
 void VarEmitAlloc()
 /*
 Purpose:	
@@ -538,35 +543,37 @@ Purpose:
 		if (type != NULL) {
 			if (var->mode == MODE_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
 
-				size = 1;	// size of basic element (byte by default)
-				for(d=0; d<MAX_DIM_COUNT; d++) {			
-					dim = type->dim[d];
-					if (dim == NULL) break;
-					size *= dim->range.max - dim->range.min + 1;
-				}
+				if (VarIsUsed(var)) {
+					size = 1;	// size of basic element (byte by default)
+					for(d=0; d<MAX_DIM_COUNT; d++) {			
+						dim = type->dim[d];
+						if (dim == NULL) break;
+						size *= dim->range.max - dim->range.min + 1;
+					}
 
-				// Make array aligned (it type defines address, it is definition of alignment)
-				type_var = type->owner;
-				if (type_var->adr != NULL) {
-					EmitInstrOp(INSTR_ALIGN, NULL, type_var->adr, NULL);
-				}
+					// Make array aligned (it type defines address, it is definition of alignment)
+					type_var = type->owner;
+					if (type_var->adr != NULL) {
+						EmitInstrOp(INSTR_ALIGN, NULL, type_var->adr, NULL);
+					}
 
-				ArraySize(type, &dim1, &dim2);
+					ArraySize(type, &dim1, &dim2);
 
-				if (dim2 != NULL) {
-//					dim = type->dim[0];
-//					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
-//					dim = type->dim[1];
-//					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
-					EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-					EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
-//					Gen(INSTR_ALLOC, var, cnst, cnst2);
-				} else {
-					cnst = VarNewInt(size);
-					EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-					EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
-//					GenLabel(var);		// use the variable as label - this will set the address part of the variable
-//					Gen(INSTR_ALLOC, var, cnst, NULL);
+					if (dim2 != NULL) {
+	//					dim = type->dim[0];
+	//					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
+	//					dim = type->dim[1];
+	//					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
+						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+						EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
+	//					Gen(INSTR_ALLOC, var, cnst, cnst2);
+					} else {
+						cnst = VarNewInt(size);
+						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+						EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
+	//					GenLabel(var);		// use the variable as label - this will set the address part of the variable
+	//					Gen(INSTR_ALLOC, var, cnst, NULL);
+					}
 				}
 			}
 		}
@@ -588,16 +595,17 @@ Purpose:
 	FOR_EACH_VAR(var)
 		if ((type = var->type)) {
 			if (type->variant == TYPE_ARRAY) {
-				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {
-					
-					// Make array aligned (it type defines address, it is definition of alignment)
-					type_var = type->owner;
-					if (type_var->adr != NULL) {
-						Gen(INSTR_ALIGN, NULL, type_var->adr, NULL);
+				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {		
+					if (VarIsUsed(var)) {
+						// Make array aligned (it type defines address, it is definition of alignment)
+						type_var = type->owner;
+						if (type_var->adr != NULL) {
+							Gen(INSTR_ALIGN, NULL, type_var->adr, NULL);
+						}
+						// Label & initializers
+						GenLabel(var);
+						GenBlock(var->instr);
 					}
-					// Label & initializers
-					GenLabel(var);
-					GenBlock(var->instr);
 				}
 			}
 		}
@@ -609,9 +617,11 @@ Purpose:
 		if (var->mode == MODE_VAR || var->mode == MODE_CONST) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
-				ArraySize(type, &dim1, &dim2);
-				if (dim2 != NULL) {
-					Gen(INSTR_ARRAY_INDEX, var, dim1, dim2);
+				if (VarIsUsed(var)) {
+					ArraySize(type, &dim1, &dim2);
+					if (dim2 != NULL) {
+						Gen(INSTR_ARRAY_INDEX, var, dim1, dim2);
+					}
 				}
 			}
 		}
@@ -622,7 +632,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type != NULL && type->variant == TYPE_ARRAY) {
-			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr != NULL) {					
+			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				Gen(INSTR_ORG, NULL, var->adr, NULL);
 				GenLabel(var);
 				GenBlock(var->instr);

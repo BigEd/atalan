@@ -9,7 +9,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-#define PEEPHOLE_SIZE 2
+//#define PEEPHOLE_SIZE 2
 //extern Bool VERBOSE;
 extern Var   ROOT_PROC;
 
@@ -24,6 +24,9 @@ void VarIncRead(Var * var)
 		if (var->mode == MODE_ELEMENT) {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);
+		} else if (var->mode == MODE_TUPLE) {
+			VarIncRead(var->adr);
+			VarIncRead(var->var);			
 		} else {
 			if (var->adr != NULL) VarIncRead(var->adr);
 		}
@@ -37,6 +40,9 @@ void VarIncWrite(Var * var)
 		if (var->mode == MODE_ELEMENT) {
 			VarIncWrite(var->adr);
 			VarIncRead(var->var);
+		} else if (var->mode == MODE_TUPLE) {
+			VarIncWrite(var->adr);
+			VarIncWrite(var->var);
 		} else {
 			if (var->adr != NULL) VarIncRead(var->adr);
 		}
@@ -109,6 +115,10 @@ void InstrVarLoopDependent(InstrBlock * code, InstrBlock * end)
 }
 
 void VarUse()
+/*
+Purpose:
+	Compute use of variables.
+*/
 {
 	Var * var;
 
