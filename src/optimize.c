@@ -184,38 +184,6 @@ Int16 VarReplace(Var ** p_var, Var * from, Var * to)
 	return n;
 }
 
-UInt32 VarByteSize(Var * var)
-/*
-Purpose:
-	Return size of variable in bytes.
-*/
-{
-	Int32 lrange;
-
-	Type * type;
-	if (var != NULL) {
-		type = var->type;
-		if (var->mode == MODE_ELEMENT) {
-			return 1;		//TODO: Compute size in a better way
-		}
-
-		if (type != NULL) {
-			switch(type->variant) {
-				case TYPE_INT:
-					// Some integer variables may have ranges starting higher than 0.
-					// (Like 100..300).
-					// Byte size of such integers must be computed as if their min range was 0.
-
-					lrange = type->range.min;
-					if (lrange > 0) lrange = 0;
-					return (type->range.max - lrange) / 256 + 1;
-				default: break;
-			}
-		}
-	}
-	return 0;
-}
-
 Bool ArgNeedsSpill(Var * arg, Var * var)
 {
 	Bool spill = false;
@@ -825,3 +793,4 @@ Purpose:
 		}
 	}
 }
+

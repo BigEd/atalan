@@ -130,6 +130,11 @@ rule let %A:sbyte, %B:sbyte = instr
 rule let %A:byte1arr(const %B:byte),%C:byte  = instr
   let _a,%C
   let %A(%B),_a    ;with constant, we do not need to load index register X
+
+;Access to low or high byte of card
+rule let %A:byte2(const %B:byte), %C:byte = instr
+  let _a,%C
+  let %A(%B),_a    ;with constant, we do not need to load index register X
   
 ;Prevent compiler from generation extra code, when we are already assigning _a register.
 
@@ -253,7 +258,7 @@ rule let %A:byte, %B:card = instr
 	let _a, %B(0)
 	let %A, _a
 
-
+;TODO: We should add adr to byte2, this would remove the necessity for 3 of following 4 rules
 rule let %A:byte2,%B:byte2   = instr
   let _a,%B(0)
   let %A(0),_a
@@ -278,10 +283,29 @@ rule let %A:card, %B:adr = instr
   let _a, %B(1)
   let %A(1), _a
 
+
 rule let %A:card, _a = instr
 	let %A(0), _a
 	let %A(1), 0
+
+;---- Tuples
+
+rule let (%A:byte1, %B:byte1), const %C:byte2  = instr
+	lo %A, %C
+	hi %B, %C
+
+rule let %A:byte2, (%B:byte1, %C:byte1) = instr
+	let %A(0), %B
+	let %A(1), %C
 	
+rule let (%A:byte1, %B:byte1), %C:byte2  = instr
+	let %A, %C(0)
+	let %B, %C(1)
+
+rule let (%A:byte1, %B:byte1), (%C:byte1, %D:byte1)  = instr
+	let %A, %C
+	let %B, %D
+
 ;===== Long
 rule let %A:long,const %B:long = instr
   lo %Z, %B

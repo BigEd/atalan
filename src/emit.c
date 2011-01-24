@@ -19,17 +19,62 @@ extern Rule * EMIT_RULES[INSTR_CNT];
 extern Bool VERBOSE;
 extern Var   ROOT_PROC;
 
-void PrintColor(UInt8 color)
+UInt8 G_COLOR;
+
+UInt8 PrintColor(UInt8 color)
 /*
 Purpose:
 	Change the color of printed text.
 */
 {
+	UInt8 old_color;
 #ifdef __Windows__
 	HANDLE hStdout; 
+	old_color = color;
 	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
 	SetConsoleTextAttribute(hStdout, color);
 #endif
+	G_COLOR = color;
+	return old_color;
+}
+
+void Print(char * text)
+{
+	if (text != NULL) {
+		printf("%s", text);
+	}
+}
+
+void PrintRepeat(char * text, UInt16 cnt)
+{
+	while(cnt-- > 0) {
+		Print(text);
+	}
+}
+
+void PrintHeader(char * text)
+{
+	UInt16 len, half_len;
+	UInt8 color;
+	if (text == NULL) text = "";
+
+	len = StrLen(text);
+	if (len > 70) {
+		len = 2;
+	} else {
+		len = 70 - len;
+	}
+
+	color = PrintColor(RED+GREEN);
+	half_len = len / 2;
+	PrintRepeat("=", half_len);
+	Print(" ");
+	Print(text);
+	Print(" ");
+	PrintRepeat("=", len - half_len);
+	Print("\n");
+	PrintColor(color);
+
 }
 
 char * G_BUF;		// buffer to output
@@ -378,7 +423,7 @@ void EmitLabels()
 
 		adr = var->adr;
 		if (
-			   (adr != NULL && adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
+			   (adr != NULL && !VarIsReg(adr) && adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
 			|| (var->mode == MODE_CONST && var->read > 0 && var->name != NULL > 0)
 		) {
 

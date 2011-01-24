@@ -1,6 +1,8 @@
 ﻿****
 News
 ****
+
+- OPT: Procedure argument in registers
 - NEW: Support separate procedure definition & declaration
 - NEW: -o option
 - NEW: 'in sequence' variables

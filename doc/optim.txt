@@ -16,6 +16,8 @@ Local variable optimization
 Procedure local variables and arguments are internaly allocated as global variables.
 Atalan analyzes procedure call chain and if possible, reuses global variable
 space to several procedures.
+
+Processor registers are used to pass arguments in & out of procedure, if possible.
  
 
 ===============================

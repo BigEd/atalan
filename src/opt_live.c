@@ -40,6 +40,9 @@ Input:
 
 	if (var->mode == MODE_DEREF) {
 		VarMarkLive(var->var);
+	} else if (var->mode == MODE_TUPLE) {
+		VarMark(var->adr, state);
+		VarMark(var->var, state);
 	} if (var->mode == MODE_ELEMENT) {
 
 		if (var->adr->mode == MODE_DEREF) {
@@ -59,7 +62,7 @@ Input:
 	} else {
 		// If variable is alias for some other variable, mark the other variable too
 		if (var->adr != NULL) {
-			if (var->adr->mode == MODE_VAR) {
+			if (var->adr->mode == MODE_VAR || var->adr->mode == MODE_TUPLE) {
 				VarMark(var->adr, state);
 			}
 		}
@@ -240,10 +243,11 @@ Bool OptimizeLive(Var * proc)
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
 					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && FlagOff(result->submode, /*SUBMODE_REF|*/SUBMODE_OUT)) {
-						if (VERBOSE) {
-							printf("removed dead %ld:", n); InstrPrint(i);
-						}
+						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
+							if (VERBOSE) {
+								printf("removed dead %ld:", n); InstrPrint(i);
+							}
 							i = InstrDelete(blk, i);
 							modified = true;
 							if (i == NULL) break;		// we may have removed last instruction in the block
