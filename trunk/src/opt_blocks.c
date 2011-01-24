@@ -52,7 +52,28 @@ Purpose:
 	return nb;
 }
 
-void ReplaceVar(InstrBlock * block, Var * from, Var * to)
+void VarReplaceVar(Var ** p_var, Var * from, Var * to)
+{
+	Var * var;
+
+	var = *p_var;
+
+	if (var == NULL) return;
+
+	if (var == from) {
+		*p_var = to;
+		return;
+	}
+
+	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_RANGE) {
+		VarReplaceVar(&var->var, from, to);
+		VarReplaceVar(&var->adr, from, to);
+	} else if (var->mode == MODE_DEREF) {
+		VarReplaceVar(&var->var, from, to);
+	}
+}
+
+void InstrReplaceVar(InstrBlock * block, Var * from, Var * to)
 /*
 Purpose:
 	Replace use of variable 'from' with variable 'to' in specified block.
@@ -63,9 +84,14 @@ Purpose:
 	InstrBlock * nb;
 	for(nb = block; nb != NULL; nb = nb->next) {
 		for (i = nb->first; i != NULL; i = i->next) {
-			if (i->result == from) i->result = to;
-			if (i->arg1   == from) i->arg1 = to;
-			if (i->arg2   == from) i->arg2 = to;
+			if (i->op != INSTR_LINE) {
+				VarReplaceVar(&i->result, from, to);		
+				VarReplaceVar(&i->arg1, from, to);		
+				VarReplaceVar(&i->arg2, from, to);		
+				//if (i->result == from) i->result = to;
+				//if (i->arg1   == from) i->arg1 = to;
+				//if (i->arg2   == from) i->arg2 = to;
+			}
 		}
 	}
 }
@@ -161,7 +187,7 @@ Purpose:
 				// to prevent creation of empty blocks.
 				while (i != NULL && i->op == INSTR_LABEL) {
 					i2 = i;
-					ReplaceVar(blk, i->result, nb->label);
+					InstrReplaceVar(blk, i->result, nb->label);
 					i = i->next;
 					InstrDelete(nb, i2);
 				}

@@ -245,6 +245,7 @@ struct TypeTag {
 };
 
 //TODO: Maybe we do not need the MODE_ARG, but MODE_VAR with SUBMODE_ARG_* ?
+//TODO: MODE_SCOPE is just MODE_VAR with type TYPE_SCOPE
 
 typedef enum {
 	MODE_UNDEFINED = 0,
@@ -315,6 +316,8 @@ typedef enum {
 #define VarProcInterrupt   32		// this procedure is used from interrupt
 #define VarProcAddress     64		// procedure address is required (this means, we are not allowed to inline it)
 
+#define VarUsed            16		// for register allocation
+
 #define VarLabelDefined    32
 
 typedef unsigned int VarIdx;
@@ -376,6 +379,8 @@ MODE_LABEL          Address.
 					Address may be named. (For example labels).
 
 */
+
+#define MAX_ARG_COUNT 128
 
 typedef enum {
 	INSTR_VOID = 0,
@@ -528,6 +533,10 @@ UInt32 TypeStructAssignOffsets(Type * type);
 
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2);
 
+//--- Proc type
+void ProcTypeFinalize(Type * proc);
+
+
 Bool VarMatchType(Var * var, Type * type);
 Bool VarMatchesType(Var * var, Type * type);
 
@@ -559,7 +568,7 @@ Var * VarNewTmp(long idx, Type * type);
 Var * VarNewTmpLabel();
 Var * VarAlloc(VarMode mode, Name name, VarIdx idx);
 Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx);
-Var * VarAllocScopeTmp(Var * scope, VarMode mode);
+Var * VarAllocScopeTmp(Var * scope, VarMode mode, Type * type);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFind2(char * name, VarIdx idx);
@@ -576,9 +585,15 @@ Bool VarIsArray(Var * var);
 Bool VarIsTmp(Var * var);
 Bool VarIsStructElement(Var * var);
 Bool VarIsArrayElement(Var * var);
+Bool VarIsReg(Var * var);
 
+UInt32 VarByteSize(Var * var);
+
+typedef UInt8 RegIdx;
 extern Var * REG[64];		// Array of registers (register is variable with address in REGSET, submode has flag SUBMODE_REG)
-extern UInt8 REG_CNT;		// Count of registers
+extern RegIdx REG_CNT;		// Count of registers
+
+void VarResetRegUse();
 
 TypeVariant VarType(Var * var);
 long VarParamCount(Var * var);
@@ -719,6 +734,7 @@ void InstrBlockFree(InstrBlock * blk);
 
 void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void GenLet(Var * result, Var * arg1);
 void GenLine();
 void GenLabel(Var * var);
 void GenGoto(Var * var);
@@ -740,6 +756,9 @@ void VarUse();
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2);
 
 UInt16 SetBookmarkLine(Instr * i);
+
+void InstrReplaceVar(InstrBlock * block, Var * from, Var * to);
+void ProcReplaceVar(Var * proc, Var * from, Var * to);
 
 /***********************************************************
 
@@ -858,7 +877,8 @@ void ProcInline(Var * proc);
 #define GREEN 2
 #define RED 4
 #define LIGHT 8
-void PrintColor(UInt8 color);
+UInt8 PrintColor(UInt8 color);
+void PrintHeader(char * text);
 
 Rule * EmitRule(Instr * instr);
 Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);

@@ -316,11 +316,16 @@ UInt32 TypeStructSize(Var * var);
 UInt32 TypeSize(Type * type)
 {
 	UInt32 size;
+	Int32 lrange;
 	size = 0;
 	if (type != NULL) {
 		switch(type->variant) {
 		case TYPE_INT:
-			size = type->range.max - type->range.min;
+
+			lrange = type->range.min;
+			if (lrange > 0) lrange = 0;
+
+			size = type->range.max - lrange;
 			if (size <= 255) size = 1;
 			else if (size <= 65535) size = 2;
 			else if (size <= 0xffffff) size = 3;
@@ -483,6 +488,11 @@ Bool VarMatchesType(Var * var, Type * type)
 		return VarMatchesType(var, type->dim[0]) || VarMatchesType(var, type->dim[1]);
 
 	} else if (type->variant == TYPE_INT) {
+
+		if (var->mode == MODE_TUPLE) {
+			return false;
+		}
+
 		if (vtype != NULL) {
 			// If variable is constant, the check is different
 			if (var->mode == MODE_CONST) {
@@ -510,9 +520,10 @@ Bool VarMatchesType(Var * var, Type * type)
 			&& TypeIsSubsetOf(vtype->element, type->element);
 		
 	} else if (type->variant == TYPE_ADR) {
-		if (vtype != NULL) {
-			if (vtype->variant != TYPE_ADR) return false;
-		}
+//		if (vtype != NULL) {
+//			if (vtype->variant != TYPE_ADR) return false;
+//		}
+		return vtype != NULL && vtype->variant == TYPE_ADR;
 	} else if (type->variant == TYPE_PROC) {
 
 		// Interrupt routines types will be based on some other type
@@ -528,3 +539,4 @@ Bool VarMatchesType(Var * var, Type * type)
 	}
 	return true;
 }
+

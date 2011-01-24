@@ -92,6 +92,7 @@
     <ClCompile Include="parser.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="common.c" />
+    <ClCompile Include="type_proc.c" />
     <ClCompile Include="variables.c" />
   </ItemGroup>
   <ItemGroup>

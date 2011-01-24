@@ -68,6 +68,7 @@ Purpose:
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
+							PrintVarName(var); printf("@%d\n", adr);
 							var->adr = VarNewInt(adr);
 						} else {
 							// failed to alloc in zero page
@@ -79,48 +80,50 @@ Purpose:
 	}
 }
 
-void HeapAddVariables(MemHeap * heap, Var * scope)
-{
-	Var * var, * vadr;
-	UInt32 size, adr;
+#define VAR_ADD 0
+#define VAR_REMOVE 1
 
-	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
-		if (var->mode == MODE_SCOPE) {
-			HeapAddVariables(heap, var);
-		} else {
-			if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
-				size = TypeSize(var->type);
-				vadr = var->adr;
-				if (size > 0 && vadr != NULL) {
-					if (vadr->type->variant == TYPE_INT) {
-						adr  = vadr->n;
+void HeapVarOp(MemHeap * heap, Var * var, int op)
+{
+	UInt32 size, adr;
+	Var * vadr;
+
+	if (var == NULL) return;
+
+	if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+		size = TypeSize(var->type);
+		vadr = var->adr;
+		if (size > 0 && vadr != NULL) {
+			if (vadr->mode == MODE_TUPLE) {
+				HeapVarOp(heap, vadr, op);
+			} else {
+				if (vadr->mode == MODE_CONST && vadr->type->variant == TYPE_INT) {
+					adr  = vadr->n;
+					if (op == VAR_REMOVE) {
+						HeapRemoveBlock(heap, adr, size);
+					} else {
 						HeapAddBlock(heap, adr, size);
 					}
 				}
 			}
 		}
+
+	} else if (var->mode == MODE_TUPLE) {
+		// Tuple is ignored. If it references variables local to this scope, they will be processed separately anyways.
+		//HeapVarOp(heap, var->adr, op);
+		//HeapVarOp(heap, var->var, op);
 	}
 }
 
-void HeapRemoveVariables(MemHeap * heap, Var * scope)
+void HeapVariablesOp(MemHeap * heap, Var * scope, int op)
 {
-	Var * var, * vadr;
-	UInt32 size, adr;
+	Var * var;
 
 	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
 		if (var->mode == MODE_SCOPE) {
-			HeapRemoveVariables(heap, var);
+			HeapVariablesOp(heap, var, op);
 		} else {
-			if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
-				size = TypeSize(var->type);
-				vadr = var->adr;
-				if (size > 0 && vadr != NULL) {
-					if (vadr->type->variant == TYPE_INT) {
-						adr  = vadr->n;
-						HeapRemoveBlock(heap, adr, size);
-					}
-				}
-			}
+			HeapVarOp(heap, var, op);
 		}
 	}
 }
@@ -147,7 +150,7 @@ void AllocateVariables(Var * proc)
 //				if (/*StrEqual(proc->name, "copyblock") &&*/ StrEqual(proc->name, "drawmainscreen")) {
 //					printf("***\n");
 //				}
-				HeapAddVariables(&heap, proc2);
+				HeapVariablesOp(&heap, proc2, VAR_ADD);
 //				if (StrEqual(proc->name, "drawmainscreen")) {
 //					HeapPrint(&heap);
 //				}
@@ -175,7 +178,7 @@ void AllocateVariables(Var * proc)
 //				if (StrEqual(proc->name, "drawmainscreen")) {
 //					HeapPrint(&heap);
 //				}
-				HeapRemoveVariables(&heap, proc2);
+				HeapVariablesOp(&heap, proc2, VAR_REMOVE);
 //				if (StrEqual(proc->name, "drawmainscreen")) {
 //					HeapPrint(&heap);
 //				}

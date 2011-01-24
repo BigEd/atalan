@@ -2,6 +2,8 @@
 ;Raster Music Tracker
 ;********************************
 
+param STEREOMODE:0..3 = 0
+
 ;We are probably not going to use the addresses directly,
 ;but we need to declare the variable with structure to
 ;alloc the space for RMT variables.

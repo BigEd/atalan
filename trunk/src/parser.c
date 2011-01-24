@@ -18,7 +18,7 @@ Syntax:
 	  |    option
 	"sk"   verbatim text
 	<rule> reference to other rule
-
+	~      there can not be space between previous and next syntactic token
 */
 
 #include "language.h"
@@ -55,6 +55,12 @@ Var * RULE_SCOPE;
 extern Var * LAST_VAR;
 
 void ParseVariable(Var ** p_var)
+/*
+Purpose:
+	Parse variable name.
+
+Syntax:  var_name [ ~ "." ~ var_name  ]*
+*/
 {
 	Bool spaces;
 	Var * var = NULL, * scope;
@@ -83,7 +89,7 @@ Purpose:
 	  [">" | "<"] assign
 	Arguments are added to current context with submode SUBMODE_ARG_*.
 
-	This method is used when parsing function or macro.
+	This method is used when parsing procedure or macro argument declaration or structure declaration.
 */
 {
 	VarSubmode submode = SUBMODE_EMPTY;
@@ -105,8 +111,7 @@ Purpose:
 		if (NextIs(TOKEN_ADR)) {
 			ParseVariable(&adr);
 			if (TOK) {
-				var = VarAllocScopeTmp(to_type->owner, MODE_VAR);
-				var->type = adr->type;
+				var = VarAllocScopeTmp(to_type->owner, MODE_VAR, adr->type);
 				var->adr  = adr;
 				NextIs(TOKEN_EOL);
 				continue;
@@ -281,7 +286,9 @@ const_list:
 	} else if (NextIs(TOKEN_PROC)) {
 		type = TypeAlloc(TYPE_PROC);
 		ParseArgList(MODE_ARG, type);
-
+		if (TOK) {
+			ProcTypeFinalize(type);
+		}
 	// Macro
 	} else if (NextIs(TOKEN_MACRO)) {
 
@@ -705,7 +712,8 @@ Purpose:
 				if (VarIsTmp(idx2)) G_TEMP_CNT--;
 				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 
-				idx = VarNewElement(idx, idx2);
+//				idx = VarNewElement(idx, idx2);
+				idx = VarNewTuple(idx, idx2);
 			} else {
 				SyntaxError("Array has only one dimension");
 			}
@@ -729,7 +737,7 @@ Purpose:
 
 void ParseOperand()
 {
-	Var * var = NULL, * item = NULL, * proc;
+	Var * var = NULL, * item = NULL, * proc, * tmp;
 	Bool ref = false;
 	Bool type_match;
 	UInt8 arg_no;
@@ -812,7 +820,7 @@ no_id:
 				return;
 			}
 
-			// Function call
+			// Procedure call
 			if (var->type != NULL && (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO)) {
 				proc = var;
 				NextToken();
@@ -822,10 +830,18 @@ no_id:
 					ParseMacro(proc);
 				}
 
-				// Output arguments of procedure are stored on stack
+				// *** Register Arguments (5)
+				// After the procedure has been called, we must store values of all output register arguments to temporary variables.
+				// This prevents trashing the value in register by some following computation.
+
 				var = FirstArg(proc, SUBMODE_ARG_OUT);
 				if (var != NULL) {
 					do {
+						if (VarIsReg(var)) {
+							tmp = VarNewTmp(0, var->type);
+							GenLet(tmp, var);
+							var = tmp;
+						}
 						STACK[TOP] = var;
 						TOP++;					
 					} while (var = NextArg(proc, var, SUBMODE_ARG_OUT));
@@ -1993,12 +2009,12 @@ Arguments:
 		stop = max1;
 	}
 
-	Gen(INSTR_LET, idx, min1, NULL);
+	GenLet(idx, min1);
 	if (src_idx != NULL) {
-		Gen(INSTR_LET, src_idx, src_min, NULL);
+		GenLet(src_idx, src_min);
 	}
 	GenLabel(label);
-	Gen(INSTR_LET, VarNewElement(dst_arr, idx), init, NULL);
+	GenLet(VarNewElement(dst_arr, idx), init);
 	if (src_idx != NULL) {
 		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
 		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
@@ -2084,6 +2100,64 @@ dot:
 		SyntaxError("expected integer or register set name");
 	}
 	return adr;
+}
+
+void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
+{
+	Var * arg, * tmp;
+
+	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
+		if (VarIsReg(arg)) {
+			tmp = VarAllocScopeTmp(proc, MODE_VAR, arg->type);
+			ProcReplaceVar(proc, arg, tmp);
+
+			if (submode == SUBMODE_ARG_IN) {
+				InstrInsert(proc->instr, i, INSTR_LET, tmp, arg, NULL);
+			} else {
+				InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
+			}
+		}
+	}
+}
+
+void ParseProcBody(Var * proc)
+{
+	Var * lbl;
+
+	if (proc->instr != NULL) {
+		SyntaxError("Procedure has already been defined");
+		return;
+	}
+
+	EnterSubscope(proc);
+	InstrBlockPush();
+	ParseBlock();
+
+	// If there is a return statement in procedure, special label "_exit" is defined.
+
+	lbl = VarFindScope(SCOPE, "_exit", 32767);
+	GenLabel(lbl);
+
+	proc->instr = InstrBlockPop();
+
+	ExitScope();
+
+	// *** Register Arguments (2)
+	// As the first thing in a procedure, we must spill all arguments that are passed in registers
+	// to local variables. 
+	// Otherwise some operations may trash the contents of an argument and it's value would become unavailable.
+	// In the body of the procedure, we must use these local variables insted of register arguments.
+	// Optimizer will later remove unnecessary spills.
+
+	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_IN, proc->instr->first);
+
+	// *** Register Arguments (3)
+	// At the end of a procedure, we load all values of output register arguments to appropriate registers.
+	// To that moment, local variables are used to keep the values of output arguments, so we have
+	// the registers available for use in the procedure body.
+
+	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_OUT, NULL);
+
 }
 
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type)
@@ -2322,20 +2396,7 @@ no_dot:
 
 			// Procedure or macro is defined using parsing code
 			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
-
-				if (var->instr != NULL) {
-					SyntaxError("Procedure has already been defined");
-				}
-
-				EnterSubscope(var);
-				InstrBlockPush();
-				ParseBlock();
-				item = VarFindScope(SCOPE, "_exit", 32767);
-				if (item != NULL) {
-					GenLabel(item);
-				}
-				var->instr = InstrBlockPop();
-				ExitScope();
+				ParseProcBody(var);
 			} else if (typev == TYPE_SCOPE) {
 				EnterSubscope(var);
 				ParseBlock();
@@ -2449,7 +2510,7 @@ no_dot:
 										if (VarIsTmp(item)) {
 											GenLastResult(var);
 										} else {
-											Gen(INSTR_LET, var, item, NULL);
+											GenLet(var, item);
 										}
 									}
 								}
@@ -2464,7 +2525,6 @@ no_dot:
 		// No equal
 		var = vars[0];
 		if (existed && !is_assign && var != NULL && var->type != NULL) {
-//			NextToken();
 			switch(var->type->variant) {
 				case TYPE_PROC:
 					ParseCall(var);
@@ -2631,6 +2691,22 @@ void ParseRuleArg2(RuleArg * arg)
 		arg->var  = VarNewInt(LEX.n);
 		NextToken();
 		return;
+	// Tuples
+	} else if (TOK == TOKEN_OPEN_P) {
+		NextToken();
+		idx = NewRuleArg();
+		ParseRuleArg2(idx);
+		if (NextIs(TOKEN_COMMA)) {
+			// There should be at least one comma
+			idx2 = NewRuleArg();
+			ParseRuleArg2(idx2);
+
+			arg->variant = RULE_TUPLE;
+			arg->arr    = idx;
+			arg->index = idx2;
+			NextIs(TOKEN_CLOSE_P);
+		}
+		return;
 	}
 
 	// Parse type after the argument (if present)
@@ -2692,7 +2768,6 @@ void ParseRule()
 	InstrOp op;	
 	UInt8 i;
 	Rule * rule;
-//	Var * scope;
 	char buf[255];
 	char *s, *d, c;
 
@@ -2844,9 +2919,23 @@ Var * PopTop()
 }
 
 void ParseArgs(Var * proc, VarSubmode submode)
+/*
+Purpose:
+	Parse arguments passed to procedure.
+*/
 {
-	Var * arg;
-	Var * val;
+	Var * arg, * val, * tmp;
+
+	// *** Register Arguments (4)
+	// When calling a procedure, we first store values of register arguments into temporary variables and continue with evaluation of next argument.
+	// This prevents trashing the register by some more complex operation performed when computing following arguments.
+	// All values of register arguments are loaded directly before actual call is made.
+
+	Var * reg_args[MAX_ARG_COUNT];		// temporary variables allocated for register arguments
+	Var * reg_vals[MAX_ARG_COUNT];
+	UInt8 reg_arg_cnt, i;
+
+	reg_arg_cnt = 0;
 	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
 		EnterBlock();
@@ -2858,11 +2947,26 @@ void ParseArgs(Var * proc, VarSubmode submode)
 			ParseExpression(arg);
 
 			if (TOP > 0) {
+
 				val = PopTop();
-				if (VarIsTmp(val)) {
-					GenLastResult(arg);
+
+				if (VarIsReg(arg)) {
+//				// For anything more complex than constant or simple variable, create temporary
+//				if (val->mode != MODE_VAR && val->mode != MODE_CONST) {
+					tmp = VarNewTmp(0, arg->type);
+					GenLet(tmp, val);
+					val = tmp;
+					reg_args[reg_arg_cnt] = arg;
+					reg_vals[reg_arg_cnt] = val;
+					reg_arg_cnt++;
+//				}
+
 				} else {
-					Gen(INSTR_LET, arg, val, NULL);
+					if (VarIsTmp(val)) {
+						GenLastResult(arg);
+					} else {
+						GenLet(arg, val);
+					}
 				}
 			} else {
 				if (submode == SUBMODE_ARG_IN) {
@@ -2878,15 +2982,27 @@ void ParseArgs(Var * proc, VarSubmode submode)
 			arg = NextArg(proc, arg, submode);
 		}
 	}
+
+	// Load register arguments
+	if (TOK) {
+		for(i=0; i<reg_arg_cnt; i++) {
+			GenLet(reg_args[i], reg_vals[i]);
+		}
+	}
 }
 
 void ParseCall(Var * proc)
 {
 	ParseArgs(proc, SUBMODE_ARG_IN);
 	Gen(INSTR_CALL, proc, NULL, NULL);
+
+
 }
 
 void ParseReturn()
+/*
+Syntax: "return" arg*
+*/
 {
 	Var * proc;
 	Var * label;
@@ -3112,13 +3228,5 @@ void ParseInit()
 	MemEmptyVar(G_BLOCKS);
 	G_BLOCK = &G_BLOCKS[0];
 	G_BLOCK->command = TOKEN_PROC;
-//	G_CONDITION_EXP = 0;
 	SYSTEM_PARSE = true;
 }
-
-/*
-void ProcCheck(Var * proc)
-{
-
-}
-*/

@@ -225,7 +225,7 @@ int main(int argc, char *argv[])
 	VarGenerateArrays();
 
 	if (VERBOSE) {
-		printf("================= Parsed =================\n");
+		PrintHeader("Parsed");
 		PrintProc(&ROOT_PROC);
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			type = var->type;
@@ -253,6 +253,7 @@ int main(int argc, char *argv[])
 	//***** Analysis
 	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
+
 
 	//***** Translation
 	ProcessUsedProc(ProcTranslate);
@@ -300,7 +301,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		printf("==== Output\n");
+		PrintHeader("Output");
 	} // verbose
 
 	EmitLabels();
@@ -332,7 +333,7 @@ int main(int argc, char *argv[])
 	}
 
 done:	
-	   	exit(result);
+   	exit(result);
 
 failure:
 	result = -2;

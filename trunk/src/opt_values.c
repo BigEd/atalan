@@ -423,6 +423,10 @@ Bool CodeModifiesVar(Instr * from, Instr * to, Var * var)
 	return false;
 }
 
+void VarResetProcessed()
+{
+}
+
 void ProcValuesUse(Var * proc)
 {
 	Instr * i;
@@ -446,7 +450,8 @@ void ProcValuesUse(Var * proc)
 		} else {
 			for(blk = proc->instr; blk != NULL; blk = blk->next) {
 				for(i = blk->first; i != NULL; i = i->next) {
-					if (i->op == INSTR_CALL) {
+					if (i->op == INSTR_LINE) {
+					} else if (i->op == INSTR_CALL) {
 						ProcValuesUse(i->result);
 					} else if (IS_INSTR_JUMP(i->op)) {
 						// jump instructions do have result, but it is label we jump to
@@ -454,6 +459,7 @@ void ProcValuesUse(Var * proc)
 						if (i->result != NULL) {
 							ResetValue(i->result);
 							ResetVarDep(i->result);
+							ResetVarDepRoot(i->result);
 						}
 					}
 				}
@@ -531,6 +537,7 @@ Bool OptimizeValues(Var * proc)
 		printf("------ optimize values -----\n");
 		PrintProc(proc);
 	}
+
 
 	VarUse();
 

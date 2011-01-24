@@ -20,9 +20,14 @@ GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
 GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
 
+/*
+Registers are special type of variable.
+Because we use them a lot, we create an array of references to registers here.
+*/
+
 GLOBAL Var * REGSET;
 GLOBAL Var * REG[64];		// Array of registers (register is variable with address in REGSET, submode has flag SUBMODE_REG)
-GLOBAL UInt8 REG_CNT;		// Count of registers
+GLOBAL RegIdx REG_CNT;		// Count of registers
 
 char * TMP_NAME = "_";
 char * TMP_LBL_NAME = "_lbl";
@@ -61,8 +66,13 @@ Var * VarNewRange(Var * min, Var * max)
 
 Var * VarNewTuple(Var * left, Var * right)
 {
-	Var * var = VarAlloc(MODE_TUPLE, NULL, 0);
+	Var * var;
 
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == MODE_TUPLE && var->adr == left && var->var == right) return var;
+	}
+
+	var = VarAlloc(MODE_TUPLE, NULL, 0);
 	var->adr = left;
 	var->var = right;
 	return var;
@@ -353,7 +363,7 @@ Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 
 }
 
-Var * VarAllocScopeTmp(Var * scope, VarMode mode)
+Var * VarAllocScopeTmp(Var * scope, VarMode mode, Type * type)
 /*
 Purpose:
 	Alloc new temporary variable in specified scope.
@@ -361,7 +371,9 @@ Purpose:
 {
 	Var * var;
 	var = VarAllocScope(scope, mode, NULL, 0);
+	var->name = TMP_NAME;
 	var->idx = TMP_IDX; 
+	var->type = type;
 	TMP_IDX++;
 	return var;
 }
@@ -480,8 +492,10 @@ Bool VarIsLabel(Var * var)
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
-	if (var->mode == MODE_ELEMENT) return false;
-	return var->mode != MODE_ARG && ((var->mode == MODE_CONST || (var->adr == NULL && var->value_nonempty) || var->name == NULL));
+	return var->mode == MODE_CONST;
+
+//	if (var->mode == MODE_ELEMENT) return false;
+//	return var->mode != MODE_ARG && ((var->mode == MODE_CONST || (var->adr == NULL && var->value_nonempty) || var->name == NULL));
 }
 
 
@@ -647,6 +661,48 @@ Purpose:
 	NEXT_VAR
 }
 
+void VarResetRegUse()
+{
+	RegIdx i;
+	for(i = 0; i<REG_CNT; i++) {
+		SetFlagOff(REG[i]->flags, VarUsed);
+	}
+}
+
+Bool VarIsReg(Var * var)
+/*
+Purpose:
+	Return true, if this variable is register or is stored in register(s).
+*/
+{
+	if (var == NULL) return false;
+
+	if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+		if (FlagOn(var->submode, SUBMODE_REG)) return true;
+		return VarIsReg(var->adr);		// variable address may be register
+	} else if (var->mode == MODE_TUPLE) {
+		return VarIsReg(var->adr) || VarIsReg(var->var);
+	}
+	return false;
+}
+
+UInt32 VarByteSize(Var * var)
+/*
+Purpose:
+	Return size of variable in bytes.
+*/
+{
+	Type * type;
+	if (var != NULL) {
+		type = var->type;
+		if (var->mode == MODE_ELEMENT) {
+			return 1;		//TODO: Compute size in a better way
+		}
+		return TypeSize(type);
+	}
+	return 0;
+}
+
 Bool ProcIsInterrupt(Var * proc)
 {
 	Type * base;
@@ -722,5 +778,19 @@ Arguments:
 				}
 			}
 		}
+	}
+	SetFlagOff(proc->flags, VarProcessed);
+}
+
+void ProcReplaceVar(Var * proc, Var * from, Var * to)
+/*
+Purpose:
+	Replace use of specific variable in a procedure by other variable.
+*/
+{
+	InstrBlock * blk;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		InstrReplaceVar(blk, from, to);
 	}
 }

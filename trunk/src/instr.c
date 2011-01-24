@@ -291,6 +291,11 @@ Purpose:
 	InternalGen(op, result, arg1, arg2);
 }
 
+void GenLet(Var * result, Var * arg1)
+{
+	Gen(INSTR_LET, result, arg1, NULL);
+}
+
 void GenGoto(Var * label)
 {
 	if (label != NULL) {
@@ -408,7 +413,7 @@ void RuleRegister(Rule * rule)
 }
 
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg);
+static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple);
 
 Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 {
@@ -431,7 +436,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 //				printf("");
 			} else {
 				// 1D index
-				if (!ArgMatch(pattern->index, var->var)) return false;
+				if (!ArgMatch(pattern->index, var->var, false)) return false;
 //				if (!VarMatchesType(var->adr, type)) return false;
 				return true;
 			}
@@ -447,7 +452,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	return VarMatchesType(var, type);
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg)
+static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 {
 	Type * atype;
 	Var * pvar;
@@ -459,20 +464,20 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 	switch(pattern->variant) {
 	case RULE_RANGE:
 		if (arg->mode != MODE_RANGE) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var)) return false;
-		return ArgMatch(pattern->arr, arg->adr); 
+		if (!ArgMatch(pattern->index, arg->var, false)) return false;
+		return ArgMatch(pattern->arr, arg->adr, false); 
 		break;
 
 	case RULE_TUPLE:
-		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var)) return false;
-		return ArgMatch(pattern->arr, arg->adr); 
+		if (arg->mode != MODE_TUPLE) return false;
+		if (!ArgMatch(pattern->index, arg->var, true)) return false;
+		return ArgMatch(pattern->arr, arg->adr, true); 
 		break;
 
 	case RULE_ELEMENT:
 		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var)) return false;
-		return ArgMatch(pattern->arr, arg->adr); 
+		if (!ArgMatch(pattern->index, arg->var, false)) return false;
+		return ArgMatch(pattern->arr, arg->adr, false); 
 		break;
 
 	case RULE_CONST:	// var
@@ -530,7 +535,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg)
 
 	case RULE_ARG:
 		if (arg->mode == MODE_DEREF) return false;
-		if (FlagOn(arg->submode, SUBMODE_REG)) return false; 
+		if (!in_tuple && FlagOn(arg->submode, SUBMODE_REG)) return false; 
 //		if (FlagOn(arg->submode, SUBMODE_REF)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
@@ -589,9 +594,9 @@ Bool RuleMatch(Rule * rule, Instr * i)
 
 	EmptyMacros();
 
-	match = ArgMatch(&rule->arg[0], i->result) 
-		&& ArgMatch(&rule->arg[1], i->arg1) 
-		&& ArgMatch(&rule->arg[2], i->arg2);
+	match = ArgMatch(&rule->arg[0], i->result, false) 
+		&& ArgMatch(&rule->arg[1], i->arg1, false) 
+		&& ArgMatch(&rule->arg[2], i->arg2, false);
 
 	if (match) {
 		if (RULE_MATCH_BREAK) {
@@ -766,9 +771,10 @@ Purpose:
 	Var * reg;
 
 	reg = var;
-	while(reg != NULL && reg->adr != NULL) {
+	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG) && reg->adr != NULL) {
 		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
 		reg = reg->adr;
+		if (reg->mode == MODE_TUPLE) return reg;
 	}
 	return var;
 }
@@ -861,19 +867,21 @@ Purpose:
 
 					if (VarIsArrayElement(i->arg1)) {
 						a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
-						Gen(INSTR_LET, a, i->arg1, NULL);
+						GenLet(a, i->arg1);
 						Gen(i->op, i->result, a, i->arg2);
 						modified = true;
 					} else if (VarIsArrayElement(i->arg2)) {
 						a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
-						Gen(INSTR_LET, a, i->arg2, NULL);
+						GenLet(a, i->arg2);
 						Gen(i->op, i->result, i->arg1, a);
 						modified = true;
 					} else if (VarIsArrayElement(i->result)) {
-						a = VarNewTmp(102, i->result->type);
-						Gen(i->op, a, i->arg1, i->arg2);
-						Gen(INSTR_LET, i->result, a, NULL);
-						modified = true;
+						if (i->op != INSTR_LET || (i->arg1->mode != MODE_VAR && i->arg1->mode != MODE_ARG)) {
+							a = VarNewTmp(102, i->result->type);
+							Gen(i->op, a, i->arg1, i->arg2);
+							GenLet(i->result, a);
+							modified = true;
+						}
 
 					//==== We were not able to find translation for the instruction, emit it as it is
 					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
@@ -960,6 +968,12 @@ void PrintVarVal(Var * var)
 		} else {
 			if (var->mode == MODE_RANGE) {
 				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
+			} else if (var->mode == MODE_TUPLE) {
+				printf("(");
+				PrintVarVal(var->adr);
+				printf(",");
+				PrintVarVal(var->var);
+				printf(")");
 			} else {
 				switch(var->type->variant) {
 				case TYPE_INT: printf("%ld", var->n); break;
@@ -970,6 +984,13 @@ void PrintVarVal(Var * var)
 		}
 	} else {
 		PrintVarName(var);
+
+		if (var->adr != NULL) {
+			if (var->adr->mode == MODE_TUPLE) {
+				printf("@");
+				PrintVarVal(var->adr);
+			}
+		}
 	}
 
 	type = var->type;

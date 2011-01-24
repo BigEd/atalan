@@ -56,6 +56,9 @@
     <ClCompile Include="opt_var_use.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="type_proc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">
