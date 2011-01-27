@@ -370,28 +370,39 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 	if (e1 == NULL || e2 == NULL) return false;
 	if (e1 == e2) return true;
 
+	if (FlagOn(e1->flags, FlagExpProcessed) || FlagOn(e2->flags, FlagExpProcessed)) return false;
+
+	SetFlagOn(e1->flags, FlagExpProcessed);
+	SetFlagOn(e2->flags, FlagExpProcessed);
+
 	if (e1->op == e2->op) {
 		if (e1->op == INSTR_VAR) {
 			v1 = e1->var; v2 = e2->var;
-			if (v1 == v2) return true;
+			if (v1 == v2) { eq = true; goto done; }
 
 			// Detect mutual dependency of two variables
-			if (v1->dep != NULL && v1->dep->op == INSTR_VAR && v1->dep->var == v2) return true;
+			if (v1->dep != NULL && v1->dep->op == INSTR_VAR && v1->dep->var == v2) { eq = true; goto done; }
 
 			if (v1->mode == v2->mode) {
 				if (v1->type->variant == v2->type->variant) {
 					if (v1->mode == MODE_CONST) {
-						return v1->n == v2->n;
+						eq = (v1->n == v2->n);
+						goto done;
 					}
 				}
 			}
-			return ExpEquivalent(v1->dep, v2->dep);
-		}
-		eq = ExpEquivalent(e1->arg[0], e2->arg[0]);
-		if (eq && (e1->arg[1] != NULL || e2->arg[1] != NULL)) {
-			eq = ExpEquivalent(e1->arg[1], e2->arg[1]);
+			eq = ExpEquivalent(v1->dep, v2->dep);
+		} else {
+			eq = ExpEquivalent(e1->arg[0], e2->arg[0]);
+			if (eq && (e1->arg[1] != NULL || e2->arg[1] != NULL)) {
+				eq = ExpEquivalent(e1->arg[1], e2->arg[1]);
+			}
 		}
 	}
+done:
+	SetFlagOff(e1->flags, FlagExpProcessed);
+	SetFlagOff(e2->flags, FlagExpProcessed);
+
 	return eq;
 }
 
@@ -512,6 +523,9 @@ Purpose:
 	return zero != NULL;
 }
 
+//UInt32 GOG = 0;
+//UInt32 GOG2 = 0;
+
 Bool OptimizeValues(Var * proc)
 /*
    1. If assigning some value to variable (let) and the variable already contains such value, remove the let instruction
@@ -533,7 +547,7 @@ Bool OptimizeValues(Var * proc)
 	InstrOp op, src_op;
 	char buf[32];
 
-	if (VERBOSE) {
+	if (Verbose(proc)) {
 		printf("------ optimize values -----\n");
 		PrintProc(proc);
 	}
@@ -555,6 +569,7 @@ retry:
 			if (i->op == INSTR_LINE) continue;
 
 			if (i->op == INSTR_CALL) {
+//				GOG2++;
 				ProcValuesUse(i->result);
 				continue;
 			}
@@ -584,6 +599,7 @@ retry:
 					m3 = false;
 
 					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
+//						GOG++;
 						m3 = ExpEquivalentInstr(result->dep, i);
 					}
 					 
@@ -596,7 +612,7 @@ retry:
 						
 						} else {
 	delete_instr:
-							if (VERBOSE) {
+							if (Verbose(proc)) {
 								printf("Removing %ld:", n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);
@@ -713,7 +729,7 @@ retry:
 						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
 					if (arg1->mode == MODE_CONST) {
-						if (VERBOSE) {
+						if (Verbose(proc)) {
 							printf("Arg to const %ld:", n); InstrPrint(i);
 						}
 						i->op = INSTR_STR_ARG;
@@ -843,7 +859,7 @@ next:
 
 							//==== We have suceeded, replace the register
 							
-							if (VERBOSE) {
+							if (Verbose(proc)) {
 								printf("Merging %ld", n); InstrPrint(i);
 							}
 
@@ -858,6 +874,7 @@ next:
 							i = InstrDelete(blk, i);
 							goto next;
 						}
+						if (i2->op == INSTR_CALL) break;
 						if (InstrUsesVar(i2, result)) break;
 
 					} /* test */

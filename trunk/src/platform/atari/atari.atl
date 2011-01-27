@@ -5,7 +5,7 @@
 use "m6502"
 
 const BIN_EXTENSION = "xex"
-type VARHEAP:128..255   
+type VARHEAP:128..255() or 1536..1791  
 
 in out timer@20:byte
 

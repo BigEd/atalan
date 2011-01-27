@@ -737,7 +737,7 @@ Purpose:
 
 void ParseOperand()
 {
-	Var * var = NULL, * item = NULL, * proc, * tmp;
+	Var * var = NULL, * item = NULL, * proc, * arg;
 	Bool ref = false;
 	Bool type_match;
 	UInt8 arg_no;
@@ -809,46 +809,40 @@ void ParseOperand()
 				return;
 			}
 no_id:
-			// Assign address
-			if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
-				NextToken();
-				//TODO: Check type of the adress
-				//      Create temporary variable and generate letadr
-				STACK[TOP] = var;
-				TOP++;					
-				InstrUnary(INSTR_LET_ADR);
-				return;
-			}
-
 			// Procedure call
 			if (var->type != NULL && (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO)) {
-				proc = var;
-				NextToken();
-				if (var->type->variant == TYPE_PROC) {
-					ParseCall(proc);
+				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
+					// this is address of procedure
 				} else {
-					ParseMacro(proc);
-				}
+					proc = var;
+					NextToken();
+					if (var->type->variant == TYPE_PROC) {
+						ParseCall(proc);
+					} else {
+						ParseMacro(proc);
+					}
 
-				// *** Register Arguments (5)
-				// After the procedure has been called, we must store values of all output register arguments to temporary variables.
-				// This prevents trashing the value in register by some following computation.
+					// *** Register Arguments (5)
+					// After the procedure has been called, we must store values of all output register arguments to temporary variables.
+					// This prevents trashing the value in register by some following computation.
 
-				var = FirstArg(proc, SUBMODE_ARG_OUT);
-				if (var != NULL) {
-					do {
-						if (VarIsReg(var)) {
-							tmp = VarNewTmp(0, var->type);
-							GenLet(tmp, var);
-							var = tmp;
-						}
-						STACK[TOP] = var;
-						TOP++;					
-					} while (var = NextArg(proc, var, SUBMODE_ARG_OUT));
-				} else {
-					SyntaxError("PROC does not return any result");
+					arg = FirstArg(proc, SUBMODE_ARG_OUT);
+					if (arg != NULL) {
+						do {
+							var = arg;
+							if (VarIsReg(arg)) {
+								var = VarNewTmp(0, arg->type);
+								GenLet(var, arg);
+							}
+							STACK[TOP] = var;
+							TOP++;			
+							arg = NextArg(proc, arg, SUBMODE_ARG_OUT);
+						} while (arg != NULL);
+					} else {
+						SyntaxError("PROC does not return any result");
+					}
+					return;
 				}
-				return;
 			}
 indices:
 			spaces = Spaces();
@@ -902,6 +896,18 @@ indices:
 			SyntaxError("expected operand");
 			return;
 		}
+
+		// Assign address
+		if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
+//			NextToken();
+			//TODO: Check type of the adress
+			//      Create temporary variable and generate letadr
+			STACK[TOP] = var;
+			TOP++;					
+			InstrUnary(INSTR_LET_ADR);
+			return;
+		}
+
 		STACK[TOP] = var;
 		TOP++;
 	}
@@ -2483,7 +2489,7 @@ no_dot:
 											}
 										} else {
 
-											if (VarIsTmp(item)) {
+											if (item->type == NULL && VarIsTmp(item)) {
 												type = &EXP_TYPE;
 											} else {
 												type = item->type;
@@ -2507,7 +2513,10 @@ no_dot:
 									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 										GenArrayInit(var, item);
 									} else {
-										if (VarIsTmp(item)) {
+										// If the result is stored into temporary variable, we may direct the result directly to the assigned variable.
+										// This can be done only if there is just one result.
+										// For multiple results, we can not use this optimization, as it is not last instruction, what generated the result.
+										if (TOP == 1 && VarIsTmp(item)) {
 											GenLastResult(var);
 										} else {
 											GenLet(var, item);
@@ -2522,7 +2531,7 @@ no_dot:
 			}
 		}
 	} else {
-		// No equal
+		// No equal sign, this must be call to procedure or macro (without return arguments used)
 		var = vars[0];
 		if (existed && !is_assign && var != NULL && var->type != NULL) {
 			switch(var->type->variant) {

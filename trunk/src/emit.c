@@ -16,7 +16,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 FILE * G_OUTPUT;
 
 extern Rule * EMIT_RULES[INSTR_CNT];
-extern Bool VERBOSE;
+//extern Bool VERBOSE;
 extern Var   ROOT_PROC;
 
 UInt8 G_COLOR;
@@ -94,7 +94,7 @@ void EmitChar(char c)
 	if (G_BUF != NULL) {
 		*G_BUF++ = c;
 	} else {
-		if (VERBOSE) {
+		if (Verbose(NULL)) {
 			printf("%c", c);
 		}
 		putc(c, G_OUTPUT);
@@ -346,7 +346,7 @@ Bool EmitInstr(Instr * i)
 	} else {
 		InternalError("no rule for translating instruction");
 		InstrPrint(i);
-		return false;
+ 		return false;
 	}
 }
 
@@ -409,6 +409,10 @@ void EmitClose()
 }
 
 void EmitLabels()
+/*
+Purpose:
+	Emit definition of constants and variables whose address has been defined.
+*/
 {
 	Var * var, * ov, * adr;
 	Instr instr;

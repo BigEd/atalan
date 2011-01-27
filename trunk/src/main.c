@@ -18,7 +18,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #define STDERR stderr
 GLOBAL Bool VERBOSE;
 
-extern Var   ROOT_PROC;
+extern Var  ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * CODE;
 Var * INTERRUPT;
@@ -26,6 +26,21 @@ Var * MACRO_PRINT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 UInt8 OPTIMIZE;
+char VERBOSE_PROC[128];
+
+Bool Verbose(Var * proc)
+/*
+Purpose:
+	Return true if we are supposed to be verbose.
+	Verbose may be specified for specific procedure.
+	NULL is available value.
+*/
+{
+	if (proc != NULL && *VERBOSE_PROC != 0) {
+		return StrEqual(proc->name, VERBOSE_PROC);
+	}
+	return VERBOSE;
+}
 
 void ProcessUsedProc(void (*process)(Var * proc))
 {
@@ -41,7 +56,6 @@ void ProcessUsedProc(void (*process)(Var * proc))
 	process(&ROOT_PROC);
 }
 
-
 int main(int argc, char *argv[])
 {
 	Var * var, * data;
@@ -52,8 +66,11 @@ int main(int argc, char *argv[])
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
 	char * s;
+	Bool header_out;
 
+	*VERBOSE_PROC = 0;
 
+//	StrCopy(VERBOSE_PROC, "shuffletiles");
 #ifdef DEBUG
 //	HeapUnitTest();
 #endif
@@ -222,18 +239,31 @@ int main(int argc, char *argv[])
 	// Now do extra checks in all procedures
 	// Some of the checks are postponed to have information from all procedures
 
-	if (VERBOSE) {
-		PrintHeader("Parsed");
-		PrintProc(&ROOT_PROC);
-		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-			type = var->type;
-			if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+	header_out = false;
+
+	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		type = var->type;
+		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
+			if (Verbose(var)) {
+				if (!header_out) {
+					PrintHeader("Parsed");
+					header_out = true;
+				}
+
 				printf("---------------------------------------------\n");
 				PrintVar(var);
 				printf("\n\n");
 				PrintProc(var);
 			}
 		}
+	}
+
+	if (Verbose(&ROOT_PROC)) {
+		if (!header_out) {
+			PrintHeader("Parsed");
+			header_out = true;
+		}
+		PrintProc(&ROOT_PROC);
 	}
 
 //	ProcessUsedProc(&ProcCheck);
@@ -268,7 +298,7 @@ int main(int argc, char *argv[])
 		ProcessUsedProc(DeadCodeElimination);
 	}
 
-	if (VERBOSE) {
+	if (Verbose(NULL)) {
 		printf("============== Optimized ==============\n");
 		PrintProc(&ROOT_PROC);
 	}
@@ -292,7 +322,7 @@ int main(int argc, char *argv[])
 
 	EmitOpen(filename);
 
-	if (VERBOSE) {
+	if (Verbose(NULL)) {
 
 		printf("==== Variables\n");
 

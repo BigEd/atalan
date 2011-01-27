@@ -30,8 +30,9 @@ type
    int:-32768..32767
    long:0..$ffffff
    sbyte:-128..127
-   byte1:byte or sbyte
-   byte2:card or int
+   byte1:byte() or sbyte()
+   byte2:card() or int()
+   byte2a:byte2 or adr
    byte1arr:array(card) of byte1
    _byte1arr2D:array(card,card) of byte1
 
@@ -165,6 +166,12 @@ rule let %A:byte1arr(%B:byte),%C:byte1arr(%D:byte) = instr
 	let _a,%C(%D)
 	let %A(%B), _a
 
+rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
+	lo _a, %B(%D)
+	let %A(0), _a
+	hi _a, %B(%D)
+	let %A(1), _a
+
 ;======= Array of array (is simmilar to 2D array, but x & y are not switched)
 
 type arr_of_arr:array(byte) of array(byte) of byte1
@@ -290,7 +297,7 @@ rule let %A:card, _a = instr
 
 ;---- Tuples
 
-rule let (%A:byte1, %B:byte1), const %C:byte2  = instr
+rule let (%A:byte1, %B:byte1), const %C:byte2a  = instr
 	lo %A, %C
 	hi %B, %C
 
@@ -298,13 +305,18 @@ rule let %A:byte2, (%B:byte1, %C:byte1) = instr
 	let %A(0), %B
 	let %A(1), %C
 	
-rule let (%A:byte1, %B:byte1), %C:byte2  = instr
+rule let (%A:byte1, %B:byte1), %C:byte2a  = instr
 	let %A, %C(0)
 	let %B, %C(1)
 
 rule let (%A:byte1, %B:byte1), (%C:byte1, %D:byte1)  = instr
 	let %A, %C
 	let %B, %D
+
+;Extracting lower/higher part of tuple
+
+rule lo _a, (%A:byte1, %B) = instr let _a, %A
+rule hi _a, (%A, %B:byte1) = instr let _a, %B
 
 ;===== Long
 rule let %A:long,const %B:long = instr
@@ -372,6 +384,12 @@ rule let_adr %A:adr, %B = instr
 rule let_adr _a, %A(0) = "   lda #<%A" 
 rule let_adr _a, %A(1) = "   lda #>%A" 
 
+rule let_adr _x, %A(0) = "   ldx #<%A" 
+rule let_adr _x, %A(1) = "   ldx #>%A" 
+
+rule let_adr _y, %A(0) = "   ldy #<%A" 
+rule let_adr _y, %A(1) = "   ldy #>%A" 
+
 ;*********** Lo
 
 rule lo %A, %B = instr
@@ -383,10 +401,23 @@ rule lo _a, %A:byte2 = instr
 	  
 rule lo _a, %A(_y) = "   lda %A_lo,y"
 rule lo _a,const %A     = "   lda #<%A"
+rule lo _x,const %A     = "   ldx #<%A"
+rule lo _y,const %A     = "   ldy #<%A"
+
 rule lo _a,%A:byte1 = "   lda %A"
-;rule lo _a,%A:card = "   lda %A"
 rule lo _x, %A     =  "   ldx %A"
 rule lo _y, %A     =  "   ldy %A"
+
+;These rules return hi and lo byte of an one byte array element
+rule lo _a, %A:byte1arr(const %B) = "   lda #<(%A+%B)"
+rule hi _a, %A:byte1arr(const %B) = "   lda #>(%A+%B)"
+
+rule lo _x, %A:byte1arr(const %B) = "   ldx #<(%A+%B)"
+rule hi _x, %A:byte1arr(const %B) = "   ldx #>(%A+%B)"
+
+rule lo _y, %A:byte1arr(const %B) = "   ldy #<(%A+%B)"
+rule hi _y, %A:byte1arr(const %B) = "   ldy #>(%A+%B)"
+
 
 ;*********** Hi
 

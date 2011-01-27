@@ -188,14 +188,14 @@ Bool OptimizeLive(Var * proc)
 	UInt32 n = 0, blk_n = 0;
 	InstrOp op;
 
-	if (VERBOSE) {
+	if (Verbose(proc)) {
 		printf("------ optimize live ------\n");
 		PrintProc(proc);
 	}
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		
-		if (VERBOSE) {
+		if (Verbose(proc)) {
 			n += blk_n;
 			blk_n = 0;
 			for(i = blk->last; i != NULL; i = i->prev) blk_n++;
@@ -206,9 +206,9 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
-				printf("");
-			}
+//			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
+//				printf("");
+//			}
 
 			// Non-local variables are always considered live
 			if (!VarIsLocal(var, proc)) {
@@ -245,7 +245,7 @@ Bool OptimizeLive(Var * proc)
 					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && FlagOff(result->submode, /*SUBMODE_REF|*/SUBMODE_OUT)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
-							if (VERBOSE) {
+							if (Verbose(proc)) {
 								printf("removed dead %ld:", n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);

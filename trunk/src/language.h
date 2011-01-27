@@ -3,6 +3,8 @@
 
 typedef struct VarTag Var;
 
+Bool Verbose(Var * proc);
+
 /*************************************************************
 
  Lexer
@@ -644,10 +646,13 @@ InstrOp OpNot(InstrOp op);
 
 // typedef struct ExpTag Exp;
 
+#define FlagExpProcessed 1
+
 struct ExpTag {
+	UInt8     flags;
 	InstrOp   op;			// operation
 	union {
-		Exp * arg[2];  // op != INSTR_VAR
+		Exp * arg[2];		// op != INSTR_VAR
 		Var * var;			// op == INSTR_VAR
 	};
 };
@@ -894,7 +899,7 @@ void EmitAsmIncludes();
 void EmitOpenBuffer(char * buf);
 void EmitCloseBuffer();
 
-extern Bool VERBOSE;
+//extern Bool VERBOSE;
 extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro

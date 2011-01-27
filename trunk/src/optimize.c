@@ -120,13 +120,22 @@ Purpose:
 	Compute use of variables.
 */
 {
+	Var * proc;
 	Var * var;
 
 	VarResetUse();
 
-	FOR_EACH_VAR(var)
-		if (var->type != NULL && var->type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
-			InstrVarUse(var->instr, NULL);
+	FOR_EACH_VAR(proc)
+		if (proc->type != NULL && proc->type->variant == TYPE_PROC && proc->read > 0) {
+			if (proc->instr != NULL) {
+				InstrVarUse(proc->instr, NULL);
+			} else {
+				// Procedure that has no defined body can still define variables and arguments it uses.
+				// We must mark these variables as used, if the procedure is used.
+				for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+					VarIncRead(var);
+				}
+			}
 		}
 	NEXT_VAR
 
@@ -527,7 +536,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 	while(top_var = FindMostUsedVar()) {
 
-		if (VERBOSE) {
+		if (Verbose(proc)) {
 			printf("Most user var: "); PrintVar(top_var);
 		}
 
@@ -549,7 +558,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;	// out registers can not be used to replace variables
 			if (reg->var != NULL) continue;
 
-			if (VERBOSE) {
+			if (Verbose(proc)) {
 				printf("  Testing register: "); 
 				PrintVar(reg);
 			}
@@ -568,7 +577,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		if (top_reg == NULL) continue;
 
-		if (VERBOSE) {
+		if (Verbose(proc)) {
 			printf("Var: "); PrintVar(top_var);
 			printf("Register: "); PrintVar(top_reg);
 		}
@@ -674,7 +683,7 @@ Purpose:
 
 	NumberBlocks(proc->instr);
 
-	if (VERBOSE) {
+	if (Verbose(proc)) {
 		printf("========== Optimize loops ==============\n");
 		PrintProc(proc);
 	}
@@ -701,7 +710,7 @@ Purpose:
 		if (nb->to != NULL && nb->to->loop_end == nb) header = nb->to;
 
 		if (header != NULL) {
-			if (VERBOSE) {
+			if (Verbose(proc)) {
 				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
 			}
 			OptimizeLoop(proc, header, nb);
@@ -735,7 +744,7 @@ void ProcOptimize(Var * proc)
 //		printf("");
 //	}
 
-	if (VERBOSE) {
+	if (Verbose(proc)) {
 		printf("**************************************\n");
 		PrintProc(proc);
 	}
