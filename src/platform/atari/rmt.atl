@@ -28,12 +28,17 @@ rmt_vars:struct
 ;rmt_play:proc
 ;rmt_silence:proc
 
+rmt_init:proc module@(_x,_y):adr track@_a @_a @_x @_y @rmt_vars
+rmt_play:proc @_a @_x @_y
+rmt_silence:proc @_a @_x @_y
+
 music'init:macro module:adr =
-	_x = lo module
-	_y = hi module
-	_a = 0
-	instr ref rmt_vars
-	instr call rmt_init
+	rmt_init module 0
+;	_x = lo module
+;	_y = hi module
+;	_a = 0
+;	instr ref rmt_vars
+;	instr call rmt_init
 
 music'play:macro =
 	instr call rmt_play

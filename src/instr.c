@@ -293,7 +293,20 @@ Purpose:
 
 void GenLet(Var * result, Var * arg1)
 {
-	Gen(INSTR_LET, result, arg1, NULL);
+	Type * rtype, * atype;
+
+
+	rtype = result->type;
+	atype = arg1->type;
+
+	// TODO: We should test for chain of ADR OF ADR OF ADR ....
+	//       Error should be reported when assigning address of incorrect type
+
+	if (rtype->variant == TYPE_ADR && atype->variant != TYPE_ADR) {
+		Gen(INSTR_LET_ADR, result, arg1, NULL);
+	} else {
+		Gen(INSTR_LET, result, arg1, NULL);
+	}
 }
 
 void GenGoto(Var * label)
@@ -898,7 +911,7 @@ next:
 			}
 		} // block
 
-		if (VERBOSE) {
+		if (Verbose(proc)) {
 			// Do not print unmodified step (it would be same as previous step already printed)
 			if (modified) {
 				printf("========== Translate (step %d) ============\n", step+1);
@@ -1153,6 +1166,12 @@ void PrintProc(Var * proc)
 void InstrInit()
 {
 	UInt16 op;
+	Type * type;
+
+	type = TypeAlloc(TYPE_PROC);
+
+//	ROOT_PROC = VarAlloc(MODE_VAR, "root", 0);
+//	ROOT_PROC->type = type;
 
 	ROOT_PROC_TYPE.variant = TYPE_PROC;
 //	ROOT_PROC_TYPE.members = NULL;

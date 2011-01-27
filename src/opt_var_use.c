@@ -68,7 +68,7 @@ Purpose:
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
-							PrintVarName(var); printf("@%d\n", adr);
+//							PrintVarName(var); printf("@%d\n", adr);
 							var->adr = VarNewInt(adr);
 						} else {
 							// failed to alloc in zero page
