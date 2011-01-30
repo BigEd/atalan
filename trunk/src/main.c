@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (3-Jan-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (30-Jan-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		

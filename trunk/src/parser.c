@@ -769,7 +769,12 @@ void ParseOperand()
 		// @id denotes reference to variable
 		} else if (TOK == TOKEN_ADR) {
 			NextToken();
-			var = VarFind2(LEX.name, 0);
+			if (arg_no = ParseArgNo2()) {
+				var = VarMacroArg(arg_no-1);
+			} else {
+				var = VarFind2(LEX.name, 0);
+			}
+
 			if (var != NULL) {
 				var = VarNewDeref(var);
 			} else {

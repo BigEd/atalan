@@ -1,7 +1,11 @@
 ﻿****
 News
 ****
+===========
+30-Jan-2011
+===========
 
+- NEW: Basic support for C64 platform
 - OPT: Procedure argument in registers
 - NEW: Support separate procedure definition & declaration
 - NEW: -o option

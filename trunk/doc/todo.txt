@@ -2,11 +2,18 @@
 TODO
 ****
 
-- Use MODE_TUPLE for 2D array index (currently MODE_ELEMENT is used)
+
+Array access to reference (adr of array(x))
+
+- parse adr(x) as element where adr is adr of array, not directly array
+- translation rules for those arrays
+
+
+
+
+x Use MODE_TUPLE for 2D array index (currently MODE_ELEMENT is used)
 
 TETRIS: Use random'tile routine with mod
-
-x@(a,b)
 
 
 proc :type   (type must be structure type, or proc type or macro type)
@@ -402,5 +409,5 @@ x Should replace let _a, _2000(0) with lo _a, set_col
     let _a, _2000(1)
     let VDSLST(1), _a
 
-- function inlining (function used only once automatically)
+x function inlining (function used only once automatically)
 - Multiple prints should be joined together
