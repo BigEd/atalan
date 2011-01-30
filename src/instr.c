@@ -661,7 +661,12 @@ Purpose:
 		// If this is element reference and either array or index is macro argument,
 		// create new array element referencing actual array and index.
 		
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == MODE_DEREF) {
+			arg = FindArg(macro, var->var, args);
+			if (arg != var->var) {
+				var = VarNewDeref(arg);
+			}
+		} else if (var->mode == MODE_ELEMENT) {
 			arr = FindArg(macro, var->adr, args);
 			arg = FindArg(macro, var->var, args);	// index
 

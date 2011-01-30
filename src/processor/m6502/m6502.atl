@@ -123,8 +123,41 @@ rule let %A:byte, %B:byte = instr
 rule let %A:sbyte, %B:sbyte = instr
   let _a,%B
   let %A,_a
+
+;======= Address of array
+
+rule let %A:byte1, %B:adr(%C:byte) = instr
+	let _y, %C
+	let _a, @%B(_y)
+	let %A, _a
+
+rule let %B:adr(%C:byte), %A:byte1 = instr
+	let _a, %A
+	let _y, %C
+	let @%B(_y), _a
+
+rule let_adr %A:adr, %B:adr(const %C) = instr
+	lo  %Z, %C
+	let _a, %B(0)
+	let _c, 0
+	add _a, _a, %Z
+	let %A(0), _a
+	hi  %Z, %C
+	let _a, %B(1)
+	add _a, _a, %Z
+	let %A(1), _a
+
+rule let_adr %A:adr, %B:adr(%C:byte) = instr
+	let _a, %B(0)
+	let _c, 0
+	add _a, _a, %C
+	let %A(0), _a
+	let _a, %B(1)
+	add _a, _a, 0
+	let %A(1), _a
+   
   
-;Array (byte index, byte value)
+;======== Array (byte index, byte value)
 ;We use indexing using X register.
 ;Optimizer may later change it to Y.
 
@@ -171,7 +204,7 @@ rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 	let %A(0), _a
 	hi _a, %B(%D)
 	let %A(1), _a
-
+ 
 ;======= Array of array (is simmilar to 2D array, but x & y are not switched)
 
 type arr_of_arr:array(byte) of array(byte) of byte1
@@ -1610,6 +1643,7 @@ rule let _a, %A:rawbytes(_x) = "   lda %A,x"
 rule let _a, %A:rawbytes(_y) = "   lda %A,y"
 
 rule let _a, @%A:rawbytes(_y)  = "   lda (%A),y"
+
 
 ;STA
 

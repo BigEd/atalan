@@ -289,6 +289,9 @@ txt_file "platform_atmos.txt"
 $stdout = File.new($proj_folder + 'www/nes.html', 'w')
 txt_file "platform_nes.txt"
 
+$stdout = File.new($proj_folder + 'www/c64.html', 'w')
+txt_file "platform_c64.txt"
+
 $stdout = File.new($proj_folder + 'www/news.html', 'w')
 txt_file "news.txt"
 
