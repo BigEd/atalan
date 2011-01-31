@@ -90,6 +90,10 @@ _std_print_out .proc
 		clc											;TODO: No Jump, if we are directly before the _std_print
 		bcc _std_print
 		.endp
+
+ .IF .NOT .DEF _EOL_CHAR
+		_EOL_CHAR equ 0
+ .ENDIF
 		
 _std_print	.proc
 
@@ -152,7 +156,7 @@ unsigned
 		clc
 		bcc command		;jmp command
 eol
-		lda #155	
+		lda #_EOL_CHAR	
 		jsr _std_putchr
 		clc
 		bcc command		;jmp command
