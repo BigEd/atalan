@@ -255,7 +255,7 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (_strnicmp(s, "elemsize", 8) == 0) {
+					if (StrEqualPrefix(s, "elemsize", 8)) {
 						s += 8;
 						if (var->type->variant == TYPE_ARRAY) {
 							n = TypeSize(var->type->element);
