@@ -1,3 +1,5 @@
+_EOL_CHAR equ 155
+
 _adr_putchr .proc
 ;Write byte to address specified by _arr and increment the address by 1.
 	
