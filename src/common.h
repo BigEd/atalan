@@ -26,6 +26,7 @@ char * StrAlloc(char * str);
 char * StrAllocLen(char * str, UInt16 len);
 #define StrCopy(dest, src) strcpy(dest, src);
 Bool   StrEqual(char * str1, char * str2);
+Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #define StrLen(str) strlen(str)
 
 // All global variables are marked with this macro, so they may be easily searched
