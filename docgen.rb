@@ -262,6 +262,9 @@ txt_file "contact.txt"
 $stdout = File.new($proj_folder + 'www/reference.html', 'w')
 txt_file "reference.txt"
 
+$stdout = File.new($proj_folder + 'www/howto.html', 'w')
+txt_file "howto.txt"
+
 $stdout = File.new($proj_folder + 'www/examples.html', 'w')
 #txt_file "examples.txt"
 ata_example ["hello_world","loop","unit_test","hello_font","rainbow","esieve","count_2sec","stars","tetris","interrupts","bit_sieve","pmg"]
