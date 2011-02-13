@@ -1801,4 +1801,4 @@ rule include %A = "   icl '%A'"
 ; %B  extension of resulting binary as defined by platform
 ; %/  defines path to directory with currently parsed file
 
-rule compiler %A,%B = "%/mads  ["]%A.asm["] -o:["]%A.%B["] -x -l:["]%A.lst["]"
+rule compiler %A,%B = "["]%/mads["] ["]%A.asm["] -o:["]%A.%B["] -x -l:["]%A.lst["]"

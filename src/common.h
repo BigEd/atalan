@@ -53,8 +53,8 @@ Bool   StrEqualPrefix(char * str1, char * str2, int num);
 
 #define __UNIX__
 
-#undef MADS_COMMAND
-#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
+//#undef MADS_COMMAND
+//#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 
 #undef DIRSEP
 #define DIRSEP '/'
@@ -63,7 +63,7 @@ Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #else
 
 #define __Windows__
-#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
+//#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 #define DIRSEP '\\'
 
 #endif
