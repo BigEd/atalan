@@ -357,9 +357,19 @@ int main(int argc, char *argv[])
 		var = VarFind("BIN_EXTENSION", 0);
 
 		EmitOpenBuffer(command);
-		EmitInstrOp(INSTR_COMPILER, VarNewStr(path), VarNewStr(var->str), NULL);
-		EmitCloseBuffer();
 
+// On Windows, system command requires extra set of parentheses around whole command to correctly support
+// quoted exe.
+
+#ifdef __Windows__	
+		EmitChar('\"');
+#endif
+		EmitInstrOp(INSTR_COMPILER, VarNewStr(path), VarNewStr(var->str), NULL);
+#ifdef __Windows__	
+		EmitChar('\"');
+#endif
+		EmitCloseBuffer();
+		printf("Executing %s\n", command);
 		result = system(command);
 	}
 

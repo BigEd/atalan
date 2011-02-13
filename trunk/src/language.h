@@ -902,6 +902,7 @@ void EmitProcedures();
 void EmitAsmIncludes();
 void EmitOpenBuffer(char * buf);
 void EmitCloseBuffer();
+void EmitChar(char c);
 
 //extern Bool VERBOSE;
 extern Var * INTERRUPT;
