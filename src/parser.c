@@ -513,12 +513,13 @@ Purpose:
 			case INSTR_HI: r = (n1 >> 8) & 0xff; break;
 			case INSTR_LO: r = n1 & 0xff; break;
 			case INSTR_SQRT: r = (UInt32)sqrt(n1); break;
-			default: break;
+			default: goto unknown_unary; break;
 			}
 			result = VarNewInt(r);
 			goto done;
 		}
 	}
+unknown_unary:
 	result = VarNewTmp(G_TEMP_CNT, RESULT_TYPE);
 	G_TEMP_CNT++;
 	Gen(op, result, top, NULL);
@@ -654,6 +655,7 @@ Purpose:
 	if (arr->type != NULL) {
 		if (arr->type->variant == TYPE_ARRAY) {
 			idx_type = arr->type->dim[0];
+		//TODO: Support index for adr of array(index)
 		} else {
 			idx_type = TypeByte();
 		}
@@ -726,6 +728,8 @@ Purpose:
 	//ParseParenthesis();
 	// Result is temporary variable created by InstrBinary, 
 	// arg1 = array, arg2 = item
+	
+	//TODO: For adr, we should generate dereference here!!!
 
 	item = VarNewElement(arr, idx);
 
@@ -1089,7 +1093,12 @@ If result mode is MODE_CONST, no code is to be generated.
 			if (type->variant == TYPE_ARRAY) {
 				RESULT_TYPE = type->element;
 			} else if (type->variant == TYPE_ADR) {
-
+				type = type->element;		// adr of array(index) of type
+				if (type->variant == TYPE_ARRAY) {
+					RESULT_TYPE = type->element;
+				} else {
+					RESULT_TYPE = type;
+				}
 			} else {
 			}
 		} else {

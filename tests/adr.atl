@@ -6,6 +6,7 @@
 const a1:array = 10,11,12,13,14
 const a2:array = 20,21,22,23,24
 
+w:array(0..5)
 a:adr of array(5)
 
 ;Print first two elements from passed array.
@@ -17,6 +18,9 @@ print2:proc x:adr =
    b2 = x(1)
    "[b1],[b2]"
 
+set:proc x:adr offset:byte b:byte =
+   x(offset) = b
+  
 ;We may assign address of array to address and later use the address to access
 ;array elements.
 
@@ -42,3 +46,17 @@ a = a1
 print2 a
 a = a1(2)
 print2 a
+
+"## Modifying adr"
+
+a = w
+a(0) = 30
+a(1) = 31
+
+print2 w
+
+"## Modifying adr in proc"
+set w 2 32
+set w 3 33
+
+print2 w(2)
