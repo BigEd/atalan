@@ -14,7 +14,7 @@ You may specify following switches (each after minus):
 - -a Do not call assembler after compilation
 - -p <platform>  Define for which platform is the program compiled.
 - -o <level>     Optimization level (0..9)
-                 0 = no omptimizations
+                 0 = no optimizations
 
 For example to compile example stars.atl, type
 ::::::::::::::::::

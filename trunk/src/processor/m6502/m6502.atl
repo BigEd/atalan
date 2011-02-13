@@ -155,7 +155,7 @@ rule let_adr %A:adr, %B:adr(%C:byte) = instr
 	let _a, %B(1)
 	add _a, _a, 0
 	let %A(1), _a
-   
+
   
 ;======== Array (byte index, byte value)
 ;We use indexing using X register.

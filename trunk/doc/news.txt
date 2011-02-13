@@ -2,6 +2,9 @@
 News
 ****
 
+- NEW: improved support for adr
+- DOC: added some basic info on adr
+
 ===========
 6-Feb-2011
 ===========
