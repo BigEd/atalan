@@ -192,7 +192,10 @@ Purpose:
 
 		src_dep = arg->dep;
 
-		if (VarIsArrayElement(arg)) {
+		if (arg->mode == MODE_DEREF) {
+			src_dep = ExpAlloc(INSTR_DEREF);
+			ExpArg(src_dep, 0, arg->var);
+		} else if (VarIsArrayElement(arg)) {
 			//TODO: Support for 2d arrays
 			//      In assembler phase is not required (we do not have instructions for 2d indexed arrays).
 			if (arg->var->mode != MODE_CONST) {
@@ -274,18 +277,24 @@ char * g_InstrName[INSTR_CNT] =
 	"",   // INSTR_DIVCARRY,
 
 	// Following 'instructions' are used in expressions
-	"[",   // INSTR_ELEMENT,		// access array element (left operand is array, right is index)
-	","    // INSTR_LIST,			// create list of two elements
+	"[",   // INSTR_ELEMENT,		// access array element (left operand is array or reference to array, right is index)
+	",",    // INSTR_LIST,			// create list of two elements
+	"@"     // INSTR_DEREF
 };
 
 void PrintExp(Exp * exp)
 {
 	if (exp != NULL) {
-		if (exp->op == INSTR_VAR) {
+		if (exp->op == INSTR_DEREF) {
+			printf("@");
+			PrintExp(exp->arg[0]);
+		} else if (exp->op == INSTR_VAR) {
 			PrintVarVal(exp->var);
-//		} else if (exp->op == INSTR_LET_ADR) {
-//			printf("@");
-//			PrintVarVal(exp->var);
+		} else if (exp->op == INSTR_ELEMENT) {
+			PrintExp(exp->arg[0]);
+			printf("(");
+			PrintExp(exp->arg[1]);
+			printf(")");
 		} else {
 			// Unary instruction
 			if (exp->arg[1] == NULL) {
@@ -523,7 +532,7 @@ Purpose:
 	return zero != NULL;
 }
 
-//UInt32 GOG = 0;
+UInt32 GOG = 0;
 //UInt32 GOG2 = 0;
 
 Bool OptimizeValues(Var * proc)
@@ -600,6 +609,9 @@ retry:
 
 					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
 //						GOG++;
+//						if (GOG == 18) {
+//							PrintExp(result->dep);
+//						}
 						m3 = ExpEquivalentInstr(result->dep, i);
 					}
 					 
