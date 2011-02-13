@@ -239,7 +239,13 @@ Bool VarIsStructElement(Var * var)
 
 Bool VarIsArrayElement(Var * var)
 {
-	return var != NULL && var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type != NULL && var->adr->type->variant == TYPE_ARRAY;
+	Var * adr;
+	if (var == NULL || var->mode != MODE_ELEMENT) return false;
+	adr = var->adr;
+//	if (adr == NULL) return false;			// TODO: ELEMENT with NULL adr?
+	if (adr->mode == MODE_DEREF) return true;
+	return adr->type != NULL && adr->type->variant == TYPE_ARRAY;
+//	return var != NULL && var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
 }
 /*
 Bool VarIsOut(Var * var)

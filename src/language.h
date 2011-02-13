@@ -274,7 +274,7 @@ MODE_DEREF
 
 DEREF variables represent dereference of address variable.
 Only address variables may be dereferenced.
-For every adr variable, there may is at most one dereference.
+For every adr variable, there may be at most one dereference variable.
 
 If the dereferenced variable is of type ADR OF X, deref variable is of type X.
 
@@ -449,7 +449,7 @@ typedef enum {
 	INSTR_VAR,
 	INSTR_ELEMENT,			// access array element (left operand is array, right is index)
 	INSTR_LIST,				// create list of two elements
-
+	INSTR_DEREF,
 
 	INSTR_CNT
 } InstrOp;
@@ -644,9 +644,13 @@ void ProcessUsedProc(void (*process)(Var * proc));
 
 InstrOp OpNot(InstrOp op);
 
-// typedef struct ExpTag Exp;
-
 #define FlagExpProcessed 1
+
+/*
+ Expression represents tree of expressions.
+ op defines operation used to compute the result of the expression.
+ INSTR_VAR represents expression representing value of variable or reference to variable.
+*/
 
 struct ExpTag {
 	UInt8     flags;

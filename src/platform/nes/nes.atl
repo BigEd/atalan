@@ -40,8 +40,7 @@ waitvbl:proc =
 
 ;Information: Use this Function to set the Display mode 
 ; parameter : 1 ctrl Byte for PPU 1 REG , 2 ctrl Byte for PPU 2 REG
-setDisplayMode:proc(<ctrl1:byte <ctrl2:byte) =
+setDisplayMode:macro(<ctrl1:byte <ctrl2:byte) =
 			   PPU_REG1 = ctrl1
 			   PPU_REG2 = ctrl2
-
 

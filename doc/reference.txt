@@ -514,6 +514,38 @@ set'font file "baloon.fnt"
 
 Reference to file is relative to location of the source file.
 
+*********
+Addresses
+*********
+
+Adress represents address of some memory location. On 8-bit architectures, address
+is usually 16 bits (2 bytes).
+
+Adress may define, what type of variable it references (including procedure or array).
+
+::::::::::::::::::::::
+const a1:array = 10,11,12,13,14
+
+a:adr
+
+a = a1
+b = a(0)		; b = 10
+b = a(2)    ; b = 12
+a = a1(2)		; a represents array 12,13,14 now
+b = a1(1)   ; b = 13
+::::::::::::::::::::::
+
+Adresses may be passed to procedures. This can be used to pass arrays to procedured.
+
+:::::::::::::::::::::::::::
+print2:proc x:adr =
+   b1 = x(0)
+   b2 = x(1)
+   "[b1],[b2]"
+
+print2 a1
+print2 a1(2)
+::::::::::::::::::::::::::
 
 ******
 Scopes
