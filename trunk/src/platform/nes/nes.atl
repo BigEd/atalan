@@ -15,6 +15,9 @@ rule code_end       =  " .align $FFFA,$00" "NMI:" "RTI" " org $FFFA" " .dw NMI" 
 rule line           = ";### %0(%1) %2"
 const BIN_EXTENSION = "nes"
 
+;Define variable used by assembler routines.
+_TEMPB1:adr
+
 ;------------------------------------------IN/OUT DEFINES FOR THE SYSTEM-MODULE-----------------------------------------
 
 ;Information: Output Defines for Profiling code with the VirtuaNESprof mod, at this moment i cant find the url for the download location :(
