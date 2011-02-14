@@ -4,6 +4,8 @@
 
 use m6502
 
+_stdbuf@$300
+
 ;Console application stores load address as first two bytes of file
 rule prologue = "   opt f+ h-" "_CODE_START equ $400" "   org [a(_CODE_START)],_CODE_START"
 

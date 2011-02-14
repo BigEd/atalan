@@ -4,6 +4,10 @@
 
 use "m6502"
 
+;Set the position of print buffer to address $600.
+_stdbuf@$600
+_putchr_proc_adr@$653  ;+$654 
+
 const BIN_EXTENSION = "xex"
 type VARHEAP:128..255() or 1536..1791  
 

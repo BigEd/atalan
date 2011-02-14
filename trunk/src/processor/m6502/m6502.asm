@@ -32,7 +32,7 @@
 ;
 _SYS_PRINT_SIGNED = 1
 
-_putchr_proc_adr = $653  ;+$654 
+;_putchr_proc_adr = $653  ;+$654 
 ?argptr =   $32		;$33
 ?varptr	=	$34
 ?size	=	$15		;15		//$16 BUFADR
@@ -49,7 +49,7 @@ _TW2 = $34  ;$35
 _TW3 = $15	;$16
 _TL1 = $70	;four byte register ($70-$73) defined under name _TEMPL1 in mc6502.atl		
 
-_stdbuf    = $600		;TODO: use LINBUF ($247-$26E)  (100,101 can point to it)
+;_stdbuf    = $600		;TODO: use LINBUF ($247-$26E)  (100,101 can point to it)
 
 ;Argument list:
 ;	0	end of list
