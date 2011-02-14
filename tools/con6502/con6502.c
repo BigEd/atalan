@@ -108,11 +108,17 @@ word LoadFile(char * Filename, word load_adr)
 	word adr;
 	FILE * f;
 	word size;
+	char filename2[1024];
+
 	adr = 0xffff;
 	f = fopen(Filename, "rb");
 	if (f == NULL) {
-		fprintf(STDERR, "Failed to load file %s\n", Filename);
-		exit(-2);
+		sprintf(filename2, "%s.c65", Filename);
+		f = fopen(filename2, "rb");
+		if (f == NULL) {
+			fprintf(STDERR, "Failed to load file %s\n", Filename);
+			exit(-2);
+		}
 	}
 
 

@@ -59,7 +59,13 @@ rule alloc %A:-128..127                          = "   .ds 1"
 ;Temporary variables
 ;========================
 
+;_stdbuf is used to format decimal numbers. Therefore it must be as big as number of decimal
+;digits in biggest supported number.
+;Platform may position the variable using _stdbuf@<adr>. 
+
+_stdbuf:array(0..15) of byte
 _arr:adr
+_putchr_proc_adr:adr			;address of print procedure
 
 ;Temporary variables should be allocated dynamically
 _TEMPW1@$32:CARD
@@ -1755,8 +1761,8 @@ rule call %A = "jsr %A"
 ;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
 rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
-_std_print_out:proc
-_std_print_adr:proc a@_arr:adr @_arr
+_std_print_out:proc @_stdbuf @_putchr_proc_adr @_a @_x @_y
+_std_print_adr:proc a@_arr:adr @_arr @_stdbuf @_putchr_proc_adr @_a @_x @_y
 
 std_print:macro = instr
 	call _std_print_out
