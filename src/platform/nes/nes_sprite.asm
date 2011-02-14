@@ -14,17 +14,19 @@
 ;        PPU_DATA  = spritePal(i)
 			    
 sprLoadPal .proc
-	        lda $2002
+			sta _TEMPB1
+			stx _TEMPB1+1
+			lda $2002
 			ldx #$10
-	        ldy #$00
-		    lda #$3F
+			ldy #$00
+			lda #$3F
 copyArray:  sta $2006
 			stx $2006
 cpyloop_sr: lda (_TEMPB1),y
-		    sta $2007
-		    iny
-		    cpy #$10
-		    bne cpyloop_sr 
-		    rts
-		   .endp
+			sta $2007
+			iny
+			cpy #$10
+			bne cpyloop_sr 
+			rts
+			.endp
 

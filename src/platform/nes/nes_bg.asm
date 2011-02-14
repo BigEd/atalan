@@ -14,20 +14,24 @@
 ;       PPU_DATA = titleNametable(x)
 
 bgLoadNameTable .proc
-		   ldy #00
-		   ldx #04
-		   lda #$20 
-copyArray: sta $2006
-		   sty $2006
-cpyloop_n: lda (_TEMPB1),y
-		   sta $2007
-		   iny
-		   bne cpyloop_n
-		   inc _TEMPB2
-		   dex
-		   bne cpyloop_n 
-		   rts
-		  .endp
+			sta _TEMPB1
+			stx _TEMPB1+1
+			ldy #00
+			ldx #04
+			lda #$20 
+copyArray: 
+			sta $2006
+			sty $2006
+cpyloop_n: 
+			lda (_TEMPB1),y
+			sta $2007
+			iny
+			bne cpyloop_n
+			inc _TEMPB1+1
+			dex
+			bne cpyloop_n 
+			rts
+			.endp
 
 ;  ATALAN code	 
 ;  PPU_DATA_ADR = $3F
@@ -36,14 +40,18 @@ cpyloop_n: lda (_TEMPB1),y
 ;        PPU_DATA  = bgPal(i)
 			    
 bgLoadPal .proc
-	       ldy #$00
-		   lda #$3F
-copyArray: sta $2006
-		   sty $2006
-cpyloop_p: lda (_TEMPB1),y
-		   sta $2007
-		   iny
-		   cpy #$10
-		   bne cpyloop_p 
-		   rts
-		  .endp
+			sta _TEMPB1
+			stx _TEMPB1+1
+			ldy #$00
+			lda #$3F
+copyArray: 
+			sta $2006
+			sty $2006
+cpyloop_p: 
+			lda (_TEMPB1),y
+			sta $2007
+			iny
+			cpy #$10
+			bne cpyloop_p 
+			rts
+			.endp

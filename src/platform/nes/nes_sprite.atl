@@ -10,13 +10,15 @@
 type sprPal:array(15)
 
 ;--------------------------------------------FUNCTIONS FOR SPRITE-MODULE---------------------------------------------
+sprLoadPal:proc a@(_a,_x):adr of sprPal @_a @_x @_y @_TEMPB1
+
 ;Information: Loads Sprite-Pal to the PPU (gfx chip)
-sprLoadPal:macro a:sprPal = 
-		  _TEMPB1 = lo a
-		  _TEMPB2 = hi a
- 		   instr call sprLoadPal
-		   instr ref _TEMPB1
-		   instr ref _TEMPB2
+;sprLoadPal:macro a:sprPal = 
+;		  _TEMPB1 = lo a
+;		  _TEMPB2 = hi a
+;		   instr call sprLoadPal
+;		   instr ref _TEMPB1
+;		   instr ref _TEMPB2
 
 ;Information: Function write's one sprite to OAM ram
 ;  Important: For moving more Sprites on the screen,its better to use the sprite_dma module
