@@ -189,7 +189,7 @@ Bool OptimizeLive(Var * proc)
 	InstrOp op;
 
 	if (Verbose(proc)) {
-		printf("------ optimize live ------\n");
+		printf("------ optimize live %s ------\n", proc->name);
 		PrintProc(proc);
 	}
 
@@ -210,8 +210,8 @@ Bool OptimizeLive(Var * proc)
 //				printf("");
 //			}
 
-			// Non-local variables are always considered live
-			if (!VarIsLocal(var, proc)) {
+			// Non-local variables (except registers) are always considered live
+			if (!VarIsLocal(var, proc) && !VarIsReg(var)) {
 				SetFlagOn(var->flags, VarLive);
 			} else {
 				// Procedure output argument are live in last block
