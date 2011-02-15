@@ -10,8 +10,9 @@
 ; Tnx to Patater for his nice Nes dev tutorials (http://www.patater.com/nes-asm-tutorials) ;)
 ; gfx test data is from playpower.org game hanuman quiz
 ; NROM:
-; Max codesize : 16Kib
-; Max gfxsize  : 4Kib
+; Max codesize   : 16Kib
+; Max gfxsize    : 4Kib
+; Emulator tested: fceux (2.1.4a) , needs new PPU enabled!
 ;---------------------------------------------------------------------
 ; NROM rom layout:
 ; Max codesize : 16Kib
@@ -22,6 +23,8 @@
 ;  - created some simple lib's for controlling sprites (no dma)
 ;  - changed gfx to Hanuman quiz
 ;  Tnx to Atalan the snake & rudla :)
+;---------------------------------------------------------------------
+
 
 use nes
 use nes_sprite
