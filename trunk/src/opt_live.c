@@ -234,6 +234,14 @@ Bool OptimizeLive(Var * proc)
 			}
 		NEXT_VAR
 
+		// All output arguments are marked as live (in last block)
+
+		if (blk->to == NULL) {
+			for(var = FirstArg(proc, SUBMODE_ARG_OUT); var != NULL; var = NextArg(proc, var, SUBMODE_ARG_OUT)) {
+				VarMarkLive(var);
+			}
+		}
+
 		for(i = blk->last; i != NULL; i = i->prev, n--) {
 
 			op = i->op;
