@@ -785,6 +785,7 @@ Arguments:
 
 							var = VarFindMode(i->result->name, i->result->idx, MODE_LABEL);
 							if (var != NULL) {
+								ErrArg(var);
 								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								
 							} else {
 								SyntaxErrorBmk("Label [A] is undefined", bmk);
