@@ -561,7 +561,6 @@ Bool OptimizeValues(Var * proc)
 		PrintProc(proc);
 	}
 
-
 	VarUse();
 
 	modified = false;
@@ -591,7 +590,7 @@ retry:
 				//TODO: Should be solved by blocks (when blocks are parsed, there can not be jump instruction nor label)
 				if (IS_INSTR_JUMP(i->op)) {
 
-					// jump istructions use label as result, we do not want to remove jumps
+					// jump instructions use label as result, we do not want to remove jumps
 				} else {
 
 					// Remove equivalent instructions.
@@ -823,6 +822,17 @@ Purpose:
 	}
 }
 
+Bool VarIsFixed(Var * var)
+/*
+Purpose:
+	Test, that variable is on fixed location.
+	This means normal variable, argument or reference to array element with constant index.
+*/
+{
+	if (var->mode == MODE_VAR || var->mode == MODE_ARG) return true;
+	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) return true;		// access to constant array element
+	return false;
+}
 
 Bool OptimizeVarMerge(Var * proc)
 /*
@@ -850,26 +860,28 @@ Purpose:
 next:
 			if (i == NULL) break;
 			op = i->op;
-			if (op == INSTR_LET) {
+			if (op == INSTR_LET || op == INSTR_LET_ADR || op == INSTR_HI || op == INSTR_LO) {
 				result = i->result;
 				arg1   = i->arg1;
-				if ((arg1->mode == MODE_VAR || arg1->mode == MODE_ARG) && i->next_use[1] == NULL) {
+				if (VarIsFixed(arg1) && i->next_use[1] == NULL) {
 					for /*test*/ (i2 = i->prev; i2 != NULL; i2 = i2->prev) {
 
 						if (i2->op == INSTR_LINE) continue;
 
 						// Test, that it is possible to translate the instruction using new register
+						// (and possibly new instruction - we may change let to let_adr etc.)
 
 						memcpy(&ni, i2, sizeof(Instr));
+						ni.op = op;
 						q = VarTestReplace(&ni.result, arg1, result);
 						q += VarTestReplace(&ni.arg1, arg1, result);
 						q += VarTestReplace(&ni.arg2, arg1, result);
 						if (q != 0 && EmitRule(&ni) == NULL) break;
 
-						// We sucesfully found source instruction, this means we can replace arg1 with result
+						// We successfully found source instruction, this means we can replace arg1 with result
 						if (i2->result == arg1 && !VarUsesVar(i2->arg1, arg1) && !VarUsesVar(i2->arg2, arg1)) {
 
-							//==== We have suceeded, replace the register
+							//==== We have succeeded, replacing the register
 							
 							if (Verbose(proc)) {
 								printf("Merging %ld", n); InstrPrint(i);

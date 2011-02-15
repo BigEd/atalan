@@ -26,7 +26,7 @@ Var * MACRO_PRINT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 UInt8 OPTIMIZE;
-char VERBOSE_PROC[128];
+char VERBOSE_PROC[128];		// name of procedure which should generate verbose output
 
 Bool Verbose(Var * proc)
 /*
@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
 
 	VERBOSE = false;
 
+	//TODO: Remove default platform
 	// Default platform is "atari"
 
 	strcpy(PLATFORM, "atari");
@@ -369,7 +370,6 @@ int main(int argc, char *argv[])
 		EmitChar('\"');
 #endif
 		EmitCloseBuffer();
-		printf("Executing %s\n", command);
 		result = system(command);
 	}
 
