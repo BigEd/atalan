@@ -1,3 +1,3 @@
-atalan -p nes -o 0 sprite
+atalan -p nes sprite
 copy /b sprite.nes + hanuman_quiz_game.chr
 pause
