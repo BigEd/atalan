@@ -2,11 +2,11 @@
 News
 ****
 
-
-- NES: Support for new procedure calls 
-- OPT: Add instruction merging
 - NEW: improved support for adr
+- OPT: Add instruction merging
+- OPT: Null jump elimination
 - DOC: added some basic info on adr
+- NES: Support for new procedure calls 
 
 ===========
 6-Feb-2011
