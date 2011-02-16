@@ -85,9 +85,9 @@ Purpose:
 	for(nb = block; nb != NULL; nb = nb->next) {
 		for (i = nb->first; i != NULL; i = i->next) {
 			if (i->op != INSTR_LINE) {
-				VarReplaceVar(&i->result, from, to);		
-				VarReplaceVar(&i->arg1, from, to);		
-				VarReplaceVar(&i->arg2, from, to);		
+				VarReplaceVar(&i->result, from, to);
+				VarReplaceVar(&i->arg1, from, to);
+				VarReplaceVar(&i->arg2, from, to);
 				//if (i->result == from) i->result = to;
 				//if (i->arg1   == from) i->arg1 = to;
 				//if (i->arg2   == from) i->arg2 = to;
@@ -260,6 +260,8 @@ Purpose:
 
 	   ifne x,y,l1
 
+	2. NULL jumps removed
+
 */
 {
 	InstrBlock * blk, * blk_to;
@@ -269,7 +271,25 @@ Purpose:
 	blk = proc->instr;
 	while (blk != NULL) {
 		blk_to = blk->to;
+
 		if (blk_to != NULL) {
+
+			// If there is NULL jump like:
+			//   jmp lab
+			//   lab@
+			// remove the jmp.
+			// In such case, block we jump to is same as next block.
+
+			i = blk->last;
+			if (i != NULL) {
+				if (i->op == INSTR_GOTO) {
+					if (blk->to == blk->next) {
+						InstrDelete(blk, i);
+					}
+				}
+			}
+
+
 			i = FirstInstr(blk_to);		//for (i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
 			cond_i = blk->last;
 
