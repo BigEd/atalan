@@ -1,6 +1,6 @@
 /*
 
-Code optimalization routines
+Code optimization routines
 Values optimization.
 
 (c) 2010 Rudolf Kudla 
@@ -706,6 +706,7 @@ retry:
 					r = NULL;
 					arg1 = i->arg1;
 
+					//TODO: Use SrcVal
 					if (arg1 != NULL) {
 						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
@@ -769,7 +770,7 @@ Purpose:
 	Check procedure before translation.
 */
 {
-	Instr * i;
+	Instr * i, * i2;
 	UInt32 n;
 	Var * r, * result, * arg1, * arg2, * zero;
 	InstrBlock * blk;
@@ -810,6 +811,40 @@ Purpose:
 					i->op = INSTR_LET;
 					i->arg1 = r;
 					i->arg2 = NULL;
+
+				// Try to convert
+				//      add R1, Y, #c1
+				//      add R2, R1, #c2
+				//
+				// We convert it to:
+				//      add R1, Y, #c1
+				//      add R2, Y, #c1+#c2
+				} else {
+					if (i->op == INSTR_ADD && VarIsConst(arg2)) {						
+						i2 = arg1->src_i;
+						if (i2 == NULL) {
+							i2 = i->prev; while(i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
+						}
+						if (i2 != NULL) {
+							if (i2->op == INSTR_ADD) {
+								if (i2->result == arg1) {
+									if (VarIsConst(i2->arg2)) {
+										if (result != arg1) {
+											r = InstrEvalConst(i->op, arg2, i2->arg2);
+											i2->arg2 = r;
+											i->arg1 = i2->arg1;
+											i->arg2 = r;
+
+											// We don't need the first instruction anymore
+											if (result->read == 1) {
+												InstrDelete(blk, i2);
+											}
+										}
+									}
+								}
+							}
+						}
+					}
 				}
 
 				ResetValue(i->result);
@@ -845,6 +880,7 @@ Purpose:
 	to
 
 			let b,10
+
 */{
 
 	Instr * i, * i2, ni;

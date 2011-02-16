@@ -2,6 +2,9 @@
 News
 ****
 
+
+- NES: Support for new procedure calls 
+- OPT: Add instruction merging
 - NEW: improved support for adr
 - DOC: added some basic info on adr
 
