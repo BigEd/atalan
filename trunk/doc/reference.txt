@@ -423,16 +423,19 @@ Arrays
 Array is defined using keyword array.
 
 ::::::::::::::::
-name:array [(min..max|count)[,(min..max|count)]] [of type]
+name:array [[min..]max[,[min..]max]] [of type]
 ::::::::::::::::
 
 If the array size is defined using single value, the value defines maximal index.
 Minimal index is then 0.
 So x:array(31) defines array of 32 elements (index 0..31).
+Index minimal value can be defined too. It must be positive integer (>= 0).
+x:array(1..10) defines array of 10 elements from 1 to 10.
 
 Array can be defined as one or two dimensional.
 
 If the type of the array is ommitted, it is byte.
+
  
 ==============
 Initialization
