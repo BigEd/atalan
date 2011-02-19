@@ -16,10 +16,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 FILE * G_OUTPUT;
 
 extern Rule * EMIT_RULES[INSTR_CNT];
-//extern Bool VERBOSE;
 extern Var   ROOT_PROC;
 
 UInt8 G_COLOR;
+UInt8 G_PREV_OP = 0;
 
 UInt8 PrintColor(UInt8 color)
 /*
@@ -27,10 +27,9 @@ Purpose:
 	Change the color of printed text.
 */
 {
-	UInt8 old_color;
+	UInt8 old_color = G_COLOR;
 #ifdef __Windows__
 	HANDLE hStdout; 
-	old_color = color;
 	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
 	SetConsoleTextAttribute(hStdout, color);
 #endif
@@ -53,6 +52,10 @@ void PrintRepeat(char * text, UInt16 cnt)
 }
 
 void PrintHeader(char * text)
+/*
+Purpose:
+	Print header to output.
+*/
 {
 	UInt16 len, half_len;
 	UInt8 color;
@@ -89,7 +92,7 @@ void EmitCloseBuffer()
 	*G_BUF++ = 0;
 }
 
-void EmitChar(char c)
+void EmitByte(char c)
 {
 	if (G_BUF != NULL) {
 		*G_BUF++ = c;
@@ -99,6 +102,11 @@ void EmitChar(char c)
 		}
 		putc(c, G_OUTPUT);
 	}
+}
+
+void EmitChar(char c)
+{
+	EmitByte(c);
 }
 
 void EmitStr(char * str)
@@ -121,6 +129,12 @@ void EmitInt(long n)
 }
 
 void EmitStrConst(char * str)
+/*
+Purpose:
+	Emit string constant.
+	This code is currently MADS specific to handle emit of single quotes.
+	Quotes are emitted like:  'ahaha', 39, 'sksksks'
+*/
 {
 	char * s, c;
 	Bool in_quotes = false;
@@ -143,7 +157,7 @@ void EmitStrConst(char * str)
 					EmitStr("c\'");
 					in_quotes = true;
 				}
-				EmitChar(c);
+				EmitByte(c);
 				empty = false;
 			}
 		}
@@ -161,6 +175,13 @@ void EmitHex(UInt8 c)
 }
 
 void EmitVarName(Var * var)
+/*
+Purpose:
+	Emit name of variable.
+	Variable name may contain non-alphanumeric characters, so we must translate them to support ordinary assemblers.
+	Identifiers starting with digit are prefixed by _N.
+	Non-alphanumeric characters are replaced by xNN, when NN are two hexadecimal digits representing ascii code of the character.
+*/
 {
 	char * s, c;
 
@@ -186,6 +207,7 @@ void EmitVarName(Var * var)
 		}
 	}
 
+	// If variable has index, append the index
 	if (var->idx != 0) EmitInt(var->idx-1);
 }
 
@@ -255,10 +277,19 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (StrEqualPrefix(s, "elemsize", 8)) {
+					if (StrEqualPrefix(s, "elemsize", 8)) {					// TODO: elem.size
 						s += 8;
 						if (var->type->variant == TYPE_ARRAY) {
 							n = TypeSize(var->type->element);
+						} else {
+							n = 0;
+						}
+						EmitInt(n);
+						continue;
+					} else if (StrEqualPrefix(s, "index.min", 9)) {
+						s += 9;
+						if (var->type->variant == TYPE_ARRAY) {
+							n = var->type->dim[0]->range.min;
 						} else {
 							n = 0;
 						}

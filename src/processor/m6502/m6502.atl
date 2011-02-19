@@ -448,14 +448,14 @@ rule lo _x, %A     =  "   ldx %A"
 rule lo _y, %A     =  "   ldy %A"
 
 ;These rules return hi and lo byte of an one byte array element
-rule lo _a, %A:byte1arr(const %B) = "   lda #<(%A+%B)"
-rule hi _a, %A:byte1arr(const %B) = "   lda #>(%A+%B)"
+rule lo _a, %A:byte1arr(const %B) = "   lda #<(%A-%A.index.min+%B)"
+rule hi _a, %A:byte1arr(const %B) = "   lda #>(%A-%A.index.min+%B)"
 
-rule lo _x, %A:byte1arr(const %B) = "   ldx #<(%A+%B)"
-rule hi _x, %A:byte1arr(const %B) = "   ldx #>(%A+%B)"
+rule lo _x, %A:byte1arr(const %B) = "   ldx #<(%A-%A.index.min+%B)"
+rule hi _x, %A:byte1arr(const %B) = "   ldx #>(%A-%A.index.min+%B)"
 
-rule lo _y, %A:byte1arr(const %B) = "   ldy #<(%A+%B)"
-rule hi _y, %A:byte1arr(const %B) = "   ldy #>(%A+%B)"
+rule lo _y, %A:byte1arr(const %B) = "   ldy #<(%A-%A.index.min+%B)"
+rule hi _y, %A:byte1arr(const %B) = "   ldy #>(%A-%A.index.min+%B)"
 
 
 ;*********** Hi
@@ -1629,24 +1629,24 @@ rule let _a,_y      = "   tya"
 
 rule let _x,const %A:byte1   = "   ldx #%A"
 rule let _x,%A:byte1        = "   ldx %A"
-rule let _x,%A:rawbytes(const %B) = "   ldx %A+%B"
-rule let _x,%A:rawbytes(_y)       = "   ldx %A,y"
+rule let _x,%A:rawbytes(const %B) = "   ldx %A-%A.index.min+%B"
+rule let _x,%A:rawbytes(_y)       = "   ldx %A-%A.index.min,y"
 
 ;LDY
 rule let _y,const% A:byte1   = "   ldy #%A"
 rule let _y,%A:byte1        = "   ldy %A"
-rule let _y,%A:rawbytes(const %B) = "   ldy %A+%B"
-rule let _y,%A:rawbytes(_x)       = "   ldy %A,x"
+rule let _y,%A:rawbytes(const %B) = "   ldy %A-%A.index.min+%B"
+rule let _y,%A:rawbytes(_x)       = "   ldy %A-%A.index.min,x"
 
 ;LDA
 
 rule let _a,const %A:byte1    = "   lda #%A"
 rule let _a,%A:byte1     = "   lda %A"
 
-rule let _a, %A:rawbytes(0)  = "   lda %A"       ;would be handled by next rule but we do not want +0 there
-rule let _a,%A:rawbytes(const %B)  = "   lda %A+%B"
-rule let _a, %A:rawbytes(_x) = "   lda %A,x"
-rule let _a, %A:rawbytes(_y) = "   lda %A,y"
+rule let _a, %A:rawbytes(0)  = "   lda %A-%A.index.min"       ;would be handled by next rule but we do not want +0 there
+rule let _a,%A:rawbytes(const %B)  = "   lda %A-%A.index.min+%B"
+rule let _a, %A:rawbytes(_x) = "   lda %A-%A.index.min,x"
+rule let _a, %A:rawbytes(_y) = "   lda %A-%A.index.min,y"
 
 rule let _a, @%A:rawbytes(_y)  = "   lda (%A),y"
 
@@ -1654,7 +1654,7 @@ rule let _a, @%A:rawbytes(_y)  = "   lda (%A),y"
 ;STA
 
 rule let %A:byte1,_a  = "   sta %A"
-rule let %A:rawbytes(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
+rule let %A:rawbytes(0),_a  = "   sta %A-%A.index.min"       ;would be handled by next rule but we do not want +0 there
 ;rule let %A:card(0),_a  = "   sta %A"       ;would be handled by next rule but we do not want +0 there
 ;rule let %A:card(1),_a  = "   sta %A+1"       ;would be handled by next rule but we do not want +0 there
 
@@ -1662,24 +1662,24 @@ rule let %A:rawbytes(0),_a  = "   sta %A"       ;would be handled by next rule b
 ;rule let %A:adr(1),_a  = "   sta %A+1"
 
 
-rule let %A:rawbytes(const %B),_a  = "   sta %A+%B"
+rule let %A:rawbytes(const %B),_a  = "   sta %A-%A.index.min+%B"
 
 rule let @%A:adr(_y),_a  = "   sta (%A),y"
 
-rule let %A:rawbytes(_x),_a  = "   sta %A,x"
-rule let %A:rawbytes(_y),_a  = "   sta %A,y"
+rule let %A:rawbytes(_x),_a  = "   sta %A-%A.index.min,x"
+rule let %A:rawbytes(_y),_a  = "   sta %A-%A.index.min,y"
 
 ;STX
-rule let %A:rawbytes(0),_x  = "   stx %A"
-rule let %A:rawbytes(const %B),_x  = "   stx %A+%B"
+rule let %A:rawbytes(0),_x  = "   stx %A-%A.index.min"
+rule let %A:rawbytes(const %B),_x  = "   stx %A-%A.index.min+%B"
 rule let %A:byte1,_x  = "   stx %A"
-rule let %A:rawbytes(_y),_x  = "   stx %A,y"
+rule let %A:rawbytes(_y),_x  = "   stx %A-%A.index.min,y"
 
 ;STY
-rule let %A:rawbytes(0),_y         = "   sty %A"
-rule let %A:rawbytes(const %B),_y  = "   sty %A+%B"
+rule let %A:rawbytes(0),_y         = "   sty %A-%A.index.min"
+rule let %A:rawbytes(const %B),_y  = "   sty %A-%A.index.min+%B"
 rule let %A:byte1,_y                     = "   sty %A"
-rule let %A:rawbytes(_x),_y        = "   sty %A,x"
+rule let %A:rawbytes(_x),_y        = "   sty %A-%A.index.min,x"
 
 ;LSR,ASL
 rule div _a,_a,1 = "   ;"
@@ -1696,9 +1696,9 @@ rule mul _a,_a,2 = "   asl"
 rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
 rule mul %A:byte,%A:byte,1 = "   ;"
 rule mul %A:byte,%A:byte,2 = "   asl %A"
-rule mul %A:rawbytes(0),%A(0),2 = "   asl %A"
-rule mul %A:rawbytes(1),%A(1),2 = "   asl %A+1"
-rule mul %A:rawbytes(const %B),%A(%B),2  = "  asl %A+%B"
+rule mul %A:rawbytes(0),%A(0),2 = "   asl %A-%A.index.min"
+rule mul %A:rawbytes(1),%A(1),2 = "   asl %A-%A.index.min+1"
+rule mul %A:rawbytes(const %B),%A(%B),2  = "  asl %A-%A.index.min+%B"
 ;TODO: This should be rewritten as top level rule
 rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
 rule mul %A:card,%A:card,1 = "   ;"
@@ -1710,14 +1710,14 @@ rule ror _a,_a,0 = "   ;"
 rule ror _a,_a,1 = "   ror"
 rule ror %A:byte,%A:byte,0 = "   ;"
 rule ror %A:byte,%A:byte,1 = "   ror %A"
-rule ror %A:rawbytes(const %B),%A(%B),1 = "   ror %A+%B"
+rule ror %A:rawbytes(const %B),%A(%B),1 = "   ror %A-%A.index.min+%B"
 
 rule rol _a,_a,0 = "   ;"
 rule rol _a,_a,1 = "   rol"
 rule rol %A:byte,%A:byte,0 = "   ;"
 rule rol %A:byte,%A:byte,1 = "   rol %A"
-rule rol %A:rawbytes(0),%A(0),1 = "   rol %A"
-rule rol %A:rawbytes(const %B),%A(%B),1 = "   rol %A+%B"
+rule rol %A:rawbytes(0),%A(0),1 = "   rol %A-%A.index.min"
+rule rol %A:rawbytes(const %B),%A(%B),1 = "   rol %A-%A.index.min+%B"
 ;rule rol %A:byte(1),%A:byte(1),1 = "   rol %A+1"
 
 
@@ -1730,9 +1730,9 @@ rule sub _y,_y,1 = "   dey"
 
 rule sub %A:byte1,%A,1 = "   dec %A"
 
-rule sub %A:rawbytes(const %B), %A(%B), 1 = "   dec %A+%B"
+rule sub %A:rawbytes(const %B), %A(%B), 1 = "   dec %A-%A.index.min+%B"
 
-rule sub _a,_a,%A:rawbytes(const %B) = "   sbc %A+%B"
+rule sub _a,_a,%A:rawbytes(const %B) = "   sbc %A-%A.index.min+%B"
 
 ;JMP
 rule goto @%A(0)  = "   jmp (%A)"					;TODO: goto @%A

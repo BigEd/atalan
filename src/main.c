@@ -77,6 +77,8 @@ int main(int argc, char *argv[])
 
 	VERBOSE = false;
 
+	PrintColor(RED+GREEN+BLUE);
+
 	//TODO: Remove default platform
 	// Default platform is "atari"
 
@@ -107,7 +109,7 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (6-Feb-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+	printf("Atalan programming language compiler (19-Feb-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 
 	i = 1;
 	while (i < argc) {		

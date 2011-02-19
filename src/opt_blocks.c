@@ -1,6 +1,6 @@
 /*
 
-Basic block optimalization routines
+Basic block optimization routines
 
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
@@ -27,8 +27,8 @@ are necessarily executed exactly once, in order.
 InstrBlock * SplitBlock(InstrBlock * block, Instr * i)
 /*
 Purpose:
-	Split block at specified intruction.
-	Return new created block.
+	Split block at specified instruction.
+	Return newly created block.
 */
 {
 	Instr * prev;
@@ -53,6 +53,12 @@ Purpose:
 }
 
 void VarReplaceVar(Var ** p_var, Var * from, Var * to)
+/*
+Purpose:
+	Replace one variable by another.
+	Variable may be used for example in array indexes, tuples etc.
+	Replacement is performed 'in place'.
+*/
 {
 	Var * var;
 
@@ -88,9 +94,6 @@ Purpose:
 				VarReplaceVar(&i->result, from, to);
 				VarReplaceVar(&i->arg1, from, to);
 				VarReplaceVar(&i->arg2, from, to);
-				//if (i->result == from) i->result = to;
-				//if (i->arg1   == from) i->arg1 = to;
-				//if (i->arg2   == from) i->arg2 = to;
 			}
 		}
 	}
