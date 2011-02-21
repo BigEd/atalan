@@ -2,6 +2,8 @@
 News
 ****
 
+- FIX: Local variables in macros
+
 ===========
 19-Feb-2011
 ===========

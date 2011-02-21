@@ -279,7 +279,7 @@ int main(int argc, char *argv[])
 	VarGenerateArrays();
 
 	if (OPTIMIZE > 0) {
-		// It is important to call the inline optimisation before the code is broken to basic blocks.
+		// It is important to call the inline optimization before the code is broken to basic blocks.
 		// It makes code inserting easier.
 		ProcessUsedProc(ProcInline);
 	}
@@ -293,18 +293,21 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(ProcTranslate);
 
 	//***** Optimization
-	ProcessUsedProc(GenerateBasicBlocks);		// We must generate basic blocks again, as translation may have generated labels and jumps
+
+	// We must generate basic blocks again, as translation may have generated labels and jumps
+	ProcessUsedProc(GenerateBasicBlocks);		
 
 	if (OPTIMIZE > 0) {
 		ProcessUsedProc(OptimizeJumps);
 		ProcessUsedProc(ProcOptimize);
 		ProcessUsedProc(DeadCodeElimination);
+
+		if (Verbose(NULL)) {
+			PrintHeader("Optimized");
+			PrintProc(&ROOT_PROC);
+		}
 	}
 
-	if (Verbose(NULL)) {
-		printf("============== Optimized ==============\n");
-		PrintProc(&ROOT_PROC);
-	}
 
 	VarUse();
 

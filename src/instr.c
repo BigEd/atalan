@@ -646,7 +646,7 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 	return NextArg(proc, proc, submode);
 }
 
-Var * FindArg(Var * macro, Var * var, Var ** args)
+Var * FindArg(Var * macro, Var * var, Var ** args, VarSet * locals)
 /*
 Purpose:
 	Find function (macro) argument or structure member.
@@ -662,13 +662,13 @@ Purpose:
 		// create new array element referencing actual array and index.
 		
 		if (var->mode == MODE_DEREF) {
-			arg = FindArg(macro, var->var, args);
+			arg = FindArg(macro, var->var, args, locals);
 			if (arg != var->var) {
 				var = VarNewDeref(arg);
 			}
 		} else if (var->mode == MODE_ELEMENT) {
-			arr = FindArg(macro, var->adr, args);
-			arg = FindArg(macro, var->var, args);	// index
+			arr = FindArg(macro, var->adr, args, locals);
+			arg = FindArg(macro, var->var, args, locals);	// index
 
 			if (arr != var->adr || arg != var->var) {
 				var = VarNewElement(arr, arg);
@@ -683,6 +683,16 @@ Purpose:
 			if (macro != NULL) {
 				for(n = 0, arg = FirstArg(macro, SUBMODE_ARG_IN); arg != NULL; arg = NextArg(macro, arg, SUBMODE_ARG_IN), n++) {
 					if (arg == var) return args[n];
+				}
+
+				// This is local variable in macro
+				if (var->scope == macro) {
+					arg = VarSetFind(locals, var);
+					if (arg == NULL) {
+						arg = VarAllocScopeTmp(NULL, var->mode, var->type);
+						VarSetAdd(locals, var, arg);
+					}
+					return arg;
 				}
 			}
 		}
@@ -709,8 +719,11 @@ Argument:
 	Instr * i;
 	InstrOp op;
 	Var * result, * arg1, * arg2, * r, * lab, * tmp_lab;
+	VarSet locals;
 
 	Bool local_result;
+
+	VarSetInit(&locals);
 
 	lab = tmp_lab = NULL;
 
@@ -722,7 +735,7 @@ Argument:
 		} else if (op != INSTR_VOID) {
 
 			// Labels defined in macro are all local.
-			// If there is label in macro, generate temporary macro insted of it.
+			// If there is label in macro, generate temporary label instead of it.
 
 			result = i->result;
 			if (result != NULL) {
@@ -732,7 +745,7 @@ Argument:
 				if (result->mode != MODE_ARG && (i->op == INSTR_LABEL || IS_INSTR_JUMP(i->op))) {
 
 					if (local_result) {
-						result = FindArg(macro, i->arg1, args);
+						result = FindArg(macro, i->arg1, args, &locals);
 					}
 
 					if (result == lab) {
@@ -744,14 +757,14 @@ Argument:
 					}
 				} else {
 					if (!local_result) {
-						result = FindArg(macro, result, args);
+						result = FindArg(macro, result, args, &locals);
 					}
 				}
 			}
-			arg1 = FindArg(macro, i->arg1, args);
-			arg2 = FindArg(macro, i->arg2, args);
+			arg1 = FindArg(macro, i->arg1, args, &locals);
+			arg2 = FindArg(macro, i->arg2, args, &locals);
 
-			// Try to evaluate constant instruction to prevent genrating excess instructions.
+			// Try to evaluate constant instruction to prevent generating excess instructions.
 
 			r = InstrEvalConst(op, arg1, arg2);
 			if (r != NULL) {

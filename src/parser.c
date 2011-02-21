@@ -2440,7 +2440,7 @@ no_dot:
 						// We may assign strings to array references
 						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
 
-							// Call format routine (set adrees argument)
+							// Call format routine (set address argument)
 							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
 							ParseString(STR_NO_EOL);
 						} else if (var->mode == MODE_CONST) {
