@@ -501,6 +501,7 @@ void HeapPrint(MemHeap * heap);
 // Data segment is allocated directly after CODE segment, however we reserve dynamic space for it at
 // specified address.
 
+
 /*************************************************************
 
   Type
@@ -632,6 +633,21 @@ void PrintScope(Var * scope);
 void ProcUse(Var * proc, UInt8 flag);
 
 void ProcessUsedProc(void (*process)(Var * proc));
+
+typedef struct {
+	Var * key;
+	Var * var;
+} VarTuple;
+
+typedef struct {
+	VarTuple * arr;
+	UInt16     count;
+	UInt16     capacity;
+} VarSet;
+
+void VarSetInit(VarSet * set);
+Var * VarSetFind(VarSet * set, Var * key);
+void VarSetAdd(VarSet * set, Var * key, Var * var);
 
 /***********************************************************
 

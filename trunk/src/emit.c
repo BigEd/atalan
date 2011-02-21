@@ -453,6 +453,10 @@ Purpose:
 	for(var = VarFirst(), n = 1; var != NULL; var = VarNext(var), n++) {
 		type = var->type;
 
+//		if (var->idx == 27 && var->scope != NULL && StrEqual(var->scope->name, "music\'init")) {
+//			printf("");
+//		}
+
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) continue;
 		if (var->scope == REGSET) continue;
 

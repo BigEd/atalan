@@ -1,7 +1,7 @@
 /*
 Table of variables
 
-There is one global table of varibles.
+There is one global table of variables.
 
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
@@ -42,7 +42,7 @@ void VarInit()
 	VARS = NULL;
 	LAST_VAR = NULL;
 
-	TMP_IDX = 0;
+	TMP_IDX = 1;
 	TMP_LBL_IDX = 0;
 	SCOPE_IDX = 0;
 
@@ -187,10 +187,11 @@ Var * VarFindType(char * name, VarIdx idx, Type * type)
 
 Var * VarNewTmp(long idx, Type * type)
 {
-	UInt32 range;
+//	UInt32 range;
 
 	//TODO: Should check, that the variable found has appropriate type
 	Var * var;
+/*
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
 			range = type->range.max - type->range.min;
@@ -205,20 +206,20 @@ Var * VarNewTmp(long idx, Type * type)
 	} else {
 		idx += 4000;
 	}
-
+*/
 	// We always create new temporary variable.
 	// Usuall algorithm for reusing temporary variables in expressions does not work
 	// for us very well, because we need the temporary variables have many different types
 	// (not just some, like byte, word, long, but ranges like 13..26 etc.).
 
 //	var = VarFind(TMP_NAME, idx);
-	var = NULL;
-	if (var == NULL) {
-		TMP_IDX++;
-		var = VarAlloc(MODE_VAR, NULL, TMP_IDX /*idx*/);
-		var->name = TMP_NAME;
-		var->type = type;
-	}
+//	var = NULL;
+//	if (var == NULL) {
+		var = VarAllocScopeTmp(NULL, MODE_VAR, type);
+//		TMP_IDX++;
+//		var->name = TMP_NAME;
+//		var->type = type;
+//	}
 	return var;
 }
 
@@ -281,6 +282,7 @@ Purpose:
 	NEXT_VAR
 
 	var = VarAlloc(MODE_CONST, NULL, 0);
+	var->scope = NULL;
 	var->type = &TINT;
 	var->value_nonempty = true;
 	var->n = n;

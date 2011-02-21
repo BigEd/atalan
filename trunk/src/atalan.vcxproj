@@ -94,6 +94,7 @@
     <ClCompile Include="common.c" />
     <ClCompile Include="type_proc.c" />
     <ClCompile Include="variables.c" />
+    <ClCompile Include="var_set.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h" />
