@@ -644,16 +644,21 @@ String constant used as command will be printed to screen.
 "I'm here!"
 :::::::::::::::::::
 
-Square braces may be used to insert variables into the printed string.
+Square braces may be used to insert expressions into the printed string.
 
 :::::::::::::::::::::::::::::::
 x = 4
 y = 6
-z = x + y
-"Sum of [x] and [y] is [z]."
+"Sum of [x] and [y] is [x + y]."
 :::::::::::::::::::::::::::::::
 
-Variable type is automatically recognized, there is no need to specify it.
+Expression type is automatically recognized, there is no need to specify it.
+New line will be printed after string, unless it is followed by comma.
+
+:::::::::::::::::::::::::::::::::::
+"Sum of [x] and [y] is",
+"[x + y]"
+:::::::::::::::::::::::::::::::::::
 
 **************
 Labels & Jumps

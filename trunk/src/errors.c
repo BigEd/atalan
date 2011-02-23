@@ -119,7 +119,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 //	fprintf(STDERR, "%s", buf);
 
-	if (name) fprintf(STDERR, " \'%s\'", LEX.name);
+	if (name) fprintf(STDERR, " \'%s\'", NAME);
 	fprintf(STDERR, "\n\n");
 
 	// Print line with error and position of the error on line

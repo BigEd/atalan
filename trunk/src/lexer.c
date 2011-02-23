@@ -5,6 +5,7 @@
  (c) 2010 Rudolf Kudla 
  Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
+
 *********************************************************/
 
 // C characters & lines
@@ -32,7 +33,7 @@ typedef struct {
 
 	Token      end_token;   // Token, which will end the block. 
 	                        // TOKEN_OUTDENT, TOKEN_CLOSE_P, TOKEN_EOL, TOKEN_BLOCK_END, TOKEN_EOF
-	Token      stop_token;  // Stop token may alternativelly end the block.
+	Token      stop_token;  // Stop token may alternatively end the block.
 	                        // It is specified by caller (if not TOKEN_VOID). 
 	                        // For example TOKEN_THEN, TOKEN_ELSE etc. Stop token will be returned by parser after block end.
 	LineIndent indent;		// Indent of the block. For TOKEN_OUTDENT, any indent smaller than this will end the block.
@@ -51,7 +52,7 @@ GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
 GLOBAL LineNo  LINE_NO;
 GLOBAL UInt16  LINE_LEN;
-GLOBAL UInt16  LINE_POS;						// index of next character in line
+GLOBAL UInt16  LINE_POS;				// index of next character in line
 static LineIndent     LINE_INDENT;
 static int     PREV_CHAR;
 
@@ -60,6 +61,7 @@ GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
+GLOBAL char NAME[256];
 
 /*******************************************************************
 
@@ -88,7 +90,7 @@ Result:
 	UInt16 top;
 	Token t;
 
-	// Remeber current line as previous
+	// Remember current line as previous
 	// Previous line may be used for error reporting and generating lines into emitted code
 
 	if (PREV_LINE != NULL) {
@@ -229,16 +231,20 @@ void EnterBlockWithStop(Token stop_token)
 	if (TOK == TOKEN_OPEN_P) {
 		end = TOKEN_CLOSE_P;
 
-	// 2. Indented block will start at the end of line
+	// 2. Block may be enclosed in [ ]
+	} else if (TOK == '[') {
+		end = ']';
+
+	// 3. Indented block will start at the end of line
 	} else if (TOK == TOKEN_EOL) {
 		end = TOKEN_OUTDENT;
 
-	// 3. We may be at the end of some block, in such case new block is empty (ends immediatelly)
+	// 4. We may be at the end of some block, in such case new block is empty (ends immediatelly)
 	} else if (TOK == TOKEN_BLOCK_END) {
 		end = TOKEN_BLOCK_END;
 		next_token = false;
 
-	// 4. For other tokens, this is line block
+	// 5. For other tokens, this is line block
 	//    Line block may be alternativelly ended by stop_token.
 	} else {
 		end  = TOKEN_EOL;
@@ -261,7 +267,7 @@ void EnterBlockWithStop(Token stop_token)
 	BLK[BLK_TOP].stop_token  = stop;
 
 	// NextToken MUST be called AFTER new block  has been created 
-	// (so it may possibly immediatelly exit that block, if it is empty)
+	// (so it may possibly immediately exit that block, if it is empty)
 
 	if (next_token) NextToken();
 }
@@ -295,6 +301,70 @@ static char * keywords[KEYWORD_COUNT] = {
 	
 };
 
+void NextStringToken()
+/*
+	Parse part of string.
+
+	TOKEN_STRING	String part of string
+	[				Beginning of embedded expression
+	TOKEN_BLOCK_END	End of string
+*/
+{
+	UInt16 n;
+	UInt8 c;
+
+	n = 0;
+	do {
+		if (n >= 254) {
+			SyntaxError("string too long");
+			return;
+		}
+
+		c = LINE[LINE_POS++];
+
+		if (c == '[') {
+			c = LINE[LINE_POS++];
+			// [[
+			if (c != '[') {
+				// ["]
+				if (c == '\"' && LINE[LINE_POS] == ']') {
+					LINE_POS++;
+					goto store;  // we must skip the test for string end
+				} else {
+					LINE_POS--;
+					LINE_POS--;
+					break;
+				}
+			}
+		} else if (c == ']') {
+			c = LINE[LINE_POS++];
+			// ]]
+			if (c != ']') {
+				SyntaxError("unexpected closing ] in string");				
+			}
+		} else if (c == '\"') {
+			LINE_POS--;
+			break;
+		}
+store:
+		NAME[n++] = c;
+	} while(1);
+	NAME[n] = 0;
+
+	if (TOK != TOKEN_ERROR) {
+		if (n != 0) {
+			TOK = TOKEN_STRING;
+		} else {
+			if (LINE[LINE_POS] == '[') {
+				LINE_POS++;
+				TOK = '[';
+			} else {
+				LINE_POS++;
+				TOK = TOKEN_BLOCK_END;
+			}
+		}
+	}
+}
 
 void NextToken()
 {
@@ -344,7 +414,7 @@ retry:
 	TOKEN_POS = LINE_POS;
 	LINE_POS++;
 
-	*LEX.name = 0;
+	*NAME = 0;
 
 	// Identifier
 	if (isalpha(c) || c == '_' || c == '\'') {
@@ -359,11 +429,11 @@ retry:
 				SyntaxError("identifier is too long");
 				return;
 			}
-			LEX.name[n++] = c;
+			NAME[n++] = c;
 			c = LINE[LINE_POS++];
 			if (c == c2) { LINE_POS++; break; }
 		} while(c2 != 0 || isalpha(c) || isdigit(c) || c == '_' || c == '\'');
-		LEX.name[n] = 0;
+		NAME[n] = 0;
 		LINE_POS--;
 
 		TOK = TOKEN_ID;
@@ -371,7 +441,7 @@ retry:
 		if (c2 != L'\'' && !LEX.ignore_keywords) {
 			n = 0;
 			for(n = 0; n < KEYWORD_COUNT; n++) {
-				if (StrEqual(keywords[n], LEX.name)) {
+				if (StrEqual(keywords[n], NAME)) {
 					TOK = TOKEN_KEYWORD + n;
 					break;
 				}
@@ -457,7 +527,7 @@ str_chr:
 						goto store;  // we must skip the test for string end
 					} else {
 						nest++;
-						LEX.name[n++] = '[';
+						NAME[n++] = '[';
 					}
 				}
 			} else if (c2 == ']') {
@@ -468,7 +538,7 @@ str_chr:
 						SyntaxError("unexpected closing ] in string");
 					} else {
 						nest--;
-						LEX.name[n++] = ']';
+						NAME[n++] = ']';
 						goto str_chr;
 					}
 				}
@@ -476,9 +546,9 @@ str_chr:
 			
 			if (nest == 0 && c2 == '\"') break;
 store:
-			LEX.name[n++] = c2;
+			NAME[n++] = c2;
 		} while(1);
-		LEX.name[n] = 0;
+		NAME[n] = 0;
 		TOK = TOKEN_STRING;
 
 	// End of line
@@ -502,8 +572,8 @@ store:
 			TOK = TOKEN_RIGHT_ARROW;
 		} else {
 			TOK = c;
-			LEX.name[0] = c;
-			LEX.name[1] = 0;
+			NAME[0] = c;
+			NAME[1] = 0;
 			LINE_POS--;
 		}
 	}
@@ -663,6 +733,11 @@ FILE * FindFile(char * name, char * ext)
 }
 
 Bool SrcOpen(char * name)
+/*
+Purpose:
+	Instruct lexer to use file with specified name as input.
+	After parsing this file, parsing continues with current file.
+*/
 {
 	int c;
 	Var * file_var;
@@ -746,6 +821,10 @@ Bool SrcOpen(char * name)
 }
 
 void SrcClose()
+/*
+Purpose:
+	Finish using current file for parsing and continue with previous file.
+*/
 {
 	if (LEX.f != NULL) {
 		fclose(LEX.f);

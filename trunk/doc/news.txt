@@ -2,6 +2,7 @@
 News
 ****
 
+- NEW: Strings may contain expressions, not only variable names
 - FIX: Local variables in macros
 
 ===========

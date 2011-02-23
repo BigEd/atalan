@@ -14,7 +14,7 @@ Syntax:
 
 	{  }   means at the specified place, block is expected (in whatever form)
 	[  ]   optional part
-	[  ]*  zero or more repeates of the part
+	[  ]*  zero or more repeats of the part
 	  |    option
 	"sk"   verbatim text
 	<rule> reference to other rule
@@ -40,12 +40,12 @@ Var * ParseStructElement(Var * arr);
 Var * ParseFile();
 
 // This variable is set to true, when we parse expression inside condition.
-// It modifies parsing behaviour concernign and, or and not.
+// It modifies parsing behavior concerning and, or and not.
 
 //UInt8 G_CONDITION_EXP;
 
 #define STR_NO_EOL 1
-void ParseString(UInt32 flags);
+void ParseString(InstrBlock * i, UInt32 flags);
 void ParseExpressionType(Type * result_type);
 
 // All rules share one common scope, so they do not mix with normal scope of program.
@@ -67,9 +67,9 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 	do {
 		scope = var;
 		if (scope != NULL) {
-			var = VarFindScope(scope, LEX.name, 0);
+			var = VarFindScope(scope, NAME, 0);
 		} else {
-			var = VarFind2(LEX.name, 0);
+			var = VarFind2(NAME, 0);
 		}
 		spaces = Spaces();
 		if (var == NULL) {
@@ -151,7 +151,7 @@ Type * ParseIntType()
 		}
 	// Sme variable
 	} else if (TOK == TOKEN_ID) {
-		var = VarFind2(LEX.name, 0);
+		var = VarFind2(NAME, 0);
 		if (var != NULL) {
 			if (var->mode == MODE_CONST) {
 				if (var->type->variant == TYPE_INT) {
@@ -248,7 +248,7 @@ const_list:
 				while(NextIs(TOKEN_EOL));
 
 				if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD) {
-					var = VarAlloc(MODE_CONST, LEX.name, 0);
+					var = VarAlloc(MODE_CONST, NAME, 0);
 					NextToken();
 					if (NextIs(TOKEN_EQUAL)) {
 						// Parse const expression
@@ -545,8 +545,8 @@ Return 0, if there is not such argument.
 
 	if (NextIs(TOKEN_PERCENT)) {
 		if (TOK == TOKEN_ID) {
-			c = LEX.name[0];
-			if (LEX.name[1] == 0 && c >= 'A' && c <='Z') {
+			c = NAME[0];
+			if (NAME[1] == 0 && c >= 'A' && c <='Z') {
 				arg_no = c - 'A' + 1;
 			} else {
 				SyntaxError("Rule argument mast be A..Z");
@@ -596,7 +596,7 @@ Syntax:
 	if (arr->mode == MODE_ELEMENT && arr->adr->mode == MODE_SCOPE) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
-			item = VarFindScope(arr->adr, LEX.name, 0);
+			item = VarFindScope(arr->adr, NAME, 0);
 			if (item != NULL) {
 				if (item->type->variant == TYPE_ARRAY) {
 					idx = VarNewElement(item, arr->var);
@@ -613,7 +613,7 @@ Syntax:
 	} else if (arr->type->variant == TYPE_STRUCT) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
-			item = VarFindScope(arr->type->owner, LEX.name, 0);
+			item = VarFindScope(arr->type->owner, NAME, 0);
 			if (item != NULL) {
 				idx = VarNewElement(arr, item);
 			} else {
@@ -776,7 +776,7 @@ void ParseOperand()
 			if (arg_no = ParseArgNo2()) {
 				var = VarMacroArg(arg_no-1);
 			} else {
-				var = VarFind2(LEX.name, 0);
+				var = VarFind2(NAME, 0);
 			}
 
 			if (var != NULL) {
@@ -794,7 +794,7 @@ void ParseOperand()
 			NextToken();
 		} else if (TOK == TOKEN_ID) {
 
-			var = VarFind2(LEX.name, 0);
+			var = VarFind2(NAME, 0);
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
 			//      does not conform to requested result type
@@ -806,7 +806,7 @@ void ParseOperand()
 			// Try to find using result scope (support for associated constants)
 			if (var == NULL || !type_match) {
 				if (RESULT_TYPE != NULL) {
-					item = VarFindScope(RESULT_TYPE->owner, LEX.name, 0); 
+					item = VarFindScope(RESULT_TYPE->owner, NAME, 0); 
 					if (item != NULL) var = item;
 				}
 			}
@@ -862,15 +862,15 @@ indices:
 						var = ParseStructElement(var);
 					} else {
 						if (TOK == TOKEN_ID) {
-							item = VarFindScope(var, LEX.name, 0);
+							item = VarFindScope(var, NAME, 0);
 
 							// If the element has not been found, try to match some built-in elements
 
 							if (item == NULL) {
 								if (var->type->variant == TYPE_INT) {
-									if (StrEqual(LEX.name, "min")) {
+									if (StrEqual(NAME, "min")) {
 										item = VarNewInt(var->type->range.min);
-									} else if (StrEqual(LEX.name, "max")) {
+									} else if (StrEqual(NAME, "max")) {
 										item = VarNewInt(var->type->range.max);
 									}
 								}
@@ -1387,7 +1387,7 @@ void ParseLabel(Var ** p_label)
 
 	ExpectToken(TOKEN_ID);
 	if (TOK == TOKEN_ID) {
-		var = FindOrAllocLabel(LEX.name, 0);
+		var = FindOrAllocLabel(NAME, 0);
 		NextToken();
 	}
 	*p_label = var;
@@ -1581,7 +1581,7 @@ Syntax:
 			
 			// Copy the name of loop variable, so we can get the next token
 
-			strcpy(name, LEX.name);
+			strcpy(name, NAME);
 			NextToken();
 
 			// for i ":" <range>
@@ -1789,7 +1789,7 @@ Var * ParseFile()
 	}
 
 	if (TOK == TOKEN_STRING) {
-		item = VarNewStr(StrAlloc(LEX.name));
+		item = VarNewStr(StrAlloc(NAME));
 	} else {
 		SyntaxError("expected string specifying file name");
 	}
@@ -2087,9 +2087,9 @@ Purpose:
 		NextToken();
 	} else if (TOK == TOKEN_ID) {
 
-		adr = VarFindScope(REGSET, LEX.name, 0);
+		adr = VarFindScope(REGSET, NAME, 0);
 		if (adr == NULL) {
-			adr = VarFind2(LEX.name, 0);
+			adr = VarFind2(NAME, 0);
 			NextToken();
 			if (adr == NULL) {
 				SyntaxError("$undefined regset or variable used as address");
@@ -2097,7 +2097,7 @@ Purpose:
 dot:
 				if (NextIs(TOKEN_DOT)) {
 					if (TOK == TOKEN_ID) {
-						adr = VarFindScope(adr, LEX.name, 0);
+						adr = VarFindScope(adr, NAME, 0);
 						NextToken();
 						goto dot;
 					} else {
@@ -2222,15 +2222,15 @@ retry:
 		// Either find an existing variable or create new one
 		if (to_type == NULL) {
 			if (scope == NULL) {
-				var = VarFind2(LEX.name, 0);
+				var = VarFind2(NAME, 0);
 			} else {
 //				PrintScope(scope);
-				var = VarFindScope(scope, LEX.name, 0);
+				var = VarFindScope(scope, NAME, 0);
 			}
 		}
 		//TODO: Type with same name already exists
 		if (var == NULL) {			
-			var = VarAllocScope(scope, MODE_UNDEFINED, LEX.name, 0);
+			var = VarAllocScope(scope, MODE_UNDEFINED, NAME, 0);
 			existed = false;
 //			if (scope != NULL) {
 //				PrintScope(scope);
@@ -2439,12 +2439,12 @@ no_dot:
 					if (TOK == TOKEN_STRING) {
 						// We may assign strings to array references
 						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
-
 							// Call format routine (set address argument)
+							InstrBlockPush();
 							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
-							ParseString(STR_NO_EOL);
+							ParseString(InstrBlockPop(), STR_NO_EOL);
 						} else if (var->mode == MODE_CONST) {
-							VarLetStr(var, LEX.name);
+							VarLetStr(var, NAME);
 							NextToken();
 						} else {
 							SyntaxError("string may be assigned only to variable or to constant");
@@ -2594,7 +2594,7 @@ Purpose:
 	InstrOp op = INSTR_VOID;
 
 	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD) {
-		inop = InstrFind(LEX.name);
+		inop = InstrFind(NAME);
 		if (inop != NULL) {
 			op = inop->n;
 			NextToken();
@@ -2629,7 +2629,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 		if (op == INSTR_INCLUDE) {
 
 			if (TOK == TOKEN_STRING) {
-				PathMerge(inc_path, FILE_DIR, LEX.name);
+				PathMerge(inc_path, FILE_DIR, NAME);
 				arg[n++] = VarNewStr(inc_path);
 				NextToken();
 			} else {
@@ -2640,9 +2640,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 		// 
 		} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
 			if (TOK == TOKEN_ID) {
-				label = VarFind2(LEX.name, 0);
+				label = VarFind2(NAME, 0);
 				if (label == NULL) {
-					label = VarNewLabel(LEX.name);
+					label = VarNewLabel(NAME);
 				}
 				NextToken();
 				arg[0] = label;
@@ -2827,7 +2827,7 @@ void ParseRule()
 				do {
 
 					// Rule strings may are preprocessed so, that %/ is replaced by current path.
-					s = LEX.name;
+					s = NAME;
 					d = buf;
 					do {
 						c = *s++;
@@ -2858,25 +2858,53 @@ void ParseRule()
 	
 }
 
-void ParseString(UInt32 flags)
+void ParseString(InstrBlock * call, UInt32 flags)
 /*
 Purpose:
 	Parse string constant.
 	String may contain variables enclosed in square braces.
 */
 {
-	char * start, * end, c;
+//	char * start, * end, c;
 	Var * var, * var2;
-	Bool in_var;
 	Bool no_eol;
+	UInt16 n;
+	InstrBlock * args;
+
 
 	do {
+		args =  MemAllocStruct(InstrBlock);
 		no_eol = false;
-		in_var = false;
-		start = end = LEX.name;
+		LINE_POS = TOKEN_POS+1;
+
+		while (TOK != TOKEN_ERROR) {
+			NextStringToken();
+			if (TOK == TOKEN_BLOCK_END) break;
+			if (TOK == TOKEN_STRING) {
+				var = VarNewStr(NAME);
+				var2 = VarNewInt(StrLen(NAME));
+				InstrInsert(args, NULL, INSTR_STR_ARG, NULL, var, var2);
+			} else {
+				ASSERT(TOK == '[');
+				EnterBlock();
+				ParseExpression(NULL);
+				ASSERT(TOK == TOKEN_BLOCK_END);
+
+				for(n=0; n<TOP; n++) {
+					InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, STACK[n], NULL);
+				}
+			}
+		}
+
+		GenBlock(call);
+		GenBlock(args);
+/*
+		start = end = NAME;
 		do {
 			c = *end;
 			if (c == L'[' || c == 0) {
+
+				// There is string part before variable or end of string
 				if (end != start) {
 					*end = 0;
 					var = VarNewStr(start);
@@ -2905,7 +2933,7 @@ Purpose:
 			}
 			end++;
 		} while (TOK != TOKEN_ERROR);
-
+*/
 		if (TOK != TOKEN_ERROR) {
 			NextToken();
 		}
@@ -3077,7 +3105,7 @@ void ParseId()
 
 	//TODO: Procedures & macros in scope or struct
 //	ParseVariable(&var);
-	var = VarFind2(LEX.name, 0);
+	var = VarFind2(NAME, 0);
 	if (var != NULL) {
 		if (var->type != NULL) {
 			switch(var->type->variant) {
@@ -3118,7 +3146,7 @@ void ParseUseFile()
 		return;
 	}
 
-	Parse(LEX.name, false);
+	Parse(NAME, false);
 	NextToken();
 }
 
@@ -3134,10 +3162,6 @@ Syntax: { [file_ref] }
 		NextIs(TOKEN_COMMA);
 		while(NextIs(TOKEN_EOL));
 	}
-}
-
-void ParseRef()
-{
 }
 
 void ParseCommands()
@@ -3187,8 +3211,9 @@ void ParseCommands()
 			break;
 
 		case TOKEN_STRING: 
+			InstrBlockPush();
 			GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
-			ParseString(0); 
+			ParseString(InstrBlockPop(), 0); 
 			break;
 
 		case TOKEN_ID:
