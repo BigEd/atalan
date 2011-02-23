@@ -12,7 +12,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #define MAX_RULE_UNROLL 20
 /*
 
-Intruction generating function always write to this block.
+Instruction generating function always write to this block.
 Blocks may be nested, because procedures may be nested.
 
 */

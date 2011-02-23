@@ -115,7 +115,7 @@ typedef struct {
 } ParseState;
 
 typedef struct {
-	char   name[256];
+//	char   name[256];
 	UInt32   n;
 	FILE * f;
 	Bool   ignore_keywords;
@@ -125,10 +125,12 @@ Bool SrcOpen(char * name);
 void SrcClose();
 FILE * FindFile(char * name, char * ext);
 
+extern char NAME[256];
 
 // This functions are used only by parser
 
 void NextToken();
+void NextStringToken();
 void ExpectToken(Token tok);
 
 UInt16 SetBookmark();

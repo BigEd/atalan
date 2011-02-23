@@ -387,6 +387,7 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 	if (e1->op == e2->op) {
 		if (e1->op == INSTR_VAR) {
 			v1 = e1->var; v2 = e2->var;
+			if (FlagOn(v1->submode, SUBMODE_IN)) goto done;
 			if (v1 == v2) { eq = true; goto done; }
 
 			// Detect mutual dependency of two variables
@@ -532,6 +533,14 @@ Purpose:
 	return zero != NULL;
 }
 
+Var * SrcVar(Var * var)
+{
+	if (var != NULL) {
+		while (FlagOff(var->submode, SUBMODE_IN) && var->src_i != NULL && var->src_i->op == INSTR_LET) var = var->src_i->arg1;
+	}
+	return var;
+}
+
 UInt32 GOG = 0;
 //UInt32 GOG2 = 0;
 
@@ -606,7 +615,8 @@ retry:
 
 					m3 = false;
 
-					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2) {
+					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2 
+					&& (arg1 == NULL || FlagOff(arg1->submode, SUBMODE_IN)))  {
 //						GOG++;
 //						if (GOG == 18) {
 //							PrintExp(result->dep);
@@ -657,7 +667,7 @@ retry:
 							}
 						} else if (src_op == INSTR_LET) {
 							// If instruction uses register, do not replace with instruction that does not use it
-							if (! (FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
+							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
 								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									arg1 = src_i->arg1;
@@ -673,7 +683,7 @@ retry:
 						src_op = src_i->op;
 
 						if (src_op == INSTR_LET) {
-							if (! (FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
+							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
 								if (arg2->read == 1 || !(arg2->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									if (src_i->arg1->mode != MODE_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
@@ -707,15 +717,18 @@ retry:
 					arg1 = i->arg1;
 
 					//TODO: Use SrcVal
+					arg1 = SrcVar(arg1);
+					arg2 = SrcVar(i->arg2);
+/*
 					if (arg1 != NULL) {
-						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
+						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET && FlagOff(arg1->src_i->arg1) arg1 = arg1->src_i->arg1;
 					}
 
 					arg2 = i->arg2;
 					if (arg2 != NULL) {
 						while(FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL && arg2->src_i->op == INSTR_LET) arg2 = arg2->src_i->arg1;
 					}
-
+*/
 					r = InstrEvalConst(i->op, arg1, arg2);
 
 					// We have evaluated the instruction, change it to LET <result>,r
@@ -754,14 +767,6 @@ retry:
 		}
 	} // block
 	return modified;
-}
-
-Var * SrcVar(Var * var)
-{
-	if (var != NULL) {
-		while (FlagOff(var->submode, SUBMODE_IN) && var->src_i != NULL && var->src_i->op == INSTR_LET) var = var->src_i->arg1;
-	}
-	return var;
 }
 
 void CheckValues(Var * proc)
