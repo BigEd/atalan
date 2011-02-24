@@ -12,7 +12,9 @@ So here it is:
 :::::::::::::::::::::::
 
 That was easy :-) Atalan prints any text in double quotes (string) to display on
-separate line. 
+separate line.
+What does it mean to print a text depends on a platform, we use, 
+but generally, result should be simmilar. 
 
 If you write variable name enclosed in square brackets inside string, it's
 contents will be printed.
@@ -24,7 +26,14 @@ c = a + b
 "Sum of [a] and [b] is [c]."
 :::::::::::::::::::::::::::::::::::
 
-Note, that is is not necessary to declaer variables. Type of variable is
+Note, that is is not necessary to declare variables. Type of variable is
 inferred from the expressions.
 
- 
+You can use expressions directly in print command.
+
+:::::::::::::::::::::::::::::::::::
+a = 10
+b = 20
+"Sum of [a] and [b] is [a + b]."
+:::::::::::::::::::::::::::::::::::
+

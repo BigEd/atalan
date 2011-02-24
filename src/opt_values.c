@@ -659,7 +659,7 @@ retry:
 
 						// Try to replace LO b,n LET a,b  => LO a,n LO a,n
 
-						if (src_op == INSTR_LO || src_op == INSTR_HI) {
+						if (src_op == INSTR_LO || src_op == INSTR_HI || src_op == INSTR_LET_ADR) {
 							if (op == INSTR_LET) {
 								op = src_op;
 								arg1 = src_i->arg1;
@@ -671,6 +671,7 @@ retry:
 								// Do not replace simple variable with array access
 								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									arg1 = src_i->arg1;
+									op   = src_op;
 									m2 = true;
 								}
 							}
@@ -714,21 +715,8 @@ retry:
 					// and replacing will not be performed.
 
 					r = NULL;
-					arg1 = i->arg1;
-
-					//TODO: Use SrcVal
-					arg1 = SrcVar(arg1);
+					arg1 = SrcVar(i->arg1);
 					arg2 = SrcVar(i->arg2);
-/*
-					if (arg1 != NULL) {
-						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET && FlagOff(arg1->src_i->arg1) arg1 = arg1->src_i->arg1;
-					}
-
-					arg2 = i->arg2;
-					if (arg2 != NULL) {
-						while(FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL && arg2->src_i->op == INSTR_LET) arg2 = arg2->src_i->arg1;
-					}
-*/
 					r = InstrEvalConst(i->op, arg1, arg2);
 
 					// We have evaluated the instruction, change it to LET <result>,r
