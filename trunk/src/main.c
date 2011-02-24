@@ -1,6 +1,6 @@
 /*
 
-ATALAN - Programming language Compiler for embeded systems
+ATALAN - Programming language Compiler for embedded systems
 
 
 (c) 2010 Rudolf Kudla 
