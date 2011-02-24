@@ -11,7 +11,7 @@ use m6502
 type  VARHEAP:000..255   
 rule prologue       =  "    opt h-" " .byte('N', 'E', 'S', $1A, $01, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $C000"  "RESET:" "   sei" "   cld" "   ldx #$FF" "   txs"
 rule epilogue       =  "    rts"  
-rule code_end       =  "    .align $FFFA,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
+rule code_end       =  "    .align $FFF9,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
 rule line           = ";### %0(%1) %2"
 const BIN_EXTENSION = "nes"
 
