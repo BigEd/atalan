@@ -724,8 +724,8 @@ void OptimizeCombined(Var * proc)
 	Bool modified;
 	do {
 		do {
-			modified = OptimizeLive(proc);
-			modified |= OptimizeValues(proc);
+			modified = OptimizeValues(proc);
+			modified |= OptimizeLive(proc);			// We need to call OptimizeLive as second, to keep next_use info
 		} while(modified);
 
 		modified |= OptimizeVarMerge(proc);

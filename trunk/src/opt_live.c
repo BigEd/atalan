@@ -110,6 +110,7 @@ Purpose:
 	for (i = block->first; i != NULL; i = i->next) {
 		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
 		if (i->result == var) { res1 = 0; goto done;}
+		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
 				if (var->mode == MODE_ELEMENT) {
@@ -154,7 +155,7 @@ void MarkProcLive(Var * proc)
 
 	// Procedure may use same variable both for input and output (for example using aliasing)
 	// a:proc >x@_a <y@_a
-	// In such case, marking variable as live has precence.
+	// In such case, marking variable as live has precedence.
 
 	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
 		if (FlagOn(var->submode, SUBMODE_ARG_IN)) VarMarkLive(var);

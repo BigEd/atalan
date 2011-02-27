@@ -884,6 +884,9 @@ Purpose:
 	int q;
 	UInt32 n;
 
+//	printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+//	PrintProc(proc);
+
 	for (blk = proc->instr; blk != NULL; blk = blk->next) {
 		for (i = blk->first, n = 1; i != NULL; i = i->next, n++) {
 next:
@@ -935,5 +938,10 @@ next:
 			}
 		}
 	}
+
+//	if (modified) {
+//		printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+//		PrintProc(proc);
+//	}
 	return modified;
 }

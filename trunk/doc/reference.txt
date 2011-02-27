@@ -848,6 +848,25 @@ add3: word proc
 	result = i + j + k
 :::::::::::::::::::::::
 
+=================
+Default arguments
+=================
+
+It is possible to specify default argument value. Argument with defined default 
+value does not have to be specified when procedure is called.
+
+Default value must be constant expression specified as argument assignment 
+in procedure header (after equal sign).
+When specifying default value for some argument, indented or parenthesized block must be used.
+
+:::::::::::::::::::::
+addw:proc(i:word j:word = 1 >k:word) =
+   k = i + j
+   
+x = addw 14 20		;x is now 34
+x = addw 14       ;x is now 15
+:::::::::::::::::::: 
+
 ================
 Multiple results
 ================

@@ -197,6 +197,13 @@ on'vbi play
 :::::::::::::::::::::::::::::::
 
 
+:::::::::::::::::::::::::::
+music'init(module:adr track:byte = 0)
+:::::::::::::::::::::::::::
+
+adr specifies byte array containing the module, track is optional argument specifying
+which track of the module to start playing (for example when module contains multiple songs). 
+
 ********
 Commands
 ********

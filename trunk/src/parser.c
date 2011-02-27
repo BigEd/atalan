@@ -656,6 +656,8 @@ Purpose:
 		if (arr->type->variant == TYPE_ARRAY) {
 			idx_type = arr->type->dim[0];
 		//TODO: Support index for adr of array(index)
+		} else if (arr->type->variant == TYPE_SCOPE) {
+			idx_type = NULL;
 		} else {
 			idx_type = TypeByte();
 		}
@@ -902,7 +904,7 @@ indices:
 			//	NextToken();
 			//}
 		} else {
-			SyntaxError("expected operand");
+//			SyntaxError("expected operand");
 			return;
 		}
 
@@ -1116,7 +1118,9 @@ If result mode is MODE_CONST, no code is to be generated.
 
 	if (TOK) {
 		if (EXP_TYPE.variant == TYPE_UNDEFINED) {
-			TypeLet(&EXP_TYPE, STACK[0]);
+			if (TOP > 0) {
+				TypeLet(&EXP_TYPE, STACK[0]);
+			}
 		}
 	}
 }
@@ -2297,13 +2301,13 @@ no_dot:
 
 		vars[cnt] = var;
 		cnt++;
-		// this is to check if there is not too many exprs
+		// this is to check if there is not too many expressions
 		if (cnt>=MAX_VARS_COMMA_SEPARATED) {
 			SyntaxError("too many comma separated identifiers");
 		}
 	} while (NextIs(TOKEN_COMMA));
 
-	// This is definitelly a type!!!
+	// This is definitely a type!!!
 	// Assignment does not allow type specified.
 
 	if (NextIs(TOKEN_COLON)) {
@@ -2353,6 +2357,8 @@ no_dot:
 				// If type has not been defined, but this is alias, use type of the aliased variable
 				adr = var->adr;
 				if (adr != NULL) {
+
+					// We are parsing procedure or macro argument
 					if (adr->mode == MODE_VAR) {
 						var->type = adr->type;
 					} else if (adr->mode == MODE_TUPLE) {
@@ -2386,7 +2392,7 @@ no_dot:
 		}
 	}
 
-	// If there is assigment part, generate instruction
+	// If there is assignment part, generate instruction
 	// (it may be pruned later, when it is decided the variable is not used, or is constant)
 
 	if (NextIs(TOKEN_EQUAL)) {
@@ -2474,11 +2480,12 @@ no_dot:
 
 								item = STACK[stack];
 
-								if (var->mode == MODE_CONST) {
+								if (mode == MODE_ARG) {
+									var->var = item;
+								} else if (var->mode == MODE_CONST) {
 									var->n = item->n;
 									var->value_nonempty = item->value_nonempty;
 									// Set the type based on the constant
-									// TODO: Maybe we should create IntType(n,n) - i.e. variable with only one possible value?
 									if (var->type == NULL) {
 										var->type = TypeAllocInt(item->n, item->n);
 									}
@@ -2969,13 +2976,18 @@ Var * PopTop()
 	return var;
 }
 
-void ParseArgs(Var * proc, VarSubmode submode)
+void ParseArgs(Var * proc, VarSubmode submode, Var ** args)
 /*
 Purpose:
-	Parse arguments passed to procedure.
+	Parse arguments passed to procedure or macro.
+Arguments:
+	proc     Procedure or macro for which we parse the arguments.
+	submode  SUBMODE_ARG_In if parsing input arguments, SUBMODE_ARG_OUT if parsing output arguments
+	args     When specified, we store parsed argument values to this array.
 */
 {
 	Var * arg, * val, * tmp;
+	Bool no_next_args;
 
 	// *** Register Arguments (4)
 	// When calling a procedure, we first store values of register arguments into temporary variables and continue with evaluation of next argument.
@@ -2984,9 +2996,11 @@ Purpose:
 
 	Var * reg_args[MAX_ARG_COUNT];		// temporary variables allocated for register arguments
 	Var * reg_vals[MAX_ARG_COUNT];
-	UInt8 reg_arg_cnt, i;
+	UInt8 reg_arg_cnt, i, arg_no;
 
+	no_next_args = false;
 	reg_arg_cnt = 0;
+	arg_no = 0;
 	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
 		EnterBlock();
@@ -2995,35 +3009,49 @@ Purpose:
 				ExitBlock();
 				break;
 			}
-			ParseExpression(arg);
-
-			if (TOP > 0) {
-
-				val = PopTop();
-
-				if (VarIsReg(arg)) {
-//				// For anything more complex than constant or simple variable, create temporary
-//				if (val->mode != MODE_VAR && val->mode != MODE_CONST) {
-					tmp = VarNewTmp(0, arg->type);
-					GenLet(tmp, val);
-					val = tmp;
-					reg_args[reg_arg_cnt] = arg;
-					reg_vals[reg_arg_cnt] = val;
-					reg_arg_cnt++;
-//				}
-
+			if (!no_next_args) {
+				if (!NextIs(TOKEN_BLOCK_END)) {
+					ParseExpression(arg);
 				} else {
-					if (VarIsTmp(val)) {
-						GenLastResult(arg);
+					no_next_args = true;
+				}
+			}
+
+			val = NULL;
+			if (TOP > 0) {
+				val = PopTop();
+			} else {
+				val = arg->var;
+			}
+
+			if (val != NULL) {
+				if (args != NULL) {
+					args[arg_no] = val;
+				} else {
+					if (VarIsReg(arg)) {
+						tmp = VarNewTmp(0, arg->type);
+						GenLet(tmp, val);
+						val = tmp;
+						reg_args[reg_arg_cnt] = arg;
+						reg_vals[reg_arg_cnt] = val;
+						reg_arg_cnt++;
 					} else {
-						GenLet(arg, val);
+						if (VarIsTmp(val)) {
+							GenLastResult(arg);
+						} else {
+							GenLet(arg, val);
+						}
 					}
 				}
 			} else {
 				if (submode == SUBMODE_ARG_IN) {
 					ErrArg(arg);
 					ErrArg(proc);
-					SyntaxError("Missing argument [A] in call of procedure [B]");
+					if (proc->type->variant == TYPE_MACRO) {
+						SyntaxError("Missing argument [B] in use of macro [A]");
+					} else {
+						SyntaxError("Missing argument [B] in call of procedure [A]");
+					}
 
 				// Output arguments (in return) do not have to be specified all
 				} else {
@@ -3031,23 +3059,24 @@ Purpose:
 				}
 			}
 			arg = NextArg(proc, arg, submode);
+			arg_no++;
 		}
 	}
 
 	// Load register arguments
-	if (TOK) {
-		for(i=0; i<reg_arg_cnt; i++) {
-			GenLet(reg_args[i], reg_vals[i]);
+	if (proc->type->variant != TYPE_MACRO) {
+		if (TOK) {
+			for(i=0; i<reg_arg_cnt; i++) {
+				GenLet(reg_args[i], reg_vals[i]);
+			}
 		}
 	}
 }
 
 void ParseCall(Var * proc)
 {
-	ParseArgs(proc, SUBMODE_ARG_IN);
+	ParseArgs(proc, SUBMODE_ARG_IN, NULL);
 	Gen(INSTR_CALL, proc, NULL, NULL);
-
-
 }
 
 void ParseReturn()
@@ -3060,7 +3089,7 @@ Syntax: "return" arg*
 
 	NextToken();
 	proc = VarProcScope();
-	ParseArgs(proc, SUBMODE_ARG_OUT);
+	ParseArgs(proc, SUBMODE_ARG_OUT, NULL);
 
 	// Return is implemented as jump to end of procedure
 	// Optimizer may later move return insted of jump (if there is no cleanup)
@@ -3071,10 +3100,13 @@ Syntax: "return" arg*
 
 void ParseMacro(Var * macro)
 {
-	Var * arg;
+/*
+	Var * arg, * val;
 	Var * args[32];
 	UInt8 i;
+	Bool no_next_args;
 	i = 0;
+	no_next_args = false;
 	arg = FirstArg(macro, SUBMODE_ARG_IN);
 	if (arg != NULL) {
 		EnterBlock();
@@ -3083,22 +3115,42 @@ void ParseMacro(Var * macro)
 				ExitBlock();
 				break;
 			}
-			ParseExpression(arg);
+			if (!no_next_args) {
+				if (!NextIs(TOKEN_BLOCK_END)) {
+					ParseExpression(arg);
+				} else {
+					no_next_args = true;
+				}
+			}
 
+			val = NULL;
 			if (TOP > 0) {
-				args[i] = STACK[0];
+				val = PopTop();
+			} else {
+				val = arg->var;
+			}
+
+			if (val != NULL) {
+				args[i] = val;
 			} else {
 				ErrArg(arg);
 				ErrArg(macro);
-				SyntaxError("Missing argument [A] in call of macro [B]");
+				SyntaxError("Missing argument [B] in call of macro [A]");
 			}
 			arg = NextArg(macro, arg, SUBMODE_ARG_IN);
 			i++;
 		}
 	}
-	GenMacro(macro->instr, macro, args);
+*/
+	Var * args[32];
+
+	ParseArgs(macro, SUBMODE_ARG_IN, args);
+	if (TOK != TOKEN_ERROR) {
+		GenMacro(macro->instr, macro, args);
+	}
 }
 
+/*
 void ParseId()
 {
 	Var * var;		// may be global?
@@ -3123,7 +3175,7 @@ void ParseId()
 	}
 	ParseAssign(MODE_VAR, SUBMODE_EMPTY, NULL);
 }
-
+*/
 void ParseDeclarations(VarMode mode, VarSubmode submode)
 /*
 Purpose:
