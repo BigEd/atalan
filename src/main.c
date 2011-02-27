@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 
 	*VERBOSE_PROC = 0;
 
-//	StrCopy(VERBOSE_PROC, "shuffletiles");
+//	StrCopy(VERBOSE_PROC, "root");
 #ifdef DEBUG
 //	HeapUnitTest();
 #endif

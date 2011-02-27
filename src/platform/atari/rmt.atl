@@ -23,17 +23,13 @@ rmt_vars:struct
 	tmp:byte		
 	cmd2:byte ;may be optional (IFT FEAT_COMMAND2)
 	rmt_offset:card
-	
-;rmt_init:proc 
-;rmt_play:proc
-;rmt_silence:proc
 
 rmt_init:proc module@(_x,_y):adr track@_a @_a @_x @_y @rmt_vars
 rmt_play:proc @_a @_x @_y
 rmt_silence:proc @_a @_x @_y
 
-music'init:macro module:adr =
-	rmt_init module 0
+music'init:macro(module:adr track:byte = 0) =
+	rmt_init module track
 ;	_x = lo module
 ;	_y = hi module
 ;	_a = 0
@@ -41,8 +37,8 @@ music'init:macro module:adr =
 ;	instr call rmt_init
 
 music'play:macro =
-	instr call rmt_play
+	rmt_play
 
 music'off:macro =
-	instr call rmt_silence
+	rmt_silence
 		                          
