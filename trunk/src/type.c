@@ -496,10 +496,9 @@ Bool VarMatchesType(Var * var, Type * type)
 		if (vtype != NULL) {
 			// If variable is constant, the check is different
 			if (var->mode == MODE_CONST) {
-				if (vtype->variant == TYPE_INT) {
-					if (var->n < type->range.min) return false;
-					if (var->n > type->range.max) return false;
-				}
+				if (vtype->variant != TYPE_INT) return false;
+				if (var->n < type->range.min) return false;
+				if (var->n > type->range.max) return false;
 			} else if (var->mode == MODE_ELEMENT) {
 				// Specified variable is element, but the type is not array
 				if (type->variant != TYPE_ARRAY) return false;

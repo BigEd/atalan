@@ -158,7 +158,7 @@ have_char:
 	}
 
 	// If this is empty line, read next line.
-	// Character following whitespaces on empty line is either EOL, or semicolon (for coment lines).
+	// Character following whitespaces on empty line is either EOL, or semicolon (for comment lines).
 
 	if (b == EOL || b == ';') goto next_line;
 
@@ -188,7 +188,7 @@ have_char:
 	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) {
 		BLK[BLK_TOP].indent = indent;
 		// If the indent is smaller or equal than previous indented block, 
-		// this is empty indented block, and must be ended immediatelly.
+		// this is empty indented block, and must be ended immediately.
 		// We make sure following loop will end this block by making it's indent bigger than current indent.
 		if (indent <= BLK[BLK_TOP-1].indent) BLK[BLK_TOP].indent++; //BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
 	}
@@ -205,7 +205,7 @@ Bool Spaces()
 /*
 Purpose:
 	Return true, if no non-space character directly follows current token.
-	EOF is condidered space too (in the logic, that no text follows the token directly.
+	EOF is considered space too (in the logic, that no text follows the token directly.
 */
 {
 	int c;
@@ -239,19 +239,19 @@ void EnterBlockWithStop(Token stop_token)
 	} else if (TOK == TOKEN_EOL) {
 		end = TOKEN_OUTDENT;
 
-	// 4. We may be at the end of some block, in such case new block is empty (ends immediatelly)
+	// 4. We may be at the end of some block, in such case new block is empty (ends immediately)
 	} else if (TOK == TOKEN_BLOCK_END) {
 		end = TOKEN_BLOCK_END;
 		next_token = false;
 
 	// 5. For other tokens, this is line block
-	//    Line block may be alternativelly ended by stop_token.
+	//    Line block may be alternatively ended by stop_token.
 	} else {
 		end  = TOKEN_EOL;
 		stop = stop_token;
 		next_token = false;
 
-		// Block may be immediatelly terminated by stop token (may be empty)
+		// Block may be immediately terminated by stop token (may be empty)
 		// In such case, do not even create the block
 		if (TOK == stop_token) {
 			LINE_POS = TOKEN_POS;		// make sure the token is parsed again
@@ -297,7 +297,7 @@ static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "param", "instr", "times", "adr", "debug", "mod", "bitnot", "bitand", "bitor", "bitxor", "struct", "use", "ref", "step", "return",
-	"scope", "sequence"
+	"scope", "sequence", "assert"
 	
 };
 

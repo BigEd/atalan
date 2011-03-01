@@ -62,6 +62,9 @@
     <ClCompile Include="var_set.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="opt_loops.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common.h">

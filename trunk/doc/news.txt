@@ -3,6 +3,9 @@ News
 ****
 
 - NEW: Strings may contain expressions, not only variable names
+- NEW: Array assignments now handled at code generation level (making them subject to rule definitions)
+- NEW: autoexp.dat for Visual Studio 2010 (easier debugging of Atalan)
+- FIX: Error in values optimizer preventing some optimizations
 - FIX: Local variables in macros
 
 ===========
