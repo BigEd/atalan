@@ -16,7 +16,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include "language.h"
 
 void PrintExp(Exp * exp);
-Bool VarUsesVar(Var * var, Var * test_var);
 
 void ExpFree(Exp ** p_exp)
 {
@@ -52,8 +51,6 @@ void ResetValues()
 		ExpFree(&var->dep);		// TODO: Release the expression objects
 	NEXT_VAR
 }
-
-Bool VarUsesVar(Var * var, Var * test_var);
 
 void ResetValue(Var * res)
 /*
@@ -494,7 +491,7 @@ Bool VarIsZeroNonzero(Var * var, Var ** p_zero)
 /*
 Purpose:
 	Test, if variable may have just two values, 0 and some other.
-	This is basically true for 0..1 integers or enums with 0 and oother value.
+	This is basically true for 0..1 integers or enumerators with 0 and other value.
 */
 {
 	Type * t;
@@ -671,7 +668,7 @@ retry:
 								// Do not replace simple variable with array access
 								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									arg1 = src_i->arg1;
-									op   = src_op;
+//									op   = src_op;			//!!!!! What is this?????
 									m2 = true;
 								}
 							}
@@ -848,18 +845,6 @@ Purpose:
 			}
 		}
 	}
-}
-
-Bool VarIsFixed(Var * var)
-/*
-Purpose:
-	Test, that variable is on fixed location.
-	This means normal variable, argument or reference to array element with constant index.
-*/
-{
-	if (var->mode == MODE_VAR || var->mode == MODE_ARG) return true;
-	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) return true;		// access to constant array element
-	return false;
 }
 
 Bool OptimizeVarMerge(Var * proc)

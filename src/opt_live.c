@@ -36,29 +36,28 @@ Input:
 	Var * var2;
 	if (var == NULL) return;
 
-	// If this is array access variable, mark indices as live (used)
-
+	// Dereferencing reads the variable (even if it is used for writing at that address later)
 	if (var->mode == MODE_DEREF) {
 		VarMarkLive(var->var);
+
+	// Tuple just marks both variables in the same manner same
 	} else if (var->mode == MODE_TUPLE) {
 		VarMark(var->adr, state);
 		VarMark(var->var, state);
+
+	// If this is array access variable, mark indices as live (used)
 	} if (var->mode == MODE_ELEMENT) {
 
 		if (var->adr->mode == MODE_DEREF) {
 			VarMarkLive(var->adr);
 		}
-
-		// Reference uses the array variable
-//		if (var->submode == SUBMODE_REF) {
-//			VarMarkLive(var->adr);
-//		}
-			
+		
+		// Index used to access array is always live
 		VarMarkLive(var->var);
 
 		// Array references with variable indexes are always live
-
 		if (var->var->mode != MODE_CONST) state = VarLive;
+
 	} else {
 		// If variable is alias for some other variable, mark the other variable too
 		if (var->adr != NULL) {
@@ -68,16 +67,20 @@ Input:
 		}
 	}
 
-	var->flags = (var->flags & ~VarLive) | state;
+	// We will never mark output variable as dead
 
-	// Each element, which has this variable as an array is marked same
-	FOR_EACH_VAR(var2)
-		if (var2->mode == MODE_ELEMENT) {
-			if (var2->adr == var) {
-				var2->flags = (var2->flags & ~VarLive) | state;
+	if (FlagOff(var->submode, SUBMODE_OUT)) {
+		var->flags = (var->flags & ~VarLive) | state;
+
+		// Each element, which has this variable as an array is marked same
+		FOR_EACH_VAR(var2)
+			if (var2->mode == MODE_ELEMENT) {
+				if (var2->adr == var) {
+					var2->flags = (var2->flags & ~VarLive) | state;
+				}
 			}
-		}
-	NEXT_VAR
+		NEXT_VAR
+	}
 }
 
 // 0 dead
@@ -196,6 +199,7 @@ Bool OptimizeLive(Var * proc)
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		
+		// Compute total number of instructions in procedure, so we can report position of removed instruction
 		if (Verbose(proc)) {
 			n += blk_n;
 			blk_n = 0;
@@ -255,7 +259,7 @@ Bool OptimizeLive(Var * proc)
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
 							if (Verbose(proc)) {
-								printf("removed dead %ld:", n); InstrPrint(i);
+								printf("Removing dead %ld:", n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);
 							modified = true;
@@ -270,16 +274,8 @@ Bool OptimizeLive(Var * proc)
 			//      Result must be marked first dead first, to properly handle instructions like x = x + 1
 
 			if (result != NULL) {
-				// For reference, the adr is marked live, reference is not marked dead, as we may not know, what adr there is
-//				if (FlagOn(result->submode, SUBMODE_REF)) {
-//					VarMarkLive(result->adr);
-//				} else 
-				if (FlagOff(result->submode, SUBMODE_OUT)) {
+//				if (FlagOff(result->submode, SUBMODE_OUT)) {
 					VarMarkDead(result);
-				}
-				// Array indexes are marked live (even if value itself is marked dead)
-//				if (result->mode == MODE_ELEMENT) {
-//					VarMarkLive(result->var);
 //				}
 				result->src_i = NULL;			// next use
 			}

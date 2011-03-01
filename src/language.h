@@ -90,8 +90,8 @@ typedef enum {
 	TOKEN_RETURN,
 	TOKEN_SCOPE,
 	TOKEN_SEQUENCE,
-
-	TOKEN_LAST_KEYWORD = TOKEN_SEQUENCE,
+	TOKEN_ASSERT,
+	TOKEN_LAST_KEYWORD = TOKEN_ASSERT,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -591,6 +591,7 @@ Bool VarIsTmp(Var * var);
 Bool VarIsStructElement(Var * var);
 Bool VarIsArrayElement(Var * var);
 Bool VarIsReg(Var * var);
+Bool VarIsFixed(Var * var);
 
 UInt32 VarByteSize(Var * var);
 
@@ -768,6 +769,7 @@ void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
 void GenMacro(InstrBlock * code, Var * macro, Var ** args);
 void GenLastResult(Var * var);
+void GenArrayInit(Var * arr, Var * init);
 
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
@@ -876,15 +878,19 @@ void ProcCheck(Var * proc);
 *************************************************************/
 
 Bool VarUsesVar(Var * var, Var * test_var);
-Bool InstrUsesVar(Instr * i, Var * var);
 Int16 VarTestReplace(Var ** p_var, Var * from, Var * to);
 Int16 VarReplace(Var ** p_var, Var * from, Var * to);
+
+Bool InstrUsesVar(Instr * i, Var * var);
+Bool InstrSpill(Instr * i, Var * var);
+
 
 void ProcOptimize(Var * proc);
 void GenerateBasicBlocks(Var * proc);
 Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
 Bool OptimizeVarMerge(Var * proc);
+void OptimizeLoops(Var * proc);
 
 void OptimizeJumps(Var * proc);
 void DeadCodeElimination(Var * proc);

@@ -432,13 +432,6 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 {
 	Type * type = pattern->type;
 	Type * vtype = var->type;
-//	RuleArg * idx, * idx2;
-
-//	if (pattern->variant == RULE_ELEMENT) {
-//		if (!VarIsArrayElement(var)) return false;		// pattern expects element, and variable is not an element
-//		if (!ArgMatch(pattern->index, var->var)) return false;
-//		return ArgMatch(pattern->arr, var->adr);
-//	}
 
 	// Pattern expects reference to array with one or more indices
 	if (pattern->index != NULL) {
@@ -450,7 +443,6 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 			} else {
 				// 1D index
 				if (!ArgMatch(pattern->index, var->var, false)) return false;
-//				if (!VarMatchesType(var->adr, type)) return false;
 				return true;
 			}
 		} else {
@@ -793,6 +785,112 @@ Argument:
 	}
 }
 
+Int32 ByteMask(Int32 n)
+/*
+Purpose:
+	Return power of $ff ($ff, $ffff, $ffffff or $ffffffff) bigger than specified number.
+*/
+{
+	Int32 nmask;
+	nmask = 0xff;
+	while(n > nmask) nmask = (nmask << 8) | 0xff;
+	return nmask;
+}
+
+
+void GenArrayInit(Var * arr, Var * init)
+/*
+Purpose:
+	Generate array initialization loop.
+Arguments:
+	arr		Reference to array or array element or array slice
+*/
+{
+	Type * type, * src_type, * idx1_type;
+	Var * idx, * src_idx, * label, * range, * stop, * label_done;
+	Int32 nmask;
+	Int32 stop_n;
+	Var * min1, * max1, * src_min, * src_max;
+	Var * dst_arr;
+
+	src_idx = NULL;
+	type = arr->type;
+	label = VarNewTmpLabel();
+	idx1_type = NULL;
+
+	if (type->variant == TYPE_ARRAY) {
+		idx1_type = type->dim[0]	;
+	}
+
+	if (arr->mode == MODE_ELEMENT) {
+
+		// If this is array of array, we may need to initialize index variable differently
+		
+		if (arr->adr->mode == MODE_ELEMENT) {
+			idx1_type = arr->adr->type->dim[0];
+		} else if (arr->adr->mode == MODE_VAR) {
+			idx1_type = arr->adr->type->dim[0];
+		}
+
+		range = arr->var;
+		if (range->mode == MODE_RANGE) {
+			min1 = range->adr;
+			max1 = range->var;
+		} else {
+			min1 = arr->var;
+			max1 = VarNewInt(arr->adr->type->dim[0]->range.max);
+		}
+		dst_arr = arr->adr;
+	} else {
+		min1 = VarNewInt(type->dim[0]->range.min);
+		max1 = VarNewInt(type->dim[0]->range.max);
+		dst_arr = arr;
+	}
+
+	idx = VarNewTmp(0, idx1_type);
+
+	src_type = init->type;
+	
+	// This is copy instruction (source is array)
+	if (src_type->variant == TYPE_ARRAY) {		
+		src_min = VarNewInt(src_type->dim[0]->range.min);
+		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
+		src_idx = VarNewTmp(0, src_type->dim[0]);
+		init = VarNewElement(init, src_idx);
+		label_done = VarNewTmpLabel();
+	}
+
+	if (max1->mode == MODE_CONST) {
+		stop_n = max1->n;
+	
+		nmask = ByteMask(stop_n);
+		if (nmask == stop_n) {
+			stop_n = 0;
+		} else {
+			stop_n++;
+		}
+		stop = VarNewInt(stop_n);
+	} else {
+		stop = max1;
+	}
+
+	GenLet(idx, min1);
+	if (src_idx != NULL) {
+		GenLet(src_idx, src_min);
+	}
+	GenLabel(label);
+	GenLet(VarNewElement(dst_arr, idx), init);
+	if (src_idx != NULL) {
+		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
+		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
+	}
+	Gen(INSTR_ADD, idx, idx, VarNewInt(1));
+	Gen(INSTR_IFNE, label, idx, stop);
+	if (src_idx != NULL) {
+		GenLabel(label_done);
+	}
+}
+
 Var * VarReg(Var * var)
 /*
 Purpose:
@@ -820,7 +918,9 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 	} else {
 		// Find translating rule
 		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-			if (RuleMatch(rule, i)) break;
+			if (RuleMatch(rule, i)) {
+				break;
+			}
 		}
 
 		if (rule != NULL) {
@@ -844,7 +944,7 @@ Purpose:
 	Bool modified, untranslated;
 	UInt8 step = 0;
 	UInt32 ln;
-	Var * a = NULL;
+	Var * a = NULL, * var, * item;
 	Instr i2;
 
 	// As first step, we translate all variables on register address to actual registers
@@ -890,6 +990,16 @@ Purpose:
 						i2.arg1 = i->arg2;
 						i2.arg2 = i->arg1;
 						if (InstrTranslate(&i2, &modified)) goto next;
+					}
+
+					// Array assignment default
+					if (i->op == INSTR_LET) {
+						var = i->result;
+						item = i->arg1;
+						if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
+							GenArrayInit(var, item);
+							goto next;
+						}
 					}
 
 					// No emit rule nor rule for translating instruction found,

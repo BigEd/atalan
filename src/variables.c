@@ -813,3 +813,36 @@ Purpose:
 		InstrReplaceVar(blk, from, to);
 	}
 }
+
+Bool VarIsFixed(Var * var)
+/*
+Purpose:
+	Test, that variable is on fixed location.
+	This means normal variable, argument or reference to array element with constant index.
+*/
+{
+	if (var->mode == MODE_VAR || var->mode == MODE_ARG) return true;
+	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) return true;		// access to constant array element
+	return false;
+}
+
+Bool VarUsesVar(Var * var, Var * test_var)
+/*
+Purpose:
+	Return true, if the specified variable uses tested variable.
+	It may either be same, or use the tested variable as index into array etc.
+*/
+{
+	Bool uses = false;
+	if (var != NULL) {
+		if (var->mode == MODE_DEREF) {
+			uses = VarUsesVar(var->var, test_var);
+		} else if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE) {
+			uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+		} else {
+			uses = (var == test_var);
+		}
+	}
+	return uses;	
+}
+

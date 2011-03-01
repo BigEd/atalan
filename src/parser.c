@@ -1946,109 +1946,6 @@ Bool VarIsImplemented(Var * var)
 	return rule != NULL;
 }
 
-Int32 ByteMask(Int32 n)
-/*
-Purpose:
-	Return power of $ff ($ff, $ffff, $ffffff or $ffffffff) bigger than specified number.
-*/
-{
-	Int32 nmask;
-	nmask = 0xff;
-	while(n > nmask) nmask = (nmask << 8) | 0xff;
-	return nmask;
-}
-
-
-void GenArrayInit(Var * arr, Var * init)
-/*
-Purpose:
-	Generate array initialization loop.
-Arguments:
-	arr		Reference to array or array element or array slice
-*/
-{
-	Type * type, * src_type, * idx1_type;
-	Var * idx, * src_idx, * label, * range, * stop, * label_done;
-	Int32 nmask;
-	Int32 stop_n;
-	Var * min1, * max1, * src_min, * src_max;
-	Var * dst_arr;
-
-	src_idx = NULL;
-	type = arr->type;
-	label = VarNewTmpLabel();
-	idx1_type = NULL;
-
-	if (type->variant == TYPE_ARRAY) {
-		idx1_type = type->dim[0]	;
-	}
-
-	if (arr->mode == MODE_ELEMENT) {
-
-		// If this is array of array, we may need to initialize index variable differently
-		
-		if (arr->adr->mode == MODE_ELEMENT) {
-			idx1_type = arr->adr->type->dim[0];
-		}
-
-		range = arr->var;
-		if (range->mode == MODE_RANGE) {
-			min1 = range->adr;
-			max1 = range->var;
-		} else {
-			min1 = arr->var;
-			max1 = VarNewInt(arr->adr->type->dim[0]->range.max);
-		}
-		dst_arr = arr->adr;
-	} else {
-		min1 = VarNewInt(type->dim[0]->range.min);
-		max1 = VarNewInt(type->dim[0]->range.max);
-		dst_arr = arr;
-	}
-
-	idx = VarNewTmp(0, idx1_type);
-
-	src_type = init->type;
-	
-	// This is copy instruction (source is array)
-	if (src_type->variant == TYPE_ARRAY) {		
-		src_min = VarNewInt(src_type->dim[0]->range.min);
-		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
-		src_idx = VarNewTmp(0, src_type->dim[0]);
-		init = VarNewElement(init, src_idx);
-		label_done = VarNewTmpLabel();
-	}
-
-	if (max1->mode == MODE_CONST) {
-		stop_n = max1->n;
-	
-		nmask = ByteMask(stop_n);
-		if (nmask == stop_n) {
-			stop_n = 0;
-		} else {
-			stop_n++;
-		}
-		stop = VarNewInt(stop_n);
-	} else {
-		stop = max1;
-	}
-
-	GenLet(idx, min1);
-	if (src_idx != NULL) {
-		GenLet(src_idx, src_min);
-	}
-	GenLabel(label);
-	GenLet(VarNewElement(dst_arr, idx), init);
-	if (src_idx != NULL) {
-		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
-		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
-	}
-	Gen(INSTR_ADD, idx, idx, VarNewInt(1));
-	Gen(INSTR_IFNE, label, idx, stop);
-	if (src_idx != NULL) {
-		GenLabel(label_done);
-	}
-}
 
 Var * ParseAdr()
 /*
@@ -2531,9 +2428,9 @@ no_dot:
 									}
 
 									// Array assignment
-									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
-										GenArrayInit(var, item);
-									} else {
+//									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
+//										GenArrayInit(var, item);
+//									} else {
 										// If the result is stored into temporary variable, we may direct the result directly to the assigned variable.
 										// This can be done only if there is just one result.
 										// For multiple results, we can not use this optimization, as it is not last instruction, what generated the result.
@@ -2542,7 +2439,7 @@ no_dot:
 										} else {
 											GenLet(var, item);
 										}
-									}
+//									}
 								}
 								VarFree(item);
 							}
