@@ -1,9 +1,23 @@
+/*
+
+Common utilities
+
+Memory management, strings etc.
+
+(c) 2010 Rudolf Kudla 
+Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+*/
+
 #define OK 0
 
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
 #include <math.h>
+
+
+// Basic types
 
 typedef int Bool;
 typedef int Int16;
@@ -15,12 +29,16 @@ typedef unsigned char UInt8;
 #define true 1
 #define false 0
 
+// Memory management
+
 void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
 #define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
 #define MemFree(adr) free(adr)
 
 #define MemMove(dest, src, size) memmove(dest, src, size)
+
+// String management
 
 char * StrAlloc(char * str);
 char * StrAllocLen(char * str, UInt16 len);
@@ -29,7 +47,7 @@ Bool   StrEqual(char * str1, char * str2);
 Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #define StrLen(str) strlen(str)
 
-// All global variables are marked with this macro, so they may be easily searched
+// Flag (bit) testing and setting
 
 #define FlagOn(set, flag)  (((set) & (flag))!=0)
 #define FlagOff(set, flag)  (((set) & (flag))==0)
@@ -37,8 +55,10 @@ Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #define SetFlagOn(set, flag) set |= (flag)
 
 
-//GLOBAL is uset to mark global variables, so it is easy to find all of them
+//GLOBAL is used to mark global variables, so it is easy to find all of them
 #define GLOBAL
+
+// Asserts
 
 #ifndef ASSERT
 	#define ASSERT(x) if (!(x)) exit(-1)
@@ -53,17 +73,12 @@ Bool   StrEqualPrefix(char * str1, char * str2, int num);
 
 #define __UNIX__
 
-//#undef MADS_COMMAND
-//#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
-
 #undef DIRSEP
 #define DIRSEP '/'
 
-//WIDOWS
 #else
 
 #define __Windows__
-//#define MADS_COMMAND "mads \"%s.asm\" -o:\"%s.xex\" -x -l:\"%s.lst\""
 #define DIRSEP '\\'
 
 #endif

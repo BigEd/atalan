@@ -18,6 +18,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #endif
 
 void * MemAllocEmpty(long size)
+/*
+Purpose:
+	Allocate memory and set it to zeroes.
+*/
 {
 	void * m = malloc(size);
 	memset(m, 0, size);
