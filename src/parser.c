@@ -1620,7 +1620,7 @@ Syntax:
 
 	BeginBlock(TOKEN_FOR);
 	
-	// STEP can be only used if there was FOR
+	// STEP can be only used if we have the loop variable defined
 
 	if (var != NULL) {
 		if (NextIs(TOKEN_STEP)) {
@@ -2769,14 +2769,28 @@ Purpose:
 	String may contain variables enclosed in square braces.
 */
 {
-//	char * start, * end, c;
+
+/*
+	String generates following sections of code:
+
+	1. expressions used to calculate the string parameters 
+	2. call to string output routine
+	3. list of arguments
+	4. EOL (optional)
+	5. End of argument list
+*/
+
 	Var * var, * var2;
 	Bool no_eol;
 	UInt16 n;
 	InstrBlock * args;
 
-
 	do {
+
+		// We need to create list of argument instructions now, but generate it later
+		// Therefore we create instrblock and insert the argument instructions there.
+		// Later it gets generated to current code.
+
 		args =  MemAllocStruct(InstrBlock);
 		no_eol = false;
 		LINE_POS = TOKEN_POS+1;
@@ -2784,10 +2798,13 @@ Purpose:
 		while (TOK != TOKEN_ERROR) {
 			NextStringToken();
 			if (TOK == TOKEN_BLOCK_END) break;
+
+			// Constant string argument
 			if (TOK == TOKEN_STRING) {
 				var = VarNewStr(NAME);
 				var2 = VarNewInt(StrLen(NAME));
 				InstrInsert(args, NULL, INSTR_STR_ARG, NULL, var, var2);
+			// Expression argument (one or more expressions)
 			} else {
 				ASSERT(TOK == '[');
 				EnterBlock();
@@ -2795,49 +2812,25 @@ Purpose:
 				ASSERT(TOK == TOKEN_BLOCK_END);
 
 				for(n=0; n<TOP; n++) {
-					InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, STACK[n], NULL);
+
+					var = STACK[n];
+
+					// If the parsed value is element, we need to store it to temporary variable first.
+					// Otherwise the code to access the element would get generated into list of arguments.
+
+					if (var->mode == MODE_ELEMENT) {
+						var2 = VarAllocScopeTmp(NULL, MODE_VAR, var->adr->type->element);
+						GenLet(var2, var);
+						var = var2;
+					}
+					InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
 				}
 			}
 		}
 
 		GenBlock(call);
 		GenBlock(args);
-/*
-		start = end = NAME;
-		do {
-			c = *end;
-			if (c == L'[' || c == 0) {
 
-				// There is string part before variable or end of string
-				if (end != start) {
-					*end = 0;
-					var = VarNewStr(start);
-					var2 = VarNewInt(StrLen(start));
-					Gen(INSTR_STR_ARG, NULL, var, var2);
-				}
-
-				if (c == 0) break;
-				// Find ending square bracket
-				end++;
-				start = end;
-				while ((c = *end) && c != ']') end++;
-				*end = 0;
-
-				//TODO: Set the string as input source (enclose in parenthesis) - we may only set the position in line to token
-				//TODO: Parse expression
-				//TODO: Insert expression before the string (block for insertion should be passed to string parse routine)
-
-				var = VarFind2(start, 0);
-				if (var != NULL) {
-					Gen(INSTR_VAR_ARG, NULL, var, NULL);
-				} else {
-					SyntaxError("Variable not found");
-				}
-				start = end+1;
-			}
-			end++;
-		} while (TOK != TOKEN_ERROR);
-*/
 		if (TOK != TOKEN_ERROR) {
 			NextToken();
 		}
