@@ -142,19 +142,17 @@ Var * VarMacroArg(UInt8 i)
 	return MACRO_ARG_VAR[i];
 }
 
-/*
-*/
-
-void SetScope(Var * new_scope)
+Var * InScope(Var * new_scope)
 {
+	Var * scope;
+	scope = SCOPE;
 	SCOPE = new_scope;
+	return scope;
 }
 
-void EnterSubscope(Var * new_scope)
+void ReturnScope(Var * prev)
 {
-	new_scope->scope = SCOPE;
-	new_scope->instr = 0;
-	SCOPE = new_scope;
+	SCOPE = prev;
 }
 
 void ExitScope()
@@ -168,7 +166,8 @@ void EnterLocalScope()
 	SCOPE_IDX++;
 	var = VarAlloc(MODE_SCOPE, SCOPE_NAME, SCOPE_IDX);
 	var->type = TypeScope();
-	EnterSubscope(var);
+	var->scope = SCOPE;
+	SCOPE = var;
 }
 
 Var * VarFirst()
@@ -321,11 +320,10 @@ Var * FindOrAllocLabel(char * name, UInt16 idx)
 	proc = VarProcScope();
 	var = VarFindScope(proc, name, idx);
 	if (var == NULL) {
-		scope = SCOPE;
-		SCOPE = proc;
+		scope = InScope(proc);
 		var = VarNewLabel(name);
 		var->idx = idx;
-		SCOPE = scope;
+		ReturnScope(scope);
 	}
 	return var;
 }
@@ -419,6 +417,7 @@ Purpose:
 */
 {
 	Var * var;
+	printf("===== %s =======\n", scope->name);
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->scope == scope) {
 			PrintVar(var);
@@ -690,7 +689,7 @@ void VarResetRegUse()
 Bool VarIsReg(Var * var)
 /*
 Purpose:
-	Return true, if this variable is register or is stored in register(s).
+	Return true, if this variable is register or is stored in register(s).	
 */
 {
 	if (var == NULL) return false;
@@ -844,5 +843,22 @@ Purpose:
 		}
 	}
 	return uses;	
+}
+
+Var * VarReg(Var * var)
+/*
+Purpose:
+	Return register that is aliased by this variable or NULL.
+*/
+{
+	Var * reg;
+
+	reg = var;
+	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG) && reg->adr != NULL) {
+		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
+		reg = reg->adr;
+		if (reg->mode == MODE_TUPLE) return reg;
+	}
+	return var;
 }
 

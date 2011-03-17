@@ -168,8 +168,9 @@ rule let_adr %A:adr, %B:adr(%C:byte) = instr
 ;Optimizer may later change it to Y.
 
 rule let %A:byte1arr(const %B:byte),%C:byte  = instr
-  let _a,%C
-  let %A(%B),_a    ;with constant, we do not need to load index register X
+	let _a,%C
+	mul %Z, %B, %A.step
+	let %A(%Z),_a    ;with constant, we do not need to load index register X
 
 ;Access to low or high byte of card
 rule let %A:byte2(const %B:byte), %C:byte = instr
@@ -179,16 +180,20 @@ rule let %A:byte2(const %B:byte), %C:byte = instr
 ;Prevent compiler from generation extra code, when we are already assigning _a register.
 
 rule let _a,%A:byte1arr(%B:byte) = instr
-  let _x,%B 
-  let _a,%A(_x)
+	let _a, %B
+	mul _a, _a, %A.step
+	let _x,_a
+	let _a,%A(_x)
 
-rule let %A:byte1arr(%B:byte), _a = instr
-  let _x,%B 
-  let %A(_x),_a
+;rule let %A:byte1arr(%B:byte), _a = instr
+;  let _x,%B 
+;  let %A(_x),_a
 
 rule let %A:byte1arr(%B:byte),%C:byte1 = instr
+	let _a, %B
+	mul _a, _a, %A.step
+	let _x,_a
 	let _a,%C
-	let _x,%B
 	let %A(_x),_a
 
 ;Accessing one dimensional array using constant is optimized to direct access.
@@ -197,13 +202,15 @@ rule let %A:byte1,%B:byte1arr(const %C) = instr
 	let %A, _a
 	
 rule let %A:byte1,%B:byte1arr(%C:byte) = instr 
-	let _x,%C
+	let _a, %C
+	mul _a, _a, %B.step
+	let _x, _a
 	let _a,%B(_x)
 	let %A, _a
 
-rule let %A:byte1arr(%B:byte),%C:byte1arr(%D:byte) = instr 
-	let _a,%C(%D)
-	let %A(%B), _a
+;rule let %A:byte1arr(%B:byte),%C:byte1arr(%D:byte) = instr 
+;	let _a,%C(%D)
+;	let %A(%B), _a
 
 rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 	lo _a, %B(%D)
@@ -1761,21 +1768,27 @@ rule call %A = "jsr %A"
 ;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
 rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
+;This is definition of procedure, that can be used to output character
+system.printchar:proc chr@_a
+
+;system.out will send the data following the call to specified output routine. 
+system.print:proc printchar_proc@(_a,_x):adr @_stdbuf @_putchr_proc_adr @_y
+
 _std_print_out:proc @_stdbuf @_putchr_proc_adr @_a @_x @_y
 _std_print_adr:proc a@_arr:adr @_arr @_stdbuf @_putchr_proc_adr @_a @_x @_y
 
 std_print:macro = instr
 	call _std_print_out
-	ref _a
-	ref _x
-	ref _y
+;	ref _a
+;	ref _x
+;	ref _y
 
 std_format:macro a:adr = instr
 	let_adr _arr, a
 	call _std_print_adr
-	ref _a
-	ref _x
-	ref _y
+;	ref _a
+;	ref _x
+;	ref _y
 
 ;rule print     = instr
 ;	call std_print

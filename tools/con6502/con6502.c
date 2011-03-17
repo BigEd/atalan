@@ -27,6 +27,16 @@ typedef unsigned char UInt8;
 #define true 1
 #define false 0
 
+// We store output printed to screen in cyclic buffer.
+// When we print using assert instruction ($df), con6502 performs test, that output printed to screen
+// equals byte for byte to the output specified in assert.
+// If not, error is reported and execution ends.
+
+#define OUT_BUF_SIZE 4096
+UInt8 out_buf[OUT_BUF_SIZE];
+UInt16 out_buf_first = 0;
+UInt16 out_buf_last = 0;
+
 Bool   StrEqual(char * str1, char * str2)
 {
 	if (str1 == str2) return true;
@@ -43,6 +53,7 @@ M6502 cpu;
 byte mem[0xffff];
 word load_adr;
 Bool done;
+UInt16  result;
 
 void Wr6502(register word Addr,register byte Value)
 {
@@ -63,7 +74,18 @@ byte Loop6502(register M6502 *R)
 byte Patch6502(register byte Op,register M6502 *R)
 {
 	if (Op == 0xff) {
+		out_buf[out_buf_last++] = R->A;
+		if (out_buf_last == OUT_BUF_SIZE) out_buf_last = 0;
 		printf("%c", R->A);
+		return 1;
+	} else if (Op == 0xdf) {
+		if (out_buf[out_buf_first] != R->A) {
+			printf("*** Unexpected output\n");
+			done = true;
+			result = 3;
+		}
+		out_buf_first++;
+		if (out_buf_first == OUT_BUF_SIZE) out_buf_first = 0;
 		return 1;
 	} else if (Op == 0xef) {
 		done = true;
@@ -117,7 +139,7 @@ word LoadFile(char * Filename, word load_adr)
 		f = fopen(filename2, "rb");
 		if (f == NULL) {
 			fprintf(STDERR, "Failed to load file %s\n", Filename);
-			exit(-2);
+			exit(2);
 		}
 	}
 
@@ -130,7 +152,7 @@ word LoadFile(char * Filename, word load_adr)
 		size = fread(&mem[adr], 1, 0xffff - adr, f);
 	} else {
 		fprintf(STDERR, "Illegal file format\n");
-		exit(-2);
+		exit(2);
 	}
 	fclose(f);
 
@@ -141,6 +163,8 @@ int main(int argc, char *argv[])
 {
 	UInt8 i;
 	// filename -a load_addr
+
+	result = 0;
 
 	load_adr = 512;		// 0 page for variables, 1 page stack
 	i = 1;
@@ -172,5 +196,5 @@ int main(int argc, char *argv[])
 	done = false;
 	Run6502(&cpu);
 
-	return 0;
+	return result;
 }

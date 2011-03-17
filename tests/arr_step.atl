@@ -1,0 +1,20 @@
+type frequency:0..255
+type channel:0..3
+
+out freq@$1000:array(channel) step 2 of frequency
+
+in out z:0..3
+
+freq(0) = 50
+freq(1) = 13
+freq(2) = 19
+
+z = 3
+x = z		;we must make sure compiler looses track of the value
+freq(x) = 30
+
+
+for i:0..3 "[freq(i)] ",
+""
+
+assert "50 13 19 30 "

@@ -277,7 +277,7 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (StrEqualPrefix(s, "elemsize", 8)) {					// TODO: elem.size
+					if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {					// TODO: elem.size
 						s += 8;
 						if (var->type->variant == TYPE_ARRAY) {
 							n = TypeSize(var->type->element);
@@ -286,6 +286,15 @@ void EmitInstr2(Instr * instr, char * str)
 						}
 						EmitInt(n);
 						continue;
+					} if (StrEqualPrefix(s, "step", 4)) {					// TODO: step
+						s += 4;
+						n = 1;
+						if (var->type->variant == TYPE_ARRAY) {
+							n = var->type->step;
+						}
+						EmitInt(n);
+						continue;
+
 					} else if (StrEqualPrefix(s, "index.min", 9)) {
 						s += 9;
 						if (var->type->variant == TYPE_ARRAY) {

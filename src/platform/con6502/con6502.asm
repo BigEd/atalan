@@ -23,3 +23,17 @@ _out_putchr .proc
 
 .endp
 
+
+system__assert_printchar .proc
+;Check that the character from A has been written to output.
+
+		dta b($df)
+		rts
+
+.endp
+
+system__assert_print_asm .proc
+		lda #<system__assert_printchar
+		ldx #>system__assert_printchar
+		jmp system__print		
+.endp

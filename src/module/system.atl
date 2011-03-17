@@ -1,6 +1,10 @@
 ﻿;ATALAN Language system definition file
 ;This file is always loaded as fisrt file by compiler.
 
+;system scope is used to define variables used by Atalan system. 
+
+system:scope
+
 ;======================
 ;Processor instructions
 ;======================

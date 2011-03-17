@@ -69,8 +69,6 @@ wait'line:macro =
 
 in button'state:enum (pressed = 0, not'pressed = 1)
 in STRIG@644:array(0..3) of button'state		;Set to 1 when joystick button is not pushed, 0 if pushed
-;in STRIG0@644:button'state		;Set to 1 when joystick button is not pushed, 0 if pushed
-;in STRIG1@645:button'state
 
 type stick'state:enum (
 	left = 11
@@ -176,24 +174,6 @@ set'pmgbase:macro x:pmg.bitmap =
 init'pmgbase:macro =
 	set'pmgbase pmg.memory
 
-;out PMBASE@$D407:byte  
-
-;type PMG@1024:array(2048) 
-;type PMG_LOWRES@1024:array(1024)
-
-;type PMG@1024:array(0..127,-2..6)
-;There is unused memory at the beginning of the sprite array.
-
-;Player-missile graphics
-
-;out player_size@$d008:array(3) of byte
-;out player_x@$d000:array(3) of byte
-;out player_gfx@$d00d:array(3) of byte
-;out player_color@704:array(3) of color			;shadow (slow) color
-;out player_col2@$d012:array(3) of color
-
-;out missile_size@$d00c:byte
-;out missile_x@$d004:array(3) of byte
 
 out GRACTL@$d01d:0..255 (off = 0, missiles = 1, players = 2, trigger_latch = 4)
 
@@ -206,22 +186,24 @@ out SPRIOR@$26F, PRIOR@$D01B:0..255 (PLPF = 1, PFPL = 4, PL01PFPL23= 16, ONE'COL
 ;Sound
 ;*******************************
 
-;What we would like:
-;
-; sound(0).freq        = 100
-; sound(0).control     = 105   (volume + distortion + volume_only)
+audio:scope =
+	type frequency:0..255
+	type channel:0..3
+	type volume:0..15
 
-out AUDF1@$D200:byte   ; audio 1 freq.      
-out AUDC1@$D201:byte   ; audio 1 control    
-out AUDF2@$D202:byte   ; audio 2 freq.      
-out AUDC2@$D203:byte   ; audio 2 control    
-out AUDF3@$D204:byte   ; audio 3 freq.      
-out AUDC3@$D205:byte   ; audio 3 control    
-out AUDF4@$D206:byte   ; audio 4 freq.      
-out AUDC4@$D207:byte   ; audio 4 control    
+	out freq@$D200:array(channel) step 2 of frequency
+	out ctl@$d201:array(channel) step 2 of byte
 
-out AUDCTL@$D208:byte  ; audio control
-out SKCTL@$d20f:byte   ; audio control   
+	out control@$d20f:byte   ; audio control
+	
+sound:macro
+	channel: audio.channel 
+	freq: audio.frequency 
+	dist: 0..14 = 10 
+	volume: audio.volume = 8
+=
+	audio(channel).freq = freq
+	audio(channel).ctl = dist * 16 + volume
 
 
 ;Keyboard

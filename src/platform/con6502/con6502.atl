@@ -22,3 +22,14 @@ const BIN_EXTENSION = "c65"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:128..255   
+
+
+;Support for ASSERT "expected" command.
+
+;system.assert_printchar:system.printchar
+
+system.assert_print_asm:proc @_x @_a @_y
+
+system.print_assert:macro = instr call system.assert_print_asm
+
+	

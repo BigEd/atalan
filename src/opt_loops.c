@@ -71,32 +71,43 @@ void InstrVarLoopDependent(InstrBlock * code, InstrBlock * end)
 {
 	Instr * i;
 	Var * result;
-	UInt8 flags;
+	UInt16 flags;
+	Bool  modified;
 
 	InstrBlock * blk;
 	
-	for(blk = code; blk != end; blk = blk->next) {
-		for(i = blk->first; i != NULL; i = i->next) {
+	do {
+		modified = false;
 
-			if (i->op == INSTR_LINE) continue;
+		for(blk = code; blk != end; blk = blk->next) {
+			for(i = blk->first; i != NULL; i = i->next) {
 
-			flags = 0;
-			result = i->result;
-			if (result != NULL) {
-				if (i->op == INSTR_LET) {
-					result->flags &= ~(VarLoopDependent|VarLoop);
-					result->flags |= i->arg1->flags & (VarLoopDependent|VarLoop);
-				} else {
-					// Exclude self dependency
-					if (i->arg1 != NULL && i->arg1 != result) flags |= i->arg1->flags;
-					if (i->arg2 != NULL && i->arg2 != result) flags |= i->arg2->flags;
-					if (FlagOn(flags, VarLoop | VarLoopDependent)) {
-						result->flags |= VarLoopDependent;
+				if (i->op == INSTR_LINE) continue;
+
+				result = i->result;
+				if (result != NULL) {
+					if (FlagOff(result->flags, VarLoopDependent)) {
+						// In case of direct let, we want to distribute VarLoop flag too
+						if (i->op == INSTR_LET) {
+							flags = i->arg1->flags & (VarLoopDependent|VarLoop);
+							if (result->flags != (result->flags | flags)) {
+								result->flags |= flags;
+								modified = true;
+							}
+						} else {
+							flags = 0;
+							if (i->arg1 != NULL && i->arg1 != result) flags |= i->arg1->flags;
+							if (i->arg2 != NULL && i->arg2 != result) flags |= i->arg2->flags;
+							if (FlagOn(flags, VarLoop | VarLoopDependent)) {
+								result->flags |= VarLoopDependent;
+								modified = true;
+							}
+						}
 					}
 				}
 			}
 		}
-	}
+	} while(modified);
 }
 
 InstrBlock * FindLoopDominator(Var * proc, InstrBlock * header)
@@ -121,7 +132,7 @@ UInt32 NumberBlocks(InstrBlock * block)
 Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * reg, Bool * p_init)
 //===== Compute usage quotient (q)
 //      The bigger the value, the more suitable the register is
-//      0 means no gain, >0 means using the register would lead to worser code
+//      0 means no gain, >0 means using the register would lead to less optimal code
 {
 	Var * prev_var;
 	Int32 q, q1;
@@ -140,7 +151,7 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 								// this variable must be loaded, when instruction using the register is encountered
 								// (if it is not top_var)
 
-	// Compute usage coeficient
+	// Compute usage quotient
 	for(blk = header; blk != exit; blk = blk->next) {
 		for(i2 = blk->first, n2 = 0; i2 != NULL; i2 = i2->next, n2++) {
 
@@ -241,6 +252,93 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 	}
 done:
 	return q;
+}
+
+void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+
+	InstrBlock * blk;
+	Instr * i;
+
+	blk = FindLoopDominator(proc, header);
+
+	i = blk->last;
+
+	// Loops with condition at the beginning may start with jump to condition
+	// We need to insert the initialization code before this jump.
+
+	if (i->op == INSTR_GOTO) {
+		i = i->prev;
+	} else {
+		i = NULL;
+	}
+	InstrInsert(blk, i, op, result, arg1, arg2);
+}
+
+void OptimizeLoopInvariants(Var * proc, InstrBlock * header, InstrBlock * end)
+/*
+Purpose:
+	Move loop invariants before the loop.
+	Instruction is considered loop invariant if:
+
+	1. instruction is not jump
+	2. it has result
+	3. it's result is set exactly once in the loop (result->write == 1) 
+	4. it's result is not OUT
+	5. it's result is not loop dependent (meaning none of it's arguments is loop dependent)
+	6. none of it's arguments is IN
+	7. it's result is not live after the loop (this condition may be made weaker)
+	8. loop prologue does not end with jump instruction (it is not loop with condition at the beginning)
+*/
+{
+	InstrBlock * blk;
+	InstrBlock * exit, *  prologue;
+	Instr * i;
+	Var * result;
+	UInt32 n;
+
+//	printf("========== Invariants ================\n");
+//	PrintProc(proc);
+
+	prologue = NULL;
+	exit = end->next;
+
+	VarResetUse();
+	InstrVarUse(header, exit);
+	InstrVarLoopDependent(header, exit);
+	MarkBlockAsUnprocessed(proc->instr);
+
+	for(blk = header; blk != exit; blk = blk->next) {
+		i = blk->first; n=1;
+		while(i != NULL) {
+			if (i->op == INSTR_LINE) goto next;
+			result = i->result;
+			if (result != NULL && !VarIsLabel(result) && !OutVar(result) && result->write == 1) {
+				if ( (i->arg1 == NULL || (!InVar(i->arg1) && FlagOff(i->arg1->flags, VarLoop|VarLoopDependent)))
+					&& (i->arg2 == NULL || (!InVar(i->arg2) && FlagOff(i->arg2->flags, VarLoop|VarLoopDependent)))
+				) {
+
+					//TODO: There can be multiple exits!!!!
+					if (VarIsLiveInBlock(proc, exit, result) == 0) {
+						if (Verbose(proc)) {
+							printf("Moving loop invariant #%d/%d: ", blk->seq_no, n); InstrPrint(i);
+						}
+
+						//TODO: If there are multiple places we may have come from, or prologue is NULL we must insert new block
+						//TODO: Call should count use of arguments as read & write
+
+						LoopInsertPrologue(proc, header, i->op, i->result, i->arg1, i->arg2);
+						i = InstrDelete(blk, i);
+						continue;
+					}
+				}
+			}
+next:
+			i = i->next;
+			n++;
+		}
+	}
+
 }
 
 void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
@@ -346,6 +444,8 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		// We only do this, if the variable is not initialized inside the loop.
 		if (FlagOn(top_var->flags, VarUninitialized) || init) {
 
+			LoopInsertPrologue(proc, header, INSTR_LET, top_reg, top_var, NULL);
+/*
 			blk = FindLoopDominator(proc, header);
 
 			i2 = blk->last;
@@ -360,6 +460,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			}
 
 			InstrInsert(blk, i2, INSTR_LET, top_reg, top_var, NULL);
+*/
 			top_reg->var = top_var;		// to prevent using the register in subsequent steps
 		}
 		r = 0;
@@ -446,6 +547,7 @@ Purpose:
 				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
 			}
 			OptimizeLoop(proc, header, nb);
+//			OptimizeLoopInvariants(proc, header, nb);
 		}
 
 	}
