@@ -880,7 +880,7 @@ next:
 			if (op == INSTR_LET || op == INSTR_LET_ADR || op == INSTR_HI || op == INSTR_LO) {
 				result = i->result;
 				arg1   = i->arg1;
-				if (VarIsFixed(arg1) && i->next_use[1] == NULL) {
+				if (!OutVar(result) && VarIsFixed(arg1) && i->next_use[1] == NULL) {
 					for /*test*/ (i2 = i->prev; i2 != NULL; i2 = i2->prev) {
 
 						if (i2->op == INSTR_LINE) continue;

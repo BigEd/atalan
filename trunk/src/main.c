@@ -23,6 +23,7 @@ extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * CODE;
 Var * INTERRUPT;
 Var * MACRO_PRINT;
+Var * MACRO_ASSERT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 UInt8 OPTIMIZE;
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
 	UInt16 filename_len;
 	char * s;
 	Bool header_out;
+	Var * system_scope;
 
 	*VERBOSE_PROC = 0;
 
@@ -92,7 +94,7 @@ int main(int argc, char *argv[])
 	//  modules/
 	//		system.atl
 	//      ;platform independent modules
-	//  plaforms/
+	//  platforms/
 	//      atari/
 	//         ;platform dependent modules
 	//      c64/
@@ -203,8 +205,13 @@ int main(int argc, char *argv[])
 //	if (!Parse("m6502", false)) goto failure;
 	if (!Parse(PLATFORM, false)) goto failure;
 
-	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);
-	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);
+	system_scope = VarFindScope(&ROOT_PROC, "system", 0);
+
+	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
+	MACRO_ASSERT =  VarFindScope(system_scope, "print_assert", 0);
+
+	PrintScope(system_scope);
 
 	VarInitRegisters();
 
@@ -221,7 +228,7 @@ int main(int argc, char *argv[])
 //	HeapAddBlock(&VAR_HEAP, 128, 128);
 
 	// Parse the file. This also generates main body of the program (_ROOT procedure).
-	// TODO: Root procedure may be just specifal type of procedure.
+	// TODO: Root procedure may be just special type of procedure.
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
 
 	Gen(INSTR_PROLOGUE, NULL, NULL, NULL);
@@ -330,7 +337,7 @@ int main(int argc, char *argv[])
 
 	if (Verbose(NULL)) {
 
-		printf("==== Variables\n");
+		PrintHeader("Variables");
 
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			if (var->write >= 1) {
@@ -356,12 +363,9 @@ int main(int argc, char *argv[])
 	//     Argument is filename (without extension) of the compiled file.
 
 	result = 0;
-	if (assembler) {
-	
+	if (assembler) {	
 		PathMerge(path, PROJECT_DIR, filename);
-
 		var = VarFind("BIN_EXTENSION", 0);
-
 		EmitOpenBuffer(command);
 
 // On Windows, system command requires extra set of parentheses around whole command to correctly support
@@ -382,6 +386,6 @@ done:
    	exit(result);
 
 failure:
-	result = -2;
+	result = 2;
   	goto done;
 }

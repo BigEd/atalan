@@ -75,27 +75,30 @@ _TL1 = $70	;four byte register ($70-$73) defined under name _TEMPL1 in mc6502.at
 _std_print_adr .proc
 
 		lda #<_adr_putchr
-		sta _putchr_proc_adr
-		lda #>_adr_putchr
-		sta _putchr_proc_adr+1
+		ldx #>_adr_putchr
 		clc
-		bcc _std_print
+		bcc system__print
 		.endp
 		
 _std_print_out .proc
 		lda #<_out_putchr
-		sta _putchr_proc_adr
-		lda #>_out_putchr
-		sta _putchr_proc_adr+1
+		ldx #>_out_putchr
 		clc											;TODO: No Jump, if we are directly before the _std_print
-		bcc _std_print
+		bcc system__print
 		.endp
 
  .IF .NOT .DEF _EOL_CHAR
 		_EOL_CHAR equ 0
  .ENDIF
+
+system__print .proc
+		sta _putchr_proc_adr 
+		stx _putchr_proc_adr+1
 		
-_std_print	.proc
+		;... continue to _std_print
+;.endp
+		
+;_std_print	.proc
 
 		;Get address of argument from stack
 		pla

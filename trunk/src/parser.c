@@ -27,6 +27,16 @@ Syntax:
 #define MAX_VARS_COMMA_SEPARATED 100
 
 GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
+#define STACK_LIMIT 100
+Var *  STACK[STACK_LIMIT];
+UInt16 TOP;
+Type * RESULT_TYPE;
+int    G_TEMP_CNT;
+
+Type   EXP_TYPE;			// Type returned by expression
+							// Is modified as the expression gets generated
+
+void ParseExpRoot();
 
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
@@ -53,6 +63,30 @@ void ParseExpressionType(Type * result_type);
 Var * RULE_SCOPE;
 
 extern Var * LAST_VAR;
+
+Var * ParseScope()
+{
+	Bool spaces;
+	Var * var, * scope = NULL;
+	do {
+		if (scope != NULL) {
+			var = VarFindScope(scope, NAME, 0);
+		} else {
+			var = VarFind2(NAME, 0);
+		}
+
+		if (var == NULL || var->mode != MODE_SCOPE) break;
+		NextToken();
+
+		scope = var;
+		spaces = Spaces();
+		if (spaces || !NextIs(TOKEN_DOT)) {
+			SyntaxError("Expected . after scope name");
+		}
+	} while(1);
+
+	return scope;
+}
 
 void ParseVariable(Var ** p_var)
 /*
@@ -322,7 +356,7 @@ const_list:
 		}
 		
 		// If no dimension has been defined, use flexible array.
-		// This is possible only for constatnts now.
+		// This is possible only for constants now.
 
 		if (TOK) {
 			if (type->dim[0] == NULL) {
@@ -334,10 +368,30 @@ const_list:
 		}
 
 		if (TOK) {
+			if (NextIs(TOKEN_STEP)) {
+				ExpectExpression(NULL);
+				if (TOK) {
+					var = STACK[0];
+					if (var->mode == MODE_CONST && var->type->variant == TYPE_INT) {
+						type->step = var->n;
+					} else {
+						SyntaxError("Expected integer constant");
+					}
+				}
+			}
+		}
+
+		if (TOK) {
 			if (NextIs(TOKEN_OF)) {
 				type->element = ParseType();
 			} else {
 				type->element = TypeByte();
+			}
+		}
+
+		if (TOK) {
+			if (type->step == 0) {
+				type->step = TypeSize(type->element);
 			}
 		}
 
@@ -416,16 +470,6 @@ void PrintStack()
 *********************************************************************/
 //$E
 
-#define STACK_LIMIT 100
-Var *  STACK[STACK_LIMIT];
-UInt16 TOP;
-Type * RESULT_TYPE;
-int    G_TEMP_CNT;
-
-Type   EXP_TYPE;			// Type returned by expression
-							// Is modified as the expression gets generated
-
-void ParseExpRoot();
 
 void InstrBinary(InstrOp op)
 /*
@@ -860,32 +904,41 @@ indices:
 			NextToken();
 			if (!spaces) {
 				if (NextIs(TOKEN_DOT)) {
-					if (var->type->variant == TYPE_STRUCT) {
-						var = ParseStructElement(var);
+					if (var->mode == MODE_ARG) {
+						var = VarNewElement(var, VarNewStr(NAME));
+						NextToken();
 					} else {
-						if (TOK == TOKEN_ID) {
-							item = VarFindScope(var, NAME, 0);
+						if (var->type->variant == TYPE_STRUCT) {
+							var = ParseStructElement(var);
+						} else {
+							if (TOK == TOKEN_ID) {
+								item = VarFindScope(var, NAME, 0);
 
-							// If the element has not been found, try to match some built-in elements
+								// If the element has not been found, try to match some built-in elements
 
-							if (item == NULL) {
-								if (var->type->variant == TYPE_INT) {
-									if (StrEqual(NAME, "min")) {
-										item = VarNewInt(var->type->range.min);
-									} else if (StrEqual(NAME, "max")) {
-										item = VarNewInt(var->type->range.max);
+								if (item == NULL) {
+									if (var->type->variant == TYPE_INT) {
+										if (StrEqual(NAME, "min")) {
+											item = VarNewInt(var->type->range.min);
+										} else if (StrEqual(NAME, "max")) {
+											item = VarNewInt(var->type->range.max);
+										}
+									} else if (var->type->variant == TYPE_ARRAY) {
+										if (StrEqual(NAME, "step")) {
+											item = VarNewInt(var->type->step);
+										}
 									}
 								}
-							}
 
-							if (item != NULL) {
-								var = item;
-								NextToken();
+								if (item != NULL) {
+									var = item;
+									NextToken();
+								} else {
+									SyntaxError("$unknown item");
+								}
 							} else {
-								SyntaxError("$unknown item");
+								SyntaxError("variable name expected after .");
 							}
-						} else {
-							SyntaxError("variable name expected after .");
 						}
 					}
 
@@ -2044,13 +2097,14 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 void ParseProcBody(Var * proc)
 {
 	Var * lbl;
+	Var * scope;
 
 	if (proc->instr != NULL) {
 		SyntaxError("Procedure has already been defined");
 		return;
 	}
 
-	EnterSubscope(proc);
+	scope = InScope(proc);
 	InstrBlockPush();
 	ParseBlock();
 
@@ -2061,7 +2115,7 @@ void ParseProcBody(Var * proc)
 
 	proc->instr = InstrBlockPop();
 
-	ExitScope();
+	ReturnScope(scope);
 
 	// *** Register Arguments (2)
 	// As the first thing in a procedure, we must spill all arguments that are passed in registers
@@ -2141,20 +2195,13 @@ retry:
 			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
 			// Real mode is assigned when the variable type is parsed.
 			var->submode = submode;
-//			if (scope != NULL) {
-//				var->scope = scope;
-//			}
 		} else {
 			if (var->mode == MODE_SCOPE) {
 				NextToken();
 				scope = var;
 
-				if (NextIs(TOKEN_DOT)) {
-					goto retry;
-				} else {
-					goto no_dot;
-//					SyntaxError("Dot expected after scope name");
-				}
+				if (NextIs(TOKEN_DOT)) goto retry;
+				goto no_dot;
 			}
 		}
 		NextToken();
@@ -2217,15 +2264,12 @@ no_dot:
 		} else {
 			is_assign = true;
 
-			// Parsing may create new constants, arguments atc. so we must enter subscope, to assign the
+			// Parsing may create new constants, arguments etc. so we must enter subscope, to assign the
 			// type elements to this variable
-			scope = SCOPE;
-			SCOPE = var;
-//			EnterSubscope(var);
+			scope = InScope(var);
 			bookmark = SetBookmark();
 			type = ParseType2(mode);
-//			ExitScope();
-			SCOPE = scope;
+			ReturnScope(scope);
 		}
 	}
 
@@ -2233,6 +2277,13 @@ no_dot:
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
+
+		// If scope has not been explicitly defined, use current scope
+
+		if (var->scope == NULL) {
+			var->scope = SCOPE;
+		}
+
 		if (var->mode == MODE_UNDEFINED) {
 
 			var->mode = mode;
@@ -2321,9 +2372,9 @@ no_dot:
 			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
 				ParseProcBody(var);
 			} else if (typev == TYPE_SCOPE) {
-				EnterSubscope(var);
+				scope = InScope(var);
 				ParseBlock();
-				ExitScope();
+				ReturnScope(scope);
 			} else {
 
 				// Initialization of array
@@ -2521,9 +2572,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	Var * arg[3];
 	UInt8 n, arg_no;
 	InstrOp op;
-	Var * label;
+	Var * label, * scope;
 	char inc_path[MAX_PATH_LEN];
-
+	
 	op = ParseInstrOp();
 	if (TOK != TOKEN_ERROR) {
 		n = 0;
@@ -2544,14 +2595,22 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 		// 
 		} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
 			if (TOK == TOKEN_ID) {
-				label = VarFind2(NAME, 0);
-				if (label == NULL) {
-					label = VarNewLabel(NAME);
+				scope = ParseScope();
+				if (TOK) {
+					if (scope != NULL) {
+						label = VarFindScope(scope, NAME, 0);
+					} else {
+						label = VarFind2(NAME, 0);
+					}
+
+					if (label == NULL) {
+						label = VarNewLabel(NAME);
+					}
+					NextToken();
+					arg[0] = label;
+					n++;
+					goto next_arg;	//NextIs(TOKEN_COMMA);
 				}
-				NextToken();
-				arg[0] = label;
-				n++;
-				goto next_arg;	//NextIs(TOKEN_COMMA);
 			} else if (arg_no = ParseArgNo()) {
 				arg[0] = VarMacroArg(arg_no-1);
 				NextIs(TOKEN_COMMA);
@@ -3106,6 +3165,24 @@ Syntax: { [file_ref] }
 	}
 }
 
+void ParseAssert()
+{
+	NextIs(TOKEN_ASSERT);
+
+	if (TOK == TOKEN_STRING) {
+		if (MACRO_ASSERT != NULL) {
+			InstrBlockPush();
+			GenMacro(MACRO_ASSERT->instr, MACRO_PRINT, NULL);
+			ParseString(InstrBlockPop(), 0); 
+		} else {
+			SyntaxError("This platform does not support output asserts");
+		}
+	} else {
+		SyntaxError("Only string argument for assert supported now.");
+	}
+}
+
+
 void ParseCommands()
 {
 	VarSubmode submode;
@@ -3178,6 +3255,11 @@ void ParseCommands()
 		case TOKEN_DEBUG: 
 			NextToken(); 
 			Gen(INSTR_DEBUG, NULL, NULL, NULL); break;
+
+		case TOKEN_ASSERT:
+			ParseAssert();
+			break;
+
 		case TOKEN_EOL:
 			NextToken(); 
 //			if (G_DEPTH > 0) return;

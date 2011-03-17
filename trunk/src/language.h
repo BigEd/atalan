@@ -206,7 +206,6 @@ typedef struct TypeTag Type;
 typedef struct InstrTag Instr;
 typedef struct ExpTag Exp;
 typedef struct InstrBlockTag InstrBlock;
-//typedef struct InstrEnumTag InstrEnum;
 
 typedef enum {
 	TYPE_VOID = 0,
@@ -217,7 +216,7 @@ typedef enum {
 	TYPE_STRING,
 	TYPE_ARRAY,
 	TYPE_LABEL,		// label in code (all labels share same type
-	TYPE_ADR,		// adress (or reference) to 
+	TYPE_ADR,		// address (or reference)
 	TYPE_VARIANT,
 	TYPE_UNDEFINED,
 	TYPE_SCOPE
@@ -225,8 +224,8 @@ typedef enum {
 
 typedef struct {
 	Bool flexible;		// range has been fixed by user
-	long min;
-	long max;
+	Int32 min;
+	Int32 max;
 } Range;
 
 #define MAX_DIM_COUNT 2
@@ -244,6 +243,7 @@ struct TypeTag {
 		struct {
 			Type * dim[MAX_DIM_COUNT];		// array dimension types (integer ranges)
 			Type * element;
+			UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size.
 		};
 	};
 };
@@ -452,6 +452,7 @@ typedef enum {
 	INSTR_ELEMENT,			// access array element (left operand is array, right is index)
 	INSTR_LIST,				// create list of two elements
 	INSTR_DEREF,
+	INSTR_FIELD,			// access field of structure
 
 	INSTR_CNT
 } InstrOp;
@@ -557,9 +558,11 @@ void VarInitRegisters();
 Var * VarFirst();
 #define VarNext(v) (v)->next
 
-void SetScope(Var * new_scope);
+Var * InScope(Var * new_scope);
+void ReturnScope(Var * prev);
+
 void EnterLocalScope();
-void EnterSubscope(Var * new_scope);
+//void EnterSubscope(Var * new_scope);
 void ExitScope();
 
 Var * VarNewInt(long n);
@@ -591,7 +594,12 @@ Bool VarIsTmp(Var * var);
 Bool VarIsStructElement(Var * var);
 Bool VarIsArrayElement(Var * var);
 Bool VarIsReg(Var * var);
+Var * VarReg(Var * var);
 Bool VarIsFixed(Var * var);
+
+
+#define InVar(var)  FlagOn((var)->submode, SUBMODE_IN)
+#define OutVar(var) FlagOn((var)->submode, SUBMODE_OUT)
 
 UInt32 VarByteSize(Var * var);
 
@@ -704,7 +712,7 @@ struct InstrTag {
 	};
 
 	Instr * next_use[3];		// next use of result, arg1, arg2
-	UInt8 flags[3];		// live
+//	UInt8 flags2[3];		// live
 
 	Instr * next, * prev;
 };
@@ -884,6 +892,9 @@ Int16 VarReplace(Var ** p_var, Var * from, Var * to);
 Bool InstrUsesVar(Instr * i, Var * var);
 Bool InstrSpill(Instr * i, Var * var);
 
+UInt8 VarIsLiveInBlock(Var * proc, InstrBlock * block, Var * var);
+void MarkBlockAsUnprocessed(InstrBlock * block);
+
 
 void ProcOptimize(Var * proc);
 void GenerateBasicBlocks(Var * proc);
@@ -932,6 +943,7 @@ void EmitChar(char c);
 extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro
+extern Var * MACRO_ASSERT;		// Assert procedure
 extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
 extern Var * VARS;				// list of variables
 

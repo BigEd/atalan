@@ -261,6 +261,9 @@ void ProcOptimize(Var * proc)
 	OptimizeCombined(proc);
 	OptimizeLoops(proc);
 	OptimizeCombined(proc);
+//	OptimizeLoops(proc);
+//	OptimizeCombined(proc);
+
 }
 
 void ProcInline(Var * proc)

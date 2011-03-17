@@ -114,6 +114,7 @@ void InstrBlockFree(InstrBlock * blk)
 	}
 }
 
+
 Instr * InstrDelete(InstrBlock * blk, Instr * i)
 /*
 Purpose:
@@ -638,6 +639,38 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 	return NextArg(proc, proc, submode);
 }
 
+Var * VarField(Var * var, char * fld_name)
+/*
+Purpose:
+	Return property of variable.
+	Following properties are supported:
+
+	min
+	max
+	step
+*/
+{
+	Var * fld = NULL;
+	Type * type;
+	TypeVariant vtype;
+
+	type = var->type;
+	vtype = type->variant;
+
+	if (vtype == TYPE_INT) {
+		if (StrEqual(fld_name, "min")) {
+			fld = VarNewInt(type->range.min);
+		} else if (StrEqual(fld_name, "max")) {
+			fld = VarNewInt(type->range.max);
+		}
+	} else if (vtype == TYPE_ARRAY) {
+		if (StrEqual(fld_name, "step")) {
+			fld = VarNewInt(type->step);
+		}
+	}
+	return fld;
+}
+
 Var * FindArg(Var * macro, Var * var, Var ** args, VarSet * locals)
 /*
 Purpose:
@@ -659,11 +692,17 @@ Purpose:
 				var = VarNewDeref(arg);
 			}
 		} else if (var->mode == MODE_ELEMENT) {
-			arr = FindArg(macro, var->adr, args, locals);
-			arg = FindArg(macro, var->var, args, locals);	// index
 
-			if (arr != var->adr || arg != var->var) {
-				var = VarNewElement(arr, arg);
+			arr = FindArg(macro, var->adr, args, locals);
+
+			if (arr != var->adr && var->var->mode == MODE_CONST && var->var->type->variant == TYPE_STRING) {
+				var = VarField(arr, var->var->str);
+			} else {
+				arg = FindArg(macro, var->var, args, locals);	// index
+
+				if (arr != var->adr || arg != var->var) {
+					var = VarNewElement(arr, arg);
+				}
 			}
 		} else {
 
@@ -722,8 +761,10 @@ Argument:
 	for(i = code->first; i != NULL; i = i->next) {
 		op = i->op;
 		local_result = false;
-		// Macro may contain NOP instruction, we do not generate it to result
+		// Line instructions are not processed in any special way (TODO: We should mark them as macro generated)
 		if (op == INSTR_LINE) {
+
+		// Macro may contain NOP instruction, we do not generate it to result
 		} else if (op != INSTR_VOID) {
 
 			// Labels defined in macro are all local.
@@ -732,6 +773,7 @@ Argument:
 			result = i->result;
 			if (result != NULL) {
 
+				// %Z variable is used as forced local argument.
 				local_result = result->mode == MODE_ARG && result->idx == ('Z' - 'A' + 1);
 
 				if (result->mode != MODE_ARG && (i->op == INSTR_LABEL || IS_INSTR_JUMP(i->op))) {
@@ -889,23 +931,6 @@ Arguments:
 	if (src_idx != NULL) {
 		GenLabel(label_done);
 	}
-}
-
-Var * VarReg(Var * var)
-/*
-Purpose:
-	Return register that is aliased by this variable or NULL.
-*/
-{
-	Var * reg;
-
-	reg = var;
-	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG) && reg->adr != NULL) {
-		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
-		reg = reg->adr;
-		if (reg->mode == MODE_TUPLE) return reg;
-	}
-	return var;
 }
 
 Bool InstrTranslate(Instr * i, Bool * p_modified)
@@ -1298,11 +1323,7 @@ void InstrInit()
 
 	type = TypeAlloc(TYPE_PROC);
 
-//	ROOT_PROC = VarAlloc(MODE_VAR, "root", 0);
-//	ROOT_PROC->type = type;
-
 	ROOT_PROC_TYPE.variant = TYPE_PROC;
-//	ROOT_PROC_TYPE.members = NULL;
 
 	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
 	ROOT_PROC.name = "root";
@@ -1310,7 +1331,7 @@ void InstrInit()
 	ROOT_PROC.type = &ROOT_PROC_TYPE;
 	ROOT_PROC.instr = NULL;
 
-	SCOPE = &ROOT_PROC;
+	InScope(&ROOT_PROC);
 
 	for(op=0; op<INSTR_CNT; op++) {
 		RULES[op] = NULL;
