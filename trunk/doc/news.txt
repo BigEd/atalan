@@ -2,6 +2,13 @@
 News
 ****
 
+===========
+18-Mar-2011
+===========
+
+- NEW: default procedure and macro arguments 
+- NEW: tail call optimization
+- NEW: platform correctly parsed (there is no default Atari platform)
 - NEW: Automated tests
 - NEW: Padded arrays
 - NEW: Strings may contain expressions, not only variable names
