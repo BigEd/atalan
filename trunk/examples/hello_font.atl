@@ -1,4 +1,6 @@
-﻿;Define variable containing font, written in external file.
+﻿use atari
+
+;Define variable containing font, written in external file.
 const baloon:font = file "baloon.fnt"
 
 ;Set the font.

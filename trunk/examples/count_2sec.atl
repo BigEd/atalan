@@ -2,6 +2,8 @@
 ;
 ;On Atari 800 XL (Altirra emulator, PAL) this counts to 179704.
 
+use atari
+
 count:0..2'000'000
 
 "Counting 2 seconds..."

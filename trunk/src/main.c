@@ -22,6 +22,7 @@ extern Var  ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * CODE;
 Var * INTERRUPT;
+Var * SYSTEM_SCOPE;
 Var * MACRO_PRINT;
 Var * MACRO_ASSERT;
 Var * MACRO_FORMAT;
@@ -57,18 +58,33 @@ void ProcessUsedProc(void (*process)(Var * proc))
 	process(&ROOT_PROC);
 }
 
+void InitPlatform()
+/*
+Purpose:
+	This procedure is called after the platform file has been parsed.
+*/
+{
+	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
+	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
+
+	VarInitRegisters();
+}
+
 int main(int argc, char *argv[])
 {
 	Var * var, * data;
 	Type * type;
 	Int16 i;
 	Bool assembler = true;
+	Bool header = true;
 	int result = 0;
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 filename_len;
 	char * s;
 	Bool header_out;
 	Var * system_scope;
+	char * platform = NULL;
 
 	*VERBOSE_PROC = 0;
 
@@ -81,10 +97,12 @@ int main(int argc, char *argv[])
 
 	PrintColor(RED+GREEN+BLUE);
 
+	*PLATFORM = 0;
+
 	//TODO: Remove default platform
 	// Default platform is "atari"
 
-	strcpy(PLATFORM, "atari");
+//	strcpy(PLATFORM, "atari");
 
 	// System folder is parent directory of directory where the binary is stored
 	//
@@ -111,11 +129,11 @@ int main(int argc, char *argv[])
     // Check arguments.
     //
 
-	printf("Atalan programming language compiler (19-Feb-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
-
 	i = 1;
 	while (i < argc) {		
-		if (StrEqual(argv[i], "-V")) {
+		if (StrEqual(argv[i], "-V0")) {
+			header = false;
+		} else if (StrEqual(argv[i], "-V")) {
 			VERBOSE = true;
 		} else if (StrEqual(argv[i], "-A")) {
 			assembler = false;
@@ -142,12 +160,16 @@ int main(int argc, char *argv[])
 		} else if (StrEqual(argv[i], "-P")) {
 			i++;
 			if (i<argc) {
-				strcpy(PLATFORM, argv[i]);
+				platform = argv[i];
 			}
 		} else {
 			break;
 		}
 		i++;
+	}
+
+	if (header) {
+		printf("Atalan programming language compiler (19-Feb-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 	}
 
     if (i == argc) {
@@ -175,9 +197,6 @@ int main(int argc, char *argv[])
 	//==== Split dir and filename
 
 	PathSeparate(filename, PROJECT_DIR, filename);
-
-//	printf("Project dir: %s\n", PROJECT_DIR);
-
 	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
 
 	//===== Initialize
@@ -201,31 +220,14 @@ int main(int argc, char *argv[])
 	
 	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
-
-//	if (!Parse("m6502", false)) goto failure;
-	if (!Parse(PLATFORM, false)) goto failure;
-
 	system_scope = VarFindScope(&ROOT_PROC, "system", 0);
 
-	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
-	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
-	MACRO_ASSERT =  VarFindScope(system_scope, "print_assert", 0);
-
-	PrintScope(system_scope);
-
-	VarInitRegisters();
+	// If the platform has been specified as an argument, parse it
+	if (platform != NULL) {
+		if (!Parse(platform, false)) goto failure;
+	}
 
 	//TODO: Read the var heap definition from configuration
-
-	var = VarFindScope(&ROOT_PROC, "varheap", 0);
-	if (var != NULL) {
-		HeapAddType(&VAR_HEAP, var->type);
-//		HeapAddBlock(&VAR_HEAP, DATA_SEGMENT, DATA_SEGMENT_CAPACITY);
-	} else {
-		InternalError("Platform does not define varheap");
-		goto done;
-	}
-//	HeapAddBlock(&VAR_HEAP, 128, 128);
 
 	// Parse the file. This also generates main body of the program (_ROOT procedure).
 	// TODO: Root procedure may be just special type of procedure.
@@ -235,6 +237,19 @@ int main(int argc, char *argv[])
 	SYSTEM_PARSE = false;
 	if (!Parse(filename, true)) goto failure;
 	SYSTEM_PARSE = true;
+
+	if (*PLATFORM == 0) {
+		SyntaxError("No target platform defined");
+		goto failure;
+	}
+
+	var = VarFindScope(&ROOT_PROC, "varheap", 0);
+	if (var != NULL) {
+		HeapAddType(&VAR_HEAP, var->type);
+	} else {
+		InternalError("Platform does not define varheap");
+		goto done;
+	}
 
 	Gen(INSTR_EPILOGUE, NULL, NULL, NULL);
 
@@ -246,6 +261,9 @@ int main(int argc, char *argv[])
 
 	ROOT_PROC.instr = CODE;
 
+	VarUse();
+	ProcUse(&ROOT_PROC, 0);
+
 	// Now do extra checks in all procedures
 	// Some of the checks are postponed to have information from all procedures
 
@@ -253,7 +271,7 @@ int main(int argc, char *argv[])
 
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL) {
+		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL && var->read > 0) {
 			if (Verbose(var)) {
 				if (!header_out) {
 					PrintHeader("Parsed");
@@ -276,10 +294,6 @@ int main(int argc, char *argv[])
 		PrintProc(&ROOT_PROC);
 	}
 
-//	ProcessUsedProc(&ProcCheck);
-
-	VarUse();
-	ProcUse(&ROOT_PROC, 0);
 	if (ERROR_CNT > 0) goto failure;
 
 	VarUse();

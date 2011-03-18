@@ -4,6 +4,7 @@
 ;
 ;This version uses bit array so it can find primes up to $ffff.
 
+use atari
 out rtclock1@20:byte
 out rtclock2@19:byte
 

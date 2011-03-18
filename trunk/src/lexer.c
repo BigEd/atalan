@@ -654,59 +654,67 @@ void ParseStateGoto(ParseState * s)
 	}
 }
 
-FILE * FindFile2(char * name, char * ext, char * base_dir)
+FILE * FindFile2(char * base_dir, char * name, char * ext)
 {
-//	char path[MAX_PATH_LEN];
-
 	FILE * f = NULL;
-//	if (*base_dir != 0) {
-		strcpy(FILENAME, base_dir);
-		strcat(FILENAME, name);
-		strcat(FILENAME, ext);
-	    f = fopen(FILENAME, "rb");
-		if (f != NULL) {
-			strcpy(FILE_DIR, base_dir);
-		}
-//	}
+	strcpy(FILENAME, base_dir);
+	strcat(FILENAME, name);
+	strcat(FILENAME, ext);
+	f = fopen(FILENAME, "rb");
+	if (f != NULL) {
+		strcpy(FILE_DIR, base_dir);
+	}
 	return f;
 }
 
-void PlatformPath(char * path)
+void PlatformPath(char * path, char * name)
 {
 	char sep[2];
 	sep[0] = DIRSEP;
 	sep[1] = 0;
-	strcpy(path, SYSTEM_DIR);
-	strcat(path, "platform");
-	strcat(path, sep);
-	strcat(path, PLATFORM);
-	strcat(path, sep);
 }
 
-FILE * FindFile(char * name, char * ext)
+FILE * FindFile(char * name, char * ext, char * path)
 {
 	FILE * f;
 	char sep[2];
-	char path[MAX_PATH_LEN];
+//	char path[MAX_PATH_LEN];
 
 	sep[0] = DIRSEP;
 	sep[1] = 0;
 
+	*path = 0;
+
 	//%FILEDIR%
 
-	f = FindFile2(name, ext, FILE_DIR);
+	strcpy(path, FILE_DIR);
+	f = FindFile2(path, name, ext);
 
 	//%PROJDIR%/
 
 	if (f == NULL) {
-		f = FindFile2(name, ext, PROJECT_DIR);
+		strcpy(path, PROJECT_DIR);
+		f = FindFile2(path, name, ext);
 	}
 
 	// %SYSTEM%/platform/%PLATFORM%/
 
 	if (f == NULL) {
-		PlatformPath(path);
-		f = FindFile2(name, ext, path);
+		strcpy(path, SYSTEM_DIR);
+		strcat(path, "platform");
+		strcat(path, sep);
+		if (*PLATFORM != 0) {
+			strcat(path, PLATFORM);
+		} else {
+			strcat(path, name);
+		}
+		strcat(path, sep);
+		f = FindFile2(path, name, ext);
+		if (f != NULL) {
+			if (*PLATFORM == 0) {
+				strcpy(PLATFORM, name);
+			}
+		}
 	}
 
 	// %SYSTEM%/processor/%name%/
@@ -717,7 +725,7 @@ FILE * FindFile(char * name, char * ext)
 		strcat(path, sep);
 		strcat(path, name);
 		strcat(path, sep);
-		f = FindFile2(name, ext, path);
+		f = FindFile2(path, name, ext);
 	}
 
 	// %SYSTEM%/
@@ -726,7 +734,7 @@ FILE * FindFile(char * name, char * ext)
 		strcpy(path, SYSTEM_DIR);
 		strcat(path, "module");
 		strcat(path, sep);
-		f = FindFile2(name, ext, path);
+		f = FindFile2(path, name, ext);
 	}
 
 	return f;
@@ -747,48 +755,45 @@ Purpose:
 	char * filename;
 
 	// When parsing system files, use SYSTEM folder
-	if (!SYSTEM_PARSE) {
-		strcpy(path, PROJECT_DIR);
-	} else {
-		strcpy(path, SYSTEM_DIR);
-	}
-	path_len = StrLen(path);
-	filename = path + path_len;
-	strcat(filename, name);
-	strcat(filename, ".atl");
+	// Build the file name to compare for duplicity.
+	// Maybe we may try to use FindFile.
 
-	// Check, that files are not cyclic dependent
-	for(file_var = SRC_FILE; file_var != NULL; file_var = file_var->scope) {
-		if (StrEqual(file_var->name, filename)) {
-			ErrArg(file_var);
-			ErrArg(SRC_FILE);
-			SyntaxError("Modules [A] and [B] are trying to use each other.");
-			return false;
-		}
-	}
-
-	// If the file has been already loaded (variable with filename exists), 
-	// ignore the load request (do not however report error)
-
-	if (VarFind(filename, 0)) return false;
-
-	// Create new block for the file 
-	// File block is ended with TOKEN_EOF and starts with indent 0
-	BLK_TOP++;
-	BLK[BLK_TOP].end_token = TOKEN_EOF;
-	BLK[BLK_TOP].indent    = 0;
-	BLK[BLK_TOP].stop_token = TOKEN_VOID;
-
-	// Reference to file is stored in variable of MODE_SRC_FILE
-
-	file_var = VarAlloc(MODE_SRC_FILE, path + path_len, 0);
-	file_var->n    = 0;
-	file_var->scope = SRC_FILE;
-	SRC_FILE = file_var;
-
-	f = FindFile(name, ".atl");
+	f = FindFile(name, ".atl", path);
 
 	if (f != NULL) {
+		path_len = StrLen(path);
+		filename = path + path_len;
+		strcat(path, name);
+		strcat(filename, ".atl");
+
+		// Check, that files are not cyclic dependent
+		for(file_var = SRC_FILE; file_var != NULL; file_var = file_var->scope) {
+			if (StrEqual(file_var->name, filename)) {
+				ErrArg(file_var);
+				ErrArg(SRC_FILE);
+				SyntaxError("Modules [A] and [B] are trying to use each other.");
+				return false;
+			}
+		}
+
+		// If the file has been already loaded (variable with filename exists), 
+		// ignore the load request (do not however report error)
+
+		if (VarFind(filename, 0)) return false;
+
+		// Create new block for the file 
+		// File block is ended with TOKEN_EOF and starts with indent 0
+		BLK_TOP++;
+		BLK[BLK_TOP].end_token = TOKEN_EOF;
+		BLK[BLK_TOP].indent    = 0;
+		BLK[BLK_TOP].stop_token = TOKEN_VOID;
+
+		// Reference to file is stored in variable of MODE_SRC_FILE
+
+		file_var = VarAlloc(MODE_SRC_FILE, filename, 0);
+		file_var->n    = 0;
+		file_var->scope = SRC_FILE;
+		SRC_FILE = file_var;
 
 		file_var->parse_state = ParseStateLabel();
 
@@ -798,8 +803,6 @@ Purpose:
 		LINE_POS  = 0;
 		LINE_LEN  = 0;
 		LINE_INDENT = 0;
-//		LEX.filename = name;
-		//TODO: Remove LEX.filename
 		PREV_LINE = NULL;
 		TOK = TOKEN_EOL;
 

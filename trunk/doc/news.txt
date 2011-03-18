@@ -2,6 +2,8 @@
 News
 ****
 
+- NEW: Automated tests
+- NEW: Padded arrays
 - NEW: Strings may contain expressions, not only variable names
 - NEW: Array assignments now handled at code generation level (making them subject to rule definitions)
 - NEW: autoexp.dat for Visual Studio 2010 (easier debugging of Atalan)

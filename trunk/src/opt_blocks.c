@@ -136,15 +136,18 @@ void LinkBlocks(Var * proc)
 
 		if (IS_INSTR_JUMP(op)) {
 			label = i->result;
-			dst = label->instr;
+			// Jumps to other procedures are handled in a special way, as these are not normal jumps.
+			if (label->type->variant != TYPE_PROC) {
+				dst = label->instr;
 
-			if (op == INSTR_GOTO) {
-				nb->to = dst;
-			} else {
-				nb->cond_to = dst;
+				if (op == INSTR_GOTO) {
+					nb->to = dst;
+				} else {
+					nb->cond_to = dst;
+				}
+				nb->next_caller = dst->callers;
+				dst->callers = nb;
 			}
-			nb->next_caller = dst->callers;
-			dst->callers = nb;
 		}
 	}
 }
@@ -268,32 +271,31 @@ Purpose:
 */
 {
 	InstrBlock * blk, * blk_to;
-	Instr * i, * cond_i;
+	Instr * i, * cond_i, * last_i;
 	Var * label;
 
 	blk = proc->instr;
 	while (blk != NULL) {
 		blk_to = blk->to;
+		last_i = blk->last;
 
 		if (blk_to != NULL) {
 
 			// If there is NULL jump like:
-			//   jmp lab
+			//   goto lab
 			//   lab@
-			// remove the jmp.
+			// remove the goto.
 			// In such case, block we jump to is same as next block.
 
-			i = blk->last;
-			if (i != NULL) {
-				if (i->op == INSTR_GOTO) {
-					if (blk->to == blk->next) {
-						InstrDelete(blk, i);
+			if (last_i != NULL) {
+				if (last_i->op == INSTR_GOTO) {
+					if (blk->to == blk->next && blk->to != NULL) {
+						InstrDelete(blk, last_i);
 					}
 				}
 			}
 
-
-			i = FirstInstr(blk_to);		//for (i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
+			i = FirstInstr(blk_to);
 			cond_i = blk->last;
 
 			if (i != NULL && i->op == INSTR_GOTO) {
@@ -318,6 +320,18 @@ retry:
 				if (i != NULL && i->op == INSTR_GOTO && i->result != cond_i->result) {
 					cond_i->result = i->result;
 					goto retry;
+				}
+			}
+		// This is block with no continuation to other block.
+		// It means, it ends the procedure.
+		} else {
+
+			// call A   =>  goto A
+			// rts
+
+			if (last_i != NULL) {
+				if (last_i->op == INSTR_CALL) {
+					last_i->op = INSTR_GOTO;
 				}
 			}
 		}

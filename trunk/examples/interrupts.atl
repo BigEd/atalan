@@ -3,6 +3,8 @@
 ; Example on using Display List interrupts in Atalan.
 ; (c) 2010 Rudla Kudla
 
+use atari
+
 s@$8000:array(0..39,0..23) of byte
 
 ;24 lines of text, 4th line will execute DLI

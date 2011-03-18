@@ -25,7 +25,7 @@ type instrs:enum
 	ifle
 	ifoverflow
 	ifnoverflow
-		
+
 	prologue	;generated at the beggining of the program
 	epilogue	;generated at the end of programm
 	emit  		;emit string to output
@@ -42,11 +42,14 @@ type instrs:enum
 	
 	alloc
 	proc			;procedure entry
-	endproc		;procedure exit
+	return		;procedure exit
+	endproc		;mark end of procedure
 	call			;call procedure
+
 	var_arg
 	str_arg
 	data
+
 	file
 	align
 	org

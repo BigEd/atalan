@@ -80,6 +80,15 @@ Purpose:
 
 }
 
+void PrintOptim(char * text)
+{
+	UInt8 color;
+	color = PrintColor(GREEN);
+	Print(":");
+	Print(text);
+	PrintColor(color);
+}
+
 char * G_BUF;		// buffer to output
 
 void EmitOpenBuffer(char * buf)
@@ -428,6 +437,10 @@ Bool EmitProc(Var * proc)
 
 		result = EmitInstrBlock(blk);
 		if (!result) break;
+
+		if (blk->to == NULL && blk->last->op != INSTR_GOTO) {
+			EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
+		}
 	}
 	return result;
 }
@@ -527,7 +540,7 @@ Purpose:
 	Var * var;
 	Instr i;
 	FILE * f;
-	char name[MAX_PATH_LEN];
+	char name[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 len;
 
 	MemEmptyVar(i);
@@ -539,7 +552,7 @@ Purpose:
 				strcpy(name, var->name);
 				len = StrLen(name);
 				name[len-4] = 0;
-				f = FindFile(name, ".asm");
+				f = FindFile(name, ".asm", path);
 
 				if (f != NULL) {
 					fclose(f);

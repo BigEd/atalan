@@ -123,7 +123,7 @@ typedef struct {
 
 Bool SrcOpen(char * name);
 void SrcClose();
-FILE * FindFile(char * name, char * ext);
+FILE * FindFile(char * name, char * ext, char * path);
 
 extern char NAME[256];
 
@@ -159,8 +159,6 @@ extern char SYSTEM_DIR[MAX_PATH_LEN];
 char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
 char FILENAME[MAX_PATH_LEN];
 extern char PLATFORM[64];
-
-void PlatformPath(char * path);
 
 /*********************************************************
 
@@ -416,6 +414,7 @@ typedef enum {
 
 	INSTR_ALLOC,
 	INSTR_PROC,
+	INSTR_RETURN,
 	INSTR_ENDPROC,
 	INSTR_CALL,
 	INSTR_VAR_ARG,
@@ -729,15 +728,16 @@ For instructions, where arg1 or arg2 = result, source points to instruction, tha
 
 struct InstrBlockTag {
 
-	InstrBlock * next;			//  Blocks are linked in chain, so we can traverse them as required.
-	UInt32 seq_no;
+	InstrBlock * next;			// Blocks are linked in chain, so we can traverse them as required.
+								// This is normally in order, in which the blocks were parsed.
+	UInt32 seq_no;				// Block sequence number. It is used to determine order of blocks when detecting loops.
 
-	InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, this is last block in the procedure)
-	InstrBlock * cond_to;		// last instruction conditionaly jumps to this block
+	InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, we leave the routine after the last instruction in the block)
+	InstrBlock * cond_to;		// last instruction conditionally jumps to this block if the condition if true
 
 	InstrBlock * from;			// we may come to this block from here
 
-	InstrBlock * callers;		// list of blocks calling this block (excluding prev)
+	InstrBlock * callers;		// list of blocks calling this block (excluding from)
 	InstrBlock * next_caller;	// next caller in the chain
 
 	InstrBlock * loop_end;
@@ -753,8 +753,6 @@ void InstrPrintInline(Instr * i);
 
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
-
-//void InstrFree(Instr * i);
 
 Var * InstrFind(char * name);
 
@@ -923,6 +921,7 @@ void ProcInline(Var * proc);
 #define LIGHT 8
 UInt8 PrintColor(UInt8 color);
 void PrintHeader(char * text);
+void PrintOptim(char * text);
 
 Rule * EmitRule(Instr * instr);
 Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
@@ -939,7 +938,10 @@ void EmitOpenBuffer(char * buf);
 void EmitCloseBuffer();
 void EmitChar(char c);
 
+extern Var   ROOT_PROC;
+
 //extern Bool VERBOSE;
+void InitPlatform();
 extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro
