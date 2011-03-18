@@ -3,6 +3,8 @@
 ;(c) 2010 Rudla Kudla
 
   
+use atari
+
 RTCLOCK@20:byte
 
 const SQRT_COUNT = 91

@@ -1977,7 +1977,7 @@ Bool VarIsImplemented(Var * var)
 
 	if (var->type == NULL) return true;
 
-	// Type declarations do not need to be implementd
+	// Type declarations do not need to be implemented
 	// (we think of them as being implemented by compiler).
 
 	if (var->mode == MODE_TYPE) return true;
@@ -2393,10 +2393,17 @@ no_dot:
 					if (TOK == TOKEN_STRING) {
 						// We may assign strings to array references
 						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
-							// Call format routine (set address argument)
-							InstrBlockPush();
-							GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
-							ParseString(InstrBlockPop(), STR_NO_EOL);
+//							if (MACRO_FORMAT == NULL) {
+//								MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
+//							}
+							if (MACRO_FORMAT != NULL) {
+								// Call format routine (set address argument)
+								InstrBlockPush();
+								GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
+								ParseString(InstrBlockPop(), STR_NO_EOL);
+							} else {
+								SyntaxError("printing into array not supported by the platform");
+							}
 						} else if (var->mode == MODE_CONST) {
 							VarLetStr(var, NAME);
 							NextToken();
@@ -2765,6 +2772,8 @@ void ParseRule()
 	rule->line_no = LINE_NO;
 	rule->file    = SRC_FILE;
 
+	SYSTEM_PARSE = true;
+
 	// Parse three parameters
 
 	for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
@@ -2803,7 +2812,7 @@ void ParseRule()
 						}
 					} while (c != 0);
 
-					Gen(INSTR_EMIT, NULL, VarNewStr(buf), NULL);
+					InternalGen(INSTR_EMIT, NULL, VarNewStr(buf), NULL);
 
 					NextToken();
 				} while (TOK == TOKEN_STRING);
@@ -2818,6 +2827,7 @@ void ParseRule()
 	if (TOK != TOKEN_ERROR) {
 		RuleRegister(rule);
 	}
+	SYSTEM_PARSE = true;
 	
 }
 
@@ -3172,7 +3182,7 @@ void ParseAssert()
 	if (TOK == TOKEN_STRING) {
 		if (MACRO_ASSERT != NULL) {
 			InstrBlockPush();
-			GenMacro(MACRO_ASSERT->instr, MACRO_PRINT, NULL);
+			GenMacro(MACRO_ASSERT->instr, MACRO_ASSERT, NULL);
 			ParseString(InstrBlockPop(), 0); 
 		} else {
 			SyntaxError("This platform does not support output asserts");
@@ -3230,9 +3240,16 @@ void ParseCommands()
 			break;
 
 		case TOKEN_STRING: 
-			InstrBlockPush();
-			GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
-			ParseString(InstrBlockPop(), 0); 
+//			if (MACRO_PRINT == NULL) {
+//				MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+//			}
+			if (MACRO_PRINT != NULL) {
+				InstrBlockPush();
+				GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
+				ParseString(InstrBlockPop(), 0); 
+			} else {
+				SyntaxError("Print is not supported by the platform");
+			}
 			break;
 
 		case TOKEN_ID:
@@ -3274,13 +3291,19 @@ extern UInt8      BLK_TOP;
 
 Bool Parse(char * name, Bool main_file)
 {
+	Bool no_platform;
+
 	G_TEMP_CNT = 1;
+	no_platform = (*PLATFORM == 0);
 	if (SrcOpen(name)) {
 		if (main_file) {
 			SRC_FILE->submode = SUBMODE_MAIN_FILE;
 		}
 		ParseCommands();
 		if (TOK != TOKEN_ERROR) {
+			if (no_platform  && *PLATFORM != 0) {
+				InitPlatform();
+			}
 			if (TOK == TOKEN_BLOCK_END) {
 //				if (BLK_TOP > 1) {
 //					SyntaxError("Unended blocks at the end of file");

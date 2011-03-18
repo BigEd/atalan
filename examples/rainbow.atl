@@ -1,6 +1,8 @@
 ﻿;ATALAN Example program
 ;Author: Rudla Kudla
 
+use atari
+
 out COL'BK@$d01a:byte
 out COL'PF0@$D016:byte
 out COL'PF1@$D017:byte

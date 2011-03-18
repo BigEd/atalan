@@ -2,6 +2,8 @@
 ; Tetris implemented in ATALAN Programming language
 ; (c) 2010 Rudla Kudla
 
+use atari
+
 ;Screen and DISPLAY LIST
 
 ;This if GR.0 screen 40 characters width and 24 characters height
