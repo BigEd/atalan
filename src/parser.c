@@ -2827,7 +2827,7 @@ void ParseRule()
 	if (TOK != TOKEN_ERROR) {
 		RuleRegister(rule);
 	}
-	SYSTEM_PARSE = true;
+	SYSTEM_PARSE = false;
 	
 }
 

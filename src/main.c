@@ -88,7 +88,6 @@ int main(int argc, char *argv[])
 
 	*VERBOSE_PROC = 0;
 
-//	StrCopy(VERBOSE_PROC, "root");
 #ifdef DEBUG
 //	HeapUnitTest();
 #endif
@@ -98,11 +97,6 @@ int main(int argc, char *argv[])
 	PrintColor(RED+GREEN+BLUE);
 
 	*PLATFORM = 0;
-
-	//TODO: Remove default platform
-	// Default platform is "atari"
-
-//	strcpy(PLATFORM, "atari");
 
 	// System folder is parent directory of directory where the binary is stored
 	//
@@ -169,7 +163,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (header) {
-		printf("Atalan programming language compiler (19-Feb-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+		printf("Atalan programming language compiler (18-Mar-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 	}
 
     if (i == argc) {
