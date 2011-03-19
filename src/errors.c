@@ -45,17 +45,27 @@ GLOBAL Var * ERR_ARGS[MAX_ERR_ARG_COUNT];
 static UInt8 ERR_ARG_POS;
 
 static void ReportError(char * kind, char * text, UInt16 bookmark)
+/*
+	text	Text of error message
+			If the first character is >, indent will be visualized and column will not be shown
+*/
 {
 	UInt16 i, token_pos, indent, line_cnt;
 	char c, * t, * n;
 	char * line;
 	char buf[2048];
 	char * o;
-	Var * var;
-	
+	Var * var;	
 	Bool name = false;
+	Bool show_indent = false;
+
 	if (*text == '$') {
 		name = true;
+		text++;
+	}
+
+	if (*text == '>') {
+		show_indent = true;
 		text++;
 	}
 
@@ -68,6 +78,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 	line_cnt = 0;
 	PrintColor(RED);
+
 	if (SRC_FILE != NULL) {
 		indent = fprintf(STDERR, "%s(%d) %s error: ", SRC_FILE->name, i, kind);
 	} else {
@@ -138,24 +149,30 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	if (line != NULL) {
 
 		while(*line == SPC || *line == TAB) {
+			if (show_indent) {
+				if (*line == SPC) printf(".");
+				if (*line == TAB) printf("->|");
+			}
 			line++;
 			if (token_pos > 0) token_pos--;
 		}
 
 		fprintf(STDERR, "%s", line);
 
-		if (token_pos > 0) {
-			for(i=0; i<token_pos; i++) {
-				c = line[i];
-				if (c != 9) c = 32;
-				fprintf(STDERR, "%c", c);
+		if (!show_indent) {
+			if (token_pos > 0) {
+				for(i=0; i<token_pos; i++) {
+					c = line[i];
+					if (c != 9) c = 32;
+					fprintf(STDERR, "%c", c);
+				}
+				// There can be some spaces or tabs before at the token pos
+				while((c = line[i]) == SPC || c == TAB) {
+					fprintf(STDERR, "%c", c);
+					i++;
+				}
+				fprintf(STDERR, "^\n");
 			}
-			// There can be some spaces ot tabs before at the token pos
-			while((c = line[i]) == SPC || c == TAB) {
-				fprintf(STDERR, "%c", c);
-				i++;
-			}
-			fprintf(STDERR, "^\n");
 		}
 	}
 	PrintColor(RED+GREEN+BLUE);

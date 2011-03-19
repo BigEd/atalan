@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (header) {
-		printf("Atalan programming language compiler (18-Mar-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+		printf("Atalan programming language compiler (19-Mar-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 	}
 
     if (i == argc) {

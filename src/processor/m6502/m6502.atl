@@ -1045,7 +1045,7 @@ rule mul %A:card, %B:card, %C:card = instr
 
 ;*********** Square root
 
- _sys_sqrt16:proc a@_TEMPW1 >r@_a 
+_sys_sqrt16:proc a@_TEMPW1 >r@_a 
 
 rule sqrt %A:card, %B:card = instr
 	let _TEMPW1, %B
