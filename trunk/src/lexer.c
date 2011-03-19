@@ -84,7 +84,7 @@ Result:
 */
 {
 	int b, b2;
-	LineIndent indent;
+	LineIndent indent, prev_indent;
 	UInt16 tabs, spaces;
 	Bool mixed_spaces;
 	UInt16 top;
@@ -183,6 +183,27 @@ have_char:
 			}
 		}
 		return false;
+	}
+
+	// The indent on this line is smaller than indent of previous block
+
+	top = BLK_TOP;
+	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) top--;
+	if (indent < BLK[top].indent) {
+		prev_indent = BLK[top].indent;
+		while(top > 0) {
+			if (BLK[top].indent == indent) break;		// this is O.K., we found the same indent
+			// We haven't encountered same indent and this indent is already bigger than our indent
+			// We have no chance of finding the same indent
+			top--;
+		}
+		if (top == 0) {
+			if (indent < 256 && (prev_indent % 256) == 0) {
+				SyntaxError(">Invalid indent (previous indent is made of tabs, this one of spaces)");
+			} else {
+				SyntaxError(">Invalid indent");
+			}
+		}
 	}
 
 	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) {
