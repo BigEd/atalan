@@ -359,6 +359,10 @@ rule let (%A:byte1, %B:byte1), (%C:byte1, %D:byte1)  = instr
 	let %A, %C
 	let %B, %D
 
+rule let_adr (%A:byte1, %B:byte1), %D = instr
+  let_adr %A, %D(0)
+  let_adr %B, %D(1)
+ 
 ;Extracting lower/higher part of tuple
 
 rule lo _a, (%A:byte1, %B) = instr let _a, %A
@@ -1343,6 +1347,10 @@ rule ifeq %A,%B:byte,%C:byte   = instr
   sub _void, _a, %C   ; cmp %C
   ifeq %A, _z, 1      ; jeq %A
 
+rule ifne %A,_a,%C:byte   = instr
+  sub _void, _a, %C   ; cmp %C
+  ifne %A, _z, 1      ; jne %A
+
 rule ifne %A,%B:byte,%C:byte   = instr
   let _a, %B          ; lda %A
   sub _void, _a, %C   ; cmp %C
@@ -1780,16 +1788,10 @@ _std_print_adr:proc a@_arr:adr @_arr @_stdbuf @_putchr_proc_adr @_a @_x @_y
 
 std_print:macro = instr
 	call _std_print_out
-;	ref _a
-;	ref _x
-;	ref _y
 
 std_format:macro a:adr = instr
 	let_adr _arr, a
 	call _std_print_adr
-;	ref _a
-;	ref _x
-;	ref _y
 
 ;rule print     = instr
 ;	call std_print

@@ -817,7 +817,9 @@ Purpose:
 		}
 	} else {
 		BLK_TOP--;
-		InternalError("could not open file: %s",path);
+		strcpy(path, name);
+		strcat(path, ".atl");
+		InternalError("could not open file: %s", path);
 		return false;
     }
 	return true;

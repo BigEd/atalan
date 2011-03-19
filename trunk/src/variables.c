@@ -73,6 +73,7 @@ Var * VarNewTuple(Var * left, Var * right)
 	}
 
 	var = VarAlloc(MODE_TUPLE, NULL, 0);
+	var->type = TypeTuple();
 	var->adr = left;
 	var->var = right;
 	return var;
