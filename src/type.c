@@ -15,6 +15,7 @@ GLOBAL Type TSTR;
 GLOBAL Type TLBL;
 GLOBAL Type TBYTE;		//0..255
 GLOBAL Type TSCOPE;
+GLOBAL Type TTUPLE;
 
 Type * TypeAlloc(TypeVariant variant)
 {
@@ -299,6 +300,11 @@ Type * TypeScope()
 	return &TSCOPE;
 }
 
+Type * TypeTuple()
+{
+	return &TTUPLE;
+}
+
 Var * NextItem(Var * scope, Var * arg, VarSubmode submode)
 {
 	Var * var = arg->next;
@@ -417,6 +423,10 @@ void TypeInit()
 	TLBL.owner     = NULL;
 
 	TSCOPE.variant = TYPE_SCOPE;
+	TSCOPE.base    = NULL;
+	TSCOPE.owner   = NULL;
+
+	TTUPLE.variant = TYPE_TUPLE;
 	TSCOPE.base    = NULL;
 	TSCOPE.owner   = NULL;
 }

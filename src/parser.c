@@ -3158,7 +3158,7 @@ void ParseUseFile()
 	}
 
 	Parse(NAME, false);
-	NextToken();
+	if (TOK != TOKEN_ERROR) NextToken();
 }
 
 void ParseUse()
@@ -3240,12 +3240,13 @@ void ParseCommands()
 			break;
 
 		case TOKEN_STRING: 
-//			if (MACRO_PRINT == NULL) {
-//				MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
-//			}
 			if (MACRO_PRINT != NULL) {
 				InstrBlockPush();
-				GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
+				if (MACRO_PRINT->type->variant == TYPE_MACRO) {
+					GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
+				} else {
+					Gen(INSTR_CALL, MACRO_PRINT, NULL, NULL);
+				}
 				ParseString(InstrBlockPop(), 0); 
 			} else {
 				SyntaxError("Print is not supported by the platform");

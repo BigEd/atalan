@@ -298,6 +298,9 @@ txt_file "platform_c64.txt"
 $stdout = File.new($proj_folder + 'www/con6502.html', 'w')
 txt_file "platform_con6502.txt"
 
+$stdout = File.new($proj_folder + 'www/sim6502.html', 'w')
+txt_file "platform_sim6502.txt"
+
 $stdout = File.new($proj_folder + 'www/news.html', 'w')
 txt_file "news.txt"
 

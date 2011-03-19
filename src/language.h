@@ -216,6 +216,7 @@ typedef enum {
 	TYPE_LABEL,		// label in code (all labels share same type
 	TYPE_ADR,		// address (or reference)
 	TYPE_VARIANT,
+	TYPE_TUPLE,
 	TYPE_UNDEFINED,
 	TYPE_SCOPE
 } TypeVariant;
@@ -520,6 +521,7 @@ Type * TypeCopy(Type * base);
 Type * TypeByte();
 Type * TypeLongInt();
 Type * TypeScope();
+Type * TypeTuple();
 
 UInt16 TypeItemCount(Type * type);
 void TypeLimits(Type * type, Var ** p_min, Var ** p_max);

@@ -64,7 +64,11 @@ Purpose:
 	This procedure is called after the platform file has been parsed.
 */
 {
-	MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+	MACRO_PRINT  = VarFindScope(SYSTEM_SCOPE, "print_scr", 0);			// TODO: Screen print
+	if (MACRO_PRINT == NULL) {
+		MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+	}
+
 	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
 	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
 
@@ -83,7 +87,6 @@ int main(int argc, char *argv[])
 	UInt16 filename_len;
 	char * s;
 	Bool header_out;
-	Var * system_scope;
 	char * platform = NULL;
 
 	*VERBOSE_PROC = 0;
@@ -191,7 +194,7 @@ int main(int argc, char *argv[])
 	//==== Split dir and filename
 
 	PathSeparate(filename, PROJECT_DIR, filename);
-	printf("Building %s%s.atl\n", PROJECT_DIR, filename);
+	printf("Building %s%s.atl...\n", PROJECT_DIR, filename);
 
 	//===== Initialize
 
@@ -212,9 +215,9 @@ int main(int argc, char *argv[])
 	INSTRSET = NULL;
 	if (!Parse("system", false)) goto failure;
 	
+	SYSTEM_SCOPE = VarFindScope(&ROOT_PROC, "system", 0);
 	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
-	system_scope = VarFindScope(&ROOT_PROC, "system", 0);
 
 	// If the platform has been specified as an argument, parse it
 	if (platform != NULL) {
@@ -392,7 +395,7 @@ int main(int argc, char *argv[])
 
 done:	
    	exit(result);
-
+	
 failure:
 	result = 2;
   	goto done;

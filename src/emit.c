@@ -438,7 +438,7 @@ Bool EmitProc(Var * proc)
 		result = EmitInstrBlock(blk);
 		if (!result) break;
 
-		if (blk->to == NULL && blk->last->op != INSTR_GOTO) {
+		if (blk->to == NULL && (blk->last == NULL || blk->last->op != INSTR_GOTO)) {
 			EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
 		}
 	}
