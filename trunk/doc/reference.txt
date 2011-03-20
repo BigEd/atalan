@@ -10,7 +10,7 @@ Syntax elements
 
 Atalan source code is ASCII text file.
 It does not support reading of UTF-8 files, it can however safely skip UTF-8 header,
-so if you mistakenly safe your source code using UTF-8 (hello PSPad), 
+so if you mistakenly save your source code using UTF-8 (hello PSPad), 
 there should be no problem.
 
 Atalan is case insensitive.
@@ -44,7 +44,7 @@ Special characters may be enclosed in square brackets.
 "I said: ["]Hello!["]"
 :::::::::::::::::::
 
-Following escape sequences are supported:
+The following escape sequences are supported:
 ::::::::::::::::::::
 ["]  "
 [[   [
@@ -84,14 +84,14 @@ Commands are organized in blocks.
 
 Block may be defined using several methods:
 
-- line
+- line block
 - parentheses
-- indent
+- indentation
 
-In following examples, block starts after 'then' and everything before "Hello" 
+In the following examples, block starts after 'then' and everything before "Hello" 
 is part of the block.
 
-Line block start somewhere on the line and continue until the end of line.
+Line block start somewhere in the line and continues until the end of the line.
 
 ::::::::::::::::::::::
 if x = 10 then a=1 b=2
@@ -125,7 +125,7 @@ if x = 10 then
 :::::::::::::::::::::::::::::::::::
 
 Both TABS and spaces can be used to define indent, but they must not be mixed.
-If both is used on same line, there must be first TABS, then spaces.
+If both are used in same line, TABS must be first, then spaces.
 This prevents some common errors when using indent.
  
 ******************************************
@@ -138,10 +138,10 @@ Variables do not have to be defined, they are declared using assignment action.
 [const|type|in|out] name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
 :::::::::::::
 
-name	Name of variable, multiple variables may be declared/assigned (separated by comma)
-adr		Place variable at specified address or register.
+name	Name of variable, multiple variables may be declared/assigned at once (separated by comma)
+adr		Places variable at specified address or register.
 
-Type is declared using one of following methods:
+Type is declared using one of the following methods:
 	- numeric range (min..max)
 	- variable name declares type identical to that variable
 	- structure (list of variable declarations)
@@ -166,7 +166,7 @@ type char:byte
 Const declaration
 =================
 
-Constant is variable, that is initialized during declaration and never assigned again.
+Constant is a variable that is initialized during declaration and never assigned again.
 Array may be used as const to define static data.
 
 ::::::::::::::::
@@ -187,19 +187,19 @@ const
 Input & output
 ==============
 
-In and out keywords may be used to define, that variable represents input or
-output register on system, where registers are mapped into memory.
+In and out keywords may be used to define that variable represents input or
+output register on system where registers are mapped into memory.
 
-'in' defines input register. This means, that value of variable may change between
+'in' defines input register. This means that value of variable may change between
 reads and it is therefore necessary to always read the value from register (optimizer
 will not cache values from this register).
 
-'in sequence' defines input register, that works as sequence. Reading
+'in sequence' defines input register that works as sequence. Reading
 this register has some kind of side effect (for example increments some internal pointer etc).
-Optimizer will not remove reading from the register even if the red value is never used.
+Optimizer will not remove reading from the register even if the read value is never used.
 
 'out' specifies the register is used for output. Writing to that register has 
-some side effect. Optimizer may not remove any write to such regiser.
+some side effect. Optimizer will not remove any writes to such regiser.
 
 =================
 Variable location
@@ -213,11 +213,11 @@ COLOR  @708:array(5)		; playfield color
 SDLSTL @560:adr 			; address of beginning of display list
 STICK  @632:array(4)
 ::::::::::::::
-Value of some hardware registers changes automatically.
+Value of some hardware registers change automatically.
 It is necessary to mark such variables as 'in' or 'out'. 
 
-This syntax may be laso used to define variable as an alias for some other variable
-(place the two variables to same location). This feature is most commonly used
+This syntax may be also used to define variable as an alias for some other variable
+(to put two variables to the same location). This feature is most commonly used
 when definining headers of external procedures. 
 
 Slices of existing arrays may be defined using address.
@@ -255,7 +255,7 @@ Writing to specified address [TODO]
 ===================================
 
 Anonymous variable may be assigned (like POKE in BASIC).
-It is possible to specify type too.
+It is possible to specify type, too.
 
 :::::::::::::::::::::::::::
 @712 = 0				; set background color to black 
@@ -267,8 +267,8 @@ It is possible to specify type too.
 Labels
 ======
 
-Label is specified as variable located at address where address is not specified.
-Note, that there must be at least one space after label definition.
+Label is specified as a variable located at an address where address is not specified.
+Note that there must be at least one whitespace after label definition.
 
 :::::
 name@
@@ -279,7 +279,7 @@ Integers
 ********
 
 Integer type is declared using numeric range.
-Compiler automatically decides, how many bytes to use.
+Compiler automatically decides how many bytes to use.
 
 :::::::::::::::::::::::::::::
 byte:0..255
@@ -482,7 +482,7 @@ arr(0,0) = 65
 second index Y coordinate on 2D grid.
 This is to provide comfortable means of working with display data.
 
-Following example defines 'screen' of 24 lines with 40 columns and sets the character in the middle of the screen to 'A'.
+The following example defines 'screen' of 24 lines with 40 columns and sets the character in the middle of the screen to 'A'.
 
 ::::::::::::::::::::::::::::
 screen:array(0..39,0..23) of byte
@@ -814,7 +814,7 @@ Loop body is executed only if the condition after where is true.
 Combinations
 ============
 
-Following loop will print odd numbers until Q is pressed.
+The following loop will print odd numbers until Q is pressed.
  
 ::::::::::::::::::::::::::::::::::
 for k:1..10000 where k mod 2 = 0 until KEY = Q
