@@ -198,7 +198,7 @@ have_char:
 			top--;
 		}
 		if (top == 0) {
-			if (indent < 256 && (prev_indent % 256) == 0) {
+			if (tabs == 0 && (prev_indent % 256) == 0) {
 				SyntaxError(">Invalid indent (previous indent is made of tabs, this one of spaces)");
 			} else {
 				SyntaxError(">Invalid indent");

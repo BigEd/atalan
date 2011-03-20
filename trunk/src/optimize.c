@@ -236,6 +236,7 @@ void OptimizeCombined(Var * proc)
 		do {
 			modified = OptimizeValues(proc);
 			modified |= OptimizeLive(proc);			// We need to call OptimizeLive as second, to keep next_use info
+			modified |= OptimizeMergeBranchCode(proc);
 		} while(modified);
 
 		modified |= OptimizeVarMerge(proc);

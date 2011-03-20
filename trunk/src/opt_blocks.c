@@ -99,18 +99,38 @@ Purpose:
 	}
 }
 
+Instr * FirstInstr(InstrBlock * blk)
+/*
+Purpose:
+	Return first non-line instruction in the block.
+*/{
+	Instr * i;
+	for (i = blk->first; i != NULL && i->op == INSTR_LINE; i = i->next);
+	return i;
+}
+
+Instr * InstrPrev(Instr * i)
+{
+	if (i != NULL) {
+		while(i != NULL && i->op == INSTR_LINE) i = i->prev;
+	}
+	return i;
+}
+
 void LinkBlocks(Var * proc)
 {
-	InstrBlock * nb, * blk, * dst;
+	InstrBlock * nb, * blk, * dst, * prev_blk;
 	Instr * i;
 	InstrOp op;
 	Var * label;
 
+repeat:
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		blk->to      = NULL;
 		blk->cond_to = NULL;
 		blk->callers = NULL;
 		blk->from    = NULL;
+		blk->next_caller = NULL;
 	}
 
 	// Create caller lists for blocks for goto and if instructions
@@ -150,6 +170,54 @@ void LinkBlocks(Var * proc)
 			}
 		}
 	}
+
+	// Remove empty blocks
+
+	prev_blk = NULL;
+	blk = proc->instr;
+	while(blk != NULL) {
+
+		if (FirstInstr(blk) == NULL && blk->to != NULL) {
+
+			dst = blk->from;
+			if (dst != NULL) dst->to = blk->to;
+			for(dst = blk->callers; dst != NULL; dst = dst->next_caller) {
+				if (dst->to == blk) dst->to = blk->to;
+				if (dst->cond_to == blk) dst->cond_to = blk->to;
+				
+				i = InstrPrev(dst->last);
+				if (i != NULL) {
+					label = blk->label;
+					if (i->result == label) {
+						if (blk->to->label == NULL) {
+							blk->to->label = label;
+							label->instr = blk->to;
+						} else {
+							i->result = blk->to->label;
+						}
+					}
+				}
+			}
+
+			// Remove block from chain and delete it
+			if (prev_blk != NULL) {
+				prev_blk->next = blk->next;
+			} else {
+				proc->instr = blk->next;
+			}
+
+
+//			InstrBlockFree(blk);
+//			MemFree(blk);
+			goto repeat;
+
+		}
+
+		prev_blk = blk;
+		blk = blk->next;
+
+	}
+
 }
 
 void GenerateBasicBlocks(Var * proc)
@@ -241,16 +309,6 @@ Purpose:
 	//TODO: Blocks with labels, that are not jumped to (data labels) may be merged together
 }
 
-Instr * FirstInstr(InstrBlock * blk)
-/*
-Purpose:
-	Return first non-line instruction in the block.
-*/{
-	Instr * i;
-	for (i = blk->first; i != NULL && i->op == INSTR_LINE; i = i->next);
-	return i;
-}
-
 void OptimizeJumps(Var * proc)
 /*
 Purpose:
@@ -274,10 +332,15 @@ Purpose:
 	Instr * i, * cond_i, * last_i;
 	Var * label;
 
+	LinkBlocks(proc);
+
+//	printf("============= jumps =============\n");
+//	PrintProc(proc);
+
 	blk = proc->instr;
 	while (blk != NULL) {
 		blk_to = blk->to;
-		last_i = blk->last;
+		last_i = InstrPrev(blk->last);
 
 		if (blk_to != NULL) {
 
@@ -332,7 +395,7 @@ retry:
 			if (last_i != NULL) {
 				if (last_i->op == INSTR_CALL) {
 					last_i->op = INSTR_GOTO;
-				}
+}
 			}
 		}
 		blk = blk->next;
@@ -369,4 +432,75 @@ void DeadCodeElimination(Var * proc)
 		blk = blk->next;
 	}
 
+}
+
+Instr * LastInstr(InstrBlock * blk)
+{
+	Instr * i = NULL;
+	if (blk != NULL) {
+		i = InstrPrev(blk->last);
+		if (i != NULL) {
+			if (i->op == INSTR_GOTO) i = InstrPrev(i->prev);
+		}
+	}
+	return i;
+}
+
+Bool InstrEquivalent(Instr * i, Instr * i2)
+{
+	if (i == NULL || i2 == NULL) return false;
+	if (i->op != i2->op) return false;
+	if (i->result != i2->result) return false;
+	if (i->arg1 != i2->arg1) return false;
+	if (i->arg2 != i2->arg2) return false;
+	return true;
+}
+
+Bool OptimizeMergeBranchCode(Var * proc)
+{
+	InstrBlock * blk, * prev_blk;
+	Instr * i, * i2;
+	Bool modified = false;
+
+	LinkBlocks(proc);
+
+//	printf("============= merge branch ==============\n");
+//	PrintProc(proc);
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+
+		prev_blk = blk->from;
+		i = LastInstr(prev_blk);
+		if (i != NULL && !IS_INSTR_BRANCH(i->op)) {
+			// Test other callers
+			if (blk->callers == NULL) {
+				i = NULL;
+			} else {
+				for(prev_blk = blk->callers; prev_blk != NULL; prev_blk = prev_blk->next_caller) {
+					i2 = LastInstr(prev_blk);
+					if (!InstrEquivalent(i, i2)) {
+						i = NULL;
+						break;
+					}
+				}
+			}
+
+			if (i != NULL) {
+
+				modified = true;
+				for(prev_blk = blk->callers; prev_blk != NULL; prev_blk = prev_blk->next_caller) {
+					i2 = LastInstr(prev_blk);
+					InstrDelete(prev_blk, i2);
+				}
+
+				InstrInsert(blk, NULL, i->op, i->result, i->arg1, i->arg2);
+
+				prev_blk = blk->from;
+				InstrDelete(prev_blk, i);
+
+			}
+		}
+
+	}
+	return modified;
 }

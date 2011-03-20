@@ -905,6 +905,7 @@ void OptimizeLoops(Var * proc);
 
 void OptimizeJumps(Var * proc);
 void DeadCodeElimination(Var * proc);
+Bool OptimizeMergeBranchCode(Var * proc);
 
 void ProcClearProcessed(Var * proc);
 void AllocateVariables(Var * proc);

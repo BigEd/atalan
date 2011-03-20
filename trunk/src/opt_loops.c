@@ -521,6 +521,10 @@ Purpose:
 		PrintProc(proc);
 	}
 
+	for(nb = proc->instr; nb != NULL; nb = nb->next) {
+		nb->loop_end = NULL;
+	}
+
 	// Test for each block, if it is end of an loop
 
 	for(nb = proc->instr; nb != NULL; nb = nb->next) {
