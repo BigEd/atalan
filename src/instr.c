@@ -97,6 +97,9 @@ Purpose:
 void InstrFree(Instr * i)
 {
 	if (i != NULL) {
+		if (i->op == INSTR_LINE) {
+//			free(i->line);
+		}
 		free(i);
 	}
 }
@@ -340,7 +343,7 @@ Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2)
 /*
 Purpose:
 	Try to evaluate instruction.
-	Instruction may be avaluated if it's arguments are constant.
+	Instruction may be evaluated if it's arguments are constant.
 Result:
 	Return evaluated variable as constant or NULL, if instruction can not be evaluated.
 */

@@ -319,6 +319,7 @@ int main(int argc, char *argv[])
 		ProcessUsedProc(OptimizeJumps);
 		ProcessUsedProc(ProcOptimize);
 		ProcessUsedProc(DeadCodeElimination);
+		ProcessUsedProc(OptimizeJumps);
 
 		if (Verbose(NULL)) {
 			PrintHeader("Optimized");
