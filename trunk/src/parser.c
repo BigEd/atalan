@@ -154,6 +154,7 @@ Purpose:
 
 		if (TOK == TOKEN_ID) {
 			ParseAssign(mode, submode, to_type);
+			NextIs(TOKEN_COMMA);
 			NextIs(TOKEN_EOL);
 		} else {
 			SyntaxError("Expected variable name");
@@ -3018,6 +3019,7 @@ Arguments:
 				}
 			}
 			arg = NextArg(proc, arg, submode);
+			NextIs(TOKEN_COMMA);		// Arguments may be optionally separated by comma
 			arg_no++;
 		}
 	}
