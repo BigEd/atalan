@@ -5,11 +5,13 @@
 ; Generates NROM-128 romlayout (1 x 16Kib bank + 1 x 8Kib Chr bank)
 ; changed by Marcel Cevani 31.01.2011
 ; added System functions and some IN/OUT definitions
+; changed by Marcel Cevani 23.03.2011
+; added IN/OUT for Joypad state reading
 ; tnx to Atalan the snake & rudla :)
 
 use m6502
 type  VARHEAP:000..255   
-rule prologue       =  "    opt h-" " .byte('N', 'E', 'S', $1A, $01, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $C000"  "RESET:" "   sei" "   cld" "   ldx #$FF" "   txs"
+rule prologue       =  "    opt h-" " .byte('N', 'E', 'S', $1A, $02, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $8000"  "RESET:" "   sei" "   cld" "   ldx #$FF" "   txs"
 rule epilogue       =  "    rts"  
 rule code_end       =  "    .align $FFF9,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
 rule line           = ";### %0(%1) %2"
@@ -34,6 +36,10 @@ out PPU_DATA_ADR@$2006:byte
 out PPU_DATA@$2007:byte
 in  sequence PPU_STAT_REG@$2002:byte
 
+out INPUT_PAD1_RESET@$4016:byte
+out INPUT_PAD2_RESET@$4017:byte
+in  sequence INPUT_PAD1_READ@$4016:byte
+in  sequence INPUT_PAD2_READ@$4017:byte
 ;------------------------------------------IN/OUT DEFINES FOR THE SYSTEM-MODULE-----------------------------------------
 
 ;--------------------------------------------FUNCTIONS FOR SYSTEM-MODULE---------------------------------------------
