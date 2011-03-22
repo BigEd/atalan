@@ -3,6 +3,8 @@
 ;********************************
 ; created by Marcel Cevani 31.01.2011
 ; added System functions and some IN/OUT definitions
+; changed by Marcel Cevani 23.03.2011
+; removed unused code
 ; tnx to Atalan the snake & rudla :)
 
 ; Defines for Pal and NameTable arrays (Pal 16 Bytes,Nametable 1kb)
@@ -12,22 +14,6 @@ type bgNameTable:array(1023)
 bgLoadPal:proc a@(_a,_x):adr of bgPal @_a @_x @_y @_TEMPB1
 bgLoadNameTable:proc a@(_a,_x):adr of bgNameTable @_a @_x @_y @_TEMPB1 
 
-;--------------------------------------------FUNCTIONS FOR BG-MODULE---------------------------------------------
-; Information : Loads Background-Pal
-;bgLoadPal:macro a:bgPal = 
-;	  _TEMPB1 = lo a
-;	  _TEMPB2 = hi a
-;	  instr call bgLoadPal
-;	  instr ref _TEMPB1
-;	  instr ref _TEMPB2
-
-; Information : Loads Background-Nametable
-;bgLoadNameTable:macro a:bgNameTable = 
-; 	  _TEMPB1 = lo a
-;	  _TEMPB2 = hi a
-;	  instr call bgLoadNameTable
-;	  instr ref _TEMPB1
-;	  instr ref _TEMPB2
 
 ; Information : Sets Background Scroll Position (x position , y position)
 bgSetScrolling:macro x:byte y:byte=
