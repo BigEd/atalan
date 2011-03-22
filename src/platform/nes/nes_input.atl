@@ -15,6 +15,7 @@ const
 	JOYPAD_B     = 64
 	JOYPAD_A     = 128
 	
+
 ;Information: Function reads out all Joypad 1 Buttonstates and write them into one byte
 ;             Button states can then be tested with the Const values (JOYPAD_RIGHT....)
 getJoyPad1State:proc(>result:byte) = 
