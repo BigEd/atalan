@@ -19,7 +19,7 @@ Atalan is case insensitive.
 Literals
 ========
 
-Numeric and text literals may be defined osin the following notation:
+Numeric and text literals may be defined using the following notation:
 
 :::::::::::::
 65535       dec
@@ -380,7 +380,7 @@ Structures [TODO]
 *****************
 
 Structure is defined as a list of variable declarations.
-Either "," or new line may be used as a separator. 
+Either "," or newline may be used as a separator. 
  
 :::::::::::::::::::::::
 xcoord:0..319
@@ -650,7 +650,7 @@ y = 6
 :::::::::::::::::::::::::::::::
 
 Expression type is automatically recognized and there is no need to specify it.
-New line will be printed after string, unless it is followed by comma.
+Newline will be printed after string, unless it is followed by comma.
 
 :::::::::::::::::::::::::::::::::::
 "Sum of [x] and [y] is",
@@ -752,8 +752,9 @@ has exited. In a such case it is possible to loop over an existing variable.
 No range is defined in this case.
 
 ::::::::::::::::::::::::::
+use atari
 x:1..60000
-for x until KEY = Q 	
+for x until CH = Q ; CH is Atari shortcut for keyboard characted	
 "You hit [x]."
 ::::::::::::::::::::::::::::
 
@@ -814,7 +815,8 @@ Combinations
 The following loop will print odd numbers until Q is pressed.
  
 ::::::::::::::::::::::::::::::::::
-for k:1..10000 where k mod 2 = 0 until KEY = Q
+use atari
+for k:1..10000 where k mod 2 = 0 until CH = Q ;CH is Atari shortcut for keyboard character
   "[k]"
 ::::::::::::::::::::::::::::::::::
 
