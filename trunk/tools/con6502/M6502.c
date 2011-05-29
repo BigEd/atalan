@@ -136,8 +136,9 @@ extern int Opt6502(M6502 *R);
     K.B.l=(R->A&0x0F)+(Rg&0x0F)+(R->P&C_FLAG); \
     if(K.B.l>9) K.B.l+=6; \
     K.B.h=(R->A>>4)+(Rg>>4)+(K.B.l>15? 1:0); \
+	R->P=(R->P&~C_FLAG); \
+	if(K.B.h>9) { R->P|=C_FLAG; K.B.h -= 10; } \
     R->A=(K.B.l&0x0F)|(K.B.h<<4); \
-    R->P=(R->P&~C_FLAG)|(K.B.h>15? C_FLAG:0); \
   } \
   else \
   { \
