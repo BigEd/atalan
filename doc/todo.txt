@@ -2,6 +2,8 @@
 TODO
 ****
 
+- parse ranges in for loops in reverse order (this will allow releasing it later)
+
 
 Array access to reference (adr of array(x))
 

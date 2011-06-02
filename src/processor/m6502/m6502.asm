@@ -335,7 +335,66 @@ carry1
 		rts
 
 .endp
- 
+
+/*
+   Neg value in A
+*/
+
+_sys_neg   .proc
+		clc
+		eor #$FF
+		adc #1
+		rts	
+.endp
+
+/*
+  Multiply two signed 8-bit integers
+
+	Paramerters:
+	  a  First multiplicant (signed)
+	  x  Second multiplicand (signed)
+*/
+
+_sys_mulss8   .proc
+
+	cpx #0
+	bpl _sys_mulsu8
+	
+	pha
+	txa
+	jsr _sys_neg
+	tax
+	pla	
+	jsr _sys_mulsu8
+	jmp	_sys_neg16
+.endp
+
+/*
+  Multiply signed 8-bit integer with unsigned 8-bit integer
+
+	Paramerters:
+	  a  First multiplicant (signed)
+	  x  Second multiplicand (unsigned)
+*/
+
+_sys_mulsu8   .proc
+   cmp  #0
+   bpl _sys_mul8
+   jsr _sys_neg
+   jsr _sys_mul8
+	 		
+.DEF :_sys_neg16
+   ;  neg the result of multiplication   
+   lda #0					;TODO: Maybe we may return the result in X,A ?
+   sec
+   sbc _TW2
+   sta _TW2
+   lda #0
+   sbc _TW2+1
+   sta _TW2+1
+   rts
+   .endp
+   
 /*
   Mul8 - 8-bit multiplication routine
   

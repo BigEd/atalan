@@ -1,6 +1,6 @@
 /*
 
-Type opearations
+Type operations
 
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
@@ -9,6 +9,8 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+extern char * TMP_NAME;
+
 GLOBAL Type TVOID;
 GLOBAL Type TINT;		// used for int constants
 GLOBAL Type TSTR;
@@ -16,10 +18,110 @@ GLOBAL Type TLBL;
 GLOBAL Type TBYTE;		//0..255
 GLOBAL Type TSCOPE;
 GLOBAL Type TTUPLE;
+GLOBAL Type * TUNDEFINED;
+
+
+#define RESULT 0
+#define ARG1   1
+#define ARG2   2
+
+/*
+Types are allocated in blocks.
+We work with types in a very dynamic way during type inference, so we need the access quick.
+Mark and sweep garbage collector is implemented for types.
+*/
+
+#define TYPE_BLOCK_CAPACITY 32
+
+typedef struct TypeBlockTag  TypeBlock;
+
+struct TypeBlockTag {
+	TypeBlock * next;
+	Type        types[TYPE_BLOCK_CAPACITY];
+};
+
+GLOBAL TypeBlock TYPES;
+
+/*
+To make type allocation fast, we keep a list of free types.
+Free type has class TYPE_VOID and it's base pointer points to next free type 
+or NULL if this is the last type in the list.
+*/
+
+GLOBAL Type *    FREE_TYPE;
+
+void TypeInitBlock(TypeBlock * tb)
+{
+	UInt8 i;
+	Type * type;
+
+	for(i=0, type = &tb->types[TYPE_BLOCK_CAPACITY-1]; i<TYPE_BLOCK_CAPACITY; i++, type--) {
+		type->variant = TYPE_VOID;
+		type->base   = FREE_TYPE;
+		FREE_TYPE = type;
+	}
+}
+
+Type * TypeAllocMem()
+{
+	Type * type;
+	TypeBlock * tb;
+	if (FREE_TYPE == NULL) {
+		tb = MemAllocStruct(TypeBlock);
+		TypeInitBlock(tb);
+		tb->next = TYPES.next;
+		TYPES.next = tb;
+	}
+
+	type = FREE_TYPE;
+	FREE_TYPE = type->base;
+	type->flags = 0;
+	return type;
+}
+
+void TypeMark(Type * type)
+{
+	if (type != NULL) {
+		SetFlagOn(type->flags, TypeUsed);
+		TypeMark(type->base);
+		if (type->variant == TYPE_ARRAY || type->variant == TYPE_VARIANT) {
+			TypeMark(type->dim[0]);
+			TypeMark(type->dim[1]);
+			TypeMark(type->element);
+		}
+	}
+}
+
+void TypeGarbageCollect()
+{
+	Var * var;
+	Type * type;
+	UInt8 i;
+	TypeBlock * tb;
+
+	// Mark all types as unused
+
+	for(tb = &TYPES; tb != NULL; tb = tb->next) {
+		for(i=0, type = tb->types; i<TYPE_BLOCK_CAPACITY; i++, type++) {
+			SetFlagOff(type->flags, TypeUsed);
+		}
+	}
+
+	// Mark all types used by variables, rules and instructions
+
+	for (var = VARS; var != NULL; var = var->next) {
+		TypeMark(var->type);
+	}
+
+	RulesGarbageCollect();
+
+}
 
 Type * TypeAlloc(TypeVariant variant)
 {
-	Type * type = MemAllocStruct(Type);
+	Type * type;
+	type = TypeAllocMem();
+
 	type->variant = variant;
 	type->owner   = SCOPE;
 	type->flexible = false;
@@ -38,20 +140,19 @@ Type * TypeAllocInt(Int32 min, Int32 max)
 
 Type * TypeCopy(Type * base)
 {
-	Type * type = MemAllocStruct(Type);
+	Type * type = TypeAllocMem();
 	memcpy(type, base, sizeof(Type));
 	return type;
 }
 
 Type * TypeDerive(Type * base)
 {
-	Type * type = MemAllocStruct(Type);
-	memcpy(type, base, sizeof(Type));
+	Type * type = TypeCopy(base);
 	type->base = base;
 	type->owner   = SCOPE;
 	return type;
 }
-
+/*
 void TypeLet(Type * type, Var * var)
 {
 	Type * vtype;
@@ -103,6 +204,7 @@ void TypeLet(Type * type, Var * var)
 		break;
 	}
 }
+*/
 
 void TAdd(Int32 * x, Int32 tr) { *x = *x + tr; }
 void TSub(Int32 * x, Int32 tr) { *x = *x - tr; }
@@ -145,7 +247,7 @@ RangeTransform InstrFn(InstrOp op)
 	}
 	return r;
 }
-
+/*
 void TypeTransform(Type * type, Var * var, InstrOp op)
 {
 	Type * vtype;
@@ -197,7 +299,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 		break;
 	}
 }
-
+*/
 UInt16 TypeItemCount(Type * type)
 {
 	UInt16 cnt;
@@ -380,7 +482,7 @@ Purpose:
 UInt32 TypeStructAssignOffsets(Type * type)
 /*
 Purpose:
-	Asign offsets to elements of structure.
+	Assign offsets to elements of structure.
 */
 {
 	UInt32 offset = 0;
@@ -400,6 +502,14 @@ Purpose:
 
 void TypeInit()
 {
+
+	FREE_TYPE = NULL;
+	TypeInitBlock(&TYPES);
+
+
+	TUNDEFINED = TypeAllocMem();
+	TUNDEFINED->variant = TYPE_UNDEFINED;
+
 	TINT.variant = TYPE_INT;
 	TINT.range.min = -(long)2147483648L;
 	TINT.range.max = 2147483647L;
@@ -438,6 +548,13 @@ Bool TypeIsBool(Type * type)
 	return type->range.min == 0 && type->range.max == 1;
 }
 
+Bool TypeIsIntConst(Type * type)
+{
+	if (type == NULL) return false;
+	if (type->variant != TYPE_INT) return false;
+	return type->range.min == type->range.max;
+}
+
 //TODO: Merge the two functions
 //      Difference betwen TYPE_PROC handling
 
@@ -453,10 +570,12 @@ Purpose:
 
 	if (var == NULL) return false;
 	if (type == NULL) return true;
+	if (type->variant == TYPE_UNDEFINED) return true;
 
 	rtype = type;
 	vtype = var->type;
 
+	if (vtype->variant == TYPE_UNDEFINED) return true;
 	if (vtype == NULL) return true;		// variable with no type specified matches everything
 
 	if (vtype->variant == TYPE_PROC) {
@@ -494,11 +613,16 @@ Bool VarMatchesType(Var * var, Type * type)
 	// If pattern has no defined type, it fits
 	if (type == NULL) return true;
 
-	if (type->variant == TYPE_VARIANT) {
+//	if (vtype->variant == TYPE_UNDEFINED) return true;		// anything matches undefined type
+
+	switch(type->variant) {
+	case TYPE_UNDEFINED:
+		return false;
+
+	case TYPE_VARIANT:
 		return VarMatchesType(var, type->dim[0]) || VarMatchesType(var, type->dim[1]);
 
-	} else if (type->variant == TYPE_INT) {
-
+	case TYPE_INT:
 		if (var->mode == MODE_TUPLE) {
 			return false;
 		}
@@ -518,7 +642,9 @@ Bool VarMatchesType(Var * var, Type * type)
 				if (type->range.min > vtype->range.min) return false;
 			}
 		}
-	} else if (type->variant == TYPE_ARRAY) {
+		break;
+
+	case TYPE_ARRAY:
 		if (vtype == NULL) return false;
 		if (vtype->variant != TYPE_ARRAY) return false;
 
@@ -528,12 +654,10 @@ Bool VarMatchesType(Var * var, Type * type)
 			&& TypeIsSubsetOf(vtype->dim[1], type->dim[1])
 			&& TypeIsSubsetOf(vtype->element, type->element);
 		
-	} else if (type->variant == TYPE_ADR) {
-//		if (vtype != NULL) {
-//			if (vtype->variant != TYPE_ADR) return false;
-//		}
+	case TYPE_ADR:
 		return vtype != NULL && vtype->variant == TYPE_ADR;
-	} else if (type->variant == TYPE_PROC) {
+
+	case TYPE_PROC:
 
 		// Interrupt routines types will be based on some other type
 		if (vtype->base == NULL && type->base == NULL) return true;
@@ -541,11 +665,814 @@ Bool VarMatchesType(Var * var, Type * type)
 		// Procedure type is only same, if it is exactly the same
 		return false;
 
-	} else if (type->variant == TYPE_STRUCT) {
+	case TYPE_STRUCT:
 		if (vtype != NULL) {
 			if (vtype->variant != TYPE_STRUCT) return false;
 		}
 	}
+
 	return true;
 }
 
+void PrintType(Type * type)
+{
+	if (type == NULL) { Print("NULL"); return; }
+	switch(type->variant) {
+	case TYPE_INT:		
+		PrintInt(type->range.min); Print(".."); PrintInt(type->range.max);
+		break;
+	case TYPE_SEQUENCE:
+		Print("seq "); PrintType(type->seq.init); Print(" + "); PrintType(type->seq.step);
+		break;
+
+	case TYPE_ARRAY:
+		Print("array (");
+		PrintType(type->dim[0]);
+		if (type->dim[1] != NULL) {
+			Print(",");
+			PrintType(type->dim[1]);
+		}
+		Print(") of ");
+		PrintType(type->element);
+		break;
+	}
+}
+
+void PrintVars(Var * proc)
+{
+	Var * var;
+	Type * type;
+
+	for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+		if (var->mode == MODE_SCOPE) {
+			PrintVars(var);
+		} else {
+			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == MODE_VAR) {
+				type = var->type;
+				if (type != NULL && type->variant == TYPE_LABEL) continue;
+				printf("%s: ", var->name);
+				PrintType(var->type);
+				printf("\n");
+			}
+		}
+	}
+}
+
+Type * IntTypeEval(InstrOp op, Type * left, Type * right)
+{
+	RangeTransform r_fn;
+	Int32 min, max, t;
+	Type * rt = NULL;
+
+	// When assigning the value, resulting type is simply the same as original value
+	switch(op) {
+	case INSTR_LET:
+		rt = left;
+		break;
+
+	default:
+		if (right != NULL && right->variant == TYPE_INT) {
+			r_fn = InstrFn(op);
+			if (r_fn != NULL) {
+				rt = TypeAllocInt(left->range.min, left->range.max);
+				min = right->range.min;
+				max = right->range.max;
+				if (op == INSTR_DIV || op == INSTR_MOD || op == INSTR_SUB) {
+					t = min;
+					min = max;
+					max = t;
+				}
+				r_fn(&rt->range.min, min);
+				r_fn(&rt->range.max, max);
+			}
+		}
+	}
+	return rt;
+}
+
+Type * SeqTypeEval(InstrOp op, Type * left, Type * right)
+{
+	//TODO: Only if there is same operation and step
+	return NULL;
+//	return left;
+}
+
+Type * TypeEval(InstrOp op, Type * left, Type * right)
+{
+	Type * rt = NULL;
+
+	if (left != NULL) {
+
+		switch(left->variant) {
+		case TYPE_INT:
+			rt = IntTypeEval(op, left, right);
+			break;
+		case TYPE_SEQUENCE:
+			rt = SeqTypeEval(op, left, right);
+			break;
+		default:
+			ASSERT("Unknown type eval.");
+		}
+	}
+
+	return rt;
+}
+
+#define TYPE_IS_UNDEFINED(t)  (t == NULL)
+
+Type * TypeUnion(Type * left, Type * right)
+/*
+Purpose:
+	Combine types so, that resulting type may contain values from left or from the right type.
+	This may be used when a variable is initialized in multiple code branches.
+*/
+{
+	Type * type = NULL, * t;
+	Int32 min, max;
+
+	if (left == right) return left;
+
+	// Make sure, that if there is NON-NULL type, it is the left one
+	if (left == NULL) {
+		left = right;
+		right = NULL;
+	}
+
+	// In case there is only one type or no type, return the one type or NULL
+	if (right == NULL) return left;
+
+	// If any of the types is undefined, result is undefined
+	if (left->variant == TYPE_UNDEFINED) return left;
+	if (right->variant == TYPE_UNDEFINED) return right;
+
+	// If one of the types is sequence, make sure it is the left one
+	if (right->variant == TYPE_SEQUENCE) {
+		t = left;
+		left = right;
+		right = t;
+	}
+
+	if (left->variant == TYPE_SEQUENCE) {
+
+		// Sequence & sequence
+		if (right->variant == TYPE_SEQUENCE) {
+
+			// same operator
+			if (right->seq.op == left->seq.op) {
+				type = TypeAlloc(TYPE_SEQUENCE);
+				type->seq.op = right->seq.op;
+				type->seq.init = TypeUnion(left->seq.init, right->seq.init);
+				type->seq.step = TypeUnion(left->seq.step, right->seq.step);
+				return type;
+			}
+
+		// Step is on the left side
+
+		} else if (right->variant == TYPE_INT) {
+			if (left->seq.init == NULL) {
+				type = TypeCopy(left);
+				type->seq.init = right;
+				return type;
+			}
+
+			if (left->seq.op == INSTR_ADD && left->seq.step->range.min >=0) {
+				type = TypeAlloc(TYPE_INT);
+				type->range.max = INT_MAX;
+				type->range.min = right->range.min;
+				return type;
+			}
+		}
+	}
+
+	if (right == NULL) return right;
+
+	switch (left->variant) {
+	case TYPE_INT:
+		if (right->variant == TYPE_INT) {
+			if (left->range.max >= right->range.min || right->range.max >= left->range.min) {
+				min =  left->range.min; if (right->range.min < min) min = right->range.min;
+				max = right->range.max; if ( left->range.max > max) max =  left->range.max;
+				if (left->range.min == min && left->range.max == max) {
+					type = left;
+				} else if (left->range.min == min && left->range.max == max) {
+					type = right;
+				} else {
+					type = TypeAllocInt(min, max);
+				}
+			}
+		}
+		break;
+	}
+
+	// Default case is VARIANT type
+	if (type == NULL) {
+		type = TypeAlloc(TYPE_VARIANT);
+		type->dim[0] = left;
+		type->dim[1] = right;
+	}
+	return type;
+}
+
+Type * TypeExpand(Type * left, Type * right)
+/*
+Purpose:
+	Combine types so, that resulting type may contain values from left or from the right type.
+	This may be used when a variable is initialized in multiple code branches.
+*/
+{
+	Type * type = NULL;
+	Int32 min, max;
+
+	if (left == NULL) return right;
+	if (right == NULL) return left;
+
+	if (left->variant == TYPE_UNDEFINED) return right;
+	if (right->variant == TYPE_UNDEFINED) return left;
+
+	switch (left->variant) {
+	case TYPE_INT:
+		if (right->variant == TYPE_INT) {
+			min = left->range.min; 			
+			if (right->range.min < min) min = right->range.min;
+			max = right->range.max;
+			if (left->range.max > max) max = left->range.max;
+
+			if (min != left->range.min || max != left->range.max) {		
+				type = TypeAllocInt(min, max);
+			}
+		} else if (right->variant == TYPE_VARIANT) {
+			type = TypeExpand(left, right->dim[0]);
+			type = TypeExpand(type, right->dim[1]);
+		}
+		break;
+	}
+
+	if (type == NULL) type = left;
+
+	return type;
+}
+
+#define MAX_INT 0x7fffffff
+//#define MIN_INT -2147483648L
+#define MIN_INT 0x80000000
+
+Bool TypeIsInt(Type * type)
+{
+	return type != NULL && type->variant == TYPE_INT;
+}
+
+Type * TypeRestrict(Type * type, Var * var, InstrBlock * blk, Bool neg)
+{
+	Type * rt, * vt;
+	Instr * i;
+	InstrOp op;
+	Var * var2;
+	Int32 min, max;
+	Int32 init, step;
+
+	rt = type;
+
+	// 1. Undefined type may not be restricted
+	if (type == NULL || type->variant == TYPE_UNDEFINED) goto done;
+
+	if (blk == NULL) goto done;
+	i = blk->last;
+	if (i == NULL) goto done;
+	op = i->op;
+	if (!IS_INSTR_BRANCH(i->op)) goto done;
+
+	// Select appropriate variable
+	if (i->arg1 == var) {
+		var2 = i->arg2;
+	} else if (i->arg2 == var) {
+		var2 = i->arg1;
+		op = OpRelSwap(op);
+	} else {
+		goto done;
+	}
+
+	// If this is path not taken, swap the operation
+	if (neg) {
+		op = OpNot(op);
+	}
+
+	vt = var2->type;
+	if (VarIsIntConst(var2)) {
+		min = max = var2->n;
+	} else if (vt != NULL && vt->variant == TYPE_INT) {
+		min = var2->type->range.min;
+		max = var2->type->range.max;
+	}
+
+	if (type == NULL) type = var->type;
+
+	if (type != NULL) {
+		if (type->variant == TYPE_SEQUENCE) {
+			switch(op) {
+			case INSTR_IFNE:
+				if (TypeIsIntConst(type->seq.step) && TypeIsIntConst(type->seq.init)) {
+					init = type->seq.init->range.min;
+					step = type->seq.step->range.max;
+					if (type->seq.op == INSTR_ADD) {
+						rt = TypeAllocInt(init, max-1);
+					}
+				}
+				break;
+			case INSTR_IFLT:
+				max--;
+				//continue to IFLE
+			case INSTR_IFLE:
+				if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init)) {
+					init = type->seq.init->range.min;
+					step = type->seq.step->range.max;			// maximal step
+					if (type->seq.op == INSTR_ADD) {
+						rt = TypeAllocInt(init, max + step);	// we may overstep maximal value by step
+					}
+				}
+				break;
+			default:
+				ASSERT(false);	// unknown operator
+			}
+
+		} else if (type->variant == TYPE_INT) {
+			switch(op) {
+
+			case INSTR_IFNE:
+				break;
+
+			// For Eq, resulting type is the range of source variable
+			case INSTR_IFEQ:
+				break;
+			case INSTR_IFLE:
+				min = MIN_INT;
+				break;
+			case INSTR_IFGE:
+				max = MAX_INT;
+				break;
+			case INSTR_IFLT:
+				max--;
+				min = MIN_INT;
+				break;
+			case INSTR_IFGT:
+				min++;
+				max = MAX_INT;
+				break;
+			}
+
+			if (type != NULL && type->variant == TYPE_INT) {
+				if (type->range.min > min) min = type->range.min;
+				if (type->range.max < max) max = type->range.max;
+
+				rt = TypeAllocInt(min, max);
+			}
+		}
+	}
+done:
+	return rt;
+}
+
+
+UInt32 paths;		// number of paths
+UInt32 undefined;
+Bool   looped;		//self referencing and looped (without found bound)
+
+Bool InstrIsSelfReferencing(Instr * i)
+{
+	return i != NULL && i->result != NULL && (i->result == i->arg1 || i->result == i->arg2);
+}
+
+Type * FindType(Loc * loc, Var * var);
+
+UInt16 g_fb_level;
+
+//#define TRACE_INFER 1
+
+Type * FindTypeBlock(Loc * loc, Var * var, InstrBlock * blk, Instr * instr)
+/*
+Purpose:
+	Find type of variable var used in instruction at location loc in specified block beginning at instruction instr.
+Result:
+	NULL             Specified variable is not modified in this block (or any block that jumps to this block).
+	                 This may happen for example for loops, where the variable is not modified in the loop.
+                     When NULL is combined with other type, result is the non-null type.
+	TYPE_UNDEFINED   Undefined type means, that the type is somehow modified, but we do not know exactly how.
+	                 (We cannot infer the type).
+					 When UNDEFINED type is combined with any other type, result is UNDEFINED type.
+*/
+{
+	Instr * i;
+	InstrBlock * caller;
+	Type * type, * type2;
+	Var * var2;
+
+	if (blk == NULL) return NULL;
+
+#ifdef TRACE_INFER
+	PrintRepeat("  ", g_fb_level); Print("#"); PrintInt(blk->seq_no); Print("\n");
+#endif
+	// If the block has been already processed, return the remembered result.
+	// In case of loop, the result will be NULL, which means this branch does not alter the type of the variable in any way.
+
+	if (blk->processed) goto done2;
+
+	blk->type = NULL;
+
+	if (instr == NULL) {
+		i = blk->last;
+		blk->processed = true;
+	} else {
+		i = instr->prev;
+	}
+
+	type = NULL;
+
+	// Definition of the variable may be in this block
+	for(; i != NULL; i = i->prev) {
+		if (i->op == INSTR_LINE) continue;
+		if (i->result == NULL) continue;
+
+		if (i->result == var) {
+
+			// We have found the same instruction again.
+			// This means, it is part of some loop.
+			if (i == loc->i) {
+				if (InstrIsSelfReferencing(i)) {
+					looped = true;
+
+					if (i->arg2 != i->result) {
+						var2 = i->arg2;
+						if (i->type[ARG2] != NULL) {
+							type = TypeAlloc(TYPE_SEQUENCE);
+							type->seq.op = i->op;
+							type->seq.step = i->type[ARG2];
+							type->seq.init = NULL;
+							goto sub1;		//continue;
+						}
+					}
+					type = TUNDEFINED;	// we are not able to deduct the type of the instruction now
+					goto done;
+				}
+			}
+
+			type = i->type[RESULT];
+			if (type == NULL) type = TUNDEFINED;
+sub1:
+			#ifdef TRACE_INFER
+				PrintRepeat("  ", g_fb_level); Print("instr:"); PrintType(type); Print("\n");
+			#endif
+			goto done;
+		// For array, we check, that A(x) fits B(y) so, that A = B and x contains y
+		} else if (var->mode == MODE_ELEMENT) {
+			if (i->result->mode == MODE_ELEMENT && var->adr == i->result->adr) {
+
+			}
+		}
+	}
+
+
+	// We are in starting block and there is no definition.
+	// This is use of undefined variable. (Except for procedure input arguments, in variables and global variables).
+	
+	if (blk->from == NULL && blk->callers == NULL) {
+		// If we are at the beginning of the procedure and this is an input argument, we can use the type of variable as an argument.
+		// Input register variables are considered defined here too.
+		if ((var->mode == MODE_ARG && FlagOn(var->submode, SUBMODE_ARG_IN)) || InVar(var)) {
+			type = var->type;
+		} else {
+			undefined++;
+			type = TUNDEFINED;
+		}
+	}
+
+	if (blk->from != NULL) {
+#ifdef TRACE_INFER
+		g_fb_level++;
+#endif
+		type2 = FindTypeBlock(loc, var, blk->from, NULL);
+#ifdef TRACE_INFER
+		g_fb_level--;
+#endif
+
+		// This is just speed optimization, if the type is undefined, we do not need to continue processing
+		if (type2 != NULL) {
+			if (type2->variant == TYPE_UNDEFINED) {
+				type = type2;
+				goto done;
+			}
+			type2 = TypeRestrict(type2, var, blk->from, true);
+			type = TypeUnion(type, type2);
+			type = TypeRestrict(type, var, blk->from, true);
+		}
+	}
+
+	for(caller = blk->callers; caller != NULL; caller = caller->next_caller) {
+		paths++;
+#ifdef TRACE_INFER
+		g_fb_level++;
+#endif
+		type2 = FindTypeBlock(loc, var, caller, NULL);
+#ifdef TRACE_INFER		
+		g_fb_level--;
+#endif
+		if (type2 != NULL) {
+			if (type2->variant == TYPE_UNDEFINED) {
+				type = type2;
+				goto done;
+			}
+			type2 = TypeRestrict(type2, var, caller, false);
+			type = TypeUnion(type, type2);
+			type = TypeRestrict(type, var, caller, false);
+		}
+	}
+
+done:
+	blk->type = type;
+done2:
+	return blk->type;
+}
+
+Type * FindType(Loc * loc, Var * var)
+/*
+Purpose:
+	Find type of variable at specified location.
+Result:
+	NULL if type was not found or is undefined
+*/
+{
+	Type * type = NULL;
+
+	if (var == NULL) return NULL;
+	if (var->mode == MODE_CONST) {
+		if (var->type->variant == TYPE_INT) {
+			type = TypeAllocInt(var->n, var->n);
+			type->flexible = false;
+		}
+	} else if (var->mode == MODE_BYTE) {
+		type = var->type;
+	} else {
+
+#ifdef TRACE_INFER
+		g_fb_level = 0;
+#endif
+		paths = 1;
+		looped = false;
+		undefined = 0;
+		MarkBlockAsUnprocessed(loc->proc->instr);
+		type = FindTypeBlock(loc, var, loc->blk, loc->i);
+
+		// Instruction is in loop and is self referencing.
+		// We were not able to find the type of variable.
+		// TODO: Maybe we do not need this condition?
+
+		if (type == NULL) {
+			if (looped) {
+				return NULL;
+			}
+		}
+
+		// Type was not found. This means, the variable has not been assigned yet (or at least at some path).
+		// In such case, we are not able to infer the type (or infer it completely).
+		// User will be asked to specify the type for the variable.
+		// It also means, we may be using undefined variable!
+
+//		if (type == NULL) {
+//			type = var->type;
+//		}
+
+		if (undefined > 0) {
+			// Input register does not have to be explicitly initialized.
+			if (!InVar(var) && (var->mode == MODE_VAR)) {
+				ErrArg(var);
+				if (paths > 1) {
+					LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
+				} else {
+					LogicWarningLoc("Use of uninitialized variable [A].", loc);
+				}
+			}
+		}
+	}
+
+	if (type != NULL && type->variant == TYPE_UNDEFINED) type = NULL;
+	return type;
+}
+
+void ReplaceConst(Var ** p_var, Type * type)
+/*
+Purpose:
+	If the possible type of variable is range where min = max, replace the variable with constant.
+*/
+{
+	Var * var;
+	var = *p_var;
+	if (var != NULL && var->mode != MODE_CONST && !InVar(var)) {
+		if (type != NULL && type->variant == TYPE_INT && type->range.min == type->range.max) {
+			*p_var = VarNewInt(type->range.min);
+		}
+	}
+}
+
+void ReportUnusedVars(Var * proc)
+/*
+Purpose:
+	Report variables declared in this procedure that are not used.
+*/
+{
+	Var * var;
+	Type * type;
+
+	for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == MODE_VAR) {
+			type = var->type;
+			if (type != NULL && type->variant == TYPE_LABEL) continue;
+			if (var->read == 0) {
+				ErrArg(var);
+				if (var->write == 0) {
+					LogicWarning("Unreferenced variable [-A].", SetBookmarkVar(var));
+				} else {
+					if (!OutVar(var)) {
+						LogicWarning("Unread variable [-A].", SetBookmarkVar(var));
+					}
+				}
+			}
+		}
+	}
+}
+
+/*
+
+Type inferencer tries to determine type for result of every instruction (that is for every instruction that has result).
+
+1. Type was deduced
+2. Type was not deduced, but the destination variable has been defined by user (use the user defined type)
+3. Type was not deduced, destination variable is immediately assigned to variable with defined type
+
+*/
+
+void TypeInfer(Var * proc)
+/*
+Purpose:
+	Try to infer types for all variables used in given procedure.
+*/
+{
+
+	Instr * i;
+	Type * tr, * ti;
+	InstrBlock * blk;
+	Var * var, * result;
+	Loc loc;
+	Bool modified;
+	UInt16 steps;
+	UInt32 n;
+
+	// Init the info on types in instruction
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			i->type[0] = i->type[1] = i->type[2] = NULL;
+		}
+	}
+
+	printf("======= Infer ===========\n");
+	PrintProc(proc);
+
+
+	// 1. For every instruction in the code try to infer the type of it's result
+	// 2. Repeat this until no new result type was inferred
+
+	loc.proc = proc;
+	steps = 0;
+	do {
+		modified = false;
+		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+			loc.blk = blk;
+			for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
+				if (i->op == INSTR_LINE) continue;
+
+				loc.i = i;
+				if (i->result != NULL && i->type[RESULT] == NULL) {
+
+					if (i->arg1 != NULL && i->type[ARG1] == NULL) {
+						i->type[ARG1] = FindType(&loc, i->arg1);
+						if (i->type[ARG1] != NULL) modified = true;
+					}
+
+					if (i->arg2 != NULL && i->type[ARG2] == NULL) {
+						i->type[ARG2] = FindType(&loc, i->arg2);
+						if (i->type[ARG2] != NULL) modified = true;
+					}
+
+					// In some cases, we may find out, that the type at this place does allow only one value.
+					// That means, we may replace the variable with the constant.
+					ReplaceConst(&i->arg1, i->type[ARG1]);
+					ReplaceConst(&i->arg2, i->type[ARG2]);
+
+					//TODO: We may try to create some table here for small range of values (even for sparse values).
+
+					// For comparisons, we may check whether the condition is not always true or always false
+					if (IS_INSTR_BRANCH(i->op)) {
+
+					} else {
+
+						result = i->result;
+
+						// Check array indexes
+						// Array may have one or two indexes
+						// Index may be simple, or it can be range
+
+						//TODO: Result & argument indexes should be checked in separate pass after type inferring
+						if (result->mode == MODE_ELEMENT) {
+							if (result->var->mode == MODE_VAR || result->var->mode == MODE_CONST || result->var->mode == MODE_ARG) {
+								ti = FindType(&loc, result->var);
+								if (ti != NULL) {
+									if (!TypeIsSubsetOf(ti, result->adr->type->dim[0])) {
+										ErrArg(VarNewInt(ti->range.max));
+										ErrArg(VarNewInt(ti->range.min));
+										ErrArg(result->adr);
+										LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", &loc);
+									}
+								} else {
+									// failed to compute index, what does it means?
+								}
+							}
+						}
+
+						tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
+
+						// Type was evaluated, test, whether there is not an error while assigning it
+						if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
+							if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == MODE_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
+
+								// We allow assigning values to arrays, so we must allow this operation in type checker
+
+								ti = result->type;
+
+								// We initialize array with list of elements
+								// TODO: Parser should probably create element of array borders, to distinguish it from
+								//       assigning arrays.
+
+								if (i->op == INSTR_LET && ti->variant == TYPE_ARRAY && tr->variant != TYPE_ARRAY) {
+									ti = ti->element;
+								}
+
+								if (!TypeIsSubsetOf(tr, ti)) {
+									if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
+										ErrArg(result);
+										ErrArg(VarNewInt(ti->range.max));
+										ErrArg(VarNewInt(ti->range.min));
+										ErrArg(VarNewInt(tr->range.max));
+										ErrArg(VarNewInt(tr->range.min));
+										if (TypeIsIntConst(tr)) {
+											LogicWarningLoc("The value [A] does not fit into variable", &loc);
+										} else {
+											LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", &loc);
+										}
+									} else {
+										LogicWarningLoc("Value does not fit into variable", &loc);								
+									}
+								}
+							}
+
+						// If the resulting type is defined and we failed to compute the type, we may try to
+						// deduce the type 'backwards'.
+						} else {
+						}
+
+						if (tr != NULL) {
+							i->type[RESULT] = tr;
+							modified = true;
+						}
+					}
+				}
+			}
+		}
+		steps++;
+	} while (modified);
+
+	// Extend the type of variables to handle
+	// - Check variables, whose types can not be inferred here
+	// - Check array indexes (this may already lead to argument inference algorithm)
+
+	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
+		for(loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next) {
+			i = loc.i;
+
+			if (i->op == INSTR_LINE) continue;
+
+			var = i->result;
+			if (var != NULL && VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
+				tr = i->type[RESULT];
+				if (tr != NULL && tr->variant != TYPE_UNDEFINED) {
+					var->type = TypeExpand(var->type, i->type[RESULT]);
+				} else {
+					if (var->type->variant == TYPE_UNDEFINED) {
+						ErrArg(var);
+						LogicErrorLoc("Cannot infer type of variable [A].\nPlease specify the type explicitly.", &loc);
+					}
+
+				}
+			}
+		}
+	}
+	PrintVars(proc);
+
+	ReportUnusedVars(proc);
+}

@@ -1,40 +1,50 @@
 ﻿; Horizontal Stars
 ; Demo program for ATALAN programming language
-;(c) 2010 Rudla Kudla
+;(c) 2011 Rudla Kudla
 
 use atari
 
-i:0..242				; number of lines with stars
-hpos:array(242) of byte
-speed:array(242) of 1..4
-col:array(242) of color
+type video_line:4..242 ; video lines numbered 4..242 are visible on screen
 
-;Turn off screen, so we have nice black deep space
+;There is one star on every video line.
+;For every star, we define x coordinate, speed and color.
+x:array(video_line) of byte
+speed:array(video_line) of 1..4
+col:array(video_line) of color
+
+;Turn off screen, so we have nice black deep space.
 
 DMACTL = off
 GRACTL = off
 
-;Initialize start positions, speeds and colors
+;Initialize stars positions, speeds and colors.
 
-for i 
-	hpos(i)  = RANDOM
-	speed(i) = (RANDOM mod 4) + 1
-	col(i)   = RANDOM bitor 3			;make the star color light enough 
+for y:video_line 
+	x(y)  = RANDOM
+	speed(y) = RANDOM mod 4 + 1
+	col(y)   = RANDOM bitor 3			;make the star color light enough 
 
-;Setup sprite 0
+;We use sprite 0 to create stars. Set it up so, that it is 1 pixel height
+;column over whole height of screen.
 
 player(0).gfx = %00000001
 player(0).size = 0
 
 until STRIG(0) = pressed
-
-	until VCOUNT = 4 
+	
+	;Wait for visible video line to appear
+	until VCOUNT = video_line.min 
 		wait'line
+	
+	;On every line, change position and color of sprite 0 to create separate stars	
+	for y:video_line
+		player(0).color = col(y)
+		player(0).x = x(y)
 		
-	for i
-		player(0).color = col(i)
-		player(0).x = hpos(i)
-		hpos(i) = hpos(i) + speed(i)
+		;Move the star to next position. We want the star positions to overflow
+		;back to 0, so we use the 'lo' operator to limit the result to 0..255.
+
+		x(y) =  lo (x(y) + speed(y))
 		wait'line
 
 ;Turn off sprite and turn on screen

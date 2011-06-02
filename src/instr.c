@@ -73,6 +73,64 @@ Purpose:
 	return blk;
 }
 
+void InstrDetach(InstrBlock * blk, Instr * first, Instr * last)
+{
+	Instr * next;
+
+	if (blk != NULL && first != NULL) {
+
+		next = last->next;
+		if (first->prev != NULL) {
+			first->prev->next = next;
+		} else {
+			blk->first = next;
+		}
+
+		if (next != NULL) {
+			next->prev = first->prev;
+		} else {
+			blk->last = first->prev;
+		}
+
+		first->prev = NULL;
+		last->next  = NULL;
+	}
+}
+
+void InstrAttach(InstrBlock * blk, Instr * before, Instr * first, Instr * last)
+{
+
+	if (before == NULL) {
+		first->prev = blk->last;
+		if (blk->last != NULL) {
+			blk->last->next = first;
+		}
+		blk->last = last;
+		if (blk->first == NULL) blk->first = first;
+		last->next = NULL;
+	} else {
+		first->prev = before->prev;
+		last->next = before;
+
+		if (before->prev != NULL) {
+			before->prev->next = first;
+		} else {
+			blk->first = first;
+		}
+		before->prev = first;
+	}
+}
+
+void InstrMoveCode(InstrBlock * to, Instr * before, InstrBlock * from, Instr * first, Instr * last)
+/*
+Purpose:
+	Move piece of code (list of instructions) from one block to another.
+*/
+{
+	InstrDetach(from, first, last);
+	InstrAttach(to, before, first, last);
+}
+
 void GenBlock(InstrBlock * blk)
 /*
 Purpose:
@@ -128,6 +186,7 @@ Purpose:
 {
 	Instr * next = NULL;
 
+	// use Detach
 	if (blk != NULL && i != NULL) {
 
 		next = i->next;
@@ -157,34 +216,12 @@ Purpose:
 */
 {
 	Instr * i = MemAllocStruct(Instr);
-
-	// Attach the new instruction to doubly linked list
-
-	if (before == NULL) {
-		i->prev = blk->last;
-		if (blk->last != NULL) {
-			blk->last->next = i;
-		}
-		blk->last = i;
-		if (blk->first == NULL) blk->first = i;
-	} else {
-		i->prev = before->prev;
-		i->next = before;
-
-		if (before->prev != NULL) {
-			before->prev->next = i;
-		} else {
-			blk->first = i;
-		}
-		before->prev = i;
-	}
-
-
 	i->op = op;
 	i->result = result;
 	i->arg1 = arg1;
 	i->arg2 = arg2;
 
+	InstrAttach(blk, before, i, i);
 }
 
 InstrOp OpNot(InstrOp op)
@@ -192,42 +229,23 @@ InstrOp OpNot(InstrOp op)
 	return op ^ 1;
 }
 
-
+InstrOp OpRelSwap(InstrOp op)
 /*
-char * INSTR_NAME[] = {
-	"nop",     
-	"let",    
+Purpose:
+	Change orientation of non commutative relational operators
+	This is different from NOT operation.
+*/{
 
-	"ifeq",
-	"ifne",
-	"iflt",
-	"ifge",
-	"ifgt",
-	"ifle",
+	switch(op) {
+	case INSTR_IFLE: op = INSTR_IFGE; break;
+	case INSTR_IFGE: op = INSTR_IFLE; break;
+	case INSTR_IFGT: op = INSTR_IFLT; break;
+	case INSTR_IFLT: op = INSTR_IFGT; break;
+	default: break;
+	}
+	return op;
+}
 
-	"prologue",
-	"epilogue",
-	"emit",      
-	"vardef",  
-	"label",   
-	"goto",   
-	"add",
-	"sub",
-	"mul",
-	"div",
-	"and",
-	"or",
-	"letarr",
-	"getarr",
-
-	"alloc",
-	"print",
-	"proc",
-	"endproc",
-	"call",
-	"byte"
-};
-*/
 
 LineNo CURRENT_LINE_NO;
 
@@ -261,23 +279,14 @@ void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
 	Var * var;
 	// For commutative or relational operations make sure the constant is the other operator
-	// This simplifies further code processign.
+	// This simplifies further code processing.
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
 		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
 			if (arg1->mode == MODE_CONST) {
 				var = arg1; arg1 = arg2; arg2 = var;
 
-				// Change oriantation of non commutative relational operators
-				// This is different from NOT operation.
-
-				switch(op) {
-				case INSTR_IFLE: op = INSTR_IFGE; break;
-				case INSTR_IFGE: op = INSTR_IFLE; break;
-				case INSTR_IFGT: op = INSTR_IFLT; break;
-				case INSTR_IFLT: op = INSTR_IFGT; break;
-				default: break;
-				}
+				op = OpRelSwap(op);
 
 			}
 		}
@@ -306,7 +315,7 @@ void GenLet(Var * result, Var * arg1)
 	// TODO: We should test for chain of ADR OF ADR OF ADR ....
 	//       Error should be reported when assigning address of incorrect type
 
-	if (rtype->variant == TYPE_ADR && atype->variant != TYPE_ADR) {
+	if (rtype != NULL && atype != NULL && rtype->variant == TYPE_ADR && atype->variant != TYPE_ADR) {
 		Gen(INSTR_LET_ADR, result, arg1, NULL);
 	} else {
 		Gen(INSTR_LET, result, arg1, NULL);
@@ -316,14 +325,14 @@ void GenLet(Var * result, Var * arg1)
 void GenGoto(Var * label)
 {
 	if (label != NULL) {
-		Gen(INSTR_GOTO, label, NULL, NULL);
+		InternalGen(INSTR_GOTO, label, NULL, NULL);
 	}
 }
 
 void GenLabel(Var * var)
 {
 	if (var != NULL) {
-		if (var->type == NULL) {
+		if (var->type->variant == TYPE_UNDEFINED) {
 			VarToLabel(var);
 		}
 		InternalGen(INSTR_LABEL, var, NULL, NULL);
@@ -349,6 +358,12 @@ Result:
 */
 {
 	Var * r = NULL;
+
+	// Multiplication of A by 1 is same as assigning A
+	if (op == INSTR_MUL) {
+		if (VarIsN(arg1, 1)) return arg2;
+		if (VarIsN(arg2, 1)) return arg1;
+	}
 
 	if (VarIsConst(arg1) && (arg2 == NULL || VarIsConst(arg2))) {
 		
@@ -414,6 +429,10 @@ GLOBAL Rule * EMIT_RULES[INSTR_CNT];
 GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
 
 void RuleRegister(Rule * rule)
+/*
+Purpose:
+	Register parsed rule.
+*/
 {
 	InstrOp op = rule->op;
 	if (!rule->to->first) InternalError("Empty rule");
@@ -429,6 +448,37 @@ void RuleRegister(Rule * rule)
 	}
 }
 
+void RuleArgMarkNonGarbage(RuleArg * rule)
+{
+	if (rule != NULL) {
+		if (rule->variant == RULE_VARIABLE || rule->variant == RULE_CONST) {
+			TypeMark(rule->type);
+		} else if (rule->variant == RULE_TUPLE || rule->variant == RULE_DEREF) {
+			RuleArgMarkNonGarbage(rule->arr);
+		}
+		RuleArgMarkNonGarbage(rule->index);
+	}
+}
+
+void RulesMarkNonGarbage(Rule * rule)
+{
+	UInt8 i;
+	while(rule != NULL) {
+		for(i=0; i<2; i++) {
+			RuleArgMarkNonGarbage(&rule->arg[i]);
+		}
+		rule = rule->next;
+	}
+}
+
+void RulesGarbageCollect()
+{
+	UInt8 op;
+	for(op=0; op<INSTR_CNT; op++) {
+		RulesMarkNonGarbage(RULES[op]);
+		RulesMarkNonGarbage(EMIT_RULES[op]);
+	}
+}
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple);
 
@@ -483,6 +533,12 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		return ArgMatch(pattern->arr, arg->adr, true); 
 		break;
 
+	case RULE_BYTE:
+		if (arg->mode != MODE_BYTE) return false;		// pattern expects byte, and variable is not an byte
+		if (!ArgMatch(pattern->index, arg->var, false)) return false;
+		return ArgMatch(pattern->arr, arg->adr, false); 
+		break;
+
 	case RULE_ELEMENT:
 		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, false)) return false;
@@ -524,28 +580,13 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 	
 	case RULE_DEREF:
 		if (arg->mode != MODE_DEREF) return false;
-//		if (arg->mode == MODE_CONST) return false;
-//		if (FlagOff(arg->submode, SUBMODE_REF)) return false;
 		arg = arg->var;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
-	// We get array as an argument. We are interested in the type of it's element.
-//	case RULE_ARRAY_ARG:
-//		if (arg->mode == MODE_ELEMENT) return false;
-//		if (atype->variant != TYPE_ARRAY) return false;
-//		while(atype->element->variant == TYPE_ARRAY) atype = atype->element;
-//		if (pattern->type != NULL) {
-//			if (!TypeIsSubsetOf(atype->element, pattern->type)) return false;
-//			if (!VarMatchesPattern(arg, pattern)) return false; 
-//			printf("");
-//		}
-//		break;
-
 	case RULE_ARG:
-		if (arg->mode == MODE_DEREF) return false;
+		if (arg->mode == MODE_DEREF || arg->mode == MODE_RANGE) return false;
 		if (!in_tuple && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-//		if (FlagOn(arg->submode, SUBMODE_REF)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
@@ -994,9 +1035,10 @@ Purpose:
 	do {
 		modified = false;
 		untranslated = false;
-		ln = 1;
+
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
+			ln = 1;
 			// The translation is done by using procedures for code generating.
 			// We detach the instruction list from block and set the block as destination for instruction generator.
 			// In this moment, the code generating stack must be empty anyways.
@@ -1134,6 +1176,11 @@ void PrintVarVal(Var * var)
 				PrintVarVal(index);
 				printf(")");
 			}
+		} else if (var->mode == MODE_BYTE) {
+			PrintVarVal(var->adr);
+			Print("$");
+			PrintVarVal(var->var);
+
 		} else {
 			if (var->mode == MODE_RANGE) {
 				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
@@ -1153,6 +1200,14 @@ void PrintVarVal(Var * var)
 		}
 	} else {
 		PrintVarName(var);
+
+		if (var->type->variant == TYPE_LABEL) {
+			if (var->instr != NULL) {
+				Print(" (#");
+				PrintInt(var->instr->seq_no);
+				Print(")");
+			}
+		}
 
 		if (var->adr != NULL) {
 			if (var->adr->mode == MODE_TUPLE) {
@@ -1186,6 +1241,27 @@ void PrintVarArgs(Var * var)
 	printf(")");
 }
 
+void PrintVarNameUser(Var * var)
+{
+	Print(var->name);
+	if (var->idx > 0) {
+		PrintInt(var->idx-1);
+	}
+}
+
+void PrintVarUser(Var * var)
+{
+	if (var->mode == MODE_ELEMENT) {
+		PrintVarNameUser(var->adr); Print("("); PrintVarUser(var->var); Print(")");
+	} else if (var->mode == MODE_BYTE) {
+		PrintVarNameUser(var->adr);
+		Print("$");
+		PrintVarUser(var->var);
+	} else {
+		PrintVarNameUser(var);
+	}
+}
+
 void PrintVar(Var * var)
 {
 	Type * type;
@@ -1200,9 +1276,13 @@ void PrintVar(Var * var)
 
 	if (var->mode == MODE_ELEMENT) {
 		PrintVarName(var->adr);
-		printf("(");
+		Print("(");
 		PrintVar(var->var);
-		printf(")");
+		Print(")");
+	} else if (var->mode == MODE_BYTE) {
+		PrintVarName(var->adr);
+		Print("$");
+		PrintVar(var->var);
 	} else if (var->mode == MODE_CONST) {
 		printf("%ld", var->n);
 		return;
@@ -1254,29 +1334,29 @@ void InstrPrintInline(Instr * i)
 		PrintColor(RED+GREEN+BLUE);
 	} else if (i->op == INSTR_LABEL) {
 		PrintVarVal(i->result);
-		printf("@");
+		Print("@");
 	} else {
 		inop = InstrFindCode(i->op);
 		printf("   %s", inop->name);
 	
 		if (i->result != NULL) {
-			printf(" ");
+			Print(" ");
 			PrintVarVal(i->result);
 			r = true;
 		}
 
 		if (i->arg1 != NULL) {
 			if (r) {
-				printf(", ");
+				Print(", ");
 			} else {
-				printf(" ");
+				Print(" ");
 			}
 
 			PrintVarVal(i->arg1);
 		}
 
 		if (i->arg2 != NULL) {
-			printf(", ");
+			Print(", ");
 			PrintVarVal(i->arg2);
 		}
 	}
@@ -1292,18 +1372,16 @@ void InstrPrint(Instr * i)
 void CodePrint(InstrBlock * blk)
 {
 	Instr * i;
-	UInt32 n = 1;
+	UInt32 n;
 	while (blk != NULL) {
+		n = 1;
+		printf("#%ld/  ", blk->seq_no);
 		if (blk->label != NULL) {
 			printf("    ");
 			PrintVarVal(blk->label);
 			printf("@");
 		}
-		if (blk->seq_no != 0) {
-			printf("   (#%d)\n", blk->seq_no);
-		} else {
-			printf("\n");
-		}
+		printf("\n");
 		for(i = blk->first; i != NULL; i = i->next, n++) {
 			printf("%3ld| ", n);
 			InstrPrint(i);

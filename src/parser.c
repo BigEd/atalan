@@ -88,7 +88,7 @@ Var * ParseScope()
 	return scope;
 }
 
-void ParseVariable(Var ** p_var)
+Var * ParseVariable()
 /*
 Purpose:
 	Parse variable name.
@@ -113,7 +113,7 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 		}
 	} while(!spaces && NextIs(TOKEN_DOT));
 
-	*p_var = var;
+	return var;
 }
 
 void ParseArgList(VarMode mode, Type * to_type)
@@ -128,22 +128,33 @@ Purpose:
 {
 	VarSubmode submode = SUBMODE_EMPTY;
 	Var * var, * adr;
+	Bool out_part = false;
 
  	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
 
 	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 
-		submode = SUBMODE_ARG_IN;
-		if (NextIs(TOKEN_LOWER)) {
-			submode = SUBMODE_ARG_IN;
+		if (!out_part && NextIs(TOKEN_RIGHT_ARROW)) {
+			out_part = true;
 		}
-		if (NextIs(TOKEN_HIGHER)) {
+
+		submode = SUBMODE_ARG_IN;
+
+		if (out_part) {
 			submode = SUBMODE_ARG_OUT;
+		} else {
+
+			if (NextIs(TOKEN_LOWER)) {
+				submode = SUBMODE_ARG_IN;
+			}
+			if (NextIs(TOKEN_HIGHER)) {
+				submode = SUBMODE_ARG_OUT;
+			}
 		}
 
 		// Variables preceded by @ define local variables used in the procedure.
 		if (NextIs(TOKEN_ADR)) {
-			ParseVariable(&adr);
+			adr = ParseVariable();
 			if (TOK) {
 				var = VarAllocScopeTmp(to_type->owner, MODE_VAR, adr->type);
 				var->adr  = adr;
@@ -405,7 +416,7 @@ const_list:
 		}
 
 	} else if (TOK == TOKEN_ID) {
-		ParseVariable(&var);
+		var = ParseVariable();
 		if (TOK != TOKEN_ERROR) {
 			if (mode == MODE_TYPE) {
 				type = TypeDerive(var->type);
@@ -417,15 +428,17 @@ const_list:
 		}
 	}
 
-	if (variant_type != NULL) {
-		variant_type->dim[1] = type;
-		type = variant_type;
-	}
+	if (TOK) {
+		if (variant_type != NULL) {
+			variant_type->dim[1] = type;
+			type = variant_type;
+		}
 
-	if (NextIs(TOKEN_OR)) {
-		variant_type = TypeAlloc(TYPE_VARIANT);
-		variant_type->dim[0] = type;
-		goto next;
+		if (NextIs(TOKEN_OR)) {
+			variant_type = TypeAlloc(TYPE_VARIANT);
+			variant_type->dim[0] = type;
+			goto next;
+		}
 	}
 
 	return type;
@@ -479,7 +492,7 @@ Purpose:
 */
 {
 	Var * result, * arg1, * arg2;
-	Type * type;
+//	Type * type;
 
 	arg1 = STACK[TOP-2];
 	arg2 = STACK[TOP-1];
@@ -499,21 +512,22 @@ Purpose:
 
 	result = InstrEvalConst(op, arg1, arg2);
 	if (result == NULL) {
-
+/*
 		if (EXP_TYPE.variant == TYPE_UNDEFINED) {
 			TypeLet(&EXP_TYPE, arg1);
 		}
 
 		TypeTransform(&EXP_TYPE, arg2, op);
-
+*/
 //		type = RESULT_TYPE;
 //		if (type != NULL && type->variant == TYPE_ARRAY) {
 //			type = type->element;
 //		}
 
 		//TODO: Other than numeric types (
-		type = TypeCopy(&EXP_TYPE);
-		result = VarNewTmp(G_TEMP_CNT, type);
+//		type = TypeCopy(&EXP_TYPE);
+		result = VarAllocScopeTmp(NULL, MODE_VAR, NULL);
+//		result = VarNewTmp(G_TEMP_CNT, type);
 		G_TEMP_CNT++;
 		Gen(op, result, arg1, arg2);
 	}
@@ -594,7 +608,7 @@ Return 0, if there is not such argument.
 			if (NAME[1] == 0 && c >= 'A' && c <='Z') {
 				arg_no = c - 'A' + 1;
 			} else {
-				SyntaxError("Rule argument mast be A..Z");
+				SyntaxError("Rule argument must be A..Z");
 			}
 		}
 	}
@@ -682,28 +696,31 @@ Purpose:
 */
 {
 	UInt16 top;
-	Type * idx_type;
+	Type * idx_type, * atype;
 	Var * idx, * idx2, * item;
 	UInt16 bookmark;
-//	Bool prev_cond;
-	VarMode mode = MODE_ELEMENT;
+	TypeVariant tv;
 
 	// Array element access uses always () block
 	EnterBlock();
 
-//	NextIs(TOKEN_OPEN_P);
-
 	top = TOP;
+
+	atype = arr->type;
+	tv = TYPE_VOID;
 
 	// First dimension (or first element of tuple)
 
-	if (arr->type != NULL) {
-		if (arr->type->variant == TYPE_ARRAY) {
-			idx_type = arr->type->dim[0];
-		//TODO: Support index for adr of array(index)
-		} else if (arr->type->variant == TYPE_SCOPE) {
+	if (atype != NULL) {
+		tv = atype->variant;
+
+		if (tv == TYPE_ARRAY) {
+			idx_type = atype->dim[0];
+		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
 		} else {
+			// This is default case for accessing bytes of variable
+			// It should be replaced by x$0 x$1 syntax in the future.
 			idx_type = TypeByte();
 		}
 	} else {
@@ -711,16 +728,22 @@ Purpose:
 	}
 
 	bookmark = SetBookmark();
-//	prev_cond = G_CONDITION_EXP;
-//	G_CONDITION_EXP = false;
 
-	// It may be (..<n>), use min as default
-	if (TOK == TOKEN_DOTDOT) {
-		mode = MODE_RANGE;
+	idx = idx2 = NULL;
+
+	// Syntax a()  represents whole array
+	if (tv == TYPE_ARRAY && TOK == TOKEN_BLOCK_END) {
 		idx  = VarNewInt(idx_type->range.min);
-		
-	} else {
+		idx2 = VarNewInt(idx_type->range.max);
+		idx = VarNewRange(idx, idx2);
+		goto done;
+	}
 
+
+	// It may be (..<n>), or even () use min as default
+	if (TOK == TOKEN_DOTDOT) {
+		idx  = VarNewInt(idx_type->range.min);
+	} else {
 		ParseSubExpression(idx_type);
 		if (TOK) {
 			idx = STACK[top];
@@ -733,9 +756,10 @@ Purpose:
 
 	// <min>..<max>
 	if (NextIs(TOKEN_DOTDOT)) {
-		mode = MODE_RANGE;
 		if (TOK == TOKEN_COMMA || TOK == TOKEN_BLOCK_END) {
-			idx2 = VarNewInt(idx_type->range.max);
+			if (tv == TYPE_ARRAY) {
+				idx2 = VarNewInt(idx_type->range.max);
+			}
 		} else {
 			ParseSubExpression(idx_type);
 			idx2 = STACK[top];
@@ -743,13 +767,15 @@ Purpose:
 				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 			}
 		}
-		idx = VarNewRange(idx, idx2);
+		if (idx2 != NULL) {
+			idx = VarNewRange(idx, idx2);
+		}
 	}
 
 	if (TOK) {
 		// Second dimension
 		idx_type = NULL;
-		if (arr->type != NULL && arr->type->variant == TYPE_ARRAY) idx_type = arr->type->dim[1];
+		if (tv == TYPE_ARRAY) idx_type = atype->dim[1];
 
 		if (NextIs(TOKEN_COMMA)) {
 			if (idx_type != NULL) {
@@ -761,25 +787,19 @@ Purpose:
 				if (VarIsTmp(idx2)) G_TEMP_CNT--;
 				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 
-//				idx = VarNewElement(idx, idx2);
 				idx = VarNewTuple(idx, idx2);
 			} else {
 				SyntaxError("Array has only one dimension");
 			}
 		}
 
+	}
+done:
+
+	if (TOK) {
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
-	//G_CONDITION_EXP = prev_cond;
-
-	//ParseParenthesis();
-	// Result is temporary variable created by InstrBinary, 
-	// arg1 = array, arg2 = item
-	
-	//TODO: For adr, we should generate dereference here!!!
-
 	item = VarNewElement(arr, idx);
-
 
 	TOP = top;
 
@@ -866,7 +886,7 @@ void ParseOperand()
 			}
 no_id:
 			// Procedure call
-			if (var->type != NULL && (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO)) {
+			if (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO) {
 				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
 					// this is address of procedure
 				} else {
@@ -901,10 +921,28 @@ no_id:
 				}
 			}
 indices:
+			if (NextCharIs('$')) {
+				NextToken();
+				if (TOK == TOKEN_INT) {
+					item = VarNewInt(LEX.n);
+					NextToken();
+				} else if (TOK == TOKEN_ID) {
+					item = ParseVariable();
+				} else {
+					SyntaxError("Expected constant or variable name");
+				}
+				if (TOK) {
+					var = VarNewByteElement(var, item);
+				}
+				goto done;
+			}
+
 			spaces = Spaces();
 			NextToken();
 			if (!spaces) {
-				if (NextIs(TOKEN_DOT)) {
+				// Accessing the specified byte of variable (a$0, a$1, ...)
+				if (NextIs(TOKEN_DOLLAR)) {
+				} if (NextIs(TOKEN_DOT)) {
 					if (var->mode == MODE_ARG) {
 						var = VarNewElement(var, VarNewStr(NAME));
 						NextToken();
@@ -954,14 +992,14 @@ indices:
 					TOP++;
 					return;
 				}
-			}// else {
+			} //else {
 			//	NextToken();
 			//}
 		} else {
 //			SyntaxError("expected operand");
 			return;
 		}
-
+done:
 		// Assign address
 		if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
 //			NextToken();
@@ -1144,6 +1182,8 @@ If result mode is MODE_CONST, no code is to be generated.
 	if (result == NULL) {
 		RESULT_TYPE = NULL;
 	} else {
+		type = result->type;
+
 		if (result->mode == MODE_ELEMENT) {
 			type = result->adr->type;
 			if (type->variant == TYPE_ARRAY) {
@@ -1157,6 +1197,8 @@ If result mode is MODE_CONST, no code is to be generated.
 				}
 			} else {
 			}
+		} else if (type != NULL && type->variant == TYPE_ARRAY) {
+			RESULT_TYPE = type->element;
 		} else {
 			RESULT_TYPE = result->type;
 		}
@@ -1173,7 +1215,7 @@ If result mode is MODE_CONST, no code is to be generated.
 	if (TOK) {
 		if (EXP_TYPE.variant == TYPE_UNDEFINED) {
 			if (TOP > 0) {
-				TypeLet(&EXP_TYPE, STACK[0]);
+//				TypeLet(&EXP_TYPE, STACK[0]);
 			}
 		}
 	}
@@ -1457,12 +1499,10 @@ void ParseGoto()
 	Var * var;
 	ParseLabel(&var);
 	if (TOK != TOKEN_ERROR) {
-		if (VarIsLabel(var)) {
-			GenGoto(var);
-		} else {
-			var = VarNewDeref(var);				//TODO: MODE_DEREF
-			GenGoto(var);
+		if (!VarIsLabel(var)) {
+			var = VarNewDeref(var);
 		}
+		Gen(INSTR_GOTO, var, NULL, NULL);
 	}
 	
 }
@@ -1503,7 +1543,7 @@ retry:
 
 			// else if
 			if (TOK == TOKEN_IF) {
-				G_BLOCK->f_label = NULL;		// expression will generate new labels if necesary
+				G_BLOCK->f_label = NULL;		// expression will generate new labels if necessary
 				G_BLOCK->t_label = NULL;
 				goto retry;
 			// else
@@ -1574,7 +1614,7 @@ Purpose:
 	Int32 nmin = 0, nmax = 0;
 	Int32 mmin = 0, mmax = 0;
 	Int32 l;
-	Type * type = NULL;
+	Type * type = TUNDEFINED;
 
 	if (min->mode == MODE_CONST) {
 		if (min->type->variant == TYPE_INT) {
@@ -1813,9 +1853,18 @@ Syntax:
 		if (G_BLOCK->f_label == NULL) {
 			G_BLOCK->f_label = VarNewTmpLabel();
 		}
-		InternalGen(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
+
+		// If step is 1, it is not necessary to test the overflow
+		if (step->mode != MODE_CONST || step->n != 1) {
+			InternalGen(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
+		}
 no_overflow:
-		InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);
+
+		// We use > comparison as in the case step is <> 1, it may step over the limit without touching it.
+		// Also user may modify the index variable (although this should be probably discouraged when for is used).
+
+//		InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);
+		InternalGen(INSTR_IFGT, G_BLOCK->body_label, max, var);
 	}
 var_done:
 
@@ -1973,10 +2022,12 @@ Bool VarIsImplemented(Var * var)
 	Instr i;
 	TypeVariant v;
 
+	v = var->type->variant;
+
 	// If the variable has no type, it will not be used in instruction,
 	// so it is considered implemented.
 
-	if (var->type == NULL) return true;
+	if (v == TYPE_UNDEFINED) return true;
 
 	// Type declarations do not need to be implemented
 	// (we think of them as being implemented by compiler).
@@ -1985,7 +2036,6 @@ Bool VarIsImplemented(Var * var)
 
 	// Macros and procedures are considered imp
 
-	v = var->type->variant;
 	if (v == TYPE_MACRO || v == TYPE_PROC || v == TYPE_LABEL || v == TYPE_SCOPE) return true;
 
 	// Register variables are considered implemented.
@@ -2021,7 +2071,7 @@ Purpose:
 	if (TOK == TOKEN_OPEN_P) {
 		EnterBlock();
 		do {
-			ParseVariable(&item);
+			item = ParseVariable();
 			if (TOK) {
 				if (adr == NULL) {
 					adr = item;
@@ -2095,6 +2145,32 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 	}
 }
 
+Bool CodeHasSideEffects(Var * scope, InstrBlock * code)
+/*
+Purpose:
+	Return true, if the code has some side effects.
+*/
+{
+	Instr * i;
+	InstrBlock * blk;
+	Var * var;
+
+	for(blk = code; blk != NULL; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			var = i->result;
+			if (i->op == INSTR_CALL) {
+				if (FlagOn(var->submode, SUBMODE_OUT)) return true;
+			} else if (i->op == INSTR_LINE) {
+			} else {
+				if (var != NULL) {
+					if (OutVar(var) || !VarIsLocal(var, scope)) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 void ParseProcBody(Var * proc)
 {
 	Var * lbl;
@@ -2115,14 +2191,16 @@ void ParseProcBody(Var * proc)
 	GenLabel(lbl);
 
 	proc->instr = InstrBlockPop();
-
+	if (CodeHasSideEffects(proc, proc->instr)) {
+		SetFlagOn(proc->submode, SUBMODE_OUT);
+	}
 	ReturnScope(scope);
 
 	// *** Register Arguments (2)
 	// As the first thing in a procedure, we must spill all arguments that are passed in registers
 	// to local variables. 
 	// Otherwise some operations may trash the contents of an argument and it's value would become unavailable.
-	// In the body of the procedure, we must use these local variables insted of register arguments.
+	// In the body of the procedure, we must use these local variables instead of register arguments.
 	// Optimizer will later remove unnecessary spills.
 
 	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_IN, proc->instr->first);
@@ -2148,10 +2226,11 @@ Purpose:
 	UInt16 cnt, j, i, stack;
 	Var * var,  * item, * adr, * scope, * idx, * min, * max;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
-	Type * type = NULL;
+	Type * type;
 	TypeVariant typev;
 	UInt16 bookmark;
 
+	type = TUNDEFINED;
 	is_assign = false;
 	existed   = true;
 	scope = NULL;
@@ -2186,15 +2265,20 @@ retry:
 		}
 		//TODO: Type with same name already exists
 		if (var == NULL) {			
+
+			// We need to prevent the variable from finding itself in case it has same name as type from outer scope
+			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
+			// Real mode is assigned when the variable type is parsed.
+
 			var = VarAllocScope(scope, MODE_UNDEFINED, NAME, 0);
+			var->line_no = LINE_NO;
+			var->file    = SRC_FILE;
+			if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
 			existed = false;
 //			if (scope != NULL) {
 //				PrintScope(scope);
 //			}
 
-			// We need to prevent the variable from finding itself in case it has same name as type from outer scope
-			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
-			// Real mode is assigned when the variable type is parsed.
 			var->submode = submode;
 		} else {
 			if (var->mode == MODE_SCOPE) {
@@ -2275,6 +2359,7 @@ no_dot:
 	}
 
 	// Set the parsed type to all new variables (we do this, even if a type was not parsed)
+	if (!TOK) return;
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
@@ -2289,12 +2374,13 @@ no_dot:
 
 			var->mode = mode;
 
-			if (type != NULL) {
+			if (type->variant != TYPE_UNDEFINED) {
 				var->type = type;
+				SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
 				// Definition of named constant assigned to type (name:xxx = 34)
 				if (var->mode == MODE_CONST && FlagOff(submode, SUBMODE_PARAM)) {
-					if (var->type != NULL) {
+					if (var->type->variant != TYPE_UNDEFINED) {
 						TypeAddConst(var->type, var);
 					}
 				} else {
@@ -2334,7 +2420,7 @@ no_dot:
 				}
 			}
 		} else {
-			if (type != NULL) {
+			if (type->variant != TYPE_UNDEFINED) {
 				ErrArg(var);
 				SyntaxError("Variable [A] already defined");
 			}
@@ -2352,8 +2438,9 @@ no_dot:
 		for(j = 0; j<cnt; j++) {
 			var = vars[j];
 			type = var->type;
-			typev = TYPE_UNDEFINED;
-			if (type != NULL) typev = type->variant;
+//			typev = TYPE_UNDEFINED;
+//			if (type != NULL) typev = type->variant;
+			typev = type->variant;
 
 			ErrArgClear();
 			ErrArg(var);
@@ -2381,7 +2468,7 @@ no_dot:
 				// Initialization of array
 				// Array is initialized as list of constants.
 
-				if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) {
+				if (typev == TYPE_ARRAY && var->mode == MODE_CONST) {
 					flexible = type->dim[0]->range.flexible;
 					i = ParseArrayConst(var);
 					if (flexible) {
@@ -2442,7 +2529,7 @@ no_dot:
 									var->n = item->n;
 									var->value_nonempty = item->value_nonempty;
 									// Set the type based on the constant
-									if (var->type == NULL) {
+									if (typev == TYPE_UNDEFINED) {
 										var->type = TypeAllocInt(item->n, item->n);
 									}
 								} else {
@@ -2454,7 +2541,7 @@ no_dot:
 									// This eliminates unnecessary temporary variable usage.
 
 									// The variable does not have a type, therefore we must use inferencing
-
+/*
 									if (var->type == NULL) {
 
 										// Variable is initialized by constant, set the type to n..n
@@ -2485,7 +2572,7 @@ no_dot:
 											}
 										}
 									}
-
+*/
 									// Array assignment
 //									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 //										GenArrayInit(var, item);
@@ -2510,7 +2597,7 @@ no_dot:
 	} else {
 		// No equal sign, this must be call to procedure or macro (without return arguments used)
 		var = vars[0];
-		if (existed && !is_assign && var != NULL && var->type != NULL) {
+		if (existed && !is_assign && var != NULL) {
 			switch(var->type->variant) {
 				case TYPE_PROC:
 					ParseCall(var);
@@ -2670,10 +2757,23 @@ void ParseRuleArg2(RuleArg * arg)
 
 	if (TOK == TOKEN_ID) {
 		arg->variant = RULE_REGISTER;
-		ParseVariable(&arg->var);
+		arg->var = ParseVariable();
 		return;
-	} else if (arg->arg_no = ParseArgNo()) {
+	} else if (arg->arg_no = ParseArgNo2()) {
 		arg->variant = RULE_ARG;
+		if (NextCharIs(TOKEN_BYTE_INDEX)) {
+			NextToken();
+			arr = NewRuleArg();
+			MemMove(arr, arg, sizeof(RuleArg));
+			arg->variant = RULE_BYTE;
+			arg->arr = arr;
+			idx = NewRuleArg();
+			ParseRuleArg2(idx);
+			arg->index = idx;
+			return;
+		} else {
+			NextToken();
+		}
 	} else if (NextIs(TOKEN_ADR)) {
 		arg->variant = RULE_DEREF;
 		arg->arg_no  = ParseArgNo();
@@ -2764,6 +2864,7 @@ void ParseRule()
 	Rule * rule;
 	char buf[255];
 	char *s, *d, c;
+	Bool old_parse;
 
 	op = ParseInstrOp();
 	if (TOK == TOKEN_ERROR) return;
@@ -2773,6 +2874,7 @@ void ParseRule()
 	rule->line_no = LINE_NO;
 	rule->file    = SRC_FILE;
 
+	old_parse = SYSTEM_PARSE;
 	SYSTEM_PARSE = true;
 
 	// Parse three parameters
@@ -2828,7 +2930,7 @@ void ParseRule()
 	if (TOK != TOKEN_ERROR) {
 		RuleRegister(rule);
 	}
-	SYSTEM_PARSE = false;
+	SYSTEM_PARSE = old_parse;
 	
 }
 
@@ -2989,6 +3091,7 @@ Arguments:
 					args[arg_no] = val;
 				} else {
 					if (VarIsReg(arg)) {
+						//TODO: If var is already tmp, we do not need to create new temporary here
 						tmp = VarNewTmp(0, arg->type);
 						GenLet(tmp, val);
 						val = tmp;
@@ -3159,6 +3262,12 @@ void ParseUseFile()
 		return;
 	}
 
+	// Parse module parameters (name = value, )
+
+//	EnterBlock();
+//	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+//	}
+
 	Parse(NAME, false);
 	if (TOK != TOKEN_ERROR) NextToken();
 }
@@ -3177,8 +3286,33 @@ Syntax: { [file_ref] }
 	}
 }
 
-void ParseAssert()
+void AssertVar(Var * var)
 {
+	Var * name;
+	char buf[100];
+
+	if (var == NULL) return;
+	if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && !VarIsReg(var) && var->name != NULL) {
+		buf[0] = ' ';
+		StrCopy(buf+1, var->name);
+		StrCopy(buf + 1+ StrLen(var->name), " = ");
+		name = VarNewStr(buf);
+		InternalGen(INSTR_STR_ARG, NULL, name, VarNewInt(StrLen(buf)));
+		InternalGen(INSTR_VAR_ARG, NULL, var, NULL);
+//		PrintVarName(var); PrintEOL();
+	}
+}
+
+void ParseAssert()
+/*
+- assert may not have side effects (no side-effect procedure, no reading in-sequence)
+*/
+{
+	InstrBlock * cond, * args;
+	Instr * i;
+	char location[100];
+	UInt16 bookmark;
+
 	NextIs(TOKEN_ASSERT);
 
 	if (TOK == TOKEN_STRING) {
@@ -3190,7 +3324,56 @@ void ParseAssert()
 			SyntaxError("This platform does not support output asserts");
 		}
 	} else {
-		SyntaxError("Only string argument for assert supported now.");
+
+		// We must remember block to be able to analyze the used variables
+
+		Gen(INSTR_ASSERT_BEGIN, NULL, NULL, NULL);
+		BeginBlock(TOKEN_IF);		// begin if block		
+		G_BLOCK->not = true;
+		InstrBlockPush();
+		bookmark = SetBookmark();
+		ParseCondition();
+		if (TOK == TOKEN_ERROR) return;
+
+		cond = InstrBlockPop();
+
+		if (CodeHasSideEffects(SCOPE, cond)) {
+			LogicWarning("assertion has side-effects", bookmark);
+		}
+
+		InstrBlockPush();
+
+		sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
+		Gen(INSTR_STR_ARG, NULL, VarNewStr(location), VarNewInt(StrLen(location)));
+		for(i = cond->first; i != NULL; i = i->next) {
+			AssertVar(i->arg1);
+			AssertVar(i->arg2);
+		}
+		Gen(INSTR_DATA, NULL, VarNewInt(0), NULL);
+
+		args = InstrBlockPop();
+
+		GenBlock(cond);
+
+		// If condition referenced true label (which is not necessary, if it didn't contain AND or OR),
+		// generate it here
+
+		if (G_BLOCK->t_label != NULL) {
+			GenLabel(G_BLOCK->t_label);
+		}
+
+		// Generate call to assert (variant of print instruction)
+		InternalGen(INSTR_ASSERT, NULL, NULL, NULL);
+		GenBlock(args);
+
+		// generate file name and line number
+		// generate list of used variables
+
+		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
+		GenLabel(G_BLOCK->f_label);
+		EndBlock();
+
+//		SyntaxError("Only string argument for assert supported now.");
 	}
 }
 

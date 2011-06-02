@@ -54,7 +54,7 @@ GLOBAL LineNo  LINE_NO;
 GLOBAL UInt16  LINE_LEN;
 GLOBAL UInt16  LINE_POS;				// index of next character in line
 static LineIndent     LINE_INDENT;
-static int     PREV_CHAR;
+static Int16    PREV_CHAR;
 
 GLOBAL UInt16  TOKEN_POS;
 GLOBAL Lexer LEX;
@@ -305,6 +305,11 @@ Purpose:
 */
 {
 	BLK_TOP--;
+	// We may need to end block preceding this block, if the current token is block terminator.
+	if (BLK[BLK_TOP].end_token == TOK) {
+		TOK = TOKEN_BLOCK_END;
+		BLK_TOP--;
+	}
 }
 
 /***********************************************
@@ -612,6 +617,13 @@ store:
 
 }
 
+Bool NextCharIs(UInt8 chr)
+{
+	if (LINE[LINE_POS] != chr) return false;
+	LINE_POS++;
+	return true;
+}
+
 Bool NextIs(Token tok)
 {
 	if (TOK != tok) return false;
@@ -655,6 +667,7 @@ ParseState * ParseStateLabel()
 	s->line_pos  = LINE_POS;
 	s->prev_line = PREV_LINE;
 	s->token     = TOK;
+	s->prev_char = PREV_CHAR;
 
 	return s;
 }
@@ -669,6 +682,7 @@ void ParseStateGoto(ParseState * s)
 		LINE_POS  = s->line_pos;
 		PREV_LINE = s->prev_line;
 		TOK       = s->token;
+		PREV_CHAR = s->prev_char;
 
 		MemFree(s->line);
 		MemFree(s);
@@ -734,6 +748,7 @@ FILE * FindFile(char * name, char * ext, char * path)
 		if (f != NULL) {
 			if (*PLATFORM == 0) {
 				strcpy(PLATFORM, name);
+				SYSTEM_PARSE = true;
 			}
 		}
 	}

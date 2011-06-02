@@ -64,6 +64,9 @@ type instrs:enum
 	mod
 	xor
 	not
+	assert_begin
+	assert
+	assert_end
 	line
 	include					;include assembler file
 	mula

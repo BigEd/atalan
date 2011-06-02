@@ -10,7 +10,7 @@
  - Logic     Logic error in user program. For example type mismatch, index out of bounds etc.
  - Internal  Error, that really should not have happened
 
- Errors may be categorized by severity, too:
+ Errors may be categorized by severity:
 
  - Error
  - Warning
@@ -51,13 +51,17 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 */
 {
 	UInt16 i, token_pos, indent, line_cnt;
-	char c, * t, * n;
+	char c, * t;
 	char * line;
 	char buf[2048];
 	char * o;
 	Var * var;	
 	Bool name = false;
 	Bool show_indent = false;
+	UInt8 used_args[26];		// list of variables used in error message (in the order of use)
+	UInt8 arg_cnt = 0;
+	Bool no_rep = false;
+	FILE * f;
 
 	if (*text == '$') {
 		name = true;
@@ -76,21 +80,34 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
+	f = PrintDestination(STDERR);
+
 	line_cnt = 0;
 	PrintColor(RED);
 
 	if (SRC_FILE != NULL) {
-		indent = fprintf(STDERR, "%s(%d) %s error: ", SRC_FILE->name, i, kind);
+		fprintf(STDERR, "%s(%d) %s: ", SRC_FILE->name, i, kind);
 	} else {
-		indent = fprintf(STDERR, "%s error: ", kind);
+		fprintf(STDERR, "%s: ", kind);
 	}
+
+	indent = 4;
 
 	// Format error message
 	t = text; o = buf;
 	do {
 		c = *t++;
 		if (c == '[') {
+
+			// Print buffer we have up to now
+			*o++ = 0;
+			Print(buf);
+			o = buf;
+
+			no_rep = false;
 			c = *t++;
+			if (c == '-') { c = *t++; no_rep = true; }
+
 			// Get argument and print it's property
 			if (c>='A' && c<='Z') {
 				c = c - 'A';
@@ -100,13 +117,25 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 					c = ERR_ARG_POS - c;
 				}
 				var = ERR_ARGS[c-1];
+
+				// Remember used arguments (in order of use).
+				// Prevent duplicates.
+				if (!no_rep) {
+					for(i=0; i<arg_cnt; i++) if (used_args[i] == c) break;
+					if (i == arg_cnt) {
+						used_args[arg_cnt++] = c;
+					}
+				}
 			}
 
 			// Output variable name
-			n = var->name;
-			*o++ = '\'';
-			while(*n != 0) *o++ = *n++;
-			*o++ = '\'';
+			if (VarIsIntConst(var)) {
+				PrintInt(var->n);
+			} else {
+				Print("\'");
+				PrintVarUser(var);
+				Print("\'");
+			}
 
 			c = *t++;
 			if (c != ']') {
@@ -114,27 +143,41 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			}
 		} else if (c == '\n' || c == 0) {
 			*o++ = 0;
+			Print(buf);
+			Print("\n");
+			o = buf;
 
 			if (line_cnt != 0) {
-				for(i=0; i<indent; i++) fprintf(STDERR, " ");
+				PrintRepeat(" ", indent);
 			}
-			fprintf(STDERR, "%s\n", buf);
+
 			line_cnt++;
-			o = buf;
 		} else {
 			*o++ = c;
 		}
-	} while(c != 0);
+	} while (c != 0);
 
 //	*o++ = 0;
 
 //	fprintf(STDERR, "%s", buf);
 
 	if (name) fprintf(STDERR, " \'%s\'", NAME);
-	fprintf(STDERR, "\n\n");
+//	fprintf(STDERR, "\n");
+
+	if (arg_cnt > 0) {
+		for(i=0; i<arg_cnt; i++) {
+			c = used_args[i];
+			var = ERR_ARGS[c-1];
+			if (var->file != NULL) {
+				PrintRepeat(" ", indent);
+				fprintf(STDERR, "'%s' was declared at line %s(%d)\n", var->name, var->file->name, var->line_no);
+			}
+		}
+
+		fprintf(STDERR, "\n");
+	}
 
 	// Print line with error and position of the error on line
-
 	line = NULL;
 	if (bookmark == 0) {
 		line = LINE;
@@ -150,14 +193,14 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 		while(*line == SPC || *line == TAB) {
 			if (show_indent) {
-				if (*line == SPC) printf(".");
-				if (*line == TAB) printf("->|");
+				if (*line == SPC) Print(".");
+				if (*line == TAB) Print("->|");
 			}
 			line++;
 			if (token_pos > 0) token_pos--;
 		}
 
-		fprintf(STDERR, "%s", line);
+		Print(line);
 
 		if (!show_indent) {
 			if (token_pos > 0) {
@@ -175,12 +218,15 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			}
 		}
 	}
+	fprintf(STDERR, "\n");
 	PrintColor(RED+GREEN+BLUE);
+	PrintDestination(f);
+
 }
 
 void SyntaxErrorBmk(char * text, UInt16 bookmark)
 {
-	ReportError("Syntax", text, bookmark);
+	ReportError("Syntax error", text, bookmark);
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
 }
@@ -192,13 +238,25 @@ void SyntaxError(char * text)
 
 void LogicWarning(char * text, UInt16 bookmark)
 {
-	ReportError("Logic", text, bookmark);
+	ReportError("Warning", text, bookmark);
 	LOGIC_ERROR_CNT++;
+}
+
+void LogicWarningLoc(char * text, Loc * loc)
+{
+	UInt16 bookmark = SetBookmarkLine(loc);
+	LogicWarning(text, bookmark);
+}
+
+void LogicErrorLoc(char * text, Loc * loc)
+{
+	UInt16 bookmark = SetBookmarkLine(loc);
+	LogicError(text, bookmark);
 }
 
 void LogicError(char * text, UInt16 bookmark)
 {
-	ReportError("Logic", text, bookmark);
+	ReportError("Logic error", text, bookmark);
 	ERROR_CNT++;
 }
 
@@ -210,8 +268,9 @@ void InternalError(char * text, ...)
 	va_start(argp, text);
 	vfprintf(STDERR, text, argp);
 	va_end(argp);
-	if (LINE_NO)
+	if (LINE_NO) {
 		fprintf(STDERR," (line %d)",LINE_NO);
+	}
 	fprintf(STDERR,"\n");
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
@@ -230,14 +289,45 @@ UInt16 SetBookmark()
 	return 1;
 }
 
-UInt16 SetBookmarkLine(Instr * i)
+InstrBlock * PrevBlk(InstrBlock * first, InstrBlock * blk)
 {
-	while(i != NULL && i->op != INSTR_LINE) i = i->prev;
-	if (i == NULL) return 0;
+	InstrBlock * b;
+
+	b = first;
+	while(b != NULL && b->next != blk) b = b->next;
+	return b;
+}
+
+UInt16 SetBookmarkLine(Loc * loc)
+{
+	Instr * i;
+	InstrBlock * blk = loc->blk;
+
+	i = loc->i;
+	do {
+
+		while(i != NULL && i->op != INSTR_LINE) i = i->prev;
+		if (i != NULL) break;
+
+		blk = PrevBlk(loc->proc->instr, blk);
+		if (blk == NULL) return 0;
+		i = blk->last;
+	} while (true);
+
 	LINE_NO = i->line_no;
 	BOOKMARK_LINE_NO  = i->line_no;
 	SRC_FILE = i->result;
 	strcpy(LINE, i->line);
+	BOOKMARK_LINE_POS = 0;
+	return 1;
+}
+
+UInt16 SetBookmarkVar(Var * var)
+{
+	LINE_NO = var->line_no;
+	BOOKMARK_LINE_NO = var->line_no;
+	SRC_FILE = var->file; 
+	*LINE = 0;
 	BOOKMARK_LINE_POS = 0;
 	return 1;
 }

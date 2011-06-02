@@ -94,6 +94,32 @@ Var * VarNewDeref(Var * adr)
 	return var;
 }
 
+Var * VarNewByteElement(Var * arr, Var * idx)
+/*
+Purpose:
+	Alloc new reference to specified byte of variable.
+Argument:
+	ref		Array is accessed using reference.
+*/
+{
+	Var * item;
+
+	// Try to find same element
+
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == MODE_BYTE) {
+			if (var->adr == arr && var->var == idx) return var;
+		}
+	}
+
+	item = VarAlloc(MODE_BYTE, NULL, 0);
+	item->adr = arr;
+	item->var = idx;
+	item->type = TypeByte();
+	return item;
+}
+
 Var * VarNewElement(Var * arr, Var * idx)
 /*
 Purpose:
@@ -187,39 +213,8 @@ Var * VarFindType(char * name, VarIdx idx, Type * type)
 
 Var * VarNewTmp(long idx, Type * type)
 {
-//	UInt32 range;
-
-	//TODO: Should check, that the variable found has appropriate type
 	Var * var;
-/*
-	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			range = type->range.max - type->range.min;
-			if (range > 255) {
-				idx += 1000;
-			} else if (range > 65535) {
-				idx += 2000;
-			}
-		} else if (type->variant == TYPE_ADR) {
-			idx += 3000;
-		}
-	} else {
-		idx += 4000;
-	}
-*/
-	// We always create new temporary variable.
-	// Usuall algorithm for reusing temporary variables in expressions does not work
-	// for us very well, because we need the temporary variables have many different types
-	// (not just some, like byte, word, long, but ranges like 13..26 etc.).
-
-//	var = VarFind(TMP_NAME, idx);
-//	var = NULL;
-//	if (var == NULL) {
-		var = VarAllocScopeTmp(NULL, MODE_VAR, type);
-//		TMP_IDX++;
-//		var->name = TMP_NAME;
-//		var->type = type;
-//	}
+	var = VarAllocScopeTmp(NULL, MODE_VAR, type);
 	return var;
 }
 
@@ -281,6 +276,7 @@ Purpose:
 		if (var->mode == MODE_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
 	NEXT_VAR
 
+	//TODO: Integer constants may be in special 'const' scope
 	var = VarAlloc(MODE_CONST, NULL, 0);
 	var->scope = NULL;
 	var->type = &TINT;
@@ -359,6 +355,7 @@ Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 	var->scope = scope;
 	var->adr  = NULL;
 	var->next  = NULL;
+	var->type  = TUNDEFINED;		// freshly allocated variable has undefined type (but not NULL!)
 
 	if (VARS == NULL) {
 		VARS = var;
@@ -379,7 +376,8 @@ Purpose:
 	Var * var;
 	var = VarAllocScope(scope, mode, NULL, 0);
 	var->name = TMP_NAME;
-	var->idx = TMP_IDX; 
+	var->idx = TMP_IDX;
+	if (type == NULL) type = TUNDEFINED;
 	var->type = type;
 	TMP_IDX++;
 	return var;
@@ -488,24 +486,29 @@ Var * VarFindMode(Name name, VarIdx idx, VarMode mode)
 TypeVariant VarType(Var * var)
 {
 	if (var == NULL) return TYPE_VOID;
-	if (var->type == NULL) return TYPE_VOID;
 	return var->type->variant;
 }
 
 Bool VarIsLabel(Var * var)
 {
-	return var->type != NULL && var->type->variant == TYPE_LABEL;
+	return var->type->variant == TYPE_LABEL;
 }
 
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
 	return var->mode == MODE_CONST;
-
-//	if (var->mode == MODE_ELEMENT) return false;
-//	return var->mode != MODE_ARG && ((var->mode == MODE_CONST || (var->adr == NULL && var->value_nonempty) || var->name == NULL));
 }
 
+Bool VarIsIntConst(Var * var)
+{
+	return var != NULL && var->mode == MODE_CONST && var->type->variant == TYPE_INT;
+}
+
+Bool VarIsN(Var * var, Int32 n)
+{
+	return VarIsIntConst(var) && var->n == n;
+}
 
 Var * VarNewType(TypeVariant variant)
 {
@@ -601,19 +604,18 @@ Purpose:
 	// Generate initialized arrays, where location is not specified
 
 	FOR_EACH_VAR(var)
-		if ((type = var->type)) {
-			if (type->variant == TYPE_ARRAY) {
-				if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {		
-					if (VarIsUsed(var)) {
-						// Make array aligned (it type defines address, it is definition of alignment)
-						type_var = type->owner;
-						if (type_var->adr != NULL) {
-							Gen(INSTR_ALIGN, NULL, type_var->adr, NULL);
-						}
-						// Label & initializers
-						GenLabel(var);
-						GenBlock(var->instr);
+		type = var->type;
+		if (type->variant == TYPE_ARRAY) {
+			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {		
+				if (VarIsUsed(var)) {
+					// Make array aligned (it type defines address, it is definition of alignment)
+					type_var = type->owner;
+					if (type_var->adr != NULL) {
+						Gen(INSTR_ALIGN, NULL, type_var->adr, NULL);
 					}
+					// Label & initializers
+					GenLabel(var);
+					GenBlock(var->instr);
 				}
 			}
 		}
@@ -639,7 +641,7 @@ Purpose:
 
 	FOR_EACH_VAR(var)
 		type = var->type;
-		if (type != NULL && type->variant == TYPE_ARRAY) {
+		if (type->variant == TYPE_ARRAY) {
 			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				Gen(INSTR_ORG, NULL, var->adr, NULL);
 				GenLabel(var);
@@ -655,7 +657,7 @@ void VarResetUse()
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->type == NULL || var->type->variant != TYPE_PROC) {
+		if (var->type->variant != TYPE_PROC) {
 			var->read = 0;
 			var->write = 0;
 			var->flags = var->flags & (~(VarUninitialized|VarLoop|VarLoopDependent));
@@ -745,6 +747,9 @@ Arguments:
 	InstrBlock * blk;
 	Var * var;
 	UInt16 bmk;
+	Loc loc;
+
+	loc.proc = proc;
 
 	proc->read++;
 
@@ -771,6 +776,10 @@ Arguments:
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_CALL) {
 				ProcUse(i->result, flag);
+//				// Procedure has side-effect, if it call a procedure with side effect
+//					if (FlagOn(i->result->submode, SUBMODE_OUT)) {
+//					SetFlagOn(proc->submode, SUBMODE_OUT);
+//				}
 			} else {
 				if (i->op != INSTR_LINE) {
 					if (VarType(i->arg1) == TYPE_PROC) {
@@ -779,11 +788,19 @@ Arguments:
 					if (VarType(i->arg2) == TYPE_PROC) {
 						ProcUse(i->arg2, flag | VarProcAddress);
 					}
-
+/*
+					if (i->result != NULL) {
+						if (!VarIsLocal(i->result, proc)) {
+							SetFlagOn(proc->submode, SUBMODE_OUT);
+						}
+					}
+*/
 					if (i->result != NULL && i->result->mode == MODE_LABEL) {
 						if (FlagOff(i->result->flags, VarLabelDefined)) {
 
-							bmk = SetBookmarkLine(i);
+							loc.blk = blk;
+							loc.i   = i;
+							bmk = SetBookmarkLine(&loc);
 
 							var = VarFindMode(i->result->name, i->result->idx, MODE_LABEL);
 							if (var != NULL) {
@@ -835,12 +852,14 @@ Purpose:
 {
 	Bool uses = false;
 	if (var != NULL) {
-		if (var->mode == MODE_DEREF) {
-			uses = VarUsesVar(var->var, test_var);
-		} else if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE) {
-			uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+		if (var == test_var) {
+			uses = true;
 		} else {
-			uses = (var == test_var);
+			if (var->mode == MODE_DEREF) {
+				uses = VarUsesVar(var->var, test_var);
+			} else if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE) {
+				uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+			}
 		}
 	}
 	return uses;	
@@ -863,3 +882,11 @@ Purpose:
 	return var;
 }
 
+Bool VarIsLocal(Var * var, Var * scope)
+{
+	while (var != NULL) {
+		if (var->scope == scope) return true;
+		var = var->scope;
+	}
+	return false;
+}

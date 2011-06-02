@@ -254,13 +254,37 @@ done:
 	return q;
 }
 
-void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
 
+typedef struct {
+	InstrBlock * header;
+	InstrBlock * end;
+} Loop;
+
+
+void LoopPreheader(Var * proc, Loop * loop, Loc * loc)
+{
+	loc->blk = FindLoopDominator(proc, loop->header);
+	loc->i = loc->blk->last;
+
+	if (loc->i->op != INSTR_GOTO) {
+		loc->i = NULL;
+	}
+
+}
+
+void LoopMoveToPrologue(Var * proc, InstrBlock * header, InstrBlock * from, Instr * first, Instr * last)
+{
 	InstrBlock * blk;
 	Instr * i;
-
+	
 	blk = FindLoopDominator(proc, header);
+
+	// Header may be terminating point of multiple loops.
+	// We must detect this situation.
+
+	if (blk->callers != NULL) {
+	}
+
 
 	i = blk->last;
 
@@ -268,77 +292,366 @@ void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * resul
 	// We need to insert the initialization code before this jump.
 
 	if (i->op == INSTR_GOTO) {
-		i = i->prev;
+//		i = i->prev;
 	} else {
 		i = NULL;
 	}
-	InstrInsert(blk, i, op, result, arg1, arg2);
+
+	InstrMoveCode(blk, i, from, first, last);
+
+//	printf("========== move to prologue ===========\n");
+//	PrintProc(proc);
 }
 
-void OptimizeLoopInvariants(Var * proc, InstrBlock * header, InstrBlock * end)
-/*
-Purpose:
-	Move loop invariants before the loop.
-	Instruction is considered loop invariant if:
-
-	1. instruction is not jump
-	2. it has result
-	3. it's result is set exactly once in the loop (result->write == 1) 
-	4. it's result is not OUT
-	5. it's result is not loop dependent (meaning none of it's arguments is loop dependent)
-	6. none of it's arguments is IN
-	7. it's result is not live after the loop (this condition may be made weaker)
-	8. loop prologue does not end with jump instruction (it is not loop with condition at the beginning)
-*/
+void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
-	InstrBlock * blk;
-	InstrBlock * exit, *  prologue;
+	Instr * i = MemAllocStruct(Instr);
+	i->op = op;
+	i->result = result;
+	i->arg1 = arg1;
+	i->arg2 = arg2;
+	LoopMoveToPrologue(proc, header, NULL, i, i);
+}
+
+Bool VarIsLoopDependent(Var * var, VarSet * liveset)
+{
+	if (var == NULL) return false;
+	if (VarSetFind(liveset, var)) return false;
+	if (FlagOn(var->flags, VarLoop|VarLoopDependent)) return true;
+	if (var->mode != MODE_CONST) {
+		if (VarIsLoopDependent(var->adr, liveset)) return true;
+		if (VarIsLoopDependent(var->adr, liveset)) return true;
+	}
+	return false;
+}
+
+void DefsAdd(Defs * defs, InstrBlock * blk, Instr * i)
+{
+	Loc * def = &defs->defs[defs->count];
+	def->blk = blk;
+	def->i   = i;
+	defs->count++;
+}
+
+void DefsInit(Defs * defs)
+{
+	defs->count = 0;
+}
+
+Bool LoopContainsBlock(Loop * loop, InstrBlock * blk)
+{
+	return loop->header->seq_no <= blk->seq_no && loop->end->seq_no >= blk->seq_no;
+}
+
+void ReachingDefsBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr, Defs * defs)
+{
 	Instr * i;
-	Var * result;
+	InstrBlock * caller;
+
+	if (blk == NULL || blk->processed) return;
+	if (instr == NULL) {
+		i = blk->last;
+	} else {
+		i = instr->prev;
+	}
+
+	// Definition of the variable may be in this block
+	for(; i != NULL; i = i->prev) {
+		if (i->op == INSTR_LINE) continue;
+		if (i->result == var) {
+			DefsAdd(defs, blk, i);
+			return;
+		}
+	}
+
+	// Or it may be in some calling blocks
+	
+	// If we haven't parsed whole block, do not mark it as processed to allow parsing rest of the instructions.
+	// In case this is loop block, we will parse it again, but parsing will stop at defining instruction.
+	if (instr == NULL) {
+		blk->processed = true;
+	}
+	ReachingDefsBlock(var, loc, blk->from, NULL, defs);
+
+	for(caller = blk->callers; caller != NULL; caller = caller->next_caller) {
+		ReachingDefsBlock(var, loc, caller, NULL, defs);
+	}
+}
+
+void ReachingDefs(Var * proc, Var * var, Loc * loc, Defs * defs)
+{
+	MarkBlockAsUnprocessed(proc->instr);
+	DefsInit(defs);
+	ReachingDefsBlock(var, loc, loc->blk, loc->i, defs);
+}
+
+void NextDefsBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr, Defs * defs)
+{
+	Instr * i;
+
+	if (blk == NULL || blk->processed) return;
+
+	// If the starting instruction is not defined, we use first instruction, otherwise we start from following instruction
+	// (the specified one is the one we search for).
+	if (instr == NULL) {
+		i = blk->first;
+		blk->processed = true;
+	} else {
+		i = instr->next;
+	}
+
+	// Next definition may be in this block
+	for(; i != NULL; i = i->next) {
+		if (i->op == INSTR_LINE) continue;
+		if (i->result == var && !VarUsesVar(i->arg1, i->result) && !VarUsesVar(i->arg2, i->result)) {
+			DefsAdd(defs, blk, i);
+			return;
+		}
+	}
+
+	// Or it may be in some calling blocks
+	
+	// If we haven't parsed whole block, do not mark it as processed to allow parsing rest of the instructions.
+	// In case this is loop block, we will parse it again, but parsing will stop at defining instruction.
+//	if (instr == NULL) {
+//		blk->processed = true;
+//	}
+	NextDefsBlock(var, loc, blk->to, NULL, defs);
+	NextDefsBlock(var, loc, blk->cond_to, NULL, defs);
+}
+
+void NextDefs(Var * proc, Var * var, Loc * loc, Defs * defs)
+{
+	MarkBlockAsUnprocessed(proc->instr);
+	DefsInit(defs);
+	NextDefsBlock(var, loc, loc->blk, loc->i, defs);
+}
+
+Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
+{
+	Defs defs;
+	UInt16 n;
+	Bool out_of_loop;
+
+	if (var == NULL) return true;
+	if (var->mode == MODE_CONST) return true;
+	if (InVar(var)) return false;
+
+	// For array access, array adr is constant (except referenced array), important is index change
+	if (var->mode == MODE_ELEMENT) {
+		return VarInvariant(proc, var->var, loc, loop);
+	}
+
+	DefsInit(&defs);
+	ReachingDefs(proc, var, loc, &defs);
+
+	// 0 would be undefined variable
+
+	out_of_loop = true;
+	for(n=0; n<defs.count; n++) {
+		if (LoopContainsBlock(loop, defs.defs[n].blk)) {
+			out_of_loop = false;
+			break;
+		}
+	}
+
+	if (out_of_loop) return true;
+	return defs.count == 1 && FlagOn(defs.defs[0].i->flags, InstrInvariant);
+}
+
+Bool VarLoopDepBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr)
+{
+	Instr * i;
+
+	if (blk == NULL || blk->processed) return false;
+
+	// If the starting instruction is not defined, we use first instruction, otherwise we start from following instruction
+	// (the specified one is the one we search for).
+	if (instr == NULL) {
+		i = blk->first;
+		blk->processed = true;
+	} else {
+		i = instr->next;
+	}
+
+	// Next definition may be in this block
+	for(; i != NULL; i = i->next) {
+		if (i->op == INSTR_LINE) continue;
+		if (FlagOff(i->flags, InstrInvariant) && (VarUsesVar(i->arg1, var) || VarUsesVar(i->arg2, var))) {
+			return true;
+		}
+		// This instruction sets new value to variable
+		if (i->result == var) return false;
+	}
+
+	return VarLoopDepBlock(var, loc, blk->to, NULL) || VarLoopDepBlock(var, loc, blk->cond_to, NULL);
+}
+
+Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
+{
+
+	if (var == NULL) return false;
+	if (var->mode == MODE_CONST) return false;
+	if (InVar(var)) return true;
+
+	// For array access, array adr is constant (except referenced array), important is index change
+	if (var->mode == MODE_ELEMENT) {
+		return VarLoopDep(proc, var->var, loc, loop);
+	}
+
+	MarkBlockAsUnprocessed(proc->instr);
+	
+	return VarLoopDepBlock(var, loc, loc->blk, loc->i);
+
+}
+
+Bool VarInvariant2(Var * proc, Var * var, Loc * loc, Loop * loop)
+{
+	Defs defs;
+
+	NextDefs(proc, var, loc, &defs);
+
+	// In loop, number of definitions may be 0 in case of loop variables
+	//:::::::::::::::::::::
+	//   x = 0
+	//l@
+	//   x <- x + 1
+	//   if x < 10 goto l@
+	//:::::::::::::::::::::
+	// Instructions like x = x + 1, are not considered definitions (they modify the value of x, but do not define it).
+	// Zero killer must therefore mean the instruction is not invariant.
+
+	if (defs.count == 0) return false;
+
+	if (defs.count == 1) {
+//		if (defs.defs[0].i   == loc->i) return true;
+		if (defs.defs[0].blk == loc->blk) return true;
+	}
+	return false;
+}
+
+void PrintLoopInvariants(Loop * loop)
+{
+	InstrBlock * blk, * exit;
+	Instr * i;
+	UInt32 n;
+
+	exit = loop->end->next;
+
+	for(blk = loop->header; blk != exit; blk = blk->next) {
+		i = blk->first; n = 1;
+		while(i != NULL) {
+			printf("#%d/%d ", blk->seq_no, n);
+			if (FlagOn(i->flags, InstrInvariant)) {
+				printf("+");
+			} else if (FlagOn(i->flags, InstrLoopDep)) {
+				printf("-");
+			} else {
+				printf(" ");
+			}
+			InstrPrint(i);
+			i = i->next; n++;
+		}
+	}
+}
+
+void OptimizeLoopInvariants(Var * proc, Loop * loop)
+{
+	InstrBlock * blk, * exit;
+	Instr * i, * i2;
+	Bool change;
+	Loc loc, preheader;
 	UInt32 n;
 
 //	printf("========== Invariants ================\n");
 //	PrintProc(proc);
 
-	prologue = NULL;
-	exit = end->next;
+	exit = loop->end->next;
 
-	VarResetUse();
-	InstrVarUse(header, exit);
-	InstrVarLoopDependent(header, exit);
-	MarkBlockAsUnprocessed(proc->instr);
+	//=== Mark all instructions as variant
 
-	for(blk = header; blk != exit; blk = blk->next) {
-		i = blk->first; n=1;
-		while(i != NULL) {
-			if (i->op == INSTR_LINE) goto next;
-			result = i->result;
-			if (result != NULL && !VarIsLabel(result) && !OutVar(result) && result->write == 1) {
-				if ( (i->arg1 == NULL || (!InVar(i->arg1) && FlagOff(i->arg1->flags, VarLoop|VarLoopDependent)))
-					&& (i->arg2 == NULL || (!InVar(i->arg2) && FlagOff(i->arg2->flags, VarLoop|VarLoopDependent)))
-				) {
-
-					//TODO: There can be multiple exits!!!!
-					if (VarIsLiveInBlock(proc, exit, result) == 0) {
-						if (Verbose(proc)) {
-							printf("Moving loop invariant #%d/%d: ", blk->seq_no, n); InstrPrint(i);
-						}
-
-						//TODO: If there are multiple places we may have come from, or prologue is NULL we must insert new block
-						//TODO: Call should count use of arguments as read & write
-
-						LoopInsertPrologue(proc, header, i->op, i->result, i->arg1, i->arg2);
-						i = InstrDelete(blk, i);
-						continue;
-					}
-				}
-			}
-next:
-			i = i->next;
-			n++;
+	for(blk = loop->header; blk != exit; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			i->flags = 0;
 		}
 	}
 
+	do {
+		change = false;
+		for (blk = loop->header; blk != exit; blk = blk->next) {
+			loc.blk = blk;
+			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
+				loc.i = i;
+				if (i->op == INSTR_LINE || IS_INSTR_BRANCH(i->op)) continue;
+				if (FlagOff(i->flags, InstrInvariant)) {
+					if (i->result != NULL && !OutVar(i->result)) {
+						if (VarInvariant(proc, i->arg1, &loc, loop) && VarInvariant(proc, i->arg2, &loc, loop)) {
+							if (VarInvariant2(proc, i->result, &loc, loop)) {
+								SetFlagOn(i->flags, InstrInvariant);
+								change = true;
+							}
+						}
+					}
+				}
+			}
+		}
+	} while(change);
+
+	// Mark all instructions that are self-referencing and are not marked as constant
+/*
+	for (blk = loop->header; blk != exit; blk = blk->next) {
+		for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
+			if (FlagOff(i->flags, InstrInvariant) && i->op != INSTR_LINE) {
+				if (VarUsesVar(i->arg1, i->result) || VarUsesVar(i->arg2, i->result)) {
+					i->flags = InstrLoopDep;
+				}
+			}
+		}
+	}
+
+	printf("-----\n");
+	PrintLoopInvariants(loop);
+*/
+
+	do {
+		change = false;
+		for (blk = loop->header; blk != exit; blk = blk->next) {
+			loc.blk = blk;
+			i2 = NULL;
+			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
+//				loc.i = i;
+				if (i->op == INSTR_LINE) continue;
+				if (i2 != NULL && FlagOn(i2->flags, InstrInvariant) && FlagOff(i->flags, InstrInvariant)) {
+					if (i->op == INSTR_LET && i2->op == INSTR_LET && i2->result == i->arg1) {
+						SetFlagOff(i2->flags, InstrInvariant);
+					}
+				}
+				i2 = i;
+			}
+		}
+//		if (change) {
+//			printf("-----\n");
+//			PrintLoopInvariants(loop);
+//		}
+	} while(change);
+
+
+//	printf("-----\n");
+//	PrintLoopInvariants(loop);
+
+	//==== Move all invariant instructions to preheader
+	
+	LoopPreheader(proc, loop, &preheader);
+	for(blk = loop->header; blk != exit; blk = blk->next) {
+		i = blk->first;
+		while(i != NULL) {
+			i2 = i->next;
+			if (FlagOn(i->flags, InstrInvariant)) {
+				InstrMoveCode(preheader.blk, preheader.i, blk, i, i);
+			}
+			i = i2;
+		}
+	}
 }
 
 void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
@@ -445,22 +758,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		if (FlagOn(top_var->flags, VarUninitialized) || init) {
 
 			LoopInsertPrologue(proc, header, INSTR_LET, top_reg, top_var, NULL);
-/*
-			blk = FindLoopDominator(proc, header);
 
-			i2 = blk->last;
-
-			// Loops with condition at the beginning may start with jump to condition
-			// We need to insert the initialization code before this jump.
-
-			if (i2->op == INSTR_GOTO) {
-				i2 = i2->prev;
-			} else {
-				i2 = NULL;
-			}
-
-			InstrInsert(blk, i2, INSTR_LET, top_reg, top_var, NULL);
-*/
 			top_reg->var = top_var;		// to prevent using the register in subsequent steps
 		}
 		r = 0;
@@ -506,40 +804,51 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	}
 }
 
+void MarkLoops(Var * proc)
+{
+	InstrBlock * blk;
+	NumberBlocks(proc->instr);
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		blk->loop_end = NULL;
+	}
+
+	// Test for each block, if it is end of an loop
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		if (blk->cond_to != NULL) {
+			// We jump to some previous spot in the sequence
+			if (blk->cond_to->seq_no <= blk->seq_no) {
+				blk->cond_to->loop_end = blk;
+			}
+		}
+
+		if (blk->to != NULL) {
+			if (blk->to->seq_no <= blk->seq_no) {
+				blk->to->loop_end = blk;
+			}
+		}
+	}
+
+}
+
 void OptimizeLoops(Var * proc)
 /*
 Purpose:
 	Find loops in flow graph and call optimization for it.
 */
 {
+	Loop loop;
 	InstrBlock * nb, * header;
 
-	NumberBlocks(proc->instr);
+
+	MarkLoops(proc);
 
 	if (Verbose(proc)) {
 		printf("========== Optimize loops ==============\n");
 		PrintProc(proc);
 	}
 
-	for(nb = proc->instr; nb != NULL; nb = nb->next) {
-		nb->loop_end = NULL;
-	}
-
-	// Test for each block, if it is end of an loop
-
-	for(nb = proc->instr; nb != NULL; nb = nb->next) {
-		if (nb->cond_to != NULL) {
-			if (nb->cond_to->seq_no <= nb->seq_no) {
-				nb->cond_to->loop_end = nb;
-			}
-		}
-
-		if (nb->to != NULL) {
-			if (nb->to->seq_no <= nb->seq_no) {
-				nb->to->loop_end = nb;
-			}
-		}
-	}
 
 	for(nb = proc->instr; nb != NULL; nb = nb->next) {
 		header = NULL;
@@ -550,8 +859,10 @@ Purpose:
 			if (Verbose(proc)) {
 				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
 			}
+			loop.header = header;
+			loop.end    = nb;
+//			OptimizeLoopInvariants(proc, &loop);
 			OptimizeLoop(proc, header, nb);
-//			OptimizeLoopInvariants(proc, header, nb);
 		}
 
 	}

@@ -500,7 +500,7 @@ Purpose:
 
 	if (var == NULL) return false;
 	t = var->type;
-	if (t->variant == TYPE_INT) {
+	if (t != NULL && t->variant == TYPE_INT) {
 		if (t->is_enum) {
 
 			for(item = VarFirstLocal(t->owner); item != NULL; item = VarNextLocal(t->owner, item)) {
@@ -757,7 +757,7 @@ retry:
 void CheckValues(Var * proc)
 /*
 Purpose:
-	Check procedure before translation.
+	Check procedure before translation and perform some basic optimizations.
 */
 {
 	Instr * i, * i2;
@@ -802,6 +802,7 @@ Purpose:
 					i->arg1 = r;
 					i->arg2 = NULL;
 
+				//OPTIMIZATION: Instruction merging
 				// Try to convert
 				//      add R1, Y, #c1
 				//      add R2, R1, #c2

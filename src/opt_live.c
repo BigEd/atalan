@@ -110,8 +110,16 @@ Purpose:
 
 	res1 = res2 = 2;
 
+	// var may be _arr(0)  -> in such case, we want to test _arr as it is to check usage like @_arr
+	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) {
+		var = var->adr;
+	}
+
 	for (i = block->first; i != NULL; i = i->next) {
-		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
+		if (i->op == INSTR_LINE) continue;
+		if (VarUsesVar(i->arg1, var) || VarUsesVar(i->arg2, var)) { res1 = 1; goto done; }
+
+//		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
 		if (i->result == var) { res1 = 0; goto done;}
 		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
 		if (i->op == INSTR_LET_ADR) {
@@ -165,20 +173,22 @@ void MarkProcLive(Var * proc)
 	}
 }
 
+void VarMarkNextUse(Var * var, Instr * i)
+{
+	if (var == NULL) return;
+	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_DEREF) {
+		VarMarkNextUse(var->var, i);
+		VarMarkNextUse(var->adr, i);
+	} else {
+		var->src_i = i;
+	}
+}
+
 Bool VarDereferences(Var * var)
 {
 	if (var != NULL) {
 		if (var->mode == MODE_DEREF) return true;
 		if (var->mode == MODE_ELEMENT) return VarDereferences(var->adr) || VarDereferences(var->var);
-	}
-	return false;
-}
-
-Bool VarIsLocal(Var * var, Var * scope)
-{
-	while (var != NULL) {
-		if (var->scope == scope) return true;
-		var = var->scope;
 	}
 	return false;
 }
@@ -210,6 +220,10 @@ Bool OptimizeLive(Var * proc)
 		// At the beginning, all variables are dead (except procedure output variables for tail blocks)
 
 		FOR_EACH_VAR(var)
+
+			if (var->mode == MODE_ELEMENT && var->adr->mode == MODE_DEREF && StrEqual(var->adr->var->name, "_arr")) {
+				printf("");
+			}
 
 //			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
 //				printf("");
@@ -255,7 +269,7 @@ Bool OptimizeLive(Var * proc)
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
-					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && FlagOff(result->submode, /*SUBMODE_REF|*/SUBMODE_OUT)) {
+					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && !OutVar(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
 							if (Verbose(proc)) {
@@ -277,7 +291,8 @@ Bool OptimizeLive(Var * proc)
 //				if (FlagOff(result->submode, SUBMODE_OUT)) {
 					VarMarkDead(result);
 //				}
-				result->src_i = NULL;			// next use
+				i->next_use[0] = result->src_i;
+				result->src_i = NULL;			// next use $$$$
 			}
 
 			//===== Mark arguments as live (used)
@@ -294,11 +309,11 @@ Bool OptimizeLive(Var * proc)
 
 				if (i->arg1 != NULL) {
 					i->next_use[1] = i->arg1->src_i;
-					i->arg1->src_i = i;
+					VarMarkNextUse(i->arg1, i);
 				}
 				if (i->arg2 != NULL) {
 					i->next_use[2] = i->arg2->src_i;
-					i->arg2->src_i = i;
+					VarMarkNextUse(i->arg2, i);
 				}
 			}
 		}
