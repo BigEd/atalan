@@ -53,6 +53,7 @@ rule alloc %A:card                               = "   .ds 2"
 rule alloc %A:long                               = "   .ds 3"
 rule alloc %A:adr                                = "   .ds 2"
 rule alloc %A:-128..127                          = "   .ds 1"
+rule alloc %A:int                                = "   .ds 2"
 
 
 ;========================
@@ -130,6 +131,17 @@ rule let %A:sbyte, %B:sbyte = instr
   let _a,%B
   let %A,_a
 
+
+;===== Signed 2-bytes (si2)
+
+rule let %A:int,const %B:int = instr
+  lo  %Z, %B
+  let _a, %Z
+  let %A(0),_a
+  hi  %Z, %B
+  let _a, %Z
+  let %A(1),_a
+
 ;======= Address of array
 
 rule let %A:byte1, %B:adr(%C:byte) = instr
@@ -185,9 +197,13 @@ rule let _a,%A:byte1arr(%B:byte) = instr
 	let _x,_a
 	let _a,%A(_x)
 
-;rule let %A:byte1arr(%B:byte), _a = instr
-;  let _x,%B 
-;  let %A(_x),_a
+rule let %A:byte1arr(%B:byte), _a = instr
+	let _y, _a 
+	let _a, %B
+	mul _a, _a, %A.step
+	let _x,_a 
+	let _a, _y
+	let %A(_x),_a
 
 rule let %A:byte1arr(%B:byte),%C:byte1 = instr
 	let _a, %B
@@ -484,6 +500,11 @@ rule hi _y, %A     =  "   ldy %A+1"
 
 ;*********** Add
 
+rule add %A:byte1, %B:byte1, 1 = instr
+	let _a, %B
+	let %A, _a
+	add %A, %A, 1
+
 rule add %A:byte1, %B:byte1, %C:byte1 = instr
   let _a,%B 
   let _c,0
@@ -606,6 +627,11 @@ rule add %A:byte1,%A,1 = "   inc %A"
 rule add %A(const %B), %A(%B), 1 = "   inc %A+%B"
 
 ;*********** Sub
+
+rule sub %A:byte1, %B:byte1, 1 = instr
+	let _a, %B
+	let %A, _a
+	sub %A, %A, 1
 
 rule sub %A:byte1, %B:byte1, %C:byte1 = instr
   let _a,%B
@@ -1003,6 +1029,8 @@ rule mul %A:card,%B:byte, 32768    = instr
 	let %A(0), _a
 
 _sys_mul8:proc m1@_a m2@_x >r@_TEMPW2
+_sys_mulsu8:proc m1@_a m2@_x @_x @_a >r@_TEMPW2
+_sys_mulss8:proc m1@_a m2@_x @_x @_a >r@_TEMPW2
 
 ;System routine for multiplication.
 
@@ -1015,14 +1043,32 @@ rule mul %A:card, %B:byte, %C:byte = instr
 									;something like ASSERT would be interesting
 	let %A, _TEMPW2
 
-rule mul %A:int, %B:sbyte, %C:sbyte = instr
-	let _a, %B			;TODO: let _sys_mul8.m1, %B
+rule mul %A:int, %B:sbyte, %C:byte = instr
+	let _a, %B
 	let _x, %C
-	call _sys_mul8
-	ref _a					;mul trashes _a and _x
-	ref _x          ;x is in fact 0, but we do not have a way of defining this for now
-									;something like ASSERT would be interesting
+	call _sys_mulsu8
 	let %A, _TEMPW2
+
+rule mul %A:int, %B:sbyte, %C:sbyte = instr
+	let _a, %B
+	let _x, %C
+	call _sys_mulss8
+	let %A, _TEMPW2
+
+rule mul %A:int, %B:byte, %C:sbyte = instr
+	let _a, %C
+	let _x, %B
+	call _sys_mulsu8
+	let %A, _TEMPW2
+
+;rule mul %A:int, %B:sbyte, %C:sbyte = instr
+;	let _a, %B			;TODO: let _sys_mul8.m1, %B
+;	let _x, %C
+;	call _sys_mul8
+;	ref _a					;mul trashes _a and _x
+;	ref _x          ;x is in fact 0, but we do not have a way of defining this for now
+									;something like ASSERT would be interesting
+;	let %A, _TEMPW2
 	
 rule mul %A:card, %B:card, 2    = instr
 	let _a, %B(0)		; lda %B
@@ -1655,6 +1701,8 @@ rule let _y,%A:rawbytes(_x)       = "   ldy %A-%A.index.min,x"
 
 ;LDA
 
+rule let _a,%A$%B             = "   lda %A+%B"
+
 rule let _a,const %A:byte1    = "   lda #%A"
 rule let _a,%A:byte1     = "   lda %A"
 
@@ -1688,16 +1736,14 @@ rule let %A:rawbytes(_y),_a  = "   sta %A-%A.index.min,y"
 rule let %A:rawbytes(0),_x  = "   stx %A-%A.index.min"
 rule let %A:rawbytes(const %B),_x  = "   stx %A-%A.index.min+%B"
 rule let %A:byte1,_x  = "   stx %A"
-rule let %A:rawbytes(_y),_x  = "   stx %A-%A.index.min,y"
 
 ;STY
 rule let %A:rawbytes(0),_y         = "   sty %A-%A.index.min"
 rule let %A:rawbytes(const %B),_y  = "   sty %A-%A.index.min+%B"
 rule let %A:byte1,_y                     = "   sty %A"
-rule let %A:rawbytes(_x),_y        = "   sty %A-%A.index.min,x"
 
 ;LSR,ASL
-rule div _a,_a,1 = "   ;"
+;rule div _a,_a,1 = "   ;"
 rule div _a,_a,2 = "   lsr"
 rule div %A:byte,%A,1 = "   ;"
 rule div %A:byte,%A,2 = "   lsr %A"
@@ -1705,8 +1751,8 @@ rule div %A:rawbytes(1),%A(1),2 = "   lsr %A+1"
 ;TODO: div a(const)
 rule divc _a,_a,2 = "   lsr"
 
-rule mul _a,_a,0 = "   lda #0"
-rule mul _a,_a,1 = "   ;"
+;rule mul _a,_a,0 = "   lda #0"
+;rule mul _a,_a,1 = "   ;"
 rule mul _a,_a,2 = "   asl"
 rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
 rule mul %A:byte,%A:byte,1 = "   ;"
@@ -1716,7 +1762,7 @@ rule mul %A:rawbytes(1),%A(1),2 = "   asl %A-%A.index.min+1"
 rule mul %A:rawbytes(const %B),%A(%B),2  = "  asl %A-%A.index.min+%B"
 ;TODO: This should be rewritten as top level rule
 rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
-rule mul %A:card,%A:card,1 = "   ;"
+;rule mul %A:card,%A:card,1 = "   ;"
 
 ;ROL, ROR
 
@@ -1806,7 +1852,7 @@ rule var_arg ,%A:adr    = "   dta b(130),a(%A)"
 rule var_arg ,%A:long   = "   dta b(131),a(%A)"
 
 rule var_arg, %A:sbyte  = "   dta b(129+32), a(%A)"
-
+rule var_arg, %A:int    = "   dta b(130+32), a(%A)"
 
 rule data ,%A    = "   dta b(%A)"
 rule align ,%A    = "   .align %A"

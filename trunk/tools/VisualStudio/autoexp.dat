@@ -1,0 +1,26 @@
+;------------------------------------------
+; Atalan
+;------------------------------------------
+
+VarTag{
+	preview(
+	  #(
+	  	#if ($e.name != 0) ([$e.name,sb]),
+	  	#if ($e.idx != 0) ( $e.idx -1 ),
+	  	" ",
+	  	#if ($e.mode == 4) ($e.n)
+	  )
+	)
+}
+
+InstrTag{
+	preview(
+		#(
+			$e.op,
+			$e.result,
+			#if ($e.arg1 != 0) (#(", ",$e.arg1)),
+			#if ($e.arg2 != 0) (#(", ",$e.arg2))
+		)
+	)
+}
+;----- Atalan end

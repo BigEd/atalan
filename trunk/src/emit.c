@@ -19,7 +19,25 @@ extern Rule * EMIT_RULES[INSTR_CNT];
 extern Var   ROOT_PROC;
 
 UInt8 G_COLOR;
+
+FILE * G_PRINT_OUTPUT;		// either STDOUT or STDERR
+
+/*
+When emitting output source code, we sometimes generate texts like X+0, Y-0 etc.
+We do not want this artifacts become part of generated source code, as it unnecessarily clutters it.
+We therefore postpone emitting characters like + and - and if they are followed by integer 0, we do not output the sequence.
+
+G_PREV_OP is variable, which remembers the previous operator.
+*/
+
 UInt8 G_PREV_OP = 0;
+
+FILE * PrintDestination(FILE * file)
+{
+	FILE * f = G_PRINT_OUTPUT;
+	G_PRINT_OUTPUT = file;
+	return f;
+}
 
 UInt8 PrintColor(UInt8 color)
 /*
@@ -40,8 +58,18 @@ Purpose:
 void Print(char * text)
 {
 	if (text != NULL) {
-		printf("%s", text);
+		fprintf(G_PRINT_OUTPUT, "%s", text);
 	}
+}
+
+void PrintEOL()
+{
+	Print("\n");
+}
+
+void PrintInt(Int32 n)
+{
+	fprintf(G_PRINT_OUTPUT, "%d", n);
 }
 
 void PrintRepeat(char * text, UInt16 cnt)
@@ -115,7 +143,16 @@ void EmitByte(char c)
 
 void EmitChar(char c)
 {
-	EmitByte(c);
+	if (G_PREV_OP != 0) {
+		EmitByte(G_PREV_OP);
+		G_PREV_OP = 0;
+	}
+
+	if (c == '-') {
+		G_PREV_OP = c;
+	} else {
+		EmitByte(c);
+	}
 }
 
 void EmitStr(char * str)
@@ -133,7 +170,13 @@ void EmitStr(char * str)
 void EmitInt(long n)
 {
 	char buf[32];
-	int result = sprintf( buf, "%d", n );
+
+	// Swallow operators like -0,  +0
+	if ((G_PREV_OP == '-' || G_PREV_OP == '+') && n == 0) {
+		G_PREV_OP = 0;
+		return;
+	}
+	sprintf( buf, "%d", n );
 	EmitStr(buf);
 }
 
@@ -352,7 +395,7 @@ Rule * EmitRule(Instr * instr)
 /*
 Purpose:
 	Find rule that emits code for this instruction.
-	May be used to test, wheter specified instruction may be emitted or not.
+	May be used to test, whether specified instruction may be emitted or not.
 */
 {
 	Rule * rule;

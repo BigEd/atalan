@@ -123,14 +123,16 @@ void LinkBlocks(Var * proc)
 	Instr * i;
 	InstrOp op;
 	Var * label;
+	UInt32 n;
 
 repeat:
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = proc->instr, n=1; blk != NULL; blk = blk->next, n++) {
 		blk->to      = NULL;
 		blk->cond_to = NULL;
 		blk->callers = NULL;
 		blk->from    = NULL;
 		blk->next_caller = NULL;
+		blk->seq_no   = n;
 	}
 
 	// Create caller lists for blocks for goto and if instructions
@@ -456,6 +458,38 @@ Bool InstrEquivalent(Instr * i, Instr * i2)
 	return true;
 }
 
+/*
+
+=================================
+Optimization: Branch code merging
+=================================
+
+Branch code merging moves identical code from end of conditional branches to common place after the branch.
+
+For example:
+
+:::::::::::
+if chr = 0
+  a = 10
+  io.putc = a
+else
+  a = 20
+  io.putc = a
+:::::::::::
+
+will be converted to:
+
+::::::::::
+if chr = 0
+  a = 10
+else
+  a = 20
+io.putc = a
+::::::::::
+
+
+*/
+
 Bool OptimizeMergeBranchCode(Var * proc)
 {
 	InstrBlock * blk, * prev_blk;
@@ -464,10 +498,11 @@ Bool OptimizeMergeBranchCode(Var * proc)
 
 	LinkBlocks(proc);
 
-//	printf("============= merge branch ==============\n");
-//	PrintProc(proc);
-
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+
+		// Test, that last instruction in all branches is same.
+		// Last instruction in some of the branches is goto, which will be skipped.
+		// If any of the instructions is different, optimization will not be performed.
 
 		prev_blk = blk->from;
 		i = LastInstr(prev_blk);

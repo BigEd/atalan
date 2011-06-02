@@ -846,6 +846,18 @@ add3: word proc
 	result = i + j + k
 :::::::::::::::::::::::
 
+===================
+Calling a procedure
+===================
+
+To call a procedure, you specify it's name and then list of arguments. Arguments
+may be separated by spaces or commas.
+
+:::::::::::::::::
+x = add3 10 20 30
+y = add3 1,2,3
+:::::::::::::::::
+
 =================
 Default arguments
 =================
@@ -879,7 +891,7 @@ sumdiv:proc a,b:byte >sum:byte >div:byte =
 a:byte
 b:byte
 
-a,b = sumdiv 10 3
+a,b = sumdiv 10,3
 
 "Sum is [a], div is [b]" 
 :::::::::::::::::::::::::::::::
@@ -893,7 +905,7 @@ It is possible to specify result values as {return} arguments.
 
 :::::::::::::::::::::::::::::::
 sumdiv:proc a,b:byte >sum:byte >div:byte =
-	return a + b a - b
+	return a + b, a - b
 ::::::::::::::::::::::::::::::::
 
 =================

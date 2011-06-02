@@ -1,0 +1,31 @@
+﻿What are the benefits
+
+- You don't need to declare types of local variables, leading to shorter,
+  more readable code. Also it is easier to create a new local variable,
+  so maybe you will create some extra ones, with meaningfull names, which
+  will further imrove code readability.
+  
+- With exact interval type inferencing, the compiler may statically check
+  array bounds errors, incorrect asignment errors etc.
+	
+- Types may be inferred for procedure arguments and local variables (these are two
+  diferents algorithms).
+	
+
+For every instruction:
+
+1. We were able to infer the type of the result of the instruction
+  a. Type of the result was declared explicitly
+     Report error, if the declared type is not superset of inferred type
+     
+  b. Type of the result was not declared explicitly
+     That's ok. Inferencer does it's work.
+     
+2. We were not able to infer the type of the result of the instruction
+  a. Type of the result was declared explicitly
+     Do not report error. The type declared explicitly is considered correct
+     
+  b. Type of the result was not declared explicitly
+     Report error. Ask programmer to declare type of the result explcitly.  
+  
+  

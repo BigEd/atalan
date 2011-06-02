@@ -16,6 +16,8 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <sys/stat.h> 
 
 #define STDERR stderr
+#define STDOUT stdout
+
 GLOBAL Bool VERBOSE;
 
 extern Var  ROOT_PROC;
@@ -73,6 +75,8 @@ Purpose:
 	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
 
 	VarInitRegisters();
+
+	SYSTEM_PARSE = false;
 }
 
 int main(int argc, char *argv[])
@@ -96,7 +100,7 @@ int main(int argc, char *argv[])
 #endif
 
 	VERBOSE = false;
-
+	PrintDestination(STDOUT);
 	PrintColor(RED+GREEN+BLUE);
 
 	*PLATFORM = 0;
@@ -230,7 +234,7 @@ int main(int argc, char *argv[])
 	// TODO: Root procedure may be just special type of procedure.
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
 
-	Gen(INSTR_PROLOGUE, NULL, NULL, NULL);
+	InternalGen(INSTR_PROLOGUE, NULL, NULL, NULL);
 	SYSTEM_PARSE = false;
 	if (!Parse(filename, true)) goto failure;
 	SYSTEM_PARSE = true;
@@ -247,8 +251,7 @@ int main(int argc, char *argv[])
 		InternalError("Platform does not define varheap");
 		goto done;
 	}
-
-	Gen(INSTR_EPILOGUE, NULL, NULL, NULL);
+	InternalGen(INSTR_EPILOGUE, NULL, NULL, NULL);
 
 	// Report warning about logical errors
 
@@ -305,10 +308,21 @@ int main(int argc, char *argv[])
 	//***** Analysis
 	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
-
+	ProcessUsedProc(TypeInfer);
 
 	//***** Translation
 	ProcessUsedProc(ProcTranslate);
+
+	// Translate may have called some other procedures, so we must recalculate used procedures
+
+	FOR_EACH_VAR(var)
+		if (var->type != NULL && var->type->variant == TYPE_PROC) {
+			var->read = 0;
+		}
+	NEXT_VAR
+	ROOT_PROC.read = 0;
+
+	ProcUse(&ROOT_PROC, 0);
 
 	//***** Optimization
 
@@ -347,13 +361,17 @@ int main(int argc, char *argv[])
 
 	EmitOpen(filename);
 
+	VarUse();
+
 	if (Verbose(NULL)) {
 
 		PrintHeader("Variables");
 
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-			if (var->write >= 1) {
-				PrintVar(var);
+			if (var->write >= 1 || var->read >= 1) {
+				if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+					PrintVar(var);
+				}
 			}
 		}
 
