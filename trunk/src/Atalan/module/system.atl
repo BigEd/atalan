@@ -1,0 +1,136 @@
+﻿;ATALAN Language system definition file
+;This file is always loaded as fisrt file by compiler.
+
+;system scope is used to define variables used by Atalan system. 
+
+system:scope
+
+;======================
+;Processor instructions
+;======================
+;
+;Instructions are defined using INSTRS codelist.
+;Instructions used by compiler are defined here, it is essential to preserve their order.
+;It is possible to define custom instructions by adding constants to this codelist.
+
+type instrs:enum
+	nop = 0
+	let = 1
+	
+	ifeq
+	ifne
+	iflt
+	ifge
+	ifgt
+	ifle
+	ifoverflow
+	ifnoverflow
+
+	prologue	;generated at the beggining of the program
+	epilogue	;generated at the end of programm
+	emit  		;emit string to output
+	vardef 	
+	label  
+	goto
+	add
+	sub
+	mul
+	div
+	sqrt
+	and
+	or
+	
+	alloc
+	proc			;procedure entry
+	return		;procedure exit
+	endproc		;mark end of procedure
+	call			;call procedure
+
+	var_arg
+	str_arg
+	data
+
+	file
+	align
+	org
+	hi
+	lo
+	ptr
+	arrindex		;generate index for 2d array
+	let_adr
+	rol
+	ror
+	debug
+	mod
+	xor
+	not
+	assert_begin
+	assert
+	assert_end
+	line
+	include					;include assembler file
+	mula
+	mula16
+		
+	ref
+	divc			; div with carry set - to prevent unfolding constants
+
+	compiler
+	code_end
+	data_end
+	
+;=================
+;Instruction flags
+;=================
+;
+;It is possible to define processor flags.
+;Flags represent bool value true/false and any instruction can define, in
+;what flags it is interested and how it affects flags.
+;
+;There are four possible flag states:
+;		clear		0	set to 0
+;		set			1	set to 1
+;		undefined	?	undefined
+;		changed		x	changed by previous instruction (eventually which one) 
+;
+;Up to 8 flags may be defined.
+;
+;Flags are specified using pflags enumerator.
+
+type iflag:enum
+
+;===============
+;Register groups
+;===============
+
+type regset:enum
+
+;==========
+;Interrupts
+;==========
+
+;All procedures based on type Interrupt are considered to be implementation
+;of some interrupt.
+;As such, they will not share local variables with other, normal procedures.
+
+type interrupt:proc
+
+;============
+;Boolean type
+;============
+
+type bool: enum 
+	false = 0
+	true = 1
+
+;=================
+;Predefined macros
+;=================
+
+inc:macro(x) =
+	x = x + 1
+	
+dec:macro(x) =
+	x = x - 1
+
+rule ref %A  = ""

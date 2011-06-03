@@ -1,0 +1,23 @@
+﻿;***********************************************
+;ATALAN Sinclair ZX spectrum Platform definition
+;***********************************************
+
+use z80
+
+;prologue is emitted at the beginning of the generated assmbler file.
+;Here you can define header of output binary and the starting address of an application.
+rule prologue = "   org 30000"
+
+;epilogue is emitted at the end of programm 
+rule epilogue = "   rts"
+
+;code_end is instruction emitted after the end of code.
+rule code_end = "   ret" "   end start"     
+rule line      = ";### %0(%1) %2"
+
+;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
+const BIN_EXTENSION = "tzx"
+
+;VARHEAP defines memory area that can be used by Atalan to allocate variables.
+type VARHEAP:29000..29999   
+
