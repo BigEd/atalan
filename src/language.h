@@ -1011,6 +1011,9 @@ void ProcInline(Var * proc);
 #define RED 4
 #define LIGHT 8
 
+void PrintInit();
+void PrintCleanup();
+
 FILE * PrintDestination(FILE * file);
 UInt8 PrintColor(UInt8 color);
 void PrintHeader(char * text);

@@ -32,6 +32,28 @@ G_PREV_OP is variable, which remembers the previous operator.
 
 UInt8 G_PREV_OP = 0;
 
+UInt16 G_OLD_CP;
+
+void PrintInit()
+{
+#ifdef __Windows__
+//	printf("");
+	G_OLD_CP = GetConsoleOutputCP();
+	SetConsoleOutputCP(CP_UTF8);
+//	fprintf(stdout, "Lower equal: %s\n", "\xe2\x89\xa4");
+
+#endif
+	PrintDestination(stdout);
+	PrintColor(RED+GREEN+BLUE);
+}
+
+void PrintCleanup()
+{
+#ifdef __Windows__
+	SetConsoleOutputCP(G_OLD_CP);
+#endif
+}
+
 FILE * PrintDestination(FILE * file)
 {
 	FILE * f = G_PRINT_OUTPUT;
@@ -60,6 +82,22 @@ void Print(char * text)
 	if (text != NULL) {
 		fprintf(G_PRINT_OUTPUT, "%s", text);
 	}
+/*
+#ifdef __Windows__
+//	UInt16 len;
+	WCHAR unicode[256];
+	if (text != NULL) {
+	//SetConsoleOutputCP(CP_UTF8);
+	//len = MultiByteToWideChar(CP_UTF8, 0, text, -1, 0, 0);
+		MultiByteToWideChar(CP_UTF8, 0, text, -1, unicode, 256);
+		wprintf(L"%s", unicode);
+	}
+#else
+	if (text != NULL) {
+		fprintf(G_PRINT_OUTPUT, "%s", text);
+	}
+#endif
+*/
 }
 
 void PrintEOL()
@@ -135,7 +173,7 @@ void EmitByte(char c)
 		*G_BUF++ = c;
 	} else {
 		if (Verbose(NULL)) {
-			printf("%c", c);
+			putchar(c);	//printf("%c", c);
 		}
 		putc(c, G_OUTPUT);
 	}
@@ -158,11 +196,27 @@ void EmitChar(char c)
 void EmitStr(char * str)
 {
 	char * s, c;
+//	UInt16 len;
 
 	if (str != NULL) {
-		s = str;	
-		while(c = *s++) {		
-			EmitChar(c);
+
+		if (G_BUF != NULL) {
+			s = str;	
+			while(c = *s++) {		
+				EmitChar(c);
+			}
+		} else {
+			// We must flush previous char if it is remembered
+			EmitChar('-');
+			G_PREV_OP = 0;
+
+	//		len = StrLen(str);
+	//		if (str[len-1] == '-') {
+	//		}
+			if (Verbose(NULL)) {
+				printf("%s", str);
+			}
+			fputs(str, G_OUTPUT);
 		}
 	}
 }
