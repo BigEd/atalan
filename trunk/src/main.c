@@ -16,7 +16,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <sys/stat.h> 
 
 #define STDERR stderr
-#define STDOUT stdout
+//#define STDOUT stdout
 
 GLOBAL Bool VERBOSE;
 
@@ -95,13 +95,13 @@ int main(int argc, char *argv[])
 
 	*VERBOSE_PROC = 0;
 
+	PrintInit();
+
 #ifdef DEBUG
 //	HeapUnitTest();
 #endif
 
 	VERBOSE = false;
-	PrintDestination(STDOUT);
-	PrintColor(RED+GREEN+BLUE);
 
 	*PLATFORM = 0;
 
@@ -413,6 +413,7 @@ int main(int argc, char *argv[])
 	}
 
 done:	
+	PrintCleanup();
    	exit(result);
 	
 failure:

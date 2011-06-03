@@ -394,9 +394,9 @@ store:
 
 void NextToken()
 {
-	Int16 c, c2, n;
 	UInt16 top;
 	UInt16 nest;
+	UInt8 c, c2, c3, n;
 
 	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
 	// For blocks ended with stop token, return the stop_token instead
@@ -585,7 +585,10 @@ store:
 	// Symbol
 	} else {
 
+		TOK = 0;
+
 		c2 = LINE[LINE_POS++];
+
 		if (c == '.' && c2 == '.') {
 			TOK = TOKEN_DOTDOT;
 		} else if (c == '<' && c2 == '=') {
@@ -596,7 +599,28 @@ store:
 			TOK = TOKEN_NOT_EQUAL;
 		} else if (c == '-' && c2 == '>') {
 			TOK = TOKEN_RIGHT_ARROW;
-		} else {
+		}
+
+		if (TOK == 0 && c2 != 0) {
+			c3 = LINE[LINE_POS++];
+			if (c == 0xE2 && c2 == 0x89 && c3 == 0xA4) {
+				TOK = TOKEN_LOWER_EQUAL;
+			} else if (c == 0xE2 && c2 == 0x89 && c3 == 0xA5) {
+				TOK = TOKEN_HIGHER_EQUAL;
+			} else if (c == 0xE2 && c2 == 0x89 && c3 == 0xA0) {
+				TOK = TOKEN_NOT_EQUAL;
+			} else if (c == 0xE2 && c2 == 0x88 && c3 == 0x9A) {
+				TOK = TOKEN_SQRT;
+			} else if (c == 0xE2 && c2 == 0x86 && c3 == 0x92) {
+				TOK = TOKEN_RIGHT_ARROW;
+			}
+
+			if (TOK == 0) {
+				LINE_POS--;
+			}			
+		}
+
+		if (TOK == 0) {
 			TOK = c;
 			NAME[0] = c;
 			NAME[1] = 0;
