@@ -38,9 +38,6 @@
     <ClCompile Include="errors.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="common.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="opt_blocks.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -65,11 +62,11 @@
     <ClCompile Include="opt_loops.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\common\common.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="common.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="language.h">
       <Filter>Header Files</Filter>
     </ClInclude>

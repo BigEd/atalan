@@ -13,19 +13,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../common/common.h"
 #include "m6502.h"
 
-typedef int Bool;
-typedef int Int16;
-typedef unsigned int UInt16;
-typedef unsigned long UInt32;
-typedef long Int32;
-typedef unsigned char UInt8;
-
 #define STDERR stderr
-
-#define true 1
-#define false 0
 
 // We store output printed to screen in cyclic buffer.
 // When we print using assert instruction ($df), con6502 performs test, that output printed to screen
