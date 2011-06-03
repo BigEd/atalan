@@ -1922,6 +1922,7 @@ Arguments:
 	UInt32 i, rep;
 	Var * item;
 	Type * item_type;
+	UInt16 bookmark;
 
 	InstrBlockPush();
 	i = 0;
@@ -1957,6 +1958,7 @@ Arguments:
 		}
 
 		//TODO: Here can be either the type or integer constant or address
+		bookmark = SetBookmark();
 		ParseExpressionType(item_type);
 		item = STACK[0];
 
@@ -1969,8 +1971,18 @@ Arguments:
 				SyntaxError("repeat must be defined using integer");
 				break;
 			}
+			bookmark = SetBookmark();
 			ParseExpressionType(item_type);
 			item = STACK[0];
+		}
+
+		if (item->mode == MODE_CONST) {
+			if (item->type->variant != TYPE_ARRAY) {
+				if (!VarMatchesType(item, item_type)) {
+					LogicError("value does not fit into array", bookmark);
+					continue;
+				}
+			}
 		}
 
 		while(rep--) {
