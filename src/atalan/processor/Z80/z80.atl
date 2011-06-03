@@ -1,0 +1,30 @@
+const    reg:regset			; only a register
+_a@reg:0..255
+_b@reg:0..255
+_c@reg:0..255
+;d@reg:0..255
+;e@reg:0..255
+;h@reg:0..255
+;l@reg:0..255
+
+type
+   byte:0..255
+   card:0..65535
+   int:-32768..32767
+   sbyte:-128..127
+   byte1:byte() or sbyte()
+
+rule alloc %A:byte                               = "   .ds 1"
+rule alloc %A:card                               = "   .ds 2"
+rule alloc %A:long                               = "   .ds 3"
+rule alloc %A:adr                                = "   .ds 2"
+rule alloc %A:-128..127                          = "   .ds 1"
+
+
+rule let %A:byte, %B:byte =
+	let _a, %B
+	let %A, _a
+	
+rule let _a, %A:byte1  = "   ld a, %A"
+rule let %A:byte1, _a  = "   ld %A, a"
+ 
