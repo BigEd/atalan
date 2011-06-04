@@ -806,6 +806,51 @@ done:
 	return item;
 }
 
+Var * ParseSpecialArrays(Var * arr)
+/*
+Syntax:
+   <arr>$<idx> | <arr>#<idx>
+*/
+{
+	Var * item, * var;
+
+	var = NULL;
+
+	if (NextCharIs('$')) {
+		NextToken();
+		if (TOK == TOKEN_INT) {
+			item = VarNewInt(LEX.n);
+			NextToken();
+		} else if (TOK == TOKEN_ID) {
+			item = ParseVariable();
+		} else {
+			SyntaxError("Expected constant or variable name");
+		}
+		if (TOK) {
+			var = VarNewByteElement(arr, item);
+		}
+	} else if (NextCharIs('#')) {
+		NextToken();
+		item = NULL;
+		if (TOK == TOKEN_INT) {
+			item = VarNewInt(LEX.n);
+			NextToken();
+		} else if (TOK == TOKEN_ID) {
+			item = ParseVariable();
+		} else if (TOK == TOKEN_OPEN_P) {
+			item = ParseArrayElement(var);
+		} else {
+			SyntaxError("Expected constant or variable name");
+		}
+		if (item != NULL) {
+			var = VarNewElement(arr, item);
+		}
+	}
+
+	return var;
+}
+
+
 void ParseOperand()
 {
 	Var * var = NULL, * item = NULL, * proc, * arg;
@@ -921,6 +966,12 @@ no_id:
 				}
 			}
 indices:
+			item = ParseSpecialArrays(var);
+			if (item != NULL) {
+				var = item;
+				goto done;
+			}
+/*
 			if (NextCharIs('$')) {
 				NextToken();
 				if (TOK == TOKEN_INT) {
@@ -935,14 +986,30 @@ indices:
 					var = VarNewByteElement(var, item);
 				}
 				goto done;
+			} else if (NextCharIs('#')) {
+				NextToken();
+				item = NULL;
+				if (TOK == TOKEN_INT) {
+					item = VarNewInt(LEX.n);
+					NextToken();
+				} else if (TOK == TOKEN_ID) {
+					item = ParseVariable();
+				} else if (TOK == TOKEN_OPEN_P) {
+					item = ParseArrayElement(var);
+				} else {
+					SyntaxError("Expected constant or variable name");
+				}
+				if (item != NULL) {
+					var = VarNewElement(var, item);
+				}
+				goto done;
 			}
-
+*/
 			spaces = Spaces();
 			NextToken();
 			if (!spaces) {
-				// Accessing the specified byte of variable (a$0, a$1, ...)
-				if (NextIs(TOKEN_DOLLAR)) {
-				} if (NextIs(TOKEN_DOT)) {
+				if (NextIs(TOKEN_DOT)) {
+					//TODO: Why is this?
 					if (var->mode == MODE_ARG) {
 						var = VarNewElement(var, VarNewStr(NAME));
 						NextToken();
@@ -2301,6 +2368,13 @@ retry:
 				goto no_dot;
 			}
 		}
+
+		item = ParseSpecialArrays(var);
+		if (item != NULL) {
+			var = item;
+			goto parsed;
+		}
+
 		NextToken();
 	// Parse array and struct indices
 no_dot:
@@ -2339,7 +2413,7 @@ no_dot:
 				}
 			}
 		}
-
+parsed:
 		vars[cnt] = var;
 		cnt++;
 		// this is to check if there is not too many expressions
@@ -2397,7 +2471,11 @@ no_dot:
 					}
 				} else {
 					if (!VarIsImplemented(var)) {
-						LogicError("Type not supported by platform", bookmark);
+						if (*PLATFORM != 0) {
+							LogicError("Type not supported by platform", bookmark);
+						} else {
+							SyntaxError("Platform has not been specified");
+						}
 					}
 				}
 			} else {
