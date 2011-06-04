@@ -463,15 +463,24 @@ const a:array of byte = 3 times 112, disp, 0
 Element access
 ==============
 
-Array element is accessed using parentheses.
+Array element is accessed using hash operator followed by index.
+Index may be integer literal, variable name or expression in parentheses.
+In case of parenthesised expression, the hash may be ommited.
+
+The syntax of the array element access is:
+
+<arr>#<index> | <arr>#(<index>) | <arr>(index)
+ 
 
 ::::::::::::::::
 arr:array(10) of byte
+arr#1 = arr#2
 arr(1) = arr(2)
 
 scr:array(39,23) of byte
 arr(0,0) = 65
 ::::::::::::::::
+
 
 =========
 2D arrays
