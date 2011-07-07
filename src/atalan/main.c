@@ -22,7 +22,7 @@ GLOBAL Bool VERBOSE;
 
 extern Var  ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
-extern InstrBlock * CODE;
+extern InstrBlock * BLK;
 Var * INTERRUPT;
 Var * SYSTEM_SCOPE;
 Var * MACRO_PRINT;
@@ -30,6 +30,7 @@ Var * MACRO_ASSERT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 UInt8 OPTIMIZE;
+Bool  ASSERTS_OFF;			// do not generate asserts into output code
 char VERBOSE_PROC[128];		// name of procedure which should generate verbose output
 
 Bool Verbose(Var * proc)
@@ -60,6 +61,7 @@ void ProcessUsedProc(void (*process)(Var * proc))
 	process(&ROOT_PROC);
 }
 
+
 void InitPlatform()
 /*
 Purpose:
@@ -74,7 +76,7 @@ Purpose:
 	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
 	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
 
-	VarInitRegisters();
+	InitCPU();
 
 	SYSTEM_PARSE = false;
 }
@@ -88,46 +90,50 @@ int main(int argc, char *argv[])
 	Bool header = true;
 	int result = 0;
 	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
-	UInt16 filename_len;
 	char * s;
 	Bool header_out;
 	char * platform = NULL;
 
-	*VERBOSE_PROC = 0;
-
 	PrintInit();
 
-#ifdef DEBUG
+//#ifdef DEBUG
 //	HeapUnitTest();
-#endif
+//#endif
 
 	VERBOSE = false;
 
 	*PLATFORM = 0;
 
-	// System folder is parent directory of directory where the binary is stored
+	// System folder is parent directory of directory where the compiler binary is stored.
 	//
 	//  bin/
 	//      atalan.exe
 	//      mads.exe
-	//  modules/
+	//  module/
 	//		system.atl
 	//      ;platform independent modules
-	//  platforms/
+	//      ...
+	//  platform/
 	//      atari/
 	//         ;platform dependent modules
 	//      c64/
-	//  processors/
+	//      ...
+	//  processor/
 	//      m6502/
+	//      z80/
+	//      ...
 
 	GetApplicationDir(argv[0], SYSTEM_DIR);
 	PathParent(SYSTEM_DIR);
-	OPTIMIZE = 255;
 
 	InitErrors();
 
+	OPTIMIZE = 255;
+	ASSERTS_OFF = false;
+	*VERBOSE_PROC = 0;
+
 	//
-    // Check arguments.
+    // Parse arguments.
     //
 
 	i = 1;
@@ -138,6 +144,8 @@ int main(int argc, char *argv[])
 			VERBOSE = true;
 		} else if (StrEqual(argv[i], "-A")) {
 			assembler = false;
+		} else if (StrEqual(argv[i], "-R")) {
+			ASSERTS_OFF = true;
 		} else if (StrEqual(argv[i], "-O0")) {
 			OPTIMIZE = 0;
 		} else if (StrEqual(argv[i], "-O")) {
@@ -181,6 +189,7 @@ int main(int argc, char *argv[])
 	"  -a Only generate assembler source code, but do not call assembler\n"
 	"  -p <name>  Platform to use\n"
 	"  -o <num>   Optimization level (0..9) 0 = no optimization\n"
+	"  -r Release version (do not generate asserts into resulting code)\n"
 	, argv[0]);
         exit(-1);
     }
@@ -188,12 +197,7 @@ int main(int argc, char *argv[])
 	// If the filename has .atl extension, cut it
 
 	strcpy(filename, argv[i]);
-	filename_len = StrLen(filename);
-
-	if (filename_len > 4 && StrEqual(".atl", &filename[filename_len-4])) {
-		filename_len -= 4;
-		filename[filename_len] = 0;
-	}
+	PathCutExtension(filename, "atl");
 
 	//==== Split dir and filename
 
@@ -205,6 +209,8 @@ int main(int argc, char *argv[])
 	TypeInit();
 	VarInit();
 	InstrInit();
+	GenerateInit();
+	TranslateInit();
 	ParseInit();
 	LexerInit();
 
@@ -217,15 +223,14 @@ int main(int argc, char *argv[])
 	// Some of the definitions in system.atl are directly used by compiler.
 
 	INSTRSET = NULL;
-	if (!Parse("system", false)) goto failure;
+	if (!Parse("system", false, false)) goto failure;
 	
 	SYSTEM_SCOPE = VarFindScope(&ROOT_PROC, "system", 0);
-	REGSET    = VarFindScope(&ROOT_PROC, "regset", 0);
 	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
 
 	// If the platform has been specified as an argument, parse it
 	if (platform != NULL) {
-		if (!Parse(platform, false)) goto failure;
+		if (!Parse(platform, false, false)) goto failure;
 	}
 
 	//TODO: Read the var heap definition from configuration
@@ -234,9 +239,9 @@ int main(int argc, char *argv[])
 	// TODO: Root procedure may be just special type of procedure.
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
 
-	InternalGen(INSTR_PROLOGUE, NULL, NULL, NULL);
+	GenInternal(INSTR_PROLOGUE, NULL, NULL, NULL);
 	SYSTEM_PARSE = false;
-	if (!Parse(filename, true)) goto failure;
+	if (!Parse(filename, true, false)) goto failure;
 	SYSTEM_PARSE = true;
 
 	if (*PLATFORM == 0) {
@@ -251,7 +256,7 @@ int main(int argc, char *argv[])
 		InternalError("Platform does not define varheap");
 		goto done;
 	}
-	InternalGen(INSTR_EPILOGUE, NULL, NULL, NULL);
+	GenInternal(INSTR_EPILOGUE, NULL, NULL, NULL);
 
 	// Report warning about logical errors
 
@@ -259,7 +264,7 @@ int main(int argc, char *argv[])
 		Warning("There were logical errors.\nCompilation will proceed, but the resulting program may be errorneous.");
 	}
 
-	ROOT_PROC.instr = CODE;
+	ROOT_PROC.instr = BLK;
 
 	VarUse();
 	ProcUse(&ROOT_PROC, 0);
@@ -302,7 +307,7 @@ int main(int argc, char *argv[])
 	if (OPTIMIZE > 0) {
 		// It is important to call the inline optimization before the code is broken to basic blocks.
 		// It makes code inserting easier.
-		ProcessUsedProc(ProcInline);
+		ProcessUsedProc(OptimizeProcInline);
 	}
 
 	//***** Analysis
@@ -340,7 +345,6 @@ int main(int argc, char *argv[])
 			PrintProc(&ROOT_PROC);
 		}
 	}
-
 
 	VarUse();
 
@@ -414,9 +418,9 @@ int main(int argc, char *argv[])
 
 done:	
 	PrintCleanup();
-   	exit(result);
+	exit(result);
 	
-failure:
+failure:	
 	result = 2;
   	goto done;
 }

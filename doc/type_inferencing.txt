@@ -1,4 +1,4 @@
-﻿What are the benefits
+﻿What are the benefits of type inferencing?
 
 - You don't need to declare types of local variables, leading to shorter,
   more readable code. Also it is easier to create a new local variable,
@@ -28,4 +28,50 @@ For every instruction:
   b. Type of the result was not declared explicitly
      Report error. Ask programmer to declare type of the result explcitly.  
   
+
+
+There are three different kinds of type:
+
+1. Declared (DT)
+
+This is type, explicitly declared by the programmer.
+
+2. Inferred (IT)
+
+Inferred type is minimal type the variable must have to be able to contain
+all values assigned to it during computation.
+Inferred type is computed by the compiler.
+
+If the variable has not been declared, the required type will be used as it's type.
+
+Error: It is an error, if IT is not subset of DT. 
+
+Warning: For variables, that are not locked at given address, warning may be reported
+if the required type is smaller than declared type. 
+ 
+3. Constraint (CT)
+
+This type defines maximal range a variable may have before it is used 
+in particular instruction. For example
+
+x:array (0..7)
+let x(i), 10
+
+restricts possible type of i to the range 0..7 (otherwise the assigmnent 
+would cause out of bounds error).
+
+
+Assert: RT ⊆CT 
+
+
+
+Type should have flag, spcifying whether it is a restriction or requirement.
+
+
+
+
+- Restriction is derived for given instruction based on it's arguments
+- Instruction result does not generate restriction
+- Array element index argument is an restriction
+- Restriction is specified for a variable
   

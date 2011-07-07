@@ -37,8 +37,8 @@ Purpose:
 	RegIdx i;
 	Var * reg;
 
-	for(i = 0; i < REG_CNT; i++) {
-		reg = REG[i];
+	for(i = 0; i < CPU->REG_CNT; i++) {
+		reg = CPU->REG[i];
 		if (FlagOff(reg->flags, VarUsed)) {
 			if (reg->type->range.max == 1) continue;			// exclude flag registers
 			if (byte_size != VarByteSize(reg)) continue;			// exclude registers with different size

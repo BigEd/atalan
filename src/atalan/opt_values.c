@@ -699,7 +699,7 @@ retry:
 					}
 
 					if (m2) {
-						if (EmitRule2(op, result, arg1, arg2)) {
+						if (InstrRule2(op, result, arg1, arg2)) {
 							i->op   = op;
 							i->arg1 = arg1;
 							i->arg2 = arg2;
@@ -718,7 +718,7 @@ retry:
 
 					// We have evaluated the instruction, change it to LET <result>,r
 					if (r != NULL) {
-						if (EmitRule2(INSTR_LET, i->result, r, NULL)) {
+						if (InstrRule2(INSTR_LET, i->result, r, NULL)) {
 							i->op = INSTR_LET;
 							i->arg1 = r;
 							i->arg2 = NULL;
@@ -894,7 +894,7 @@ next:
 						q = VarTestReplace(&ni.result, arg1, result);
 						q += VarTestReplace(&ni.arg1, arg1, result);
 						q += VarTestReplace(&ni.arg2, arg1, result);
-						if (q != 0 && EmitRule(&ni) == NULL) break;
+						if (q != 0 && InstrRule(&ni) == NULL) break;
 
 						// We successfully found source instruction, this means we can replace arg1 with result
 						if (i2->result == arg1 && !VarUsesVar(i2->arg1, arg1) && !VarUsesVar(i2->arg2, arg1)) {

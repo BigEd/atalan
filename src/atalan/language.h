@@ -3,6 +3,7 @@
 
 typedef struct VarTag Var;
 typedef struct LocTag Loc;
+typedef struct VarSetTag VarSet;
 
 Bool Verbose(Var * proc);
 
@@ -126,7 +127,7 @@ typedef struct {
 	Bool   ignore_keywords;
 } Lexer;
 
-Bool SrcOpen(char * name);
+Bool SrcOpen(char * name, Bool parse_options);
 void SrcClose();
 FILE * FindFile(char * name, char * ext, char * path);
 
@@ -228,7 +229,7 @@ typedef enum {
 	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
 	INSTR_DIVCARRY,
 	INSTR_COMPILER,
-	INSTR_CODE_END,			// end of CODE segment and start of data segment
+	INSTR_CODE_END,			// end of BLK segment and start of data segment
 	INSTR_DATA_END,			// end of data segment and start of variables segment
 
 	// Following 'instructions' are used in expressions
@@ -321,11 +322,13 @@ typedef struct {
 	Type * init;		// initial value of the step
 } TypeSequence;
 
+typedef Int32 IntLimit;
+
 // min + N * mul  (<max)
 typedef struct {
 	Bool flexible;		// range has been fixed by user
-	Int32 min;
-	Int32 max;
+	IntLimit min;
+	IntLimit max;
 //	UInt32 mul;
 } Range;
 
@@ -541,7 +544,7 @@ void HeapPrint(MemHeap * heap);
 #define DATA_SEGMENT_CAPACITY 0x1000000
 
 // Variables that do not fit into defined variable space are stored in data segment.
-// Data segment is allocated directly after CODE segment, however we reserve dynamic space for it at
+// Data segment is allocated directly after BLK segment, however we reserve dynamic space for it at
 // specified address.
 
 
@@ -596,7 +599,7 @@ extern Type TLBL;
 extern Type * TUNDEFINED;
 
 void VarInit();
-void VarInitRegisters();
+void InitCPU();
 
 Var * VarFirst();
 #define VarNext(v) (v)->next
@@ -622,7 +625,8 @@ Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx);
 Var * VarAllocScopeTmp(Var * scope, VarMode mode, Type * type);
 Var * VarFind(Name name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
-Var * VarFind2(char * name, VarIdx idx);
+Var * VarFindScope2(Var * scope, char * name);
+Var * VarFind2(char * name);
 //Var * VarFindInProc(char * name, VarIdx idx);
 Var * VarProcScope();
 Var * VarFindMode(Name name, VarIdx idx, VarMode mode);
@@ -643,15 +647,13 @@ Var * VarReg(Var * var);
 Bool VarIsFixed(Var * var);
 Bool VarIsLocal(Var * var, Var * scope);
 
+Var * VarField(Var * var, char * fld_name);
+void VarLet(Var * var, Var * val);
 
 #define InVar(var)  FlagOn((var)->submode, SUBMODE_IN)
 #define OutVar(var) FlagOn((var)->submode, SUBMODE_OUT)
 
 UInt32 VarByteSize(Var * var);
-
-typedef UInt8 RegIdx;
-extern Var * REG[64];		// Array of registers (register is variable with address in REGSET, submode has flag SUBMODE_REG)
-extern RegIdx REG_CNT;		// Count of registers
 
 void VarResetRegUse();
 
@@ -675,14 +677,17 @@ Var * VarNewDeref(Var * var);
 Var * VarNewRange(Var * min, Var * max);
 Var * VarNewTuple(Var * left, Var * right);
 
-void VarResetUse();
+Var * VarEvalConst(Var * var);
 
-void VarFree(Var * var);
+void VarResetUse();
 
 void VarEmitAlloc();
 
 #define FOR_EACH_VAR(v) for(v = VARS; v != NULL; v = v->next) {
 #define NEXT_VAR }
+
+#define FOR_EACH_LOCAL(SCOPE, VAR) 	for(VAR = VarFirstLocal(SCOPE); VAR != NULL; VAR = VarNextLocal(SCOPE, VAR)) {
+#define NEXT_LOCAL }
 
 void PrintVar(Var * var);
 void PrintVarName(Var * var);
@@ -698,17 +703,38 @@ typedef struct {
 	Var * var;
 } VarTuple;
 
-typedef struct {
+typedef struct VarSetTag {
 	VarTuple * arr;
 	UInt16     count;
 	UInt16     capacity;
-} VarSet;
+};
 
 void VarSetInit(VarSet * set);
 Var * VarSetFind(VarSet * set, Var * key);
 void VarSetAdd(VarSet * set, Var * key, Var * var);
 Var * VarSetRemove(VarSet * set, Var * key);
 void VarSetEmpty(VarSet * set);
+void VarSetCleanup(VarSet * set);
+
+Bool ProcIsInterrupt(Var * proc);
+
+/***********************************************************
+
+  CPU
+
+***********************************************************/
+
+#define MAX_CPU_REG_COUNT 64
+
+typedef UInt8 RegIdx;
+
+typedef struct {
+	Var * SCOPE;
+	Var * REG[MAX_CPU_REG_COUNT];		// Array of registers
+	RegIdx REG_CNT;		// Count of registers
+} CPUType;
+
+extern CPUType * CPU;
 
 /***********************************************************
 
@@ -753,6 +779,7 @@ struct InstrTag {
 	//--- dest
 	Var * result;
 
+	//TODO: Merge the union to arg1,arg2 & line_no, line
 	union {
 		Var * arg1;
 		UInt16 line_no;
@@ -777,6 +804,9 @@ struct InstrTag {
 
 	Instr * next, * prev;
 };
+
+// Instruction flags
+#define InstrRestriction 1		// result type in the instruction is actually an restriction
 
 struct LocTag {
 	Var * proc;
@@ -829,9 +859,12 @@ struct InstrBlockTag {
 	Instr * first, * last;		// first and last instruction of the block
 };
 
+InstrBlock * InstrBlockAlloc();
+
 void InstrInit();
 void InstrPrint(Instr * i);
 void InstrPrintInline(Instr * i);
+void InstrFree(Instr * i);
 
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
@@ -841,30 +874,15 @@ Var * InstrFind(char * name);
 // When we generate instructions, it is always done to defined code block
 // Code blocks are managed using those procedures.
 
-void InstrBlockPush();
-InstrBlock * InstrBlockPop();
 
 void InstrBlockFree(InstrBlock * blk);
-
-// Instructions generating
-
-void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2);
-void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
-void GenLet(Var * result, Var * arg1);
-void GenLine();
-void GenLabel(Var * var);
-void GenGoto(Var * var);
-void GenBlock(InstrBlock * blk);
-void GenMacro(InstrBlock * code, Var * macro, Var ** args);
-void GenLastResult(Var * var);
-void GenArrayInit(Var * arr, Var * init);
-
 void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * first, Instr * last);
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 
+
 extern Var * SCOPE;		// currently parsed variable (procedure, macro)
-extern Var * REGSET;	// enumerator with register sets
+//extern Var * REGSET;	// enumerator with register sets
 
 void CodePrint(InstrBlock * blk);
 
@@ -879,11 +897,34 @@ UInt16 SetBookmarkVar(Var * var);
 void InstrReplaceVar(InstrBlock * block, Var * from, Var * to);
 void ProcReplaceVar(Var * proc, Var * from, Var * to);
 
+Bool InstrEquivalent(Instr * i, Instr * i2);
+
+// Instructions generating
+
+void GenerateInit();
+void GenSetDestination(InstrBlock * blk, Instr * i);
+void GenBegin();
+InstrBlock * GenEnd();
+
+void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void GenLet(Var * result, Var * arg1);
+void GenLine();
+void GenLabel(Var * var);
+void GenGoto(Var * var);
+void GenBlock(InstrBlock * blk);
+void GenMacro(Var * macro, Var ** args);
+void GenLastResult(Var * var);
+void GenArrayInit(Var * arr, Var * init);
+
+
 /***********************************************************
 
-  Rules
+  Translate
 
 ***********************************************************/
+
+extern Var * RULE_PROC;
 
 typedef struct RuleTag Rule;
 typedef struct RuleArgTag RuleArg;
@@ -901,16 +942,10 @@ typedef enum {
 	RULE_ELEMENT,		// array element - var defines pattern for array, index defines pattern for index
 	RULE_TUPLE,
 	RULE_RANGE,
-	RULE_BYTE
+	RULE_BYTE,
 //	RULE_ARRAY_ARG      // argument that should be array of specified type
 } RuleArgVariant;
-/*
-typedef enum {
-	RULE_ARRAY = 0,
-	RULE_DIM,      // second dimension in array
-	RULE_ITEM      // structure access
-} RuleIndexVariant;
-*/
+
 struct RuleArgTag {
 	RuleArgVariant variant;
 	UInt8          arg_no;		// argument index (1..26)  used for variable & const
@@ -918,8 +953,8 @@ struct RuleArgTag {
 	   Var * var;
 	   Type * type;
 	   RuleArg * arr;
+	   UInt8   type_arg_no;		// number of macro argument defining a type
 	};
-//	UInt8      index_variant;		// '(' first, '.' structure, ',' second index in array
 	RuleArg  * index;		        // pointer to index for array (NULL if there is no index)
 							        // Rule arg is allocated in this case
 							        // This type must be RULE_VARIABLE or RULE_REGISTER
@@ -940,6 +975,7 @@ Bool RuleMatch(Rule * rule, Instr * i);
 
 void ProcTranslate(Var * proc);
 void CheckValues(Var * proc);
+void TranslateInit();
 
 // Garbage collector
 
@@ -964,8 +1000,15 @@ struct BlockTag {
 };
 
 void ParseInit();
-Bool Parse(char * name, Bool main_file);
+Bool Parse(char * name, Bool main_file, Bool parse_options);
 void ProcCheck(Var * proc);
+
+void BufEmpty();
+void BufPush(Var * var);
+
+#define STACK_LIMIT 100
+Var *  STACK[STACK_LIMIT];
+UInt16 TOP;
 
 /*************************************************************
 
@@ -998,7 +1041,7 @@ Bool OptimizeMergeBranchCode(Var * proc);
 void ProcClearProcessed(Var * proc);
 void AllocateVariables(Var * proc);
 
-void ProcInline(Var * proc);
+void OptimizeProcInline(Var * proc);
 
 /*************************************************************
 
@@ -1023,8 +1066,8 @@ void PrintInt(Int32 n);
 void PrintRepeat(char * text, UInt16 cnt);
 void PrintEOL();
 
-Rule * EmitRule(Instr * instr);
-Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
+Rule * InstrRule(Instr * instr);
+Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 Bool EmitOpen(char * filename);
 void EmitClose();

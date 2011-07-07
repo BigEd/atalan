@@ -126,14 +126,19 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 						used_args[arg_cnt++] = c;
 					}
 				}
-			}
 
-			// Output variable name
-			if (VarIsIntConst(var)) {
-				PrintInt(var->n);
-			} else {
+				// Output variable name
+				if (VarIsIntConst(var)) {
+					PrintInt(var->n);
+				} else {
+					Print("\'");
+					PrintVarUser(var);
+					Print("\'");
+				}
+
+			} else if (c == '$') {
 				Print("\'");
-				PrintVarUser(var);
+				Print(NAME);
 				Print("\'");
 			}
 
