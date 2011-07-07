@@ -14,9 +14,11 @@ system:scope
 ;It is possible to define custom instructions by adding constants to this codelist.
 
 type instrs:enum
-	nop = 0
-	let = 1
+  NULL = 0
+	nop = 1
+	let
 	
+	goto
 	ifeq
 	ifne
 	iflt
@@ -31,7 +33,6 @@ type instrs:enum
 	emit  		;emit string to output
 	vardef 	
 	label  
-	goto
 	add
 	sub
 	mul

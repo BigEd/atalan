@@ -12,6 +12,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 GLOBAL Var * INSTRSET;			// enumerator with instructions
 extern Var * VARS;		// global variables
+GLOBAL Instr NULL_INSTR;
+GLOBAL Instr * InstrNull;
+
 
 /*
 
@@ -673,5 +676,8 @@ void PrintProc(Var * proc)
 //$I
 void InstrInit()
 {
+	MemEmptyVar(NULL_INSTR);
+	NULL_INSTR.op = INSTR_NULL;
+	InstrNull = &NULL_INSTR;
 }
 

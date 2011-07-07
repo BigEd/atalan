@@ -168,9 +168,11 @@ char FILENAME[MAX_PATH_LEN];
 extern char PLATFORM[64];
 
 typedef enum {
-	INSTR_VOID = 0,
+	INSTR_NULL = 0,
+	INSTR_VOID,
 	INSTR_LET,		// var, val
 
+	INSTR_GOTO,
 	INSTR_IFEQ,		// must be even!!!.
 	INSTR_IFNE,
 	INSTR_IFLT,
@@ -185,7 +187,6 @@ typedef enum {
 	INSTR_EMIT,
 	INSTR_VARDEF,
 	INSTR_LABEL,
-	INSTR_GOTO,
 	INSTR_ADD,
 	INSTR_SUB,
 	INSTR_MUL,
