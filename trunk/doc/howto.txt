@@ -23,20 +23,20 @@ and list of variables the procedure uses (trashes).
 As an example, we will use zero function, that will set the specified block of memory with specified byte 
 
 :::::::
-fill_mem:proc adr@(_a,_x):adr size@_y:0..255 b@fb:byte @_a @_x @_y @arr
+fill_mem:proc adr@(cpu.a,cpu.x):adr size@cpu.y:0..255 b@fb:byte @cpu.a @cpu.x @cpu.y @arr
 :::::::
 
 This declares procedure with three input arguments.
 
 'adr' specified address of first byte to erase. The address will be passed
-in registers A and X. A will contain lower byte of address. X will contain higher
+in CPU registers A and X. A will contain lower byte of address. X will contain higher
 byte of the address.
 
 'size' specifies number of bytes to fill (0..255). It will be passed in register Y.
 
 The byte to use for fill 'b' will be passed in variable fb.
 
-When executed, the procedure will use registers A,X,Y and variable arr. Their value
+When executed, the procedure will use CPU registers A,X,Y and variable arr. Their value
 is trashed i.e. set to some undefined value.
 
 It is necessary to specify the trashed registers and variables, otherwise optizer

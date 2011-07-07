@@ -98,13 +98,13 @@ type instrs:enum
 ;
 ;Flags are specified using pflags enumerator.
 
-type iflag:enum
+;type iflag:enum
 
 ;===============
 ;Register groups
 ;===============
 
-type regset:enum
+;type regset:enum
 
 ;==========
 ;Interrupts
@@ -133,5 +133,10 @@ inc:macro(x) =
 	
 dec:macro(x) =
 	x = x - 1
+
+swap:macro(x, y) =
+  t = x
+  x = y
+  y = t
 
 rule ref %A  = ""
