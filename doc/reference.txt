@@ -972,7 +972,7 @@ in register or at some adress).
 
 :::::::::::::::::::::::
 reset@$E034:proc
-out_char@$E75f:proc c@_a
+out_char@$E75f:proc c@CPU.a
 :::::::::::::::::::::::
 
 ===============================
@@ -986,7 +986,7 @@ Such variables are listed between procedure arguments with {@} prefix. It is imp
 mark this way also registers the procedure uses.
 
 ::::::::::::::::::::::::::::
-_std_print_adr:proc a@_arr:adr @_arr @_a @_x @_y
+_std_print_adr:proc a@_arr:adr @_arr @cpu.a @cpu.x @cpu.y
 :::::::::::::::::::::::::::: 
 
 *******
@@ -1006,6 +1006,30 @@ Module can be used only once (subsequent uses are ignored).
 Cyclic dependency of modules is detected and reported as an error.
 
 Paths used in module {file} command are relative to the location of the module.
+
+=================
+Module parameters
+=================
+
+Module may define paramters, that may be used to customize the functionality of the module in compilation time.
+Parameters are treated like special type of constant, that may be specified by programmer using the module.
+
+Parameters may be declared anywhere in the module (but before it is first used).
+It may have default value defined. In such case, this value will be used if the user does not specify the parameter.
+
+For example music module may define following parameter:
+
+::::::::::::::::::::
+param channels:1..4 = 2
+::::::::::::::::::::
+
+When using the module, programmer may specify the parameters like this:
+
+::::::::::::::::::::::::
+use music (channels = 3)
+::::::::::::::::::::::::
+
+Number of channels used by music module is set to 3. 
  
 ==================
 Assembler includes
@@ -1014,6 +1038,9 @@ Assembler includes
 For each module {name.atl} there may be associated assembler source code {name.asm}.
 If such a file exists, it is automatically included at the end of the source code.
 
+If the module defines parameters, assembler includes may access them as label with
+prefix PARAM_.
+ 
 =================
 Processor modules
 =================
