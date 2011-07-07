@@ -304,7 +304,7 @@ ifne x,y,l1
 ::::::::::::::::::::::
 
 ===============================
-Optimization: Remove NULL jumps
+Optimization: Remove zero jumps
 ===============================
 
 ::::::::::::::::::::::
@@ -315,6 +315,8 @@ goto l1
 ====================================
 Optimization: Tail call optimization
 ====================================
+
+Calling procadure as last thing done in a procedure will be translated to jump.
 
 ::::::::::::
 call subproc

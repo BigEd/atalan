@@ -214,9 +214,11 @@ Purpose:
 
 char * g_InstrName[INSTR_CNT] = 
 {
+	"NULL",
 	"", // INSTR_VOID = 0,
 	"<-", //INSTR_LET,		// var, val
 
+	"",   // INSTR_GOTO,
 	"=",  //INSTR_IFEQ,		// must be even!!!.
 	"<>", //INSTR_IFNE,
 	"<",   //INSTR_IFLT,
@@ -231,7 +233,6 @@ char * g_InstrName[INSTR_CNT] =
 	"",   // INSTR_EMIT,
 	"",   // INSTR_VARDEF,
 	"",   // INSTR_LABEL,
-	"",   // INSTR_GOTO,
 	"+",   // INSTR_ADD,
 	"-",   // INSTR_SUB,
 	"*",   // INSTR_MUL,
