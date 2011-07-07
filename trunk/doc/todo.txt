@@ -2,6 +2,20 @@
 TODO
 ****
 
+
+Flags and other information is part of rule, not instruction.
+Instruction must have reference to rule (pointer to rule).
+This may replace op, but that would slow down the code.
+
+
+rule &a @&z &n &v &c = &a + %A @ &c
+
+
+@ is interesting, as we already use it to denote 'trashed' variables in argument
+list and this is simmilar.
+
+rule &a + %A -> &a  
+
 - parse ranges in for loops in reverse order (this will allow releasing it later)
 
 
@@ -19,6 +33,7 @@ TETRIS: Use random'tile routine with mod
 
 
 proc :type   (type must be structure type, or proc type or macro type)
+
 
 =====
 Flags

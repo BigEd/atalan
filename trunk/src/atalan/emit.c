@@ -331,8 +331,14 @@ void EmitVar(Var * var, UInt8 format)
 			} else {
 				InternalError("don't know how to emit array element");
 			}
+		} else if (var->mode == MODE_BYTE) {
+			InternalError("don't know how to emit byte array element");
 		} else if (var->name != NULL) {
-			if (var->mode == MODE_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
+			// *** Module parameters (4)
+			// When parameter name is emmited, it is prefixed with PARAM_ prefix
+			if (var->mode == MODE_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+				EmitStr("PARAM_");
+			} else if (var->mode == MODE_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
 				EmitStr("__");
 			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
@@ -445,34 +451,6 @@ void EmitInstr2(Instr * instr, char * str)
 	}
 }
 
-Rule * EmitRule(Instr * instr)
-/*
-Purpose:
-	Find rule that emits code for this instruction.
-	May be used to test, whether specified instruction may be emitted or not.
-*/
-{
-	Rule * rule;
-	
-	rule = EMIT_RULES[instr->op];
-	if (instr->op == INSTR_LINE) return rule;
-
-	for(; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, instr)) break;
-	}
-	return rule;
-}
-
-Rule * EmitRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
-	Instr i;
-	i.op = op;
-	i.result = result;
-	i.arg1 = arg1;
-	i.arg2 = arg2;
-	return EmitRule(&i);
-}
-
 extern Bool RULE_MATCH_BREAK;
 
 Bool EmitInstr(Instr * i)
@@ -482,7 +460,7 @@ Bool EmitInstr(Instr * i)
 
 	if (i->op == INSTR_REF) return true;
 
-	rule = EmitRule(i);
+	rule = InstrRule(i);
 
 	if (rule != NULL) {
 		for(to = rule->to->first; to != NULL; to = to->next) {
@@ -577,12 +555,12 @@ Purpose:
 //		}
 
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) continue;
-		if (var->scope == REGSET) continue;
+		if (VarIsReg(var)) continue;
 
 		adr = var->adr;
 		if (
-			   (adr != NULL && !VarIsReg(adr) && adr->scope != REGSET && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
-			|| (var->mode == MODE_CONST && var->read > 0 && var->name != NULL > 0)
+			   (adr != NULL && !VarIsReg(adr) && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
+			|| (var->mode == MODE_CONST && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
 		) {
 
 			if (adr != NULL && adr->mode == MODE_CONST && adr->n >= DATA_SEGMENT) continue;

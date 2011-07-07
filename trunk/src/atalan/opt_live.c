@@ -46,7 +46,7 @@ Input:
 		VarMark(var->var, state);
 
 	// If this is array access variable, mark indices as live (used)
-	} if (var->mode == MODE_ELEMENT) {
+	} if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) {
 
 		if (var->adr->mode == MODE_DEREF) {
 			VarMarkLive(var->adr);
@@ -74,7 +74,7 @@ Input:
 
 		// Each element, which has this variable as an array is marked same
 		FOR_EACH_VAR(var2)
-			if (var2->mode == MODE_ELEMENT) {
+			if (var2->mode == MODE_ELEMENT || var2->mode == MODE_BYTE) {
 				if (var2->adr == var) {
 					var2->flags = (var2->flags & ~VarLive) | state;
 				}
@@ -111,7 +111,7 @@ Purpose:
 	res1 = res2 = 2;
 
 	// var may be _arr(0)  -> in such case, we want to test _arr as it is to check usage like @_arr
-	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) {
+	if ((var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) && var->var->mode == MODE_CONST) {
 		var = var->adr;
 	}
 
@@ -188,9 +188,20 @@ Bool VarDereferences(Var * var)
 {
 	if (var != NULL) {
 		if (var->mode == MODE_DEREF) return true;
-		if (var->mode == MODE_ELEMENT) return VarDereferences(var->adr) || VarDereferences(var->var);
+		if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) return VarDereferences(var->adr) || VarDereferences(var->var);
 	}
 	return false;
+}
+
+Bool VarIsDead(Var * var)
+{
+	if (var->mode == MODE_TUPLE) {
+		return VarIsDead(var->adr) && VarIsDead(var->var);
+	} if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
+		return VarIsDead(var->adr);
+	} else {
+		return FlagOff(var->flags, VarLive) && !OutVar(var);
+	}
 }
 
 Bool OptimizeLive(Var * proc)
@@ -221,9 +232,9 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-			if (var->mode == MODE_ELEMENT && var->adr->mode == MODE_DEREF && StrEqual(var->adr->var->name, "_arr")) {
-				printf("");
-			}
+//			if (var->mode == MODE_ELEMENT && var->adr->mode == MODE_DEREF && StrEqual(var->adr->var->name, "_arr")) {
+//				printf("");
+//			}
 
 //			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
 //				printf("");
@@ -269,11 +280,12 @@ Bool OptimizeLive(Var * proc)
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
-					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && !OutVar(result)) {
+//					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && !OutVar(result)) {
+					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
 							if (Verbose(proc)) {
-								printf("Removing dead %ld:", n); InstrPrint(i);
+								printf("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);
 							modified = true;

@@ -16,6 +16,12 @@ void VarSetInit(VarSet * set)
 	set->arr   = NULL;
 }
 
+void VarSetCleanup(VarSet * set)
+{
+	MemFree(set->arr);
+	VarSetInit(set);
+}
+
 void VarSetEmpty(VarSet * set)
 {
 	set->count = 0;

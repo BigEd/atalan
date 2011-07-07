@@ -90,3 +90,4 @@ void PathSeparate(char * path, char * dirname, char * filename);
 void PathParent(char * path);
 void PathMerge(char * path, char * dirname, char * filename);
 void GetApplicationDir(char * name, char * path);
+void PathCutExtension(char * path, char * ext);

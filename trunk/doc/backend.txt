@@ -1,4 +1,4 @@
-***********************
+﻿***********************
 ATALAN Compiler Backend
 ***********************
 
@@ -107,10 +107,15 @@ const %A          Constant. Range (or type) of the constant may be specified.
 %A:type           Value or variable of specified type
 %A:type(idx)      Access to array element at index %B. Idx may be variable, value etc.
 %A:type(idx,idx)  Access to 2d array
-@%A               Reference to variable pointed to by %A (may include index)     
+@%A               Reference to variable pointed to by %A (may include index)
+%A$%B             Access to B-th byte of variable %A     
 ::::::::::::::::::::::::
 
 Macro variable %Z has special meaning. It is used as local variable in macro evaluation.
 
 Label specified in rule using "label" instruction is local (new temporary label is generated every time
 macro is used.
+
+- For commutative operations, if mathing rule for op A,B,C is not found, op A,C,B will be searched
+- Constant is put on the right side of operation if possible
+ 

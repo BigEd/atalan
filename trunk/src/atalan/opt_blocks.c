@@ -34,7 +34,7 @@ Purpose:
 	Instr * prev;
 	InstrBlock * nb;
 
-	nb = MemAllocStruct(InstrBlock);
+	nb = InstrBlockAlloc();
 	nb->first = i;
 	nb->last  = block->last;
 	nb->next  = block->next;
@@ -52,51 +52,12 @@ Purpose:
 	return nb;
 }
 
-void VarReplaceVar(Var ** p_var, Var * from, Var * to)
-/*
-Purpose:
-	Replace one variable by another.
-	Variable may be used for example in array indexes, tuples etc.
-	Replacement is performed 'in place'.
-*/
+Instr * InstrPrev(Instr * i)
 {
-	Var * var;
-
-	var = *p_var;
-
-	if (var == NULL) return;
-
-	if (var == from) {
-		*p_var = to;
-		return;
+	if (i != NULL) {
+		while(i != NULL && i->op == INSTR_LINE) i = i->prev;
 	}
-
-	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_RANGE) {
-		VarReplaceVar(&var->var, from, to);
-		VarReplaceVar(&var->adr, from, to);
-	} else if (var->mode == MODE_DEREF) {
-		VarReplaceVar(&var->var, from, to);
-	}
-}
-
-void InstrReplaceVar(InstrBlock * block, Var * from, Var * to)
-/*
-Purpose:
-	Replace use of variable 'from' with variable 'to' in specified block.
-	When this procedure ends, 'from' variable is no more referenced in the block.
-*/
-{
-	Instr * i;
-	InstrBlock * nb;
-	for(nb = block; nb != NULL; nb = nb->next) {
-		for (i = nb->first; i != NULL; i = i->next) {
-			if (i->op != INSTR_LINE) {
-				VarReplaceVar(&i->result, from, to);
-				VarReplaceVar(&i->arg1, from, to);
-				VarReplaceVar(&i->arg2, from, to);
-			}
-		}
-	}
+	return i;
 }
 
 Instr * FirstInstr(InstrBlock * blk)
@@ -109,13 +70,23 @@ Purpose:
 	return i;
 }
 
-Instr * InstrPrev(Instr * i)
+Instr * LastInstr(InstrBlock * blk)
+/*
+Purpose:
+	Return last instruction from specified block.
+	May return NULL, if the block is empty.
+*/
 {
-	if (i != NULL) {
-		while(i != NULL && i->op == INSTR_LINE) i = i->prev;
+	Instr * i = NULL;
+	if (blk != NULL) {
+		i = InstrPrev(blk->last);
+		if (i != NULL) {
+			if (i->op == INSTR_GOTO) i = InstrPrev(i->prev);
+		}
 	}
 	return i;
 }
+
 
 void LinkBlocks(Var * proc)
 {
@@ -311,24 +282,56 @@ Purpose:
 	//TODO: Blocks with labels, that are not jumped to (data labels) may be merged together
 }
 
-void OptimizeJumps(Var * proc)
 /*
-Purpose:
-	Optimize jumps.
+============================
+Optimization: Optimize jumps
+============================
 
-	1. Sequence like:
+Optimize jumps.
 
-	    ifeq x,y,l2
-	    jmp l1
-	    label l2
+1. Sequence like:
 
-	   will be translated to
+::::::::::::::::::::::
+ifeq x,y,l2
+jmp l1
+l2@
+::::::::::::::::::::::::
 
-	   ifne x,y,l1
+will be translated to
 
-	2. NULL jumps removed
+::::::::::::::::::::::
+ifne x,y,l1
+::::::::::::::::::::::
+
+===============================
+Optimization: Remove NULL jumps
+===============================
+
+::::::::::::::::::::::
+goto l1
+@l1
+::::::::::::::::::::::
+
+====================================
+Optimization: Tail call optimization
+====================================
+
+::::::::::::
+call subproc
+return
+::::::::::::
+
+translate to
+
+::::::::::::
+goto subproc
+::::::::::::
+
+This optimization is not performed on interrupt routines.
 
 */
+
+void OptimizeJumps(Var * proc)
 {
 	InstrBlock * blk, * blk_to;
 	Instr * i, * cond_i, * last_i;
@@ -395,7 +398,7 @@ retry:
 			// rts
 
 			if (last_i != NULL) {
-				if (last_i->op == INSTR_CALL) {
+				if (last_i->op == INSTR_CALL && !ProcIsInterrupt(proc)) {
 					last_i->op = INSTR_GOTO;
 }
 			}
@@ -407,18 +410,47 @@ retry:
 	LinkBlocks(proc);
 }
 
+/*
+
+===================================
+Optimization: Dead code elimitation
+===================================
+
+Remove blocks of code, that are not called from any other block.
+
+For example:
+
+::::::::::::
+x = 1
+goto skip
+x = 5
+skip@
+::::::::::::
+
+will be converted to
+
+::::::::::::
+x = 1
+::::::::::::
+
+*/
+
 void DeadCodeElimination(Var * proc)
 {
 	InstrBlock * blk, * prev_blk;
 
 	LinkBlocks(proc);
 
-	// First block of procedure is not dead, as it is an entry point to the procedure
+	// 1. First block of procedure is not dead, as it is an entry point to the procedure.
 
 	prev_blk = proc->instr;
 	if (prev_blk != NULL) blk = prev_blk->next;
 
 	while (blk != NULL) {
+
+		// 2. Block can not be called and if it starts with label, the label may not be referenced.
+		//    (For example when setting the address of block as interrupt handler).
+
 		if (blk->from == NULL && blk->callers == NULL) {
 			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
 				//TODO: We should solve alignment using some other means (probably block, or label, should have alignment)
@@ -434,28 +466,6 @@ void DeadCodeElimination(Var * proc)
 		blk = blk->next;
 	}
 
-}
-
-Instr * LastInstr(InstrBlock * blk)
-{
-	Instr * i = NULL;
-	if (blk != NULL) {
-		i = InstrPrev(blk->last);
-		if (i != NULL) {
-			if (i->op == INSTR_GOTO) i = InstrPrev(i->prev);
-		}
-	}
-	return i;
-}
-
-Bool InstrEquivalent(Instr * i, Instr * i2)
-{
-	if (i == NULL || i2 == NULL) return false;
-	if (i->op != i2->op) return false;
-	if (i->result != i2->result) return false;
-	if (i->arg1 != i2->arg1) return false;
-	if (i->arg2 != i2->arg2) return false;
-	return true;
 }
 
 /*

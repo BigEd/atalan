@@ -28,7 +28,7 @@ type VARHEAP:128..255
 
 ;system.assert_printchar:system.printchar
 
-system.assert_print_asm:proc @_x @_a @_y
+system.assert_print_asm:proc @cpu.x @cpu.a @cpu.y
 
 system.print_assert:macro = instr call system.assert_print_asm
 
@@ -36,4 +36,3 @@ rule assert_begin = ";assert"
 rule assert = instr
    call _std_print_out
 rule assert_end = "   brk"
-	

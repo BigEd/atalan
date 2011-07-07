@@ -9,7 +9,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 */
 
 #include "language.h"
-#define MAX_RULE_UNROLL 20
+
+GLOBAL Var * INSTRSET;			// enumerator with instructions
+extern Var * VARS;		// global variables
+
 /*
 
 Instruction generating function always write to this block.
@@ -17,17 +20,38 @@ Blocks may be nested, because procedures may be nested.
 
 */
 
-GLOBAL Var * INSTRSET;			// enumerator with instructions
+InstrBlock * InstrBlockAlloc()
+{
+	return MemAllocStruct(InstrBlock);
+}
 
-GLOBAL InstrBlock * CODE;
-GLOBAL InstrBlock * IBLOCK_STACK[128];
-GLOBAL UInt16       IBLOCK_STACK_SIZE;
-GLOBAL Var * MACRO_ARG[MACRO_ARG_CNT];
-GLOBAL Type  ROOT_PROC_TYPE;
-GLOBAL Var   ROOT_PROC;
 
-extern GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
-extern Var * VARS;		// global variables
+void InstrBlockFree(InstrBlock * blk)
+{
+	Instr * i, * next;
+
+	if (blk != NULL) {
+		for(i = blk->first; i != NULL; i = next) {
+			next = i->next;
+			InstrFree(i);
+		}
+		blk->first = blk->last = NULL;
+	}
+}
+
+Bool InstrEquivalent(Instr * i, Instr * i2)
+/*
+Purpose:
+	Return true, if two instructions are equivalent (executing them has same effect).
+*/
+{
+	if (i == NULL || i2 == NULL) return false;
+	if (i->op != i2->op) return false;
+	if (i->result != i2->result) return false;
+	if (i->arg1 != i2->arg1) return false;
+	if (i->arg2 != i2->arg2) return false;
+	return true;
+}
 
 Var * InstrFind(char * name)
 {
@@ -47,30 +71,6 @@ Var * InstrFindCode(UInt16 code)
 	Var * var;
 	var = VarFindInt(INSTRSET, code);
 	return var;
-}
-
-void InstrBlockPush()
-/*
-Purpose:
-	Create new code block and let next instructions be generated into this block.
-*/
-{
-	IBLOCK_STACK[IBLOCK_STACK_SIZE] = CODE;
-	IBLOCK_STACK_SIZE++;
-	CODE = MemAllocStruct(InstrBlock);
-}
-
-InstrBlock * InstrBlockPop()
-/*
-Purpose:
-	Pop last pushed code block.
-*/
-{
-	InstrBlock * blk;
-	blk = CODE;
-	IBLOCK_STACK_SIZE--;
-	CODE = IBLOCK_STACK[IBLOCK_STACK_SIZE];
-	return blk;
 }
 
 void InstrDetach(InstrBlock * blk, Instr * first, Instr * last)
@@ -131,27 +131,6 @@ Purpose:
 	InstrAttach(to, before, first, last);
 }
 
-void GenBlock(InstrBlock * blk)
-/*
-Purpose:
-	Generate block of code.
-	The code is attached to the generated output (copy is not made).
-*/
-{
-	if (blk != NULL && blk->first != NULL) {
-		blk->first->prev = CODE->last;
-		blk->last->next  = NULL;
-		if (CODE->last != NULL) {
-			CODE->last->next = blk->first;
-		}
-		CODE->last = blk->last;
-		if (CODE->first == NULL) {
-			CODE->first = blk->first;
-		}
-		free(blk);	// free just block head
-	}
-}
-
 void InstrFree(Instr * i)
 {
 	if (i != NULL) {
@@ -159,19 +138,6 @@ void InstrFree(Instr * i)
 //			free(i->line);
 		}
 		free(i);
-	}
-}
-
-void InstrBlockFree(InstrBlock * blk)
-{
-	Instr * i, * next;
-
-	if (blk != NULL) {
-		for(i = blk->first; i != NULL; i = next) {
-			next = i->next;
-			InstrFree(i);
-		}
-		blk->first = blk->last = NULL;
 	}
 }
 
@@ -246,108 +212,6 @@ Purpose:
 	return op;
 }
 
-
-LineNo CURRENT_LINE_NO;
-
-void GenLine()
-{
-	char * line;
-	UInt32 line_no;
-	UInt16 line_len;
-
-	// Generate LINE instruction.
-	// Line instructions are used to be able to reference back from instructions to line of source code.
-	// That way, we can report logical errors detected in instructions to user.
-
-	if (!SYSTEM_PARSE && CURRENT_LINE_NO != LINE_NO) {
-		InstrInsert(CODE, NULL, INSTR_LINE, NULL, NULL, NULL);
-		line = LINE;
-		line_no = LINE_NO;
-		if (LINE_POS == 0) {
-			line = PREV_LINE;
-			line_no--;
-		}
-		line_len = StrLen(line)-1;
-		CODE->last->result    = SRC_FILE;
-		CODE->last->line_no = line_no;
-		CODE->last->line = StrAllocLen(line, line_len);
-		CURRENT_LINE_NO = line_no;
-	}
-}
-
-void InternalGen(InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
-	Var * var;
-	// For commutative or relational operations make sure the constant is the other operator
-	// This simplifies further code processing.
-
-	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
-		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
-			if (arg1->mode == MODE_CONST) {
-				var = arg1; arg1 = arg2; arg2 = var;
-
-				op = OpRelSwap(op);
-
-			}
-		}
-	}
-	InstrInsert(CODE, NULL, op, result, arg1, arg2);
-}
-
-void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2)
-/*
-Purpose:
-	Generate instruction into current code block.
-*/
-{
-	GenLine();
-	InternalGen(op, result, arg1, arg2);
-}
-
-void GenLet(Var * result, Var * arg1)
-{
-	Type * rtype, * atype;
-
-
-	rtype = result->type;
-	atype = arg1->type;
-
-	// TODO: We should test for chain of ADR OF ADR OF ADR ....
-	//       Error should be reported when assigning address of incorrect type
-
-	if (rtype != NULL && atype != NULL && rtype->variant == TYPE_ADR && atype->variant != TYPE_ADR) {
-		Gen(INSTR_LET_ADR, result, arg1, NULL);
-	} else {
-		Gen(INSTR_LET, result, arg1, NULL);
-	}
-}
-
-void GenGoto(Var * label)
-{
-	if (label != NULL) {
-		InternalGen(INSTR_GOTO, label, NULL, NULL);
-	}
-}
-
-void GenLabel(Var * var)
-{
-	if (var != NULL) {
-		if (var->type->variant == TYPE_UNDEFINED) {
-			VarToLabel(var);
-		}
-		InternalGen(INSTR_LABEL, var, NULL, NULL);
-	}
-}
-
-void GenLastResult(Var * var)
-/*
-Purpose:
-	Set result of last generated instruction.
-*/
-{
-	CODE->last->result = var;
-}
-
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2)
 /*
 Purpose:
@@ -413,463 +277,17 @@ Result:
 	return r;
 }
 
-/**************************************************************
-
- Rules
-
- Rules define, how to process instructions.
-
-**************************************************************/
-//$R
-
-GLOBAL Rule * RULES[INSTR_CNT];
-GLOBAL Rule * LAST_RULE[INSTR_CNT];
-
-GLOBAL Rule * EMIT_RULES[INSTR_CNT];
-GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
-
-void RuleRegister(Rule * rule)
-/*
-Purpose:
-	Register parsed rule.
-*/
-{
-	InstrOp op = rule->op;
-	if (!rule->to->first) InternalError("Empty rule");
-
-	if (rule->to->first->op == INSTR_EMIT) {
-		if (LAST_EMIT_RULE[op] != NULL) LAST_EMIT_RULE[op]->next = rule;
-		if (EMIT_RULES[op] == NULL) EMIT_RULES[op] = rule;
-		LAST_EMIT_RULE[op] = rule;
-	} else {
-		if (LAST_RULE[op] != NULL) LAST_RULE[op]->next = rule;
-		if (RULES[op] == NULL) RULES[op] = rule;
-		LAST_RULE[op] = rule;
-	}
-}
-
-void RuleArgMarkNonGarbage(RuleArg * rule)
-{
-	if (rule != NULL) {
-		if (rule->variant == RULE_VARIABLE || rule->variant == RULE_CONST) {
-			TypeMark(rule->type);
-		} else if (rule->variant == RULE_TUPLE || rule->variant == RULE_DEREF) {
-			RuleArgMarkNonGarbage(rule->arr);
-		}
-		RuleArgMarkNonGarbage(rule->index);
-	}
-}
-
-void RulesMarkNonGarbage(Rule * rule)
-{
-	UInt8 i;
-	while(rule != NULL) {
-		for(i=0; i<2; i++) {
-			RuleArgMarkNonGarbage(&rule->arg[i]);
-		}
-		rule = rule->next;
-	}
-}
-
-void RulesGarbageCollect()
-{
-	UInt8 op;
-	for(op=0; op<INSTR_CNT; op++) {
-		RulesMarkNonGarbage(RULES[op]);
-		RulesMarkNonGarbage(EMIT_RULES[op]);
-	}
-}
-
-static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple);
-
-Bool VarMatchesPattern(Var * var, RuleArg * pattern)
-{
-	Type * type = pattern->type;
-	Type * vtype = var->type;
-
-	// Pattern expects reference to array with one or more indices
-	if (pattern->index != NULL) {
-		if (var->mode == MODE_ELEMENT) {
-			if (VarIsStructElement(var)) {
-				// This is reference to structure
-				// We may treat it as normal variable
-//				printf("");
-			} else {
-				// 1D index
-				if (!ArgMatch(pattern->index, var->var, false)) return false;
-				return true;
-			}
-		} else {
-			return false;
-		}
-
-	// Pattern does not expect any index, but we have some, so there is no match
-	} else {
-		if (VarIsArrayElement(var)) return false;
-	}
-
-	return VarMatchesType(var, type);
-}
-
-static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
-{
-	Type * atype;
-	Var * pvar;
-	UInt8 j;
-
-	if (arg == NULL) return pattern->variant == RULE_ANY;
-	atype = arg->type;
-	
-	switch(pattern->variant) {
-	case RULE_RANGE:
-		if (arg->mode != MODE_RANGE) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;
-		return ArgMatch(pattern->arr, arg->adr, false); 
-		break;
-
-	case RULE_TUPLE:
-		if (arg->mode != MODE_TUPLE) return false;
-		if (!ArgMatch(pattern->index, arg->var, true)) return false;
-		return ArgMatch(pattern->arr, arg->adr, true); 
-		break;
-
-	case RULE_BYTE:
-		if (arg->mode != MODE_BYTE) return false;		// pattern expects byte, and variable is not an byte
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;
-		return ArgMatch(pattern->arr, arg->adr, false); 
-		break;
-
-	case RULE_ELEMENT:
-		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;
-		return ArgMatch(pattern->arr, arg->adr, false); 
-		break;
-
-	case RULE_CONST:	// var
-		if (!VarIsConst(arg)) return false;
-		if (!VarMatchesPattern(arg, pattern)) return false;
-		break;
-
-	case RULE_VALUE:
-		if (!VarIsConst(arg)) return false;
-		pvar = pattern->var;
-		if (pvar->value_nonempty) {
-			switch (pvar->type->variant) {
-			case TYPE_INT: 
-				if (pvar->n != arg->n) return false;
-				break;
-			case TYPE_STRING:
-				if (!StrEqual(pvar->str, arg->str)) return false;
-				break;
-			default: break;
-			}
-		} else {
-			// TODO: Test, that arg const matches the specified type
-		}
-		break;
-
-	case RULE_REGISTER:
-		if (pattern->var != NULL && arg != pattern->var) return false;
-		break;
-
-	case RULE_VARIABLE:
-		if (arg->mode == MODE_CONST) return false;
-		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
-		if (!VarMatchesPattern(arg, pattern)) return false;
-		break;
-	
-	case RULE_DEREF:
-		if (arg->mode != MODE_DEREF) return false;
-		arg = arg->var;
-		if (!VarMatchesPattern(arg, pattern)) return false;
-		break;
-
-	case RULE_ARG:
-		if (arg->mode == MODE_DEREF || arg->mode == MODE_RANGE) return false;
-		if (!in_tuple && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-		if (!VarMatchesPattern(arg, pattern)) return false;
-		break;
-
-	case RULE_ANY:
-		break;
-
-	default: break;
-	}
-
-	// If there is macro argument number %A-%Z specified in rule argument, we set or check it here
-
-	if (pattern->arg_no != 0) {
-
-		// For array element variable store array into the macro argument
-
-		pvar = arg;
-//		if (arg->mode == MODE_ELEMENT && !VarIsStructElement(arg)) {
-//			pvar = arg->adr;
-//		}
-
-		j = pattern->arg_no-1;
-		if (MACRO_ARG[j] == NULL) {
-			MACRO_ARG[j] = pvar;
-		} else {
-			if (MACRO_ARG[j] != pvar) return false;
-		}
-
-		// Set the index items
-
-//		if (pattern->index != NULL) {
-//			if (!ArgMatch(pattern->index, arg->var)) return false;
-//		}
-	}
-	return true;
-}
-
 
 //GLOBAL Var * G_MATCH_ARG[MACRO_ARG_CNT];
 
-GLOBAL Bool RULE_MATCH_BREAK;
 
-void EmptyMacros()
-{
-	UInt8 n;
-	for(n=0; n<MACRO_ARG_CNT; n++) {
-		MACRO_ARG[n] = NULL;
-	}
-}
 
-Bool RuleMatch(Rule * rule, Instr * i)
-{
-	Bool match;
+/****************************************************************
 
-	if (i->op != rule->op) return false;
+ Generating instructions
 
-	EmptyMacros();
+****************************************************************/
 
-	match = ArgMatch(&rule->arg[0], i->result, false) 
-		&& ArgMatch(&rule->arg[1], i->arg1, false) 
-		&& ArgMatch(&rule->arg[2], i->arg2, false);
-
-	if (match) {
-		if (RULE_MATCH_BREAK) {
-			RULE_MATCH_BREAK = true;
-		}
-	}
-	return match;
-}
-
-Var * VarNextLocal(Var * scope, Var * local)
-{
-	while(true) {
-		local = local->next;
-		if (local == NULL) break;
-		if (local->scope == scope) break;
-	}
-	return local;
-}
-
-Var * VarFirstLocal(Var * scope)
-{
-	return VarNextLocal(scope, VARS);
-}
-
-Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
-{
-	Var * var = arg->next;
-	while(var != NULL && (var->mode != MODE_ARG || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
-	return var;
-}
-
-Var * FirstArg(Var * proc, VarSubmode submode)
-{
-	return NextArg(proc, proc, submode);
-}
-
-Var * VarField(Var * var, char * fld_name)
-/*
-Purpose:
-	Return property of variable.
-	Following properties are supported:
-
-	min
-	max
-	step
-*/
-{
-	Var * fld = NULL;
-	Type * type;
-	TypeVariant vtype;
-
-	type = var->type;
-	vtype = type->variant;
-
-	if (vtype == TYPE_INT) {
-		if (StrEqual(fld_name, "min")) {
-			fld = VarNewInt(type->range.min);
-		} else if (StrEqual(fld_name, "max")) {
-			fld = VarNewInt(type->range.max);
-		}
-	} else if (vtype == TYPE_ARRAY) {
-		if (StrEqual(fld_name, "step")) {
-			fld = VarNewInt(type->step);
-		}
-	}
-	return fld;
-}
-
-Var * FindArg(Var * macro, Var * var, Var ** args, VarSet * locals)
-/*
-Purpose:
-	Find function (macro) argument or structure member.
-*/
-{
-
-	Var * arg, * arr;
-	UInt16 n;
-
-	if (var != NULL) {
-
-		// If this is element reference and either array or index is macro argument,
-		// create new array element referencing actual array and index.
-		
-		if (var->mode == MODE_DEREF) {
-			arg = FindArg(macro, var->var, args, locals);
-			if (arg != var->var) {
-				var = VarNewDeref(arg);
-			}
-		} else if (var->mode == MODE_ELEMENT) {
-
-			arr = FindArg(macro, var->adr, args, locals);
-
-			if (arr != var->adr && var->var->mode == MODE_CONST && var->var->type->variant == TYPE_STRING) {
-				var = VarField(arr, var->var->str);
-			} else {
-				arg = FindArg(macro, var->var, args, locals);	// index
-
-				if (arr != var->adr || arg != var->var) {
-					var = VarNewElement(arr, arg);
-				}
-			}
-		} else {
-
-			// Positional macro argument (1 - 26)
-			if (var->mode == MODE_ARG && var->name == NULL) {
-				return args[var->idx-1];
-			}
-
-			if (macro != NULL) {
-				for(n = 0, arg = FirstArg(macro, SUBMODE_ARG_IN); arg != NULL; arg = NextArg(macro, arg, SUBMODE_ARG_IN), n++) {
-					if (arg == var) return args[n];
-				}
-
-				// This is local variable in macro
-				if (var->scope == macro) {
-					arg = VarSetFind(locals, var);
-					if (arg == NULL) {
-						arg = VarAllocScopeTmp(NULL, var->mode, var->type);
-						VarSetAdd(locals, var, arg);
-					}
-					return arg;
-				}
-			}
-		}
-	}
-	return var;
-}
-
-/*
-
-When parsing macro, any assignment to temporary variable other than specified by argument is executed, instead of
-generating it.
-
-*/
-
-void GenMacro(InstrBlock * code, Var * macro, Var ** args)
-/*
-Purpose:
-	Generate instructions based on macro.
-	Any variable, that has same name as macro name is replaced by one of variables specified in arguments.
-Argument:
-	macro	Variable containing the macro to expand.
-	args	Macro arguments (according to macro header).
-*/{
-	Instr * i;
-	InstrOp op;
-	Var * result, * arg1, * arg2, * r, * lab, * tmp_lab;
-	VarSet locals;
-
-	Bool local_result;
-
-	VarSetInit(&locals);
-
-	lab = tmp_lab = NULL;
-
-	for(i = code->first; i != NULL; i = i->next) {
-		op = i->op;
-		local_result = false;
-		// Line instructions are not processed in any special way (TODO: We should mark them as macro generated)
-		if (op == INSTR_LINE) {
-
-		// Macro may contain NOP instruction, we do not generate it to result
-		} else if (op != INSTR_VOID) {
-
-			// Labels defined in macro are all local.
-			// If there is label in macro, generate temporary label instead of it.
-
-			result = i->result;
-			if (result != NULL) {
-
-				// %Z variable is used as forced local argument.
-				local_result = result->mode == MODE_ARG && result->idx == ('Z' - 'A' + 1);
-
-				if (result->mode != MODE_ARG && (i->op == INSTR_LABEL || IS_INSTR_JUMP(i->op))) {
-
-					if (local_result) {
-						result = FindArg(macro, i->arg1, args, &locals);
-					}
-
-					if (result == lab) {
-						result = tmp_lab;
-					} else if (tmp_lab == NULL) {
-						tmp_lab = VarNewTmpLabel();
-						lab = i->result;
-						result = tmp_lab;
-					}
-				} else {
-					if (!local_result) {
-						result = FindArg(macro, result, args, &locals);
-					}
-				}
-			}
-			arg1 = FindArg(macro, i->arg1, args, &locals);
-			arg2 = FindArg(macro, i->arg2, args, &locals);
-
-			// Try to evaluate constant instruction to prevent generating excess instructions.
-
-			r = InstrEvalConst(op, arg1, arg2);
-			if (r != NULL) {
-				op = INSTR_LET; arg1 = r; arg2 = NULL;
-			}
-
-			// There can be temporary variable, which didn't get type, because macro argument type
-			// was not known. We should derive types in a better way, but this hack
-			// should suffice for now.
-
-			if (result != NULL && result->type == NULL) result->type = arg1->type;
-
-			// If we are setting the value to local variable, do not generate instruction
-
-			if (local_result) {
-				if (op == INSTR_LET) {
-					MACRO_ARG[25] = arg1;
-				} else {
-					SyntaxError("failed to evaluate constant");
-				}
-			} else {
-				Gen(op, result, arg1, arg2);
-			}
-
-		}
-	}
-}
 
 Int32 ByteMask(Int32 n)
 /*
@@ -975,150 +393,6 @@ Arguments:
 	if (src_idx != NULL) {
 		GenLabel(label_done);
 	}
-}
-
-Bool InstrTranslate(Instr * i, Bool * p_modified)
-{
-	Rule * rule;
-	if (i->op == INSTR_LINE) {
-		Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
-	} else if (EmitRule(i)) {
-		Gen(i->op, i->result, i->arg1, i->arg2);
-	} else {
-		// Find translating rule
-		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-			if (RuleMatch(rule, i)) {
-				break;
-			}
-		}
-
-		if (rule != NULL) {
-			GenMacro(rule->to, NULL, MACRO_ARG);
-			*p_modified = true;
-		} else {
-			return false;
-		}
-	}
-	return true;
-}
-
-void ProcTranslate(Var * proc)
-/*
-Purpose:
-	Translate generic instructions to instructions directly translatable to processor instructions.
-*/
-{
-	Instr * i, * first_i, * next_i;	//, * to;
-	InstrBlock * blk;
-	Bool modified, untranslated;
-	UInt8 step = 0;
-	UInt32 ln;
-	Var * a = NULL, * var, * item;
-	Instr i2;
-
-	// As first step, we translate all variables on register address to actual registers
-
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
-			i->result = VarReg(i->result);
-			i->arg1   = VarReg(i->arg1);
-			i->arg2   = VarReg(i->arg2);
-		}
-	}
-
-	// We perform as many translation steps as necessary
-	// Some translation rules may use other translation rules, so more than one step may be necessary.
-	// Translation ends either when there has not been any modification in last step or after
-	// defined number of steps (to prevent infinite loop in case of invalid set of translation rules).
-
-	do {
-		modified = false;
-		untranslated = false;
-
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
-
-			ln = 1;
-			// The translation is done by using procedures for code generating.
-			// We detach the instruction list from block and set the block as destination for instruction generator.
-			// In this moment, the code generating stack must be empty anyways.
-
-			first_i = blk->first;
-			blk->first = blk->last = NULL;
-			CODE = blk;
-			i = first_i;
-
-			while(i != NULL) {
-
-				if (!InstrTranslate(i, &modified)) {
-
-					// If this is commutative instruction, try the other order of rules
-
-					if (i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL) {
-						i2.op = i->op;
-						i2.result = i->result;
-						i2.arg1 = i->arg2;
-						i2.arg2 = i->arg1;
-						if (InstrTranslate(&i2, &modified)) goto next;
-					}
-
-					// Array assignment default
-					if (i->op == INSTR_LET) {
-						var = i->result;
-						item = i->arg1;
-						if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
-							GenArrayInit(var, item);
-							goto next;
-						}
-					}
-
-					// No emit rule nor rule for translating instruction found,
-					// try to simplify the instruction by first calculating the element value to temporary variable
-					// and using the variable instead.
-
-					if (VarIsArrayElement(i->arg1)) {
-						a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
-						GenLet(a, i->arg1);
-						Gen(i->op, i->result, a, i->arg2);
-						modified = true;
-					} else if (VarIsArrayElement(i->arg2)) {
-						a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
-						GenLet(a, i->arg2);
-						Gen(i->op, i->result, i->arg1, a);
-						modified = true;
-					} else if (VarIsArrayElement(i->result)) {
-						if (i->op != INSTR_LET || (i->arg1->mode != MODE_VAR && i->arg1->mode != MODE_ARG)) {
-							a = VarNewTmp(102, i->result->type);
-							Gen(i->op, a, i->arg1, i->arg2);
-							GenLet(i->result, a);
-							modified = true;
-						}
-
-					//==== We were not able to find translation for the instruction, emit it as it is
-					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
-					} else {
-						Gen(i->op, i->result, i->arg1, i->arg2);
-						untranslated = true;
-					}
-				}
-next:
-				next_i = i->next;
-				InstrFree(i);
-				i = next_i;
-				ln++;
-			}
-		} // block
-
-		if (Verbose(proc)) {
-			// Do not print unmodified step (it would be same as previous step already printed)
-			if (modified) {
-				printf("========== Translate (step %d) ============\n", step+1);
-				PrintProc(proc);
-			}
-		}
-		step++;
-	} while(modified && step < MAX_RULE_UNROLL);
-
 }
 
 /****************************************************************
@@ -1399,37 +673,5 @@ void PrintProc(Var * proc)
 //$I
 void InstrInit()
 {
-	UInt16 op;
-	Type * type;
-
-	type = TypeAlloc(TYPE_PROC);
-
-	ROOT_PROC_TYPE.variant = TYPE_PROC;
-
-	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
-	ROOT_PROC.name = "root";
-	ROOT_PROC.idx  = 0;
-	ROOT_PROC.type = &ROOT_PROC_TYPE;
-	ROOT_PROC.instr = NULL;
-
-	InScope(&ROOT_PROC);
-
-	for(op=0; op<INSTR_CNT; op++) {
-		RULES[op] = NULL;
-		LAST_RULE[op] = NULL;
-		EMIT_RULES[op] = NULL;
-		LAST_EMIT_RULE[op] = NULL;
-	}
-
-	CODE = NULL;
-
-	// Alloc instruction block for root procedure.
-	
-	IBLOCK_STACK_SIZE = 0;
-	InstrBlockPush();
-	IBLOCK_STACK_SIZE = 0;
-
-	CURRENT_LINE_NO = 0;
-
 }
 

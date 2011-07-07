@@ -81,6 +81,7 @@
     <ClCompile Include="..\common\common.c" />
     <ClCompile Include="emit.c" />
     <ClCompile Include="errors.c" />
+    <ClCompile Include="gen.c" />
     <ClCompile Include="instr.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />
@@ -92,6 +93,7 @@
     <ClCompile Include="opt_values.c" />
     <ClCompile Include="opt_var_use.c" />
     <ClCompile Include="parser.c" />
+    <ClCompile Include="translate.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="type_proc.c" />
     <ClCompile Include="variables.c" />

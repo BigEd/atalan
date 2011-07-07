@@ -26,13 +26,17 @@ Syntax:
 // How many vars in a row are processed before error
 #define MAX_VARS_COMMA_SEPARATED 100
 
-GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
-#define STACK_LIMIT 100
 Var *  STACK[STACK_LIMIT];
 UInt16 TOP;
-Type * RESULT_TYPE;
-int    G_TEMP_CNT;
 
+GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
+GLOBAL Bool  USE_PARSE;
+
+Type * RESULT_TYPE;
+Bool   EXP_IS_DESTINATION = false;		// Parsed expression is destination
+Var *  EXP_EXTRA_SCOPE;						// Scope used by expression parsing to find extra variables.
+
+//TODO: Remove
 Type   EXP_TYPE;			// Type returned by expression
 							// Is modified as the expression gets generated
 
@@ -41,7 +45,7 @@ void ParseExpRoot();
 void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
 void ExpectExpression(Var * result);
-Var * PopTop();
+Var * BufPop();
 void ParseCall(Var * proc);
 void ParseMacro(Var * macro);
 Type * ParseType();
@@ -64,6 +68,31 @@ Var * RULE_SCOPE;
 
 extern Var * LAST_VAR;
 
+/*
+
+Parser uses buffer of variables.
+Usually, it is used as stack, buf sometimes it is used as a queue too.
+
+*/
+
+void BufEmpty()
+{
+	TOP = 0;
+}
+
+void BufPush(Var * var)
+{
+	STACK[TOP++] = var;
+}
+
+Var * BufPop()
+{
+	Var * var;
+	TOP--;
+	var = STACK[TOP];
+	return var;
+}
+
 Var * ParseScope()
 {
 	Bool spaces;
@@ -72,7 +101,7 @@ Var * ParseScope()
 		if (scope != NULL) {
 			var = VarFindScope(scope, NAME, 0);
 		} else {
-			var = VarFind2(NAME, 0);
+			var = VarFind2(NAME);
 		}
 
 		if (var == NULL || var->mode != MODE_SCOPE) break;
@@ -103,7 +132,12 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 		if (scope != NULL) {
 			var = VarFindScope(scope, NAME, 0);
 		} else {
-			var = VarFind2(NAME, 0);
+			if (EXP_EXTRA_SCOPE != NULL) {
+				var = VarFindScope(EXP_EXTRA_SCOPE, NAME, 0);
+			} 
+			if (var == NULL) {
+				var = VarFind2(NAME);
+			}
 		}
 		spaces = Spaces();
 		if (var == NULL) {
@@ -197,7 +231,7 @@ Type * ParseIntType()
 		}
 	// Sme variable
 	} else if (TOK == TOKEN_ID) {
-		var = VarFind2(NAME, 0);
+		var = VarFind2(NAME);
 		if (var != NULL) {
 			if (var->mode == MODE_CONST) {
 				if (var->type->variant == TYPE_INT) {
@@ -250,7 +284,7 @@ next:
 range:
 		ExpectExpression(NULL);
 		if (TOK) {
-			var = PopTop();
+			var = BufPop();
 			if (var->mode == MODE_CONST) {
 				type->range.min = var->n;
 			} else {
@@ -264,7 +298,7 @@ range:
 			NextToken();
 			ExpectExpression(NULL);
 			if (TOK) {
-				var = PopTop();
+				var = BufPop();
 				if (var->mode == MODE_CONST) {
 					type->range.max = var->n;
 				} else {
@@ -293,7 +327,7 @@ const_list:
 
 				while(NextIs(TOKEN_EOL));
 
-				if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD) {
+				if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
 					var = VarAlloc(MODE_CONST, NAME, 0);
 					NextToken();
 					if (NextIs(TOKEN_EQUAL)) {
@@ -497,11 +531,6 @@ Purpose:
 	arg1 = STACK[TOP-2];
 	arg2 = STACK[TOP-1];
 
-	//TODO: Should not we free temporaries only after they were generated?
-
-	VarFree(arg1);	//if (VarIsTmp(STACK[TOP-1])) G_TEMP_CNT--;
-	VarFree(arg2);	//if (VarIsTmp(STACK[TOP-2])) G_TEMP_CNT--;
-
 	// Todo: we may use bigger of the two
 	if (RESULT_TYPE == NULL) {
 		RESULT_TYPE = STACK[TOP-2]->type;
@@ -527,8 +556,6 @@ Purpose:
 		//TODO: Other than numeric types (
 //		type = TypeCopy(&EXP_TYPE);
 		result = VarAllocScopeTmp(NULL, MODE_VAR, NULL);
-//		result = VarNewTmp(G_TEMP_CNT, type);
-		G_TEMP_CNT++;
 		Gen(op, result, arg1, arg2);
 	}
 
@@ -550,7 +577,6 @@ Purpose:
 //	PrintStack();
 
 	top = STACK[TOP-1];
-	if (VarIsTmp(top)) G_TEMP_CNT--;
 
 	// Todo: we may use bigger of the two
 
@@ -579,8 +605,7 @@ Purpose:
 		}
 	}
 unknown_unary:
-	result = VarNewTmp(G_TEMP_CNT, RESULT_TYPE);
-	G_TEMP_CNT++;
+	result = VarAllocScopeTmp(NULL, MODE_VAR, RESULT_TYPE);
 	Gen(op, result, top, NULL);
 done:
 	STACK[TOP-1] = result;
@@ -784,7 +809,6 @@ Purpose:
 				ParseSubExpression(idx_type);
 				idx2 = STACK[TOP-1];
 
-				if (VarIsTmp(idx2)) G_TEMP_CNT--;
 				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 
 				idx = VarNewTuple(idx, idx2);
@@ -813,7 +837,7 @@ Syntax:
 */
 {
 	Var * item, * var;
-
+	UInt8 arg_no;
 	var = NULL;
 
 	if (NextCharIs('$')) {
@@ -823,6 +847,9 @@ Syntax:
 			NextToken();
 		} else if (TOK == TOKEN_ID) {
 			item = ParseVariable();
+		} else if (arg_no = ParseArgNo2()) {
+			item = VarMacroArg(arg_no-1);
+			NextToken();
 		} else {
 			SyntaxError("Expected constant or variable name");
 		}
@@ -878,9 +905,9 @@ void ParseOperand()
 				var = VarNewTmp(0, type);
 				var->mode = MODE_CONST;
 
-				InstrBlockPush();
+				GenBegin();
 				Gen(INSTR_FILE, NULL, item, NULL);
-				var->instr = InstrBlockPop();
+				var->instr = GenEnd();
 			}
 		// @id denotes reference to variable
 		} else if (TOK == TOKEN_ADR) {
@@ -888,7 +915,7 @@ void ParseOperand()
 			if (arg_no = ParseArgNo2()) {
 				var = VarMacroArg(arg_no-1);
 			} else {
-				var = VarFind2(NAME, 0);
+				var = VarFind2(NAME);
 			}
 
 			if (var != NULL) {
@@ -906,12 +933,27 @@ void ParseOperand()
 			NextToken();
 		} else if (TOK == TOKEN_ID) {
 
-			var = VarFind2(NAME, 0);
+			var = NULL;
+			if (EXP_EXTRA_SCOPE != NULL) {
+				var = VarFindScope(EXP_EXTRA_SCOPE, NAME, 0);
+			} 
+			if (var == NULL) {
+				var = VarFind2(NAME);
+			}
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
 			//      does not conform to requested result type
 
 			if (var != NULL) {
+
+				// Out-only variables may not be in expressions
+				if (!EXP_IS_DESTINATION) {			
+					if (OutVar(var) && !InVar(var)) {
+						ErrArg(var);
+						LogicError("Variable [A] may be only written", 0);
+					}
+				}
+
 				type_match = VarMatchType(var, RESULT_TYPE);
 			}
 
@@ -924,7 +966,7 @@ void ParseOperand()
 			}
 
 			if (var == NULL) {
-				SyntaxError("$unknown variable");
+				SyntaxError("unknown variable [$]");
 				//TODO: Try to search in all scopes and list found places
 				//TODO: Try to search using edit distance
 				return;
@@ -955,8 +997,7 @@ no_id:
 								var = VarNewTmp(0, arg->type);
 								GenLet(var, arg);
 							}
-							STACK[TOP] = var;
-							TOP++;			
+							BufPush(var);		
 							arg = NextArg(proc, arg, SUBMODE_ARG_OUT);
 						} while (arg != NULL);
 					} else {
@@ -1053,10 +1094,7 @@ indices:
 				} else if (TOK == TOKEN_OPEN_P) {
 
 					item = ParseArrayElement(var);
-
-//					if (VarIsTmp(STACK[TOP-1])) G_TEMP_CNT--;
-					STACK[TOP] = item;
-					TOP++;
+					BufPush(item);
 					return;
 				}
 			} //else {
@@ -1072,14 +1110,12 @@ done:
 //			NextToken();
 			//TODO: Check type of the adress
 			//      Create temporary variable and generate letadr
-			STACK[TOP] = var;
-			TOP++;					
+			BufPush(var);				
 			InstrUnary(INSTR_LET_ADR);
 			return;
 		}
 
-		STACK[TOP] = var;
-		TOP++;
+		BufPush(var);
 	}
 }
 
@@ -1087,7 +1123,7 @@ void ParseUnary()
 {
 	if (NextIs(TOKEN_MINUS)) {
 		// Unary minus before X is interpreted as 0 - X
-		STACK[TOP++] = VarNewInt(0);
+		BufPush(VarNewInt(0));
 		ParseOperand();
 		InstrBinary(INSTR_SUB);
 	} else if (NextIs(TOKEN_HI)) {
@@ -1153,11 +1189,11 @@ retry:
 
 void ParseBinaryAnd()
 {
-	Var * var;
+//	Var * var;
 	ParsePlusMinus();
 retry:
 	if (TOK == TOKEN_BITAND) {
-		var = STACK[TOP];
+//		var = STACK[TOP];
 //		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
 			NextToken();
 			ParsePlusMinus();
@@ -1761,7 +1797,7 @@ Syntax:
 				}
 			// for i (range is not specified, this is reference to global variable or type)
 			} else {
-				var = VarFind2(name, 0);
+				var = VarFind2(name);
 				if (var != NULL) {
 					if (var->type->variant == TYPE_INT) {
 						TypeLimits(var->type, &min, &max);
@@ -1795,14 +1831,14 @@ Syntax:
 	if (var != NULL) {
 		if (NextIs(TOKEN_WHERE)) {
 			G_BLOCK->f_label = G_BLOCK->loop_label;
-			InstrBlockPush();
+			GenBegin();
 			ParseCondition();
 			if (G_BLOCK->t_label != NULL) {
 				GenLabel(G_BLOCK->t_label);
 				G_BLOCK->t_label = NULL;
 			}
 
-			where_cond = InstrBlockPop();
+			where_cond = GenEnd();
 			G_BLOCK->f_label = NULL;
 			if (TOK == TOKEN_ERROR) goto done;
 		}
@@ -1814,12 +1850,12 @@ Syntax:
 		}
 		NextToken();
 
-		InstrBlockPush();
+		GenBegin();
 		ParseCondition();
 		if (G_BLOCK->t_label != NULL) {
 			GenLabel(G_BLOCK->t_label);
 		}
-		cond = InstrBlockPop();
+		cond = GenEnd();
 
 		if (TOK == TOKEN_ERROR) goto done;
 	}
@@ -1842,15 +1878,15 @@ Syntax:
 
 	// Parse body
 
-	InstrBlockPush();
+	GenBegin();
 	ParseBlock();
-	body = InstrBlockPop();
+	body = GenEnd();
 	if (TOK == TOKEN_ERROR) return;
 
 	// Variable initialization
 
 	if (var != NULL) {
-		InternalGen(INSTR_LET, var, min, NULL);
+		GenInternal(INSTR_LET, var, min, NULL);
 	}
 
 	if (cond != NULL) {
@@ -1886,7 +1922,7 @@ Syntax:
 		if (step == NULL) step = VarNewInt(1);
 		
 		// Add the step to variable
-		InternalGen(INSTR_ADD, var, var, step);
+		GenInternal(INSTR_ADD, var, var, step);
 
 		// 1. If max equals to byte limit (0xff, 0xffff, 0xffffff, ...), only overflow test is enough
 		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
@@ -1898,7 +1934,7 @@ Syntax:
 			while(n > nmask) nmask = (nmask << 8) | 0xff;
 
 			if (n == nmask && (step->mode != MODE_CONST || step->n > 255)) {
-				InternalGen(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
+				GenInternal(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
 				goto var_done;
 			} else if (step->mode == MODE_CONST) {
 
@@ -1907,7 +1943,7 @@ Syntax:
 					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
 					n = n & nmask;
 					max = VarNewInt(n);
-					InternalGen(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
+					GenInternal(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 					goto var_done;
 				// 3. max & step are constant, we may detect, that overflow will not occur
 				} else {
@@ -1923,15 +1959,15 @@ Syntax:
 
 		// If step is 1, it is not necessary to test the overflow
 		if (step->mode != MODE_CONST || step->n != 1) {
-			InternalGen(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
+			GenInternal(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
 		}
 no_overflow:
 
 		// We use > comparison as in the case step is <> 1, it may step over the limit without touching it.
 		// Also user may modify the index variable (although this should be probably discouraged when for is used).
 
-//		InternalGen(INSTR_IFLE, G_BLOCK->body_label, var, max);
-		InternalGen(INSTR_IFGT, G_BLOCK->body_label, max, var);
+//		GenInternal(INSTR_IFLE, G_BLOCK->body_label, var, max);
+		GenInternal(INSTR_IFGT, G_BLOCK->body_label, max, var);
 	}
 var_done:
 
@@ -1940,16 +1976,7 @@ var_done:
 	}
 done:
 	EndBlock();
-	VarFree(min);
-	VarFree(max);
 	ExitScope();
-}
-
-void VarFree(Var * var)
-{
-	if (var != NULL) {
-		if (VarIsTmp(var)) G_TEMP_CNT--;
-	}
 }
 
 Var * ParseFile()
@@ -1991,7 +2018,7 @@ Arguments:
 	Type * item_type;
 	UInt16 bookmark;
 
-	InstrBlockPush();
+	GenBegin();
 	i = 0;
 
 	item_type = var->type->element;
@@ -2045,7 +2072,7 @@ Arguments:
 
 		if (item->mode == MODE_CONST) {
 			if (item->type->variant != TYPE_ARRAY) {
-				if (!VarMatchesType(item, item_type)) {
+				if (!VarMatchType(item, item_type)) {
 					LogicError("value does not fit into array", bookmark);
 					continue;
 				}
@@ -2063,7 +2090,7 @@ Arguments:
 			}
 		}
 	}
-	var->instr = InstrBlockPop();
+	var->instr = GenEnd();
 	return i;
 }
 
@@ -2118,14 +2145,14 @@ Bool VarIsImplemented(Var * var)
 	if (v == TYPE_MACRO || v == TYPE_PROC || v == TYPE_LABEL || v == TYPE_SCOPE) return true;
 
 	// Register variables are considered implemented.
-	if (var->adr != NULL && var->adr->scope == REGSET) return true;
+//	if (var->adr != NULL && var->adr->scope == CPU_SCOPE) return true;
 
 
 	memset(&i, 0, sizeof(i));
 	i.op = INSTR_ALLOC;
 	i.result = var;
 	ArraySize(var->type, &i.arg1, &i.arg2);
-	rule = EmitRule(&i);
+	rule = InstrRule(&i);
 	return rule != NULL;
 }
 
@@ -2136,6 +2163,8 @@ Purpose:
 	Parse address specified after the @ symbol in variable definition.
 */
 {
+	UInt16 cnt;
+
 	Var * adr, * tuple, * item;
 
 	NextToken();
@@ -2149,8 +2178,13 @@ Purpose:
 	//@
 	if (TOK == TOKEN_OPEN_P) {
 		EnterBlock();
+		cnt = 0;
 		do {
 			item = ParseVariable();
+			if (!TOK) break;
+			cnt++;
+			BufPush(item);
+/*
 			if (TOK) {
 				if (adr == NULL) {
 					adr = item;
@@ -2162,22 +2196,33 @@ Purpose:
 					}
 				}
 			}
+*/
 		} while(NextIs(TOKEN_COMMA));
-		if (!NextIs(TOKEN_BLOCK_END)) {
+
+		if (TOK && !NextIs(TOKEN_BLOCK_END)) {
 			SyntaxError("expected closing parenthesis");
 		}
+
+		adr = NULL;
+		while(cnt > 0) {
+			TOP--;
+			adr = VarNewTuple(STACK[TOP], adr);
+			cnt--;
+		}
+
 	} else if (TOK == TOKEN_INT) {
 		adr = VarNewInt(LEX.n);
 		NextToken();
 	} else if (TOK == TOKEN_ID) {
 
-		adr = VarFindScope(REGSET, NAME, 0);
-		if (adr == NULL) {
-			adr = VarFind2(NAME, 0);
-			NextToken();
+//		adr = VarFindScope(REGSET, NAME, 0);
+//		if (adr == NULL) {
+			adr = VarFind2(NAME);
 			if (adr == NULL) {
-				SyntaxError("$undefined regset or variable used as address");
+				SyntaxError("undefined variable [$] used as address");
+				NextToken();
 			} else {
+				NextToken();
 dot:
 				if (NextIs(TOKEN_DOT)) {
 					if (TOK == TOKEN_ID) {
@@ -2197,9 +2242,9 @@ dot:
 					adr = ParseArrayElement(adr);
 				}
 			}
-		} else {
-			NextToken();
-		}
+//		} else {
+//			NextToken();
+//		}
 	} else {
 		SyntaxError("expected integer or register set name");
 	}
@@ -2261,7 +2306,7 @@ void ParseProcBody(Var * proc)
 	}
 
 	scope = InScope(proc);
-	InstrBlockPush();
+	GenBegin();
 	ParseBlock();
 
 	// If there is a return statement in procedure, special label "_exit" is defined.
@@ -2269,7 +2314,7 @@ void ParseProcBody(Var * proc)
 	lbl = VarFindScope(SCOPE, "_exit", 32767);
 	GenLabel(lbl);
 
-	proc->instr = InstrBlockPop();
+	proc->instr = GenEnd();
 	if (CodeHasSideEffects(proc, proc->instr)) {
 		SetFlagOn(proc->submode, SUBMODE_OUT);
 	}
@@ -2336,7 +2381,7 @@ retry:
 		// Either find an existing variable or create new one
 		if (to_type == NULL) {
 			if (scope == NULL) {
-				var = VarFind2(NAME, 0);
+				var = VarFind2(NAME);
 			} else {
 //				PrintScope(scope);
 				var = VarFindScope(scope, NAME, 0);
@@ -2432,6 +2477,12 @@ parsed:
 			mode = MODE_SCOPE;
 			type = TypeScope();
 			is_assign = true;
+
+			// If this is definition of CPU, immediatelly remember it
+			if (StrEqual(var->name, "CPU")) {
+				CPU->SCOPE = var;
+			}
+
 		} else {
 			is_assign = true;
 
@@ -2512,7 +2563,7 @@ parsed:
 		} else {
 			if (type->variant != TYPE_UNDEFINED) {
 				ErrArg(var);
-				SyntaxError("Variable [A] already defined");
+				SyntaxErrorBmk("Variable [A] already defined", bookmark);
 			}
 		}
 	}
@@ -2576,9 +2627,9 @@ parsed:
 //							}
 							if (MACRO_FORMAT != NULL) {
 								// Call format routine (set address argument)
-								InstrBlockPush();
-								GenMacro(MACRO_FORMAT->instr, MACRO_FORMAT, &var);
-								ParseString(InstrBlockPop(), STR_NO_EOL);
+								GenBegin();
+								GenMacro(MACRO_FORMAT, &var);
+								ParseString(GenEnd(), STR_NO_EOL);
 							} else {
 								SyntaxError("printing into array not supported by the platform");
 							}
@@ -2677,7 +2728,6 @@ parsed:
 										}
 //									}
 								}
-								VarFree(item);
 							}
 						}
 					}
@@ -2701,6 +2751,26 @@ parsed:
 			}
 		}
 	}
+
+	// *** Module parameters (3)
+	// When the module parameter declaration has been parsed, we try to find a value with same name specified as parameter value for this module
+	// in use directive.
+	// If the value has been found, it's value is set to parameter instead of value possibly parsed in declaration (parameter default value).
+
+	for(j = 0; j<cnt; j++) {
+		var = vars[j];
+		if (var->mode == MODE_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+			item = VarFindScope2(SRC_FILE, var->name);
+			if (item != NULL) {
+				VarLet(var, item);
+			} else {
+				if (!var->value_nonempty) {
+					SyntaxError("Value of parameter [A] has not been specified.");
+				}
+			}
+		}
+	}
+
 	ErrArgClear();
 
 	if (TOK != TOKEN_ERROR) {
@@ -2712,13 +2782,14 @@ parsed:
 	}
 }
 
-Var * ParseInstrArg3()
+Var * ParseInstrArg()
 {
 	Var * var = NULL;
+	EXP_EXTRA_SCOPE = CPU->SCOPE;
 	ParseExpression(NULL);
+	EXP_EXTRA_SCOPE = NULL;
 	if (TOK != TOKEN_ERROR) {
 		var = STACK[0];
-		if (VarIsTmp(var)) G_TEMP_CNT--;
 	}
 	return var;
 
@@ -2733,13 +2804,13 @@ Purpose:
 	Var * inop;
 	InstrOp op = INSTR_VOID;
 
-	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD) {
+	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
 		inop = InstrFind(NAME);
 		if (inop != NULL) {
 			op = inop->n;
 			NextToken();
 		} else {
-			SyntaxError("$Unknown instruction");
+			SyntaxError("Unknown instruction [$]");
 		}
 	} else {
 		SyntaxError("Expected instruction name");
@@ -2773,7 +2844,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 				arg[n++] = VarNewStr(inc_path);
 				NextToken();
 			} else {
-				SyntaxError("expectd name of include file");
+				SyntaxError("expected name of include file");
 			}
 
 		// Branching instruction has label as first argument
@@ -2785,7 +2856,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 					if (scope != NULL) {
 						label = VarFindScope(scope, NAME, 0);
 					} else {
-						label = VarFind2(NAME, 0);
+						label = VarFind2(NAME);
 					}
 
 					if (label == NULL) {
@@ -2805,11 +2876,14 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			}
 		}
 
+		EXP_IS_DESTINATION = true;
 		while(n<3 && TOK != TOKEN_ERROR) {
-			arg[n++] = ParseInstrArg3();
+			arg[n++] = ParseInstrArg();
+			EXP_IS_DESTINATION = false;
 next_arg:
 			if (!NextIs(TOKEN_COMMA)) break;
 		}
+		EXP_IS_DESTINATION = false;
 
 		while(n<3) arg[n++] = NULL;
 
@@ -2851,6 +2925,7 @@ void ParseRuleArg2(RuleArg * arg)
 		return;
 	} else if (arg->arg_no = ParseArgNo2()) {
 		arg->variant = RULE_ARG;
+parse_byte_item:
 		if (NextCharIs(TOKEN_BYTE_INDEX)) {
 			NextToken();
 			arr = NewRuleArg();
@@ -2866,7 +2941,8 @@ void ParseRuleArg2(RuleArg * arg)
 		}
 	} else if (NextIs(TOKEN_ADR)) {
 		arg->variant = RULE_DEREF;
-		arg->arg_no  = ParseArgNo();
+		arg->arg_no  = ParseArgNo2();
+		goto parse_byte_item;
 	} else if (NextIs(TOKEN_CONST)) {
 		arg->variant = RULE_CONST;
 		arg->arg_no  = ParseArgNo();
@@ -2969,10 +3045,16 @@ void ParseRule()
 
 	// Parse three parameters
 
+	EXP_IS_DESTINATION = true;
+	EXP_EXTRA_SCOPE = CPU->SCOPE;
+
 	for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
 		ParseRuleArg2(&rule->arg[i]);
+		EXP_IS_DESTINATION = false;
 		NextIs(TOKEN_COMMA);
 	}
+	EXP_IS_DESTINATION = false;
+	EXP_EXTRA_SCOPE = NULL;
 
 	// TODO: Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
 
@@ -2981,14 +3063,14 @@ void ParseRule()
 //		EnterBlock(TOKEN_VOID);
 
 		if (NextIs(TOKEN_INSTR)) {
-			InstrBlockPush();
+			GenBegin();
 			ParseInstr2(&rule->to);
-			rule->to = InstrBlockPop();	
+			rule->to = GenEnd();	
 		} else {
 
 			// Emitting rule
 			if (TOK == TOKEN_STRING) {
-				InstrBlockPush();
+				GenBegin();
 				do {
 
 					// Rule strings may are preprocessed so, that %/ is replaced by current path.
@@ -3005,11 +3087,11 @@ void ParseRule()
 						}
 					} while (c != 0);
 
-					InternalGen(INSTR_EMIT, NULL, VarNewStr(buf), NULL);
+					GenInternal(INSTR_EMIT, NULL, VarNewStr(buf), NULL);
 
 					NextToken();
 				} while (TOK == TOKEN_STRING);
-				rule->to = InstrBlockPop();
+				rule->to = GenEnd();
 			} else {
 				SyntaxError("Expected instruction or string");
 			}
@@ -3053,7 +3135,7 @@ Purpose:
 		// Therefore we create instrblock and insert the argument instructions there.
 		// Later it gets generated to current code.
 
-		args =  MemAllocStruct(InstrBlock);
+		args =  InstrBlockAlloc();
 		no_eol = false;
 		LINE_POS = TOKEN_POS+1;
 
@@ -3119,14 +3201,6 @@ Purpose:
 
 }
 
-Var * PopTop()
-{
-	Var * var;
-	TOP--;
-	var = STACK[TOP];
-	if (VarIsTmp(var)) G_TEMP_CNT--;
-	return var;
-}
 
 void ParseArgs(Var * proc, VarSubmode submode, Var ** args)
 /*
@@ -3134,12 +3208,13 @@ Purpose:
 	Parse arguments passed to procedure or macro.
 Arguments:
 	proc     Procedure or macro for which we parse the arguments.
-	submode  SUBMODE_ARG_In if parsing input arguments, SUBMODE_ARG_OUT if parsing output arguments
+	submode  SUBMODE_ARG_IN if parsing input arguments, SUBMODE_ARG_OUT if parsing output arguments
 	args     When specified, we store parsed argument values to this array.
 */
 {
 	Var * arg, * val, * tmp;
 	Bool no_next_args;
+	UInt16 first, idx;
 
 	// *** Register Arguments (4)
 	// When calling a procedure, we first store values of register arguments into temporary variables and continue with evaluation of next argument.
@@ -3153,6 +3228,7 @@ Arguments:
 	no_next_args = false;
 	reg_arg_cnt = 0;
 	arg_no = 0;
+	first = idx = TOP;
 	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
 		EnterBlock();
@@ -3161,19 +3237,25 @@ Arguments:
 				ExitBlock();
 				break;
 			}
+
+			// Parse next expression, if there are no arguments remaining on the stack
 			if (!no_next_args) {
-				if (!NextIs(TOKEN_BLOCK_END)) {
-					ParseExpression(arg);
-				} else {
-					no_next_args = true;
+				if (TOP == idx) {
+					if (!NextIs(TOKEN_BLOCK_END)) {
+						TOP = first;
+						idx = first;
+						ParseExpression(arg);
+						if (TOK == TOKEN_ERROR) break;		// TODO: consume line?, or to next comma?
+					} else {
+						no_next_args = true;
+					}
 				}
 			}
 
-			val = NULL;
-			if (TOP > 0) {
-				val = PopTop();
+			if (TOP > idx) {
+				val = STACK[idx++];	//BufPop();
 			} else {
-				val = arg->var;
+				val = arg->var;		// argument default value
 			}
 
 			if (val != NULL) {
@@ -3217,6 +3299,11 @@ Arguments:
 		}
 	}
 
+	if (idx < TOP) {
+		SyntaxError("superfluous argument");
+	}
+	TOP = first;
+
 	// Load register arguments
 	if (proc->type->variant != TYPE_MACRO) {
 		if (TOK) {
@@ -3254,54 +3341,15 @@ Syntax: "return" arg*
 
 void ParseMacro(Var * macro)
 {
-/*
-	Var * arg, * val;
-	Var * args[32];
-	UInt8 i;
-	Bool no_next_args;
-	i = 0;
-	no_next_args = false;
-	arg = FirstArg(macro, SUBMODE_ARG_IN);
-	if (arg != NULL) {
-		EnterBlock();
-		while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
-			if (arg == NULL) {
-				ExitBlock();
-				break;
-			}
-			if (!no_next_args) {
-				if (!NextIs(TOKEN_BLOCK_END)) {
-					ParseExpression(arg);
-				} else {
-					no_next_args = true;
-				}
-			}
-
-			val = NULL;
-			if (TOP > 0) {
-				val = PopTop();
-			} else {
-				val = arg->var;
-			}
-
-			if (val != NULL) {
-				args[i] = val;
-			} else {
-				ErrArg(arg);
-				ErrArg(macro);
-				SyntaxError("Missing argument [B] in call of macro [A]");
-			}
-			arg = NextArg(macro, arg, SUBMODE_ARG_IN);
-			i++;
-		}
-	}
-*/
+//	VarSet args;
 	Var * args[32];
 
+//	VarSetInit(&args);
 	ParseArgs(macro, SUBMODE_ARG_IN, args);
 	if (TOK != TOKEN_ERROR) {
-		GenMacro(macro->instr, macro, args);
+		GenMacro(macro, args);
 	}
+//	VarSetCleanup(&args);
 }
 
 /*
@@ -3347,19 +3395,12 @@ Syntax:
 
 void ParseUseFile()
 {
+
 	if (TOK != TOKEN_ID && TOK != TOKEN_STRING) {
 		SyntaxError("Expected module name");
 		return;
 	}
-
-	// Parse module parameters (name = value, )
-
-//	EnterBlock();
-//	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
-//	}
-
-	Parse(NAME, false);
-	if (TOK != TOKEN_ERROR) NextToken();
+	Parse(NAME, false, true);
 }
 
 void ParseUse()
@@ -3387,8 +3428,8 @@ void AssertVar(Var * var)
 		StrCopy(buf+1, var->name);
 		StrCopy(buf + 1+ StrLen(var->name), " = ");
 		name = VarNewStr(buf);
-		InternalGen(INSTR_STR_ARG, NULL, name, VarNewInt(StrLen(buf)));
-		InternalGen(INSTR_VAR_ARG, NULL, var, NULL);
+		GenInternal(INSTR_STR_ARG, NULL, name, VarNewInt(StrLen(buf)));
+		GenInternal(INSTR_VAR_ARG, NULL, var, NULL);
 //		PrintVarName(var); PrintEOL();
 	}
 }
@@ -3407,9 +3448,9 @@ void ParseAssert()
 
 	if (TOK == TOKEN_STRING) {
 		if (MACRO_ASSERT != NULL) {
-			InstrBlockPush();
-			GenMacro(MACRO_ASSERT->instr, MACRO_ASSERT, NULL);
-			ParseString(InstrBlockPop(), 0); 
+			GenBegin();
+			GenMacro(MACRO_ASSERT, NULL);
+			ParseString(GenEnd(), 0); 
 		} else {
 			SyntaxError("This platform does not support output asserts");
 		}
@@ -3420,18 +3461,18 @@ void ParseAssert()
 		Gen(INSTR_ASSERT_BEGIN, NULL, NULL, NULL);
 		BeginBlock(TOKEN_IF);		// begin if block		
 		G_BLOCK->not = true;
-		InstrBlockPush();
+		GenBegin();
 		bookmark = SetBookmark();
 		ParseCondition();
 		if (TOK == TOKEN_ERROR) return;
 
-		cond = InstrBlockPop();
+		cond = GenEnd();
 
 		if (CodeHasSideEffects(SCOPE, cond)) {
 			LogicWarning("assertion has side-effects", bookmark);
 		}
 
-		InstrBlockPush();
+		GenBegin();
 
 		sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
 		Gen(INSTR_STR_ARG, NULL, VarNewStr(location), VarNewInt(StrLen(location)));
@@ -3441,7 +3482,7 @@ void ParseAssert()
 		}
 		Gen(INSTR_DATA, NULL, VarNewInt(0), NULL);
 
-		args = InstrBlockPop();
+		args = GenEnd();
 
 		GenBlock(cond);
 
@@ -3453,7 +3494,7 @@ void ParseAssert()
 		}
 
 		// Generate call to assert (variant of print instruction)
-		InternalGen(INSTR_ASSERT, NULL, NULL, NULL);
+		GenInternal(INSTR_ASSERT, NULL, NULL, NULL);
 		GenBlock(args);
 
 		// generate file name and line number
@@ -3475,6 +3516,9 @@ void ParseCommands()
 	while (TOK != TOKEN_BLOCK_END && TOK != TOKEN_EOF && TOK != TOKEN_ERROR && TOK != TOKEN_OUTDENT) {
 
 		switch(TOK) {
+
+		// *** Module parameters (2)
+		// Module parameters are declared in the same way as constant, only prefixed with 'param' keyword.
 		case TOKEN_PARAM: 
 			NextToken();
 			ParseDeclarations(MODE_CONST, SUBMODE_PARAM); break;
@@ -3516,13 +3560,13 @@ void ParseCommands()
 
 		case TOKEN_STRING: 
 			if (MACRO_PRINT != NULL) {
-				InstrBlockPush();
+				GenBegin();
 				if (MACRO_PRINT->type->variant == TYPE_MACRO) {
-					GenMacro(MACRO_PRINT->instr, MACRO_PRINT, NULL);
+					GenMacro(MACRO_PRINT, NULL);
 				} else {
 					Gen(INSTR_CALL, MACRO_PRINT, NULL, NULL);
 				}
-				ParseString(InstrBlockPop(), 0); 
+				ParseString(GenEnd(), 0); 
 			} else {
 				SyntaxError("Print is not supported by the platform");
 			}
@@ -3565,13 +3609,12 @@ void ParseCommands()
 
 extern UInt8      BLK_TOP;
 
-Bool Parse(char * name, Bool main_file)
+Bool Parse(char * name, Bool main_file, Bool parse_options)
 {
 	Bool no_platform;
 
-	G_TEMP_CNT = 1;
 	no_platform = (*PLATFORM == 0);
-	if (SrcOpen(name)) {
+	if (SrcOpen(name, parse_options)) {
 		if (main_file) {
 			SRC_FILE->submode = SUBMODE_MAIN_FILE;
 		}
@@ -3580,11 +3623,7 @@ Bool Parse(char * name, Bool main_file)
 			if (no_platform  && *PLATFORM != 0) {
 				InitPlatform();
 			}
-			if (TOK == TOKEN_BLOCK_END) {
-//				if (BLK_TOP > 1) {
-//					SyntaxError("Unended blocks at the end of file");
-//				}
-			} else {
+			if (TOK != TOKEN_BLOCK_END) {
 				SyntaxError("Unexpected end of file");
 			}
 		}
@@ -3600,4 +3639,6 @@ void ParseInit()
 	G_BLOCK = &G_BLOCKS[0];
 	G_BLOCK->command = TOKEN_PROC;
 	SYSTEM_PARSE = true;
+	USE_PARSE = false;
+	EXP_EXTRA_SCOPE = NULL;
 }

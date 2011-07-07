@@ -18,26 +18,27 @@ GLOBAL Var * LAST_VAR;
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
-GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
 
 /*
 Registers are special type of variable.
 Because we use them a lot, we create an array of references to registers here.
 */
 
-GLOBAL Var * REGSET;
-GLOBAL Var * REG[64];		// Array of registers (register is variable with address in REGSET, submode has flag SUBMODE_REG)
-GLOBAL RegIdx REG_CNT;		// Count of registers
+
+CPUType CPUS[1];			// currently, there is only one supported CPU
+GLOBAL CPUType * CPU;		// current CPU (in case we use multiple CPUs in the future)
+
+//GLOBAL Var * REGSET;
 
 char * TMP_NAME = "_";
 char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
+#define NO_SCOPE ((Var *)1)
+
 void VarInit()
 {
-	UInt8 i;
-	Var * var;
 
 	VARS = NULL;
 	LAST_VAR = NULL;
@@ -46,12 +47,11 @@ void VarInit()
 	TMP_LBL_IDX = 0;
 	SCOPE_IDX = 0;
 
-	for(i=0; i<MACRO_ARG_CNT; i++) {
-		var = VarAlloc(MODE_ARG, NULL, i+1);
-		MACRO_ARG_VAR[i] = var;
-	}
+	// Alloc rule procedure and rule arguments (rule arguments are local arguments of RULE_PROC)
 
-	REG_CNT = 0;
+//	CPU->REG_CNT = 0;
+
+	CPU = &CPUS[0];
 }
 
 Var * VarNewRange(Var * min, Var * max)
@@ -68,11 +68,13 @@ Var * VarNewTuple(Var * left, Var * right)
 {
 	Var * var;
 
+	if (right == NULL) return left;
+
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->mode == MODE_TUPLE && var->adr == left && var->var == right) return var;
 	}
 
-	var = VarAlloc(MODE_TUPLE, NULL, 0);
+	var = VarAllocScope(NO_SCOPE, MODE_TUPLE, NULL, 0);
 	var->type = TypeTuple();
 	var->adr = left;
 	var->var = right;
@@ -94,33 +96,7 @@ Var * VarNewDeref(Var * adr)
 	return var;
 }
 
-Var * VarNewByteElement(Var * arr, Var * idx)
-/*
-Purpose:
-	Alloc new reference to specified byte of variable.
-Argument:
-	ref		Array is accessed using reference.
-*/
-{
-	Var * item;
-
-	// Try to find same element
-
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == MODE_BYTE) {
-			if (var->adr == arr && var->var == idx) return var;
-		}
-	}
-
-	item = VarAlloc(MODE_BYTE, NULL, 0);
-	item->adr = arr;
-	item->var = idx;
-	item->type = TypeByte();
-	return item;
-}
-
-Var * VarNewElement(Var * arr, Var * idx)
+Var * VarNewOp(VarMode op, Var * arr, Var * idx)
 /*
 Purpose:
 	Alloc new reference to array element.
@@ -134,12 +110,12 @@ Argument:
 
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == op) {
 			if (var->adr == arr && var->var == idx /*&& (ref == FlagOn(var->submode, SUBMODE_REF))*/ ) return var;
 		}
 	}
 
-	item = VarAlloc(MODE_ELEMENT, NULL, 0);
+	item = VarAlloc(op, NULL, 0);
 //	if (ref) item->submode = SUBMODE_REF;
 	item->adr  = arr;
 
@@ -163,10 +139,42 @@ Argument:
 	return item;
 }
 
-
-Var * VarMacroArg(UInt8 i)
+Var * VarNewElement(Var * arr, Var * idx)
 {
-	return MACRO_ARG_VAR[i];
+	return VarNewOp(MODE_ELEMENT, arr, idx);
+}
+
+Var * VarNewByteElement(Var * arr, Var * idx)
+/*
+Purpose:
+	Alloc new reference to specified byte of variable.
+Argument:
+	ref		Array is accessed using reference.
+*/
+{	
+	//TODO: VarNewByteElement may create simple integer when used with two integer constants
+
+	Var * item = VarNewOp(MODE_BYTE, arr, idx);
+	item->type = TypeByte();
+	return item;
+/*
+	Var * item;
+
+	// Try to find same element
+
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == MODE_BYTE) {
+			if (var->adr == arr && var->var == idx) return var;
+		}
+	}
+
+	item = VarAlloc(MODE_BYTE, NULL, 0);
+	item->adr = arr;
+	item->var = idx;
+	item->type = TypeByte();
+	return item;
+*/
 }
 
 Var * InScope(Var * new_scope)
@@ -342,10 +350,12 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
+
 Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 {
 	Var * var;
 	if (scope == NULL) scope = SCOPE;
+	if (scope == NO_SCOPE) scope = NULL;
 
 	var = MemAllocStruct(Var);
 
@@ -383,6 +393,16 @@ Purpose:
 	return var;
 }
 
+Var * VarClone(Var * scope, Var * var)
+{
+	Var * copy;
+
+	copy = MemAllocStruct(Var);
+	MemMove(copy, var, sizeof(Var));
+	var->scope = scope;
+	return copy;
+}
+
 Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
 /*
 Purpose:
@@ -395,7 +415,7 @@ Purpose:
 Var * VarFindScope(Var * scope, char * name, VarIdx idx)
 /*
 Purpose:
-	Find variable in specified scope, and parent scopes.
+	Find variable in specified scope.
 	If scope is NULL, only global variables will be searched.
 */
 {
@@ -404,6 +424,17 @@ Purpose:
 		if (var->scope == scope && var->mode != MODE_UNDEFINED) {
 			if (var->idx == idx && StrEqual(name, var->name)) break;
 		}
+	}
+	return var;
+}
+
+Var * VarFindScope2(Var * scope, char * name)
+{
+	Var * var = NULL;
+	Var * s;
+	for (s = SCOPE; s != NULL; s = s->scope) {
+		var = VarFindScope(s, name, 0);
+		if (var != NULL) break;
 	}
 	return var;
 }
@@ -424,7 +455,7 @@ Purpose:
 	}
 }
 
-Var * VarFind2(char * name, VarIdx idx)
+Var * VarFind2(char * name)
 /*
 Purpose:
 	Find variable in current scope.
@@ -433,7 +464,7 @@ Purpose:
 	Var * var = NULL;
 	Var * s;
 	for (s = SCOPE; s != NULL; s = s->scope) {
-		var = VarFindScope(s, name, idx);
+		var = VarFindScope(s, name, 0);
 		if (var != NULL) break;
 	}
 	return var;
@@ -665,7 +696,7 @@ void VarResetUse()
 	NEXT_VAR
 }
 
-void VarInitRegisters()
+void InitCPU()
 /*
 Purpose:
 	Initialize array of registers.
@@ -673,19 +704,29 @@ Purpose:
 */
 {
 	Var * var;
-	FOR_EACH_VAR(var)
-		if (var->adr != NULL && var->adr->scope == REGSET) {
+
+//	CPU->SCOPE = VarFindScope(&ROOT_PROC, "CPU", 0);
+	CPU->REG_CNT = 0;
+
+	if (CPU->SCOPE == NULL) {
+		InternalError("CPU scope not found");
+	}
+
+	FOR_EACH_LOCAL(CPU->SCOPE, var)
+		// Only variables without address are registers.
+		// The variables with address are register sets.
+		if (var->adr == NULL) {
 			SetFlagOn(var->submode, SUBMODE_REG);
-			REG[REG_CNT++] = var;
+			CPU->REG[CPU->REG_CNT++] = var;
 		}
-	NEXT_VAR
+	NEXT_LOCAL
 }
 
 void VarResetRegUse()
 {
 	RegIdx i;
-	for(i = 0; i<REG_CNT; i++) {
-		SetFlagOff(REG[i]->flags, VarUsed);
+	for(i = 0; i<CPU->REG_CNT; i++) {
+		SetFlagOff(CPU->REG[i]->flags, VarUsed);
 	}
 }
 
@@ -756,6 +797,8 @@ Arguments:
 	if (proc->instr == NULL) return;
 	if (FlagOn(proc->flags, VarProcessed)) return;
 
+//	PrintProc(proc);
+
 	SetFlagOn(proc->flags, flag | VarProcessed);
 
 	if (ProcIsInterrupt(proc)) {
@@ -765,6 +808,9 @@ Arguments:
 	// Mark all defined labels (those defined with label instruction)
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		if (blk->label != NULL) {
+			SetFlagOn(blk->label->flags, VarLabelDefined);
+		}
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LABEL) {
 				SetFlagOn(i->result->flags, VarLabelDefined);
@@ -816,6 +862,50 @@ Arguments:
 		}
 	}
 	SetFlagOff(proc->flags, VarProcessed);
+}
+
+Var * VarReplaceVar(Var * var, Var * from, Var * to)
+/*
+Purpose:
+	Replace one variable by another.
+	Variable may be used for example in array indexes, tuples etc.
+	Replacement is performed 'in place'.
+*/
+{
+	Var * l, * r;
+	if (var == NULL) return NULL;
+	if (var == from) return to;
+
+	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_RANGE) {
+		l = VarReplaceVar(var->var, from, to);
+		r = VarReplaceVar(var->adr, from, to);
+		if (l != var->var || r != var->adr) var = VarNewOp(var->mode, l, r);
+
+	} else if (var->mode == MODE_DEREF) {
+		l = VarReplaceVar(var->var, from, to);
+		if (l != var->var) var = VarNewDeref(l);
+	}
+	return var;
+}
+
+void InstrReplaceVar(InstrBlock * block, Var * from, Var * to)
+/*
+Purpose:
+	Replace use of variable 'from' with variable 'to' in specified block.
+	When this procedure ends, 'from' variable is no more referenced in the block.
+*/
+{
+	Instr * i;
+	InstrBlock * nb;
+	for(nb = block; nb != NULL; nb = nb->next) {
+		for (i = nb->first; i != NULL; i = i->next) {
+			if (i->op != INSTR_LINE) {
+				i->result = VarReplaceVar(i->result, from, to);
+				i->arg1   = VarReplaceVar(i->arg1, from, to);
+				i->arg2   = VarReplaceVar(i->arg2, from, to);
+			}
+		}
+	}
 }
 
 void ProcReplaceVar(Var * proc, Var * from, Var * to)
@@ -874,10 +964,10 @@ Purpose:
 	Var * reg;
 
 	reg = var;
-	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG) && reg->adr != NULL) {
+	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG)) {
 		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
 		reg = reg->adr;
-		if (reg->mode == MODE_TUPLE) return reg;
+		if (reg != NULL && reg->mode == MODE_TUPLE) return reg;
 	}
 	return var;
 }
@@ -889,4 +979,96 @@ Bool VarIsLocal(Var * var, Var * scope)
 		var = var->scope;
 	}
 	return false;
+}
+
+Var * VarNextLocal(Var * scope, Var * local)
+{
+	while(true) {
+		local = local->next;
+		if (local == NULL) break;
+		if (local->scope == scope) break;
+	}
+	return local;
+}
+
+Var * VarFirstLocal(Var * scope)
+{
+	return VarNextLocal(scope, VARS);
+}
+
+Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
+{
+	Var * var = arg->next;
+	while(var != NULL && (var->mode != MODE_ARG || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
+	return var;
+}
+
+Var * FirstArg(Var * proc, VarSubmode submode)
+{
+	return NextArg(proc, proc, submode);
+}
+
+Var * VarField(Var * var, char * fld_name)
+/*
+Purpose:
+	Return property of variable.
+	Following properties are supported:
+
+	min
+	max
+	step
+*/
+{
+	Var * fld = NULL;
+	Type * type;
+	TypeVariant vtype;
+
+	type = var->type;
+	vtype = type->variant;
+
+	if (vtype == TYPE_INT) {
+		if (StrEqual(fld_name, "min")) {
+			fld = VarNewInt(type->range.min);
+		} else if (StrEqual(fld_name, "max")) {
+			fld = VarNewInt(type->range.max);
+		}
+	} else if (vtype == TYPE_ARRAY) {
+		if (StrEqual(fld_name, "step")) {
+			fld = VarNewInt(type->step);
+		}
+	}
+	return fld;
+}
+
+Var * VarEvalConst(Var * var)
+{
+	Var * r = var;
+	IntLimit a, idx;
+
+	if (var != NULL) {
+		if (var->mode == MODE_BYTE) {
+			if (VarIsIntConst(var->adr) && VarIsIntConst(var->var)) {
+				a = var->adr->n;
+				idx = var->var->n;
+				a = (a >> (idx * 8)) & 0xff;
+				r = VarNewInt(a);
+			}
+		}
+	}
+	return r;
+}
+
+
+void VarLet(Var * var, Var * val)
+/*
+Purpose:
+	Set the variable var to specified value.
+*/
+{
+	if (var != NULL && val != NULL) {
+		if (val->type->variant == TYPE_INT) {
+			var->n = val->n;
+			var->value_nonempty = true;
+		}
+	}
 }

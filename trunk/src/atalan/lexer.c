@@ -800,7 +800,7 @@ FILE * FindFile(char * name, char * ext, char * path)
 	return f;
 }
 
-Bool SrcOpen(char * name)
+Bool SrcOpen(char * name, Bool parse_options)
 /*
 Purpose:
 	Instruct lexer to use file with specified name as input.
@@ -808,11 +808,12 @@ Purpose:
 */
 {
 	int c;
-	Var * file_var;
+	Var * file_var, * param;
 	FILE * f;
 	char path[MAX_PATH_LEN];
 	UInt16 path_len;
 	char * filename;
+	char opt_name[256];
 
 	// When parsing system files, use SYSTEM folder
 	// Build the file name to compare for duplicity.
@@ -854,6 +855,49 @@ Purpose:
 		file_var->n    = 0;
 		file_var->scope = SRC_FILE;
 		SRC_FILE = file_var;
+
+		// *** Module parameters (1)
+		// When using module using USE command, programmer may specify comma separated list of parameters in the form 'name = value'.
+		// Parsed parameters are stored as constants in source file variable scope.
+		// Type of parameter is not known at this moment, so we store whatever value is parsed (integer or string or identifier).
+		// The value is later used when parsing the declaration of parameter with same name.
+
+		if (parse_options) {
+			NextToken();		// Skip filename token
+			if (TOK == TOKEN_OPEN_P) {
+				EnterBlock();
+				while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+					do {
+						// identifier
+						if (TOK == TOKEN_ID) {
+							StrCopy(opt_name, NAME);
+							NextToken();
+							if (NextIs(TOKEN_EQUAL)) {
+								
+								// Parse till comma or closing brace
+
+								param = VarAllocScope(SRC_FILE, MODE_CONST, opt_name, 0);
+//								param->submode = SUBMODE_PARAM;
+								if (TOK == TOKEN_INT) {
+									param->type    = &TINT;
+									param->n       = LEX.n;
+								} else {
+									param->type    = &TSTR;
+									param->str     = StrAlloc(name);
+								}
+
+								NextToken();
+//								if (NextIs(TOKEN_COMMA)) goto next;
+							}
+						}
+					} while (NextIs(TOKEN_COMMA));
+					// equal
+					// value
+					// .. comma
+				}
+			}
+
+		}
 
 		file_var->parse_state = ParseStateLabel();
 

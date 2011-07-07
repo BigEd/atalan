@@ -22,6 +22,7 @@ GLOBAL Type * TUNDEFINED;
 
 
 #define RESULT 0
+#define RESTRICTION 0
 #define ARG1   1
 #define ARG2   2
 
@@ -548,6 +549,11 @@ Bool TypeIsBool(Type * type)
 	return type->range.min == 0 && type->range.max == 1;
 }
 
+Bool TypeIsInt(Type * type)
+{
+	return type != NULL && type->variant == TYPE_INT;
+}
+
 Bool TypeIsIntConst(Type * type)
 {
 	if (type == NULL) return false;
@@ -606,6 +612,11 @@ Purpose:
 }
 
 Bool VarMatchesType(Var * var, Type * type)
+/*
+Purpose:
+	Test, if the variable matches the type.
+	This is pattern matcher, so type will not match, if it's byte count does not match.
+*/
 {
 	Type * vtype = var->type;
 
@@ -640,6 +651,11 @@ Bool VarMatchesType(Var * var, Type * type)
 				if (vtype->variant != TYPE_INT) return false;
 				if (type->range.max < vtype->range.max) return false;
 				if (type->range.min > vtype->range.min) return false;
+
+				// If the size of matched type is 
+				if (TypeSize(type) > TypeSize(vtype)) {
+					return false;
+				}
 			}
 		}
 		break;
@@ -703,11 +719,11 @@ void PrintVars(Var * proc)
 	Var * var;
 	Type * type;
 
-	for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+	FOR_EACH_LOCAL(proc, var)
 		if (var->mode == MODE_SCOPE) {
 			PrintVars(var);
 		} else {
-			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == MODE_VAR) {
+			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && (var->mode == MODE_VAR || var->mode == MODE_ARG)) {
 				type = var->type;
 				if (type != NULL && type->variant == TYPE_LABEL) continue;
 				printf("%s: ", var->name);
@@ -715,7 +731,7 @@ void PrintVars(Var * proc)
 				printf("\n");
 			}
 		}
-	}
+	NEXT_LOCAL
 }
 
 Type * IntTypeEval(InstrOp op, Type * left, Type * right)
@@ -916,12 +932,44 @@ Purpose:
 //#define MIN_INT -2147483648L
 #define MIN_INT 0x80000000
 
-Bool TypeIsInt(Type * type)
+
+Type * TypeRestrict(Type * type, Type * restriction)
 {
-	return type != NULL && type->variant == TYPE_INT;
+	Type * r = type;
+	IntLimit min, max;
+	
+	if (restriction == NULL || restriction->variant == TYPE_UNDEFINED) return r;
+
+	switch(type->variant) {
+	case TYPE_INT:
+		if (restriction->variant == TYPE_INT) {
+			min = type->range.min;
+			max = type->range.max;
+			if (min < restriction->range.min) {
+				min = restriction->range.min;
+				r = NULL;
+			}
+
+			if (max > restriction->range.max) {
+				max = restriction->range.max;
+				r = NULL;
+			}
+
+			if (r == NULL) {
+				r = TypeAllocInt(min, max);
+			}
+		}
+		break;
+	case TYPE_UNDEFINED:
+		r = restriction;
+		break;
+	default:
+		break;
+	}
+	return r;
 }
 
-Type * TypeRestrict(Type * type, Var * var, InstrBlock * blk, Bool neg)
+Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 {
 	Type * rt, * vt;
 	Instr * i;
@@ -1047,6 +1095,23 @@ UInt16 g_fb_level;
 
 //#define TRACE_INFER 1
 
+Bool VarIdentical(Var * left, Var * right)
+{
+	if (left == NULL || right == NULL) return false;
+	if (left == right) return true;
+
+	// Variable may be alias (i.e. may be specified by 
+
+	if ((left->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE)) != (right->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE))) return false;
+
+	while (left->adr != NULL && left->adr->mode == MODE_VAR) left = left->adr;
+	while (right->adr != NULL && right->adr->mode == MODE_VAR) right = right->adr;
+
+	if (left == right) return true;
+
+	return false;
+}
+
 Type * FindTypeBlock(Loc * loc, Var * var, InstrBlock * blk, Instr * instr)
 /*
 Purpose:
@@ -1064,6 +1129,7 @@ Result:
 	InstrBlock * caller;
 	Type * type, * type2;
 	Var * var2;
+	UInt16 caller_count = 0;
 
 	if (blk == NULL) return NULL;
 
@@ -1091,7 +1157,7 @@ Result:
 		if (i->op == INSTR_LINE) continue;
 		if (i->result == NULL) continue;
 
-		if (i->result == var) {
+		if (VarIdentical(i->result,var)) {
 
 			// We have found the same instruction again.
 			// This means, it is part of some loop.
@@ -1099,7 +1165,7 @@ Result:
 				if (InstrIsSelfReferencing(i)) {
 					looped = true;
 
-					if (i->arg2 != i->result) {
+					if (!VarIdentical(i->arg2, i->result)) {
 						var2 = i->arg2;
 						if (i->type[ARG2] != NULL) {
 							type = TypeAlloc(TYPE_SEQUENCE);
@@ -1115,7 +1181,7 @@ Result:
 			}
 
 			type = i->type[RESULT];
-			if (type == NULL) type = TUNDEFINED;
+			if (type == NULL || FlagOn(i->flags, InstrRestriction)) type = TUNDEFINED;
 sub1:
 			#ifdef TRACE_INFER
 				PrintRepeat("  ", g_fb_level); Print("instr:"); PrintType(type); Print("\n");
@@ -1145,6 +1211,7 @@ sub1:
 	}
 
 	if (blk->from != NULL) {
+		caller_count++;
 #ifdef TRACE_INFER
 		g_fb_level++;
 #endif
@@ -1159,14 +1226,15 @@ sub1:
 				type = type2;
 				goto done;
 			}
-			type2 = TypeRestrict(type2, var, blk->from, true);
+			type2 = TypeRestrictBlk(type2, var, blk->from, true);
 			type = TypeUnion(type, type2);
-			type = TypeRestrict(type, var, blk->from, true);
+			type = TypeRestrictBlk(type, var, blk->from, true);
 		}
 	}
 
 	for(caller = blk->callers; caller != NULL; caller = caller->next_caller) {
-		paths++;
+		caller_count++;
+//		if (caller_count > 1) paths++;
 #ifdef TRACE_INFER
 		g_fb_level++;
 #endif
@@ -1179,11 +1247,12 @@ sub1:
 				type = type2;
 				goto done;
 			}
-			type2 = TypeRestrict(type2, var, caller, false);
+			type2 = TypeRestrictBlk(type2, var, caller, false);
 			type = TypeUnion(type, type2);
-			type = TypeRestrict(type, var, caller, false);
+			type = TypeRestrictBlk(type, var, caller, false);
 		}
 	}
+	if (caller_count > 0) paths += caller_count - 1;
 
 done:
 	blk->type = type;
@@ -1203,12 +1272,13 @@ Result:
 
 	if (var == NULL) return NULL;
 	if (var->mode == MODE_CONST) {
+		//TODO: Use type from constant (if it exists)
 		if (var->type->variant == TYPE_INT) {
 			type = TypeAllocInt(var->n, var->n);
 			type->flexible = false;
 		}
 	} else if (var->mode == MODE_BYTE) {
-		type = var->type;
+		type = TypeByte();
 	} else {
 
 #ifdef TRACE_INFER
@@ -1219,6 +1289,13 @@ Result:
 		undefined = 0;
 		MarkBlockAsUnprocessed(loc->proc->instr);
 		type = FindTypeBlock(loc, var, loc->blk, loc->i);
+
+		// Type has not been specified in previous code
+		if (type->variant == TYPE_UNDEFINED) {
+			if (VarIsArrayElement(var)) {
+				type = var->adr->type->element;
+			}
+		}
 
 		// Instruction is in loop and is self referencing.
 		// We were not able to find the type of variable.
@@ -1239,14 +1316,16 @@ Result:
 //			type = var->type;
 //		}
 
-		if (undefined > 0) {
-			// Input register does not have to be explicitly initialized.
-			if (!InVar(var) && (var->mode == MODE_VAR)) {
-				ErrArg(var);
-				if (paths > 1) {
-					LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
-				} else {
-					LogicWarningLoc("Use of uninitialized variable [A].", loc);
+		if (type->variant == TYPE_UNDEFINED) {
+			if (undefined > 0) {
+				// Input register does not have to be explicitly initialized.
+				if (!InVar(var) && (var->mode == MODE_VAR)) {
+					ErrArg(var);
+					if (paths > 1) {
+						LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
+					} else {
+						LogicWarningLoc("Use of uninitialized variable [A].", loc);
+					}
 				}
 			}
 		}
@@ -1280,7 +1359,7 @@ Purpose:
 	Var * var;
 	Type * type;
 
-	for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+	FOR_EACH_LOCAL(proc, var)
 		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == MODE_VAR) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_LABEL) continue;
@@ -1295,7 +1374,290 @@ Purpose:
 				}
 			}
 		}
+	NEXT_LOCAL
+}
+
+Bool DistributeRestrictionBlk(Loc * loc, Var * var, Type * restriction, InstrBlock * blk, Instr * instr)
+/*
+Purpose:
+	Spread information about restriction of specified variable.
+	The type specified defines restriction.
+Result:
+	Returns true, if something was modified.
+*/
+{
+	Instr * i;
+//	InstrBlock * caller;
+	Type * type;
+	Bool modified = false;
+
+	if (blk == NULL) return false;
+
+	// If the block has been already processed, return the remembered result.
+	// In case of loop, the result will be NULL, which means this branch does not alter the type of the variable in any way.
+
+	if (blk->processed) return false;
+
+	if (instr == NULL) {
+		i = blk->last;
+		blk->processed = true;
+	} else {
+		i = instr->prev;
 	}
+
+	// Definition of the variable may be in this block
+	for(; i != NULL; i = i->prev) {
+		if (i->op == INSTR_LINE) continue;
+		if (i->result == NULL) continue;
+
+		if (VarIdentical(i->result, var)) {
+
+			// We have found the same instruction again.
+			// This means, it is part of some loop.
+			if (i == loc->i) {
+				if (InstrIsSelfReferencing(i)) {
+					looped = true;
+
+					type = TUNDEFINED;	// we are not able to deduct the type of the instruction now
+					goto done;
+				}
+			}
+
+			type = i->type[RESULT];
+			if (type == NULL || type->variant == TYPE_UNDEFINED) {
+				i->type[RESTRICTION] = restriction;
+				SetFlagOn(i->flags, InstrRestriction);
+				modified = true;
+			} else {
+				// type may be already restriction
+				// then we came from different branch here and the restrictions should combine
+			}
+			goto done;
+		}
+	}
+
+	// We are in starting block and we haven't found the variable.
+	// It must be either input argument or global variable.
+	// In other case, this would be use of undefined variable, that is however handled elsewhere.
+	
+	if (blk->from == NULL && blk->callers == NULL) {
+		type = TypeRestrict(var->type, restriction);
+		if (type != var->type) {
+			var->type = type;
+			modified = true;
+		}
+	}
+
+
+done:
+	blk->processed = true;
+	return modified;
+}
+
+Bool PropagateConstraint(Loc * loc, Var * var, Type * restriction, InstrBlock * blk, Instr * instr)
+{
+	paths = 1;
+	looped = false;
+	undefined = 0;
+	MarkBlockAsUnprocessed(loc->proc->instr);
+
+	return DistributeRestrictionBlk(loc, var, restriction, blk, instr);
+}
+
+Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
+{
+	Instr * i;
+	InstrBlock * blk;
+	Loc loc;
+	UInt32 n;
+
+	loc.proc = proc;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		loc.blk = blk;
+		for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
+			if (i->op == INSTR_LINE) continue;
+			loc.i = i;
+			if (fn(&loc, data)) return true;
+		}
+	}
+	return false;
+}
+
+typedef struct {
+	Bool modified;
+} InferData;
+
+void VarConstraints(Loc * loc, Var * var, InferData * d)
+{
+	Var * idx;
+	Type * ti;
+
+	// Index of array access must match the type specified in array
+	if (VarIsArrayElement(var)) {
+		idx = var->var;
+		if (idx->mode == MODE_VAR || idx->mode == MODE_ARG || idx->mode == MODE_CONST) {
+			ti = FindType(loc, idx);
+			// Type of the index is undefined, this is restriction
+			if (ti == NULL || ti->variant == TYPE_UNDEFINED) {
+				if (PropagateConstraint(loc, idx, var->adr->type->dim[0], loc->blk, loc->i)) {
+					d->modified = true;
+				}
+			}
+		}
+	}
+}
+
+Bool InstrConstraints(Loc * loc, void * data)
+{
+	Var * result;
+	InstrOp op;
+	Instr * i;
+	Type * tr, * tl;
+	InferData * d = (InferData *)data;
+
+	i = loc->i;
+	result = i->result;
+				
+	if (i->type[RESULT] != NULL) {
+		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
+			if (i->type[ARG2] != NULL) {
+				// Restriction given by instruction
+				tl = i->type[RESULT];
+				tr = i->type[ARG2];
+				op = INSTR_VOID;
+				switch(i->op) {
+				case INSTR_ADD: op = INSTR_SUB;	break;
+				case INSTR_SUB: op = INSTR_ADD; break;
+				case INSTR_MUL: op = INSTR_DIV; break;
+				case INSTR_DIV: op = INSTR_MUL; break;
+				default:
+					break;
+				}
+				if (op != INSTR_VOID) {
+					tr = TypeEval(op, tl, tr);
+					if (PropagateConstraint(loc, i->arg1, tr, loc->blk, i)) {
+						d->modified = true;
+					}
+				}
+			}
+		}
+
+		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
+		}
+	}
+
+	VarConstraints(loc, i->result, d);
+	VarConstraints(loc, i->arg1, d);
+	VarConstraints(loc, i->arg2, d);
+	return false;
+}
+
+Bool InstrInferType(Loc * loc, void * data)
+{
+	Var * result;
+	Instr * i;
+	Type * tr, * ti;
+	InferData * d = (InferData *)data;
+
+	i = loc->i;
+
+	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
+
+		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
+			i->type[ARG1] = FindType(loc, i->arg1);
+			if (i->type[ARG1] != NULL) d->modified = true;
+		}
+
+		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
+			i->type[ARG2] = FindType(loc, i->arg2);
+			if (i->type[ARG2] != NULL) d->modified = true;
+		}
+
+		// In some cases, we may find out, that the type at this place does allow only one value.
+		// That means, we may replace the variable with the constant.
+		ReplaceConst(&i->arg1, i->type[ARG1]);
+		ReplaceConst(&i->arg2, i->type[ARG2]);
+
+		//TODO: We may try to create some table here for small range of values (even for sparse values).
+
+		// For comparisons, we may check whether the condition is not always true or always false
+		if (IS_INSTR_BRANCH(i->op)) {
+
+		} else {
+
+			result = i->result;
+
+			// Check array indexes
+			// Array may have one or two indexes
+			// Index may be simple, or it can be range
+
+			//TODO: Result & argument indexes should be checked in separate pass after type inferring
+			if (result->mode == MODE_ELEMENT) {
+				if (result->var->mode == MODE_VAR || result->var->mode == MODE_CONST || result->var->mode == MODE_ARG) {
+					ti = FindType(loc, result->var);
+					if (ti != NULL) {
+						if (!TypeIsSubsetOf(ti, result->adr->type->dim[0])) {
+							ErrArg(VarNewInt(ti->range.max));
+							ErrArg(VarNewInt(ti->range.min));
+							ErrArg(result->adr);
+							LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
+						}
+					} else {
+						// failed to compute index, what does it means?
+					}
+				}
+			}
+
+			tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
+
+			// Type was evaluated, test, whether there is not an error while assigning it
+			if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
+				if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == MODE_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
+
+					// We allow assigning values to arrays, so we must allow this operation in type checker
+
+					ti = result->type;
+
+					// We initialize array with list of elements
+					// TODO: Parser should probably create element of array borders, to distinguish it from
+					//       assigning arrays.
+
+					if (i->op == INSTR_LET && ti->variant == TYPE_ARRAY && tr->variant != TYPE_ARRAY) {
+						ti = ti->element;
+					}
+
+					if (!TypeIsSubsetOf(tr, ti)) {
+						if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
+							ErrArg(result);
+							ErrArg(VarNewInt(ti->range.max));
+							ErrArg(VarNewInt(ti->range.min));
+							ErrArg(VarNewInt(tr->range.max));
+							ErrArg(VarNewInt(tr->range.min));
+							if (TypeIsIntConst(tr)) {
+								LogicWarningLoc("The value [A] does not fit into variable", loc);
+							} else {
+								LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", loc);
+							}
+						} else {
+							LogicWarningLoc("Value does not fit into variable", loc);								
+						}
+					}
+				}
+
+			// If the resulting type is defined and we failed to compute the type, we may try to
+			// deduce the type 'backwards'.
+			} else {
+			}
+
+			if (tr != NULL) {
+				i->type[RESULT] = tr;
+				SetFlagOff(i->flags, InstrRestriction);
+				d->modified = true;
+			}
+		}
+	}
+	return false;
 }
 
 /*
@@ -1308,6 +1670,14 @@ Type inferencer tries to determine type for result of every instruction (that is
 
 */
 
+Bool InstrInitInfer(Loc * loc, void * data)
+{
+	Instr * i = loc->i;
+	i->type[0] = i->type[1] = i->type[2] = NULL;
+	i->flags = 0;
+	return false;
+}
+
 void TypeInfer(Var * proc)
 /*
 Purpose:
@@ -1316,141 +1686,53 @@ Purpose:
 {
 
 	Instr * i;
-	Type * tr, * ti;
-	InstrBlock * blk;
-	Var * var, * result;
+	Type * tr;
+	Var * var;
 	Loc loc;
-	Bool modified;
 	UInt16 steps;
-	UInt32 n;
+	InferData data;
 
+	ProcInstrEnum(proc, &InstrInitInfer, NULL);
+
+/*
 	// Init the info on types in instruction
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			i->type[0] = i->type[1] = i->type[2] = NULL;
+			i->flags = 0;
 		}
 	}
-
+*/
 	printf("======= Infer ===========\n");
 	PrintProc(proc);
-
 
 	// 1. For every instruction in the code try to infer the type of it's result
 	// 2. Repeat this until no new result type was inferred
 
-	loc.proc = proc;
-	steps = 0;
 	do {
-		modified = false;
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
-			loc.blk = blk;
-			for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
-				if (i->op == INSTR_LINE) continue;
 
-				loc.i = i;
-				if (i->result != NULL && i->type[RESULT] == NULL) {
+		steps = 0;
+		do {
+			data.modified = false;
+			ProcInstrEnum(proc, &InstrInferType, &data);
+			steps++;
+		} while (data.modified);
 
-					if (i->arg1 != NULL && i->type[ARG1] == NULL) {
-						i->type[ARG1] = FindType(&loc, i->arg1);
-						if (i->type[ARG1] != NULL) modified = true;
-					}
+		steps = 0;
+		do {
+			data.modified = false;
+			ProcInstrEnum(proc, &InstrConstraints, &data);
+			steps++;
+		} while(data.modified);
 
-					if (i->arg2 != NULL && i->type[ARG2] == NULL) {
-						i->type[ARG2] = FindType(&loc, i->arg2);
-						if (i->type[ARG2] != NULL) modified = true;
-					}
+	} while (steps > 1);
 
-					// In some cases, we may find out, that the type at this place does allow only one value.
-					// That means, we may replace the variable with the constant.
-					ReplaceConst(&i->arg1, i->type[ARG1]);
-					ReplaceConst(&i->arg2, i->type[ARG2]);
-
-					//TODO: We may try to create some table here for small range of values (even for sparse values).
-
-					// For comparisons, we may check whether the condition is not always true or always false
-					if (IS_INSTR_BRANCH(i->op)) {
-
-					} else {
-
-						result = i->result;
-
-						// Check array indexes
-						// Array may have one or two indexes
-						// Index may be simple, or it can be range
-
-						//TODO: Result & argument indexes should be checked in separate pass after type inferring
-						if (result->mode == MODE_ELEMENT) {
-							if (result->var->mode == MODE_VAR || result->var->mode == MODE_CONST || result->var->mode == MODE_ARG) {
-								ti = FindType(&loc, result->var);
-								if (ti != NULL) {
-									if (!TypeIsSubsetOf(ti, result->adr->type->dim[0])) {
-										ErrArg(VarNewInt(ti->range.max));
-										ErrArg(VarNewInt(ti->range.min));
-										ErrArg(result->adr);
-										LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", &loc);
-									}
-								} else {
-									// failed to compute index, what does it means?
-								}
-							}
-						}
-
-						tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
-
-						// Type was evaluated, test, whether there is not an error while assigning it
-						if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
-							if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == MODE_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
-
-								// We allow assigning values to arrays, so we must allow this operation in type checker
-
-								ti = result->type;
-
-								// We initialize array with list of elements
-								// TODO: Parser should probably create element of array borders, to distinguish it from
-								//       assigning arrays.
-
-								if (i->op == INSTR_LET && ti->variant == TYPE_ARRAY && tr->variant != TYPE_ARRAY) {
-									ti = ti->element;
-								}
-
-								if (!TypeIsSubsetOf(tr, ti)) {
-									if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
-										ErrArg(result);
-										ErrArg(VarNewInt(ti->range.max));
-										ErrArg(VarNewInt(ti->range.min));
-										ErrArg(VarNewInt(tr->range.max));
-										ErrArg(VarNewInt(tr->range.min));
-										if (TypeIsIntConst(tr)) {
-											LogicWarningLoc("The value [A] does not fit into variable", &loc);
-										} else {
-											LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", &loc);
-										}
-									} else {
-										LogicWarningLoc("Value does not fit into variable", &loc);								
-									}
-								}
-							}
-
-						// If the resulting type is defined and we failed to compute the type, we may try to
-						// deduce the type 'backwards'.
-						} else {
-						}
-
-						if (tr != NULL) {
-							i->type[RESULT] = tr;
-							modified = true;
-						}
-					}
-				}
-			}
-		}
-		steps++;
-	} while (modified);
 
 	// Extend the type of variables to handle
 	// - Check variables, whose types can not be inferred here
 	// - Check array indexes (this may already lead to argument inference algorithm)
 
+	loc.proc = proc;
 	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
 		for(loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next) {
 			i = loc.i;
@@ -1460,7 +1742,7 @@ Purpose:
 			var = i->result;
 			if (var != NULL && VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
 				tr = i->type[RESULT];
-				if (tr != NULL && tr->variant != TYPE_UNDEFINED) {
+				if (tr != NULL && tr->variant != TYPE_UNDEFINED && FlagOff(i->flags, InstrRestriction)) {
 					var->type = TypeExpand(var->type, i->type[RESULT]);
 				} else {
 					if (var->type->variant == TYPE_UNDEFINED) {

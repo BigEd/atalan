@@ -118,6 +118,22 @@ void PathParent(char * path)
 	}
 }
 
+void PathCutExtension(char * path, char * ext)
+{
+	UInt16 path_len;
+	UInt16 ext_len;
+
+	path_len = StrLen(path);
+	ext_len = StrLen(ext);
+
+	if (path_len > ext_len+1) {
+		path_len -= ext_len + 1;
+		if (path[path_len] == '.' && StrEqual(ext, &path[path_len+1])) {		
+			path[path_len] = 0;
+		}
+	}
+}
+
 void PathMerge(char * path, char * dirname, char * filename)
 {
 	UInt16 len;

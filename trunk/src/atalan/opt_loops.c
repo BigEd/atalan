@@ -212,7 +212,7 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 			// test, whether we are able to compile it (some register/adress mode combinations must not be available)
 
 			if (q1 != 0) {
-				if (EmitRule(&ti) == NULL) {
+				if (InstrRule(&ti) == NULL) {
 //					if (VERBOSE) {
 //						printf("     %ld: invalid code\n", n2);
 //					}
@@ -693,7 +693,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	InstrVarLoopDependent(header, end);
 
 	// When processing, we assign var to register
-	for(regi = 1; regi < REG_CNT; regi++) REG[regi]->var = NULL;
+	for(regi = 1; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
 
 //	if (header->seq_no == 41) {
 //		printf("");
@@ -715,9 +715,9 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		top_q = 0; top_reg = NULL;
 
-		for(regi = 1; regi < REG_CNT; regi++) {
+		for(regi = 1; regi < CPU->REG_CNT; regi++) {
 
-			reg = REG[regi];
+			reg = CPU->REG[regi];
 			if (reg->type->range.max == 1) continue;			// exclude flag registers
 			if (var_size != VarByteSize(reg)) continue;			// exclude registers with different size
 			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;	// out registers can not be used to replace variables
@@ -789,7 +789,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			// We need to spill after it
 
 			if (exit == NULL) {
-				exit = MemAllocStruct(InstrBlock);
+				exit = InstrBlockAlloc();
 				end->next = exit;
 				end->to   = exit;
 			}

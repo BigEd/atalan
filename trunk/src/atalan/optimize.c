@@ -267,60 +267,105 @@ void ProcOptimize(Var * proc)
 
 }
 
-void ProcInline(Var * proc)
+/*
+
+==============================
+Optimization: Inline expansion
+==============================
+
+Inline expansion replaces call to a procedure by actual body of the procedure.
+
+*/
+
+void OptimizeProcInline(Var * proc)
 /*
 Purpose:
 	Replace every call to function that should be inlined with actual code from the function.
 */
 {
-	Instr * i, * next;
+	Instr * i;	//, * next;
 	InstrBlock * blk;
-	Var * subproc, * var;
-	InstrBlock * subblk;
+	Var * subproc, * var, * arg;
+//	InstrBlock * subblk;
+//	VarSet locals;
+
+	PrintProc(proc);
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_CALL) {
 				subproc = i->result;
 
-				// We inline procedures that are called just once and have some body (so we have something to inline)
-				if (subproc->read == 1 && subproc->instr != NULL) {
-					// To inline a procedure, we just insert it's code at the place of call
-					// Parameters have already been stored into appropriate input registers
-					// The scope of the procedure should be made local scope in this procedure.
+				// 1. We inline procedures that are called just once
+				if (subproc->read == 1) {
 
-					// When we know, there is just one call, we may link the code of the procedure to new place.
-					// If there were multiple places where procedure could be called, we would have to make a copy (and copy of local variables too).
-					// There is no such case currently.
+					if (subproc->instr != NULL) {
+						BufEmpty();
+						FOR_EACH_LOCAL(subproc, arg)
+							if (arg->mode == MODE_ARG) {
+								if (arg->adr == NULL) {
+									var = VarAllocScopeTmp(proc, MODE_VAR, arg->type);
+								} else {
+									var = arg->adr;
+								}
+								BufPush(var);	//VarSetAdd(&locals, arg, var);
+								ProcReplaceVar(proc, arg, var);
+								// TODO: Replace use of argument in the code
+							}
+						NEXT_LOCAL
 
-					subblk = subproc->instr;
+						InScope(proc);
+						GenSetDestination(blk, i);
+						GenMacro(subproc, STACK);
+						i = InstrDelete(blk, i);
+						subproc->read--;
 
-					next = i->next;
-					i->next = subblk->first;
-					subblk->first->prev = i;
+//						PrintProc(proc);
 
-					if (next != NULL) {
-						next->prev = subblk->last;
-						subblk->last->next = next;
 					}
+//					VarSetCleanup(&locals);
 
-					i = InstrDelete(blk, i);
+//					if (subproc->instr != NULL) {
+						// To inline a procedure, we just insert it's code at the place of call
+						// Parameters have already been stored into appropriate input registers
+									
+						// We must make all variables local to procedure local to procedure, into which the procedure is inlined.
+						// This is to support inlining the procedure multiple times.
+						// It is same as when generating macro.
 
-					// Detach the block from procedure
-					MemFree(subblk);
-//					subblk->first = NULL;
-//					subblk->last = NULL;
-//					InstrBlockFree(subblk);
-					subproc->instr = NULL;
-					subproc->read--;
+						// The scope of the procedure should be made local scope in this procedure.
 
-					// Reown procedure local variables
+						// When we know, there is just one call, we may link the code of the procedure to new place.
+						// If there were multiple places where procedure could be called, we would have to make a copy (and copy of local variables too).
+						// There is no such case currently.
+/*
+						subblk = subproc->instr;
 
-					for(var = VarFirstLocal(subproc); var != NULL; var = VarNextLocal(subproc, var)) {
-						var->scope = proc;
-					}
+						next = i->next;
+						i->next = subblk->first;
+						subblk->first->prev = i;
 
-//					PrintProc(proc);
+						if (next != NULL) {
+							next->prev = subblk->last;
+							subblk->last->next = next;
+						}
+
+						// Delete the call instruction
+
+						i = InstrDelete(blk, i);
+
+						// Detach the block from procedure
+						MemFree(subblk);
+						subproc->instr = NULL;
+						subproc->read--;
+
+						// Reown procedure local variables
+
+						FOR_EACH_LOCAL(subproc, var)
+							var->scope = proc;
+						NEXT_LOCAL
+*/
+//					}
 				}
 			}
 		}
