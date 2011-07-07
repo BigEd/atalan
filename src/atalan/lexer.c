@@ -800,6 +800,57 @@ FILE * FindFile(char * name, char * ext, char * path)
 	return f;
 }
 
+// *** Module parameters (1)
+// When using module using USE command, programmer may specify comma separated list of parameters in the form 'name = value'.
+// Parsed parameters are stored as constants in source file variable scope.
+// Type of parameter is not known at this moment, so we store whatever value is parsed (integer or string or identifier).
+// The value is later used when parsing the declaration of parameter with same name.
+
+void ParseModuleParameters(Bool SkipOnly)
+/*
+Purpose:
+	Parse module arguments.
+Syntax:
+	{ name "=" value ["," name "=" value]* }
+*/
+{
+	char opt_name[256];
+	Var * param;
+
+	NextToken();		// Skip filename token
+	if (TOK == TOKEN_OPEN_P) {
+		EnterBlock();
+		while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+			do {
+				// identifier
+				if (TOK == TOKEN_ID) {
+					StrCopy(opt_name, NAME);
+					NextToken();
+					if (NextIs(TOKEN_EQUAL)) {
+								
+						// Parse till comma or closing brace
+						if (!SkipOnly) {
+							param = VarAllocScope(SRC_FILE, MODE_CONST, opt_name, 0);
+							if (TOK == TOKEN_INT) {
+								param->type    = &TINT;
+								param->n       = LEX.n;
+							} else {
+								param->type    = &TSTR;
+								param->str     = StrAlloc(NAME);
+							}
+						}
+
+						NextToken();
+					}
+				}
+			} while (NextIs(TOKEN_COMMA));
+			// equal
+			// value
+			// .. comma
+		}
+	}
+}
+
 Bool SrcOpen(char * name, Bool parse_options)
 /*
 Purpose:
@@ -808,12 +859,11 @@ Purpose:
 */
 {
 	int c;
-	Var * file_var, * param;
+	Var * file_var;
 	FILE * f;
 	char path[MAX_PATH_LEN];
 	UInt16 path_len;
 	char * filename;
-	char opt_name[256];
 
 	// When parsing system files, use SYSTEM folder
 	// Build the file name to compare for duplicity.
@@ -833,6 +883,7 @@ Purpose:
 				ErrArg(file_var);
 				ErrArg(SRC_FILE);
 				SyntaxError("Modules [A] and [B] are trying to use each other.");
+				if (parse_options) ParseModuleParameters(true);
 				return false;
 			}
 		}
@@ -840,7 +891,10 @@ Purpose:
 		// If the file has been already loaded (variable with filename exists), 
 		// ignore the load request (do not however report error)
 
-		if (VarFind(filename, 0)) return false;
+		if (VarFind(filename, 0)) {
+			if (parse_options) ParseModuleParameters(true);
+			return false;
+		}
 
 		// Create new block for the file 
 		// File block is ended with TOKEN_EOF and starts with indent 0
@@ -856,47 +910,8 @@ Purpose:
 		file_var->scope = SRC_FILE;
 		SRC_FILE = file_var;
 
-		// *** Module parameters (1)
-		// When using module using USE command, programmer may specify comma separated list of parameters in the form 'name = value'.
-		// Parsed parameters are stored as constants in source file variable scope.
-		// Type of parameter is not known at this moment, so we store whatever value is parsed (integer or string or identifier).
-		// The value is later used when parsing the declaration of parameter with same name.
-
 		if (parse_options) {
-			NextToken();		// Skip filename token
-			if (TOK == TOKEN_OPEN_P) {
-				EnterBlock();
-				while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
-					do {
-						// identifier
-						if (TOK == TOKEN_ID) {
-							StrCopy(opt_name, NAME);
-							NextToken();
-							if (NextIs(TOKEN_EQUAL)) {
-								
-								// Parse till comma or closing brace
-
-								param = VarAllocScope(SRC_FILE, MODE_CONST, opt_name, 0);
-//								param->submode = SUBMODE_PARAM;
-								if (TOK == TOKEN_INT) {
-									param->type    = &TINT;
-									param->n       = LEX.n;
-								} else {
-									param->type    = &TSTR;
-									param->str     = StrAlloc(name);
-								}
-
-								NextToken();
-//								if (NextIs(TOKEN_COMMA)) goto next;
-							}
-						}
-					} while (NextIs(TOKEN_COMMA));
-					// equal
-					// value
-					// .. comma
-				}
-			}
-
+			ParseModuleParameters(false);
 		}
 
 		file_var->parse_state = ParseStateLabel();
