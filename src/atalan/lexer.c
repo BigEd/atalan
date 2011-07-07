@@ -777,11 +777,11 @@ FILE * FindFile(char * name, char * ext, char * path)
 		}
 	}
 
-	// %SYSTEM%/processor/%name%/
+	// %SYSTEM%/cpu/%name%/
 
 	if (f == NULL) {
 		strcpy(path, SYSTEM_DIR);
-		strcat(path, "processor");
+		strcat(path, "cpu");
 		strcat(path, sep);
 		strcat(path, name);
 		strcat(path, sep);
