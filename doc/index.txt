@@ -35,4 +35,7 @@ Language Features
 - multidimensional arrays
 - support for interrupts
 - chained relational operators (10 < x <= 100)
-- module system
+- parametrized modules 
+- type inferencing
+- possibility to call assembler routines including definition of register arguments
+
