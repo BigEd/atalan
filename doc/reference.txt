@@ -1041,20 +1041,20 @@ If such a file exists, it is automatically included at the end of the source cod
 If the module defines parameters, assembler includes may access them as label with
 prefix PARAM_.
  
-=================
-Processor modules
-=================
+===========
+CPU modules
+===========
 
-Processor modules are stored in 
+CPU modules are stored in 
 ::::::::::::::::::::::::
-%SYSTEM%/processor/%module%/%module%.atl
+%SYSTEM%/cpu/%module%/%module%.atl
 ::::::::::::::::::::::::
 directory.
 
-They define processor for which the code may be compiled.
-Application may use only one processor module.
-Processor module is usually not used directly by an application, platform module
-uses the specific processor.
+They define cpu (central processing unit) for which the code may be compiled.
+Application must use exactly one cpu module.
+Cpu module is usually not used directly by an application, platform module
+uses the specific cpu.
 
 ================
 Platform modules
