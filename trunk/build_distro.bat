@@ -1,10 +1,12 @@
+﻿REM Create release folder of Atalan
+
 if exist atalan rmdir /S /Q atalan
 
 mkdir atalan
 cd atalan
 mkdir bin
 mkdir platform
-mkdir processor
+mkdir cpu
 mkdir module
 mkdir doc
 mkdir tools
@@ -13,18 +15,23 @@ cd ..
 
 echo \svn\ > exclude.list
 
-xcopy src\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
-xcopy src\processor atalan\processor /E /I /Q /EXCLUDE:exclude.list
-xcopy src\module atalan\module /E /I /Q /EXCLUDE:exclude.list
+xcopy src\atalan\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
+xcopy src\atalan\cpu atalan\cpu /E /I /Q /EXCLUDE:exclude.list
+xcopy src\atalan\module atalan\module /E /I /Q /EXCLUDE:exclude.list
 
 REM Bin
 
-cd src
+cd src\atalan
 call build.bat release
-cd ..
+cd ..\..
 
-copy src\Release\atalan.exe atalan\bin
-copy src\mads.exe atalan\bin
+cd src\con6502
+call build.bat release
+cd ..\..
+
+copy src\atalan\Release\atalan.exe atalan\bin
+copy bin\con6502.exe atalan\bin
+REM copy src\atalan\mads.exe atalan\bin
 
 copy tools\Atalan.ini atalan\tools
 
@@ -55,7 +62,7 @@ xcopy www atalan\doc /E /I /Q /EXCLUDE:exclude.list
 
 del exclude.list
 
-copy doc\contents.txt atalan\
+copy doc\index.txt atalan\about.txt
 copy license.txt atalan\
 
 Rem Build examples

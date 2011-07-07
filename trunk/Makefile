@@ -9,10 +9,10 @@ all:	atalan
 atalan:
 	@echo System name: $(SYSTEM_NAME)
 	@echo System Arch: $(SYSTEM_ARCH)
-	cd src; make
+	cd src/atalan; make
 
 clean:
-	cd src; make clean
+	cd src/atalan; make clean
 	cd examples; make clean
 
 examples:
