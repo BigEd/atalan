@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
 	//         ;platform dependent modules
 	//      c64/
 	//      ...
-	//  processor/
+	//  cpu/
 	//      m6502/
 	//      z80/
 	//      ...
