@@ -67,7 +67,7 @@ wait'line:macro =
 
 ;Joysticks & paddles
 
-in button'state:enum (pressed = 0, not'pressed = 1)
+in button'state:enum (pressed = 0, not'pressed = 1, true = 0)
 in STRIG@644:array(0..3) of button'state		;Set to 1 when joystick button is not pushed, 0 if pushed
 
 type stick'state:enum (

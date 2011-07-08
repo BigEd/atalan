@@ -746,6 +746,11 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 		rt = left;
 		break;
 
+	case INSTR_LO:
+	case INSTR_HI:
+		rt = TypeByte();		//TypeAllocInt(0, 255);
+		break;
+
 	default:
 		if (right != NULL && right->variant == TYPE_INT) {
 			r_fn = InstrFn(op);
