@@ -718,9 +718,10 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		for(regi = 1; regi < CPU->REG_CNT; regi++) {
 
 			reg = CPU->REG[regi];
-			if (reg->type->range.max == 1) continue;			// exclude flag registers
-			if (var_size != VarByteSize(reg)) continue;			// exclude registers with different size
-			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;	// out registers can not be used to replace variables
+			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input registers
+			if (reg->type->range.max == 1) continue;						// exclude flag registers
+			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different size
+			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;				// out registers can not be used to replace variables
 			if (reg->var != NULL) continue;
 
 			if (Verbose(proc)) {

@@ -70,6 +70,8 @@ CPU:scope =
 	azn@(a,z,n)
 	as@(a,c,z,n,v)	; this is set of flags used for result of adc, sbc
 	cznv@(c,z,n,v)
+	in void:0..255  ;This is special variable used to implement touch instructions.
+
 	
 ;========================
 ;Temporary variables
@@ -1915,6 +1917,11 @@ rule let %A:byte1,a  = "   sta %A"
 rule let @%A$y,a  = "   sta (%A),y"
 rule let %A$x,a  = "   sta %A-%A.index.min,x"
 rule let %A$y,a  = "   sta %A-%A.index.min,y"
+
+;This is special instruction that 'touches' the specified variable (i.e.
+;writes any value into specified variable).
+ 
+rule let %A:byte1, void = "   sta %A"
 
 ;STX
 rule let %A$const %B,x  = "   stx %A-%A.index.min+%B"

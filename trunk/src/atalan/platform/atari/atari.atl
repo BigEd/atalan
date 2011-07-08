@@ -63,7 +63,7 @@ out WSYNC@$D40A:byte
 ;without first initializing it.
 
 wait'line:macro =
-  WSYNC = cpu.a
+  WSYNC = cpu.void
 
 ;Joysticks & paddles
 
