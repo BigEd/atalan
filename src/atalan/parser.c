@@ -1613,12 +1613,17 @@ void ParseGoto()
 void ParseIf()
 /*
 Syntax:
-	If: "if" <commands> ["then"] <commands>  ["else" "if" <cond>]* ["else" <commands>]
+	If: "if"|"unless" <commands> ["then"] <commands>  ["else" "if"|"unless" <cond>]* ["else" <commands>]
 */
 {	
 	BeginBlock(TOKEN_IF);		// begin if block
 retry:
-	NextToken();				// skip if
+	G_BLOCK->not = false;
+	if (TOK == TOKEN_UNLESS) {
+		G_BLOCK->not = true;
+	}
+
+	NextToken();				// skip if or unless
 	ParseCondition();
 	if (TOK == TOKEN_ERROR) return;
 
@@ -1632,38 +1637,36 @@ retry:
 	// There may be optional THEN after IF
 	NextIs(TOKEN_THEN);
 
-		EnterBlockWithStop(TOKEN_ELSE);
-		ParseCommands();
-		NextIs(TOKEN_BLOCK_END);	// Block must end with TOKEN_END_BLOCK
-		if (NextIs(TOKEN_ELSE)) {
+	EnterBlockWithStop(TOKEN_ELSE);
+	ParseCommands();
+	NextIs(TOKEN_BLOCK_END);	// Block must end with TOKEN_END_BLOCK
+	if (NextIs(TOKEN_ELSE)) {
 			
-			// End current branch with jump after the end of if
-			if (G_BLOCK->loop_label == NULL) {
-				G_BLOCK->loop_label = VarNewTmpLabel();
-			}
-			GenGoto(G_BLOCK->loop_label);
-			GenLabel(G_BLOCK->f_label);			// previous branch will jump here
+		// End current branch with jump after the end of if
+		if (G_BLOCK->loop_label == NULL) {
+			G_BLOCK->loop_label = VarNewTmpLabel();
+		}
+		GenGoto(G_BLOCK->loop_label);
+		GenLabel(G_BLOCK->f_label);			// previous branch will jump here
 
-			// else if
-			if (TOK == TOKEN_IF) {
-				G_BLOCK->f_label = NULL;		// expression will generate new labels if necessary
-				G_BLOCK->t_label = NULL;
-				goto retry;
-			// else
-			} else {
-//				GenLabel(G_BLOCK->f_label);		// jump to else case here
-				ParseBlock();
-			}
-		// No else
+		// else if
+		if (TOK == TOKEN_IF || TOK == TOKEN_UNLESS) {
+			G_BLOCK->f_label = NULL;		// expression will generate new labels if necessary
+			G_BLOCK->t_label = NULL;
+			goto retry;
+		// else
 		} else {
-			GenLabel(G_BLOCK->f_label);
+			ParseBlock();
 		}
+	// No else
+	} else {
+		GenLabel(G_BLOCK->f_label);
+	}
 
-		// This is complete end of 'IF'
-		if (G_BLOCK->loop_label != NULL) {
-			GenLabel(G_BLOCK->loop_label);
-		}
-//	}
+	// This is complete end of 'IF'
+	if (G_BLOCK->loop_label != NULL) {
+		GenLabel(G_BLOCK->loop_label);
+	}
 	EndBlock();
 }
 
@@ -3583,6 +3586,7 @@ void ParseCommands()
 		case TOKEN_GOTO: 
 			ParseGoto(); break;
 		case TOKEN_IF:   
+		case TOKEN_UNLESS:
 			ParseIf(); break;
 		case TOKEN_WHILE:
 		case TOKEN_UNTIL: 
