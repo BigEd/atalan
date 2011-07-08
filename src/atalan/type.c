@@ -1703,8 +1703,8 @@ Purpose:
 		}
 	}
 */
-	printf("======= Infer ===========\n");
-	PrintProc(proc);
+//	printf("======= Infer ===========\n");
+//	PrintProc(proc);
 
 	// 1. For every instruction in the code try to infer the type of it's result
 	// 2. Repeat this until no new result type was inferred
@@ -1754,7 +1754,7 @@ Purpose:
 			}
 		}
 	}
-	PrintVars(proc);
+//	PrintVars(proc);
 
 	ReportUnusedVars(proc);
 }

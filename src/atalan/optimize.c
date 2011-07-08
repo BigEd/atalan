@@ -286,10 +286,6 @@ Purpose:
 	Instr * i;	//, * next;
 	InstrBlock * blk;
 	Var * subproc, * var, * arg;
-//	InstrBlock * subblk;
-//	VarSet locals;
-
-	PrintProc(proc);
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
@@ -308,9 +304,8 @@ Purpose:
 								} else {
 									var = arg->adr;
 								}
-								BufPush(var);	//VarSetAdd(&locals, arg, var);
+								BufPush(var);
 								ProcReplaceVar(proc, arg, var);
-								// TODO: Replace use of argument in the code
 							}
 						NEXT_LOCAL
 
@@ -320,52 +315,7 @@ Purpose:
 						i = InstrDelete(blk, i);
 						subproc->read--;
 
-//						PrintProc(proc);
-
 					}
-//					VarSetCleanup(&locals);
-
-//					if (subproc->instr != NULL) {
-						// To inline a procedure, we just insert it's code at the place of call
-						// Parameters have already been stored into appropriate input registers
-									
-						// We must make all variables local to procedure local to procedure, into which the procedure is inlined.
-						// This is to support inlining the procedure multiple times.
-						// It is same as when generating macro.
-
-						// The scope of the procedure should be made local scope in this procedure.
-
-						// When we know, there is just one call, we may link the code of the procedure to new place.
-						// If there were multiple places where procedure could be called, we would have to make a copy (and copy of local variables too).
-						// There is no such case currently.
-/*
-						subblk = subproc->instr;
-
-						next = i->next;
-						i->next = subblk->first;
-						subblk->first->prev = i;
-
-						if (next != NULL) {
-							next->prev = subblk->last;
-							subblk->last->next = next;
-						}
-
-						// Delete the call instruction
-
-						i = InstrDelete(blk, i);
-
-						// Detach the block from procedure
-						MemFree(subblk);
-						subproc->instr = NULL;
-						subproc->read--;
-
-						// Reown procedure local variables
-
-						FOR_EACH_LOCAL(subproc, var)
-							var->scope = proc;
-						NEXT_LOCAL
-*/
-//					}
 				}
 			}
 		}
