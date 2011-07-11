@@ -89,10 +89,16 @@ Purpose:
 
 	// If value is alias to some other value, reset it too
 	//TODO: How about element (non constant, let's say?)
+
 	var = res->adr;
 	if (var != NULL) {
-		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+		if (var->mode == MODE_VAR || var->mode == MODE_ARG || var->mode == MODE_TUPLE) {
 			ResetValue(var);
+		}
+	} else {
+		if (res->mode == MODE_TUPLE) {
+			ResetValue(res->adr);
+			ResetValue(res->var);
 		}
 	}
 
@@ -160,6 +166,11 @@ Purpose:
 	if (var != NULL) {
 		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
 			ResetVarDep(var);
+		}
+	} else {
+		if (res->mode == MODE_TUPLE) {
+			ResetVarDep(var->adr);
+			ResetVarDep(var->var);
 		}
 	}
 }
@@ -501,11 +512,11 @@ Purpose:
 
 	if (var == NULL) return false;
 	t = var->type;
-	if (t != NULL && t->variant == TYPE_INT) {
+	if (t->variant == TYPE_INT) {
 		if (t->is_enum) {
 
-			for(item = VarFirstLocal(t->owner); item != NULL; item = VarNextLocal(t->owner, item)) {
-				if (item->mode == MODE_CONST) {
+			FOR_EACH_LOCAL(t->owner, item)
+				if (VarIsIntConst(item)) {
 					if (item->n == 0) {
 						zero = item;
 					} else {
@@ -520,7 +531,7 @@ Purpose:
 						}
 					}
 				}
-			}
+			NEXT_LOCAL
 		} else {
 			if ((t->range.min == 0 && t->range.max == 1) || (t->range.min == -1 && t->range.max == 0)) {
 				zero = VarNewInt(0);
@@ -571,13 +582,14 @@ Bool OptimizeValues(Var * proc)
 	VarUse();
 
 	modified = false;
-	n = 1;
+
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		
 		ResetValues();
-
-		for(i = blk->first; i != NULL; i = i->next, n++) {
+		n = 0;
+		for(i = blk->first; i != NULL; i = i->next) {
 retry:
+			n++;
 			// Instruction may be NULL here, if we have deleted the last instruction in the block.
 			if (i == NULL) break;
 			// Line instructions are not processed.
@@ -607,13 +619,12 @@ retry:
 					arg1 = i->arg1;
 					src_i = result->src_i;
 
-					//TODO: Split OUT & Equivalent
 					// If result is equal to arg1, instructions are not equivalent, because they accumulate the result,
 					// (for example sequence of mul a,a,2  mul a,a,2
 
 					m3 = false;
 
-					if (FlagOff(result->submode, SUBMODE_OUT) && result != arg1 && result != i->arg2 
+					if (result != arg1 && result != i->arg2 && !OutVar(result)
 					&& (arg1 == NULL || FlagOff(arg1->submode, SUBMODE_IN)))  {
 //						GOG++;
 //						if (GOG == 18) {
@@ -627,15 +638,14 @@ retry:
 						// Array references, that have non-const index may not be removed, as
 						// we can not be sure, that the index variable has not changed since last
 						// use.
-						if (result->mode == MODE_ELEMENT && result->var->mode != MODE_CONST) {
+						if ((result->mode == MODE_ELEMENT || result->mode == MODE_BYTE) && result->var->mode != MODE_CONST) {
 						
 						} else {
 	delete_instr:
 							if (Verbose(proc)) {
-								printf("Removing %ld:", n); InstrPrint(i);
+								printf("Removing %ld#%ld:", blk->seq_no, n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);
-							n++;
 							modified = true;
 							goto retry;
 						}
@@ -669,7 +679,6 @@ retry:
 								// Do not replace simple variable with array access
 								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									arg1 = src_i->arg1;
-//									op   = src_op;			//!!!!! What is this?????
 									m2 = true;
 								}
 							}
@@ -677,12 +686,12 @@ retry:
 					}
 
 					arg2 = i->arg2;
-					if (arg2 != NULL && FlagOff(arg2->submode, SUBMODE_IN) && arg2->src_i != NULL ) {					
+					if (arg2 != NULL && !InVar(arg2) && arg2->src_i != NULL ) {					
 						src_i = arg2->src_i;
 						src_op = src_i->op;
 
 						if (src_op == INSTR_LET) {
-							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
+							if (!InVar(src_i->arg1) && !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
 								if (arg2->read == 1 || !(arg2->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
 									if (src_i->arg1->mode != MODE_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
@@ -734,14 +743,16 @@ retry:
 
 				} // BRANCH
 			} else { // result != NULL
+
+				// Convert reference to constant value in expression to constant text
 				if (i->op == INSTR_VAR_ARG) {
 					arg1 = i->arg1;
 					if (arg1 != NULL) {
-						while (FlagOff(arg1->submode, SUBMODE_IN) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
+						while (!InVar(arg1) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
-					if (arg1->mode == MODE_CONST) {
+					if (VarIsIntConst(arg1)) {
 						if (Verbose(proc)) {
-							printf("Arg to const %ld:", n); InstrPrint(i);
+							printf("Arg to const %ld#%ld:", blk->seq_no, n); InstrPrint(i);
 						}
 						i->op = INSTR_STR_ARG;
 						sprintf(buf, "%d", arg1->n);
@@ -768,9 +779,9 @@ Purpose:
 	InstrOp op;
 
 	VarUse();
-	n = 1;
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		ResetValues();
+		n = 1;
 		for(i = blk->first; i != NULL; i = i->next, n++) {
 
 			op = i->op;
@@ -784,7 +795,7 @@ Purpose:
 			if (op == INSTR_IFEQ || op == INSTR_IFNE) {
 				arg1 = i->arg1;
 				arg2 = i->arg2;
-				if ((arg2->mode == MODE_CONST && arg2->n != 0) && VarIsZeroNonzero(arg1, &zero)) {
+				if (VarIsIntConst(arg2) && arg2->n != 0 && VarIsZeroNonzero(arg1, &zero)) {
 					i->op = OpNot(i->op);
 					i->arg2 = zero;
 				}
@@ -812,25 +823,25 @@ Purpose:
 				//      add R1, Y, #c1
 				//      add R2, Y, #c1+#c2
 				} else {
-					if (i->op == INSTR_ADD && VarIsConst(arg2)) {						
+					if (i->op == INSTR_ADD && VarIsConst(arg2)) {
+
+						// Get source instruction or directly previous instruction
 						i2 = arg1->src_i;
 						if (i2 == NULL) {
 							i2 = i->prev; while(i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
 						}
-						if (i2 != NULL) {
+						if (i2 != NULL && i2->result == arg1) {
 							if (i2->op == INSTR_ADD) {
-								if (i2->result == arg1) {
-									if (VarIsConst(i2->arg2)) {
-										if (result != arg1) {
-											r = InstrEvalConst(i->op, arg2, i2->arg2);
-											i2->arg2 = r;
-											i->arg1 = i2->arg1;
-											i->arg2 = r;
+								if (VarIsConst(i2->arg2)) {
+									if (result != arg1) {
+										r = InstrEvalConst(i->op, arg2, i2->arg2);
+										i2->arg2 = r;
+										i->arg1 = i2->arg1;
+										i->arg2 = r;
 
-											// We don't need the first instruction anymore
-											if (result->read == 1) {
-												InstrDelete(blk, i2);
-											}
+										// We don't need the first instruction anymore
+										if (result->read == 1) {
+											InstrDelete(blk, i2);
 										}
 									}
 								}
