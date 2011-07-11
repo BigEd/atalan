@@ -3,19 +3,7 @@
 
 use atari
 
-out COL'BK@$d01a:byte
-out COL'PF0@$D016:byte
-out COL'PF1@$D017:byte
-out COL'PF2@$D018:byte
-
-in RTCLOCK@20:byte
-;in STRIG0@644:button_state		;Set to 1 when joystick button is not pushed, 0 if pushed
-;in STRIG1@645:button_state
-
-until STRIG(0) = pressed
-	c:byte = lo (VCOUNT * 2 + RTCLOCK) 
+until strig#0 = pressed
+	m = lo (VCOUNT * 2 + TIMER) 
 	wait'line   
-	COL'PF2,COL'BK  = c,c
-	 
-;	COL'PF2 = lo (VCOUNT * 2 - RTCLOCK)		;scroll down
-
+	COLPF#2,COLBK  = m,m

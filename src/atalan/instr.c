@@ -414,17 +414,26 @@ void PrintVarNameNoScope(Var * var)
 
 void PrintVarName(Var * var)
 {
-	if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
-		PrintVarName(var->scope);
-		printf(".");
+	UInt8 oc;
+
+	if (VarIsReg(var)) {
+		oc = PrintColor(GREEN+BLUE);
+		PrintVarNameNoScope(var);
+		PrintColor(oc);
+	} else {
+		if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
+			PrintVarName(var->scope);
+			printf(".");
+		}
+		PrintVarNameNoScope(var);
 	}
-	PrintVarNameNoScope(var);
 }
 
 void PrintVarVal(Var * var)
 {
 	Type * type;
 	Var * index;
+	UInt8 oc;
 
 	if (var == NULL) return;
 
@@ -455,7 +464,9 @@ void PrintVarVal(Var * var)
 			}
 		} else if (var->mode == MODE_BYTE) {
 			PrintVarVal(var->adr);
+			oc = PrintColor(GREEN+BLUE);
 			Print("$");
+			PrintColor(oc);
 			PrintVarVal(var->var);
 
 		} else {
@@ -488,8 +499,10 @@ void PrintVarVal(Var * var)
 
 		if (var->adr != NULL) {
 			if (var->adr->mode == MODE_TUPLE) {
-				printf("@");
-				PrintVarVal(var->adr);
+				if (!VarIsReg(var)) {
+					printf("@");
+					PrintVarVal(var->adr);
+				}
 			}
 		}
 	}

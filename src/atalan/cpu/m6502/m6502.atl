@@ -1,33 +1,6 @@
 ﻿;ATALAN definitions for 6502 processor
 ;This is include file automatically included by Atalan compiler.
 
-;===============
-;Register groups
-;===============
-	
-;const
-;   a:regset			; only a register
-;   xy:regset		; x or y register
-;   zpage:regset	; zpage variable
-;   flag:regset
-;   void:regset  ; hypothetical result of compare operation
-	
-;===================
-;Processor registers
-;===================
-
-;_a@a:0..255
-;_x@xy:0..255
-;_y@xy:0..255
-;in out _c@flag:0..1  ; marked as out to prevent optimizer from removing let _c,0 instructions
-;_z@flag:0..1
-;_v@flag:0..1
-;_n@flag:0..1
-;out cznv@void:0..255 ; this virtual register is used as result of compare operation
-;_ac@(_a,_c)
-;_azn@(_a, _z, _n)
-;_as@(_a,_c,_z,_n,_v)	; this is set of flags used for result of adc, sbc
-
 type
    byte:0..255
    card:0..65535
@@ -39,8 +12,6 @@ type
    byte2a:byte2 or adr
    byte1arr:array(card) of byte1
    _byte1arr2D:array(card,card) of byte1
-
-;   ptr:0..65535     ;ptr defines size of pointer and memory limits
 
 ;==============================
 ;Definition of type allocations
@@ -79,13 +50,14 @@ CPU:scope =
 
 ;_stdbuf is used to format decimal numbers. Therefore it must be as big as number of decimal
 ;digits in biggest supported number.
-;Platform may position the variable using _stdbuf@<adr>. 
+;We do not assign an address to the buffer, so platform may set the address 
+;of the buffer using _stdbuf@<adr>. If it will not, compiler will assign the address. 
 
 _stdbuf:array(0..15) of byte
 _arr:adr
 _putchr_proc_adr:adr			;address of print procedure
 
-;Temporary variables should be allocated dynamically
+;TODO: Temporary variables should be allocated dynamically
 _TEMPW1@$32:CARD
 _TEMPW2@$34:CARD
 _TEMPL1@$70:CARD		;Should be: 0..$7fffffff
@@ -141,7 +113,6 @@ _TEMPL1@$70:CARD		;Should be: 0..$7fffffff
 rule let %A:byte, %B:byte = instr
   let a,%B
   let %A,a
-
    
 ;signed byte assignment
 ;We cannot use byte1 to define this, as we do not allow assigning from signed to unsigned and vice versa
@@ -183,20 +154,20 @@ rule let_adr %A:adr, %B:adr(const %C) = instr
 	lo  %Z, %C
 	let a, %B$0
 	let c, 0
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$0, a
 	hi  %Z, %C
 	let a, %B$1
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$1, a
 
 rule let_adr %A:adr, %B:adr(%C:byte) = instr
 	let a, %B$0
 	let c, 0
-	add a, a, %C
+	add as, ac, %C
 	let %A$0, a
 	let a, %B$1
-	add a, a, 0
+	add as, ac, 0
 	let %A$1, a
 
   
@@ -283,10 +254,10 @@ rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
 	let y, %C
 	lo a, %A$y
 	let c, 0
-	add a, a, %B
+	add as, ac, %B
 	let %D$0, a
 	hi a, %A$y
-	add a, a, 0	
+	add as, ac, 0	
 	let %D$1, a
 
 ;======= 2D byte array
@@ -318,10 +289,10 @@ rule let_adr %D:adr, %A:_byte1arr2D(%B:byte,%C:byte) = instr
 	let y, %C
 	lo a, %A$y
 	let c, 0
-	add a, a, %B
+	add as, ac, %B
 	let %D$0, a
 	hi a, %A$y
-	add a, a, 0	
+	add as, ac, 0	
 	let %D$1, a
 
 ;===========
@@ -429,7 +400,7 @@ rule let %C:byte1arr(%D:card), %A:byte = instr
   let _arr$0, a
   let_adr a, %C$1
   let c, 0
-  add a,a, %D$1
+  add as, ac,  %D$1
   let _arr$1, a
   let y,%D$0
   let a,%A
@@ -441,7 +412,7 @@ rule let %C:byte1arr(%D:card), a = instr
   let _arr$0, a
   let_adr a, %C$1
   let c, 0
-  add a,a, %D$1
+  add as, ac,  %D$1
   let _arr$1, a
   let y,%D$0
   let a,x
@@ -452,7 +423,7 @@ rule let %A:byte, %C:byte1arr(%D:card)  = instr
   let _arr$0, a
   let_adr a, %C$1
   let c, 0
-  add a,a, %D$1
+  add as, ac,  %D$1
   let _arr$1, a
   let y,%D$0
   let a, @_arr$y  
@@ -536,29 +507,29 @@ rule add %A:byte1, %B:byte1, 1 = instr
 rule add %A:byte1, %B:byte1, %C:byte1 = instr
   let a,%B 
   let c,0
-  add a,a,%C
+  add as, ac, %C
   let %A,a
   
 rule add %A:byte, %B:card, %C:byte = instr
   let a,%B$0
   let c,0
-  add a,a,%C
+  add as, ac, %C
   let %A,a
   
-rule add a, a, %A:byte1arr(%B:byte) = instr
+rule add as, ac, %A:byte1arr(%B:byte) = instr
 	let x,%B
-	add a, a, %A$x
+	add as, ac, %A$x
 
 rule add %A:byte1arr(%B:byte),%C:byte1arr(%D:byte),%E:byte1arr(%F:byte) = instr
 	let a,%C(%D)
 	let c,0
-	add a, a, %E(%F)
+	add as, ac, %E(%F)
 	let %A(%B), a
 
 rule add %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let a,%C
 	let c,0
-	add a, a, %D
+	add as, ac, %D
 	let x,%B
 	let %A$x,a
 
@@ -566,14 +537,14 @@ rule add %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let x,%C
 	let a,%B$x
 	let c,0
-	add a, a, %D
+	add as, ac, %D
 	let %A, a
 
 ;u16 = u8 + u8
 rule add %A:card,%B:byte,%C:byte = instr
 	let a, %B
 	let c, 0
-	add a, a, %C
+	add as, ac, %C
 	let %A$0,a
 	let a, 0
 	rol a,a,1			; rol
@@ -584,7 +555,7 @@ rule add %A:int,%B:sbyte,%C:sbyte = instr
 	let x, 0
 	let a, %B
 	let c, 0
-	add a, a, %C
+	add as, ac, %C
 	ifeq _no_overflow, v, 0			;if there was overfow, switch the negative bit
 	ifeq _negative, n, 0
 	ifeq _positive, n, 1		
@@ -606,10 +577,10 @@ rule add %R:byte2, %A:byte2, %B:sbyte = instr
   sub x, x, 1
   label positive
   let c, 0
-  add a, a, %A$0
+  add as, ac, %A$0
 	let %R$0, a
 	let a, x
-	add a, a, %A$1
+	add as, ac, %A$1
 	let %R$1, a
 
 ;u16 += 1
@@ -623,7 +594,7 @@ rule add %A:card,%A:card,1 = instr
 rule add %A:card,%A:card,%B:byte = instr
 	let a, %A$0
 	let c, 0
-	add a, a, %B
+	add as, ac, %B
 	let %A$0,a
 	ifeq _skip1,c,0
 	add %A$1,%A$1,1
@@ -634,52 +605,52 @@ rule add %A:card,%A:card,%B:byte = instr
 rule add %A:byte2,%B:byte2,%C:byte = instr
 	let a, %B$0
 	let c, 0
-	add a, a, %C
+	add as, ac, %C
 	let %A$0,a
 	let a, %B$1
-	add a, a, 0
+	add as, ac, 0
 	let %A$1, a
 
 rule add %A:card, %B:byte, const %C:card = instr
 	let a, %B
 	lo %Z, %C           ; %Z is macro local variable
 	let c, 0
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$0, a
 	let a, 0
 	hi %Z, %C           ; %Z is macro local variable
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$1, a
 
 rule add %A:card, %B:card, const %C:card = instr
 	let a, %B$0
 	lo %Z, %C           ; %Z is macro local variable
 	let c, 0
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$0, a
 	let a, %B$1
 	hi %Z, %C           ; %Z is macro local variable
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$1, a
 
 ;u16 = u16 + u16
 rule add %A:card, %B:card, %C:card = instr
 	let a, %B$0
 	let c, 0
-	add a, a, %C$0
+	add as, ac, %C$0
 	let %A$0, a
 	let a, %B$1
-	add a, a, %C$1
+	add as, ac, %C$1
 	let %A$1, a
 
 ;Signed addition
 rule add %A:int, %B:int, %C:int = instr
 	let a, %B$0
 	let c, 0
-	add a, a, %C$0
+	add as, ac, %C$0
 	let %A$0, a
 	let a, %B$1
-	add a, a, %C$1
+	add as, ac, %C$1
 	let %A$1, a
 
 ;TODO: Remove
@@ -687,11 +658,11 @@ rule add %A:int, %B:int, const %C:int = instr
 	let a, %B$0
 	lo %Z, %C           ; %Z is macro local variable
 	let c, 0
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$0, a
 	let a, %B$1
 	hi %Z, %C           ; %Z is macro local variable
-	add a, a, %Z
+	add as, ac, %Z
 	let %A$1, a
 
 ;3-byte Increment
@@ -705,12 +676,12 @@ rule add %A:long,%A:long,1 = instr
   
 rule add x,x,1 = "   inx"
 rule add y,y,1 = "   iny"
-rule add a,a,%A$const %B = "   adc %A+%B"
+rule add as, ac, %A$const %B = "   adc %A+%B"
 rule add %A$const %B, %A$%B, 1 = "   inc %A+%B"
-rule add a,a,const %A:byte1  = "   adc #%A"
-rule add a,a,%A:byte1 = "   adc %A"
-rule add a,a, %A$x =  "   adc %A,x"
-rule add a,a, %A$y =  "   adc %A,y"
+rule add as, ac, const %A:byte1  = "   adc #%A"
+rule add as, ac,%A:byte1 = "   adc %A"
+rule add as, ac, %A$x =  "   adc %A,x"
+rule add as, ac, %A$y =  "   adc %A,y"
 
 rule add %A:byte1,%A,1 = "   inc %A"
 
@@ -768,14 +739,14 @@ rule mula %A:byte, 3    = instr
 	let a, %A			; lda %B
 	mul a, a, 2   ; asl
 	let c, 0
-	add a, a, %A
+	add as, ac, %A
 
 rule mula %A:byte, 5    = instr
 	let a, %A			; lda %B
 	mul a, a, 2   ; asl
 	mul a, a, 2   ; asl
 	let c, 0
-	add a, a, %A
+	add as, ac, %A
 
 rule mul %A:byte, %A:byte, 3	= instr
 	mula %A, 3
@@ -1476,6 +1447,18 @@ rule not %A:byte, %B:byte = instr
 rule ifoverflow %A = "   jcs %A"
 rule ifnoverflow %A = "   jcc %A"
 
+;if u8 == u8
+rule ifeq %L,%B:byte,%C:byte   = instr
+  let a, %B          ; lda %A
+  sub cznv, a, %C    ; cmp %C
+  ifeq %L, z, 1      ; jeq %A
+
+;if s8 == s8
+rule ifeq %L,%B:sbyte,%C:sbyte   = instr
+  let a, %B          ; lda %A
+  sub cznv, a, %C    ; cmp %C
+  ifeq %L, z, 1      ; jeq %A
+
 ;if s8 = u8
 rule ifeq %L,%B:sbyte,%C:byte   = instr
   let a, %B
@@ -1492,19 +1475,24 @@ rule ifeq %L,%B:byte,%C:sbyte   = instr
   ifeq %L, z, 1 	 
   label _loc
 
-;if u8 = u8
-;if s8 = s8
-rule ifeq %L,%B:byte1,%C:byte1   = instr
-  let a, %B          ; lda %A
-  sub cznv, a, %C   ; cmp %C
-  ifeq %L, z, 1      ; jeq %A
-
 ;shortcut for A register
 rule ifne %A,a,%C:byte1   = instr
   sub cznv, a, %C   ; cmp %C
   ifne %A, z, 1      ; jne %A
 
- ;if s8 <> u8
+;if u8 <> u8
+rule ifne %L,%A:byte,%B:byte   = instr
+  let a, %A          ; lda %L
+  sub cznv, a, %B   ; cmp %B
+  ifne %L, z, 1      ; jne %L
+
+;if s8 <> s8
+rule ifne %L,%A:sbyte,%B:sbyte   = instr
+  let a, %A          ; lda %L
+  sub cznv, a, %B   ; cmp %B
+  ifne %L, z, 1      ; jne %L
+
+;if s8 <> u8
 rule ifne %L,%A:sbyte,%B:byte   = instr
   let a, %A
   ifeq %L, n, 1
@@ -1517,13 +1505,6 @@ rule ifne %L,%A:byte,%B:sbyte   = instr
   ifeq %L, n, 1
 	sub cznv, a, %A
   ifne %L, z, 1
-
-;if u8 <> u8
-;if s8 <> s8
-rule ifne %L,%A:byte1,%B:byte1   = instr
-  let a, %A          ; lda %L
-  sub cznv, a, %B   ; cmp %B
-  ifne %L, z, 1      ; jne %L
 
 ;u8 <= u8
 rule ifle %L,%A:byte,%B:byte   = instr

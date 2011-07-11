@@ -95,6 +95,18 @@ void MarkBlockAsUnprocessed(InstrBlock * block)
 	}
 }
 
+Bool VarInTuple(Var * var, Var * find_var)
+{
+	if (var == find_var) return true;
+	if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && var->adr != NULL) {
+		return VarInTuple(var->adr, find_var);
+	}
+	if (var->mode == MODE_TUPLE) {
+		return VarInTuple(var->adr, find_var) || VarInTuple(var->var, find_var);
+	}
+	return false;
+}
+
 UInt8 VarIsLiveInBlock(Var * proc, InstrBlock * block, Var * var)
 /*
 Purpose:
@@ -120,8 +132,12 @@ Purpose:
 		if (VarUsesVar(i->arg1, var) || VarUsesVar(i->arg2, var)) { res1 = 1; goto done; }
 
 //		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
-		if (i->result == var) { res1 = 0; goto done;}
+
+//		if (i->result == var) { res1 = 0; goto done;}
+		if (VarInTuple(i->result, var)) { res1 = 0; goto done;}
 		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
+
+
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
 				if (var->mode == MODE_ELEMENT) {
@@ -154,23 +170,21 @@ void MarkProcLive(Var * proc)
 	//TODO: We should actually step through the code, as procedure may access and modify global variables
 	Var * var;
 
-	var = VarFirstLocal(proc);
-	while(var != NULL) {
+	FOR_EACH_LOCAL(proc, var)
 		if (FlagOff(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
 			VarMarkDead(var);
 		} else {
 			if (FlagOn(var->submode, SUBMODE_ARG_OUT)) VarMarkDead(var);
 		}
-		var = VarNextLocal(proc, var);
-	}
+	NEXT_LOCAL
 
 	// Procedure may use same variable both for input and output (for example using aliasing)
 	// a:proc >x@_a <y@_a
 	// In such case, marking variable as live has precedence.
 
-	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+	FOR_EACH_LOCAL(proc, var)
 		if (FlagOn(var->submode, SUBMODE_ARG_IN)) VarMarkLive(var);
-	}
+	NEXT_LOCAL
 }
 
 void VarMarkNextUse(Var * var, Instr * i)
@@ -188,7 +202,7 @@ Bool VarDereferences(Var * var)
 {
 	if (var != NULL) {
 		if (var->mode == MODE_DEREF) return true;
-		if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) return VarDereferences(var->adr) || VarDereferences(var->var);
+		if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE || var->mode == MODE_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
 	}
 	return false;
 }
@@ -202,6 +216,16 @@ Bool VarIsDead(Var * var)
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);
 	}
+}
+
+UInt32 BlkInstrCount(InstrBlock * blk)
+{
+	Instr * i;
+	UInt32 n = 0;
+	if (blk != NULL) {
+		for(i = blk->first; i != NULL; i = i->next) n++;
+	}
+	return n;
 }
 
 Bool OptimizeLive(Var * proc)
@@ -236,9 +260,9 @@ Bool OptimizeLive(Var * proc)
 //				printf("");
 //			}
 
-//			if (StrEqual(var->name, "x") /* && var->var->mode == MODE_CONST && var->var->n == 0*/) {
-//				printf("");
-//			}
+			if (StrEqual(var->name, "z") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
+				printf("");
+			}
 
 			// Non-local variables (except registers) are always considered live
 			if (!VarIsLocal(var, proc) && !VarIsReg(var)) {
@@ -271,6 +295,8 @@ Bool OptimizeLive(Var * proc)
 				VarMarkLive(var);
 			}
 		}
+
+		n = BlkInstrCount(blk);
 
 		for(i = blk->last; i != NULL; i = i->prev, n--) {
 
