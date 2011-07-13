@@ -11,11 +11,11 @@
 type bgPal:array(15)
 type bgNameTable:array(1023)
 
-bgLoadPal:proc a@(_a,_x):adr of bgPal @_a @_x @_y @_TEMPB1
-bgLoadNameTable:proc a@(_a,_x):adr of bgNameTable @_a @_x @_y @_TEMPB1 
+bgLoadPal:proc a@(cpu.a,cpu.x):adr of bgPal @cpu.a @cpu.x @cpu.y @_TEMPB1
+bgLoadNameTable:proc a@(cpu.a,cpu.x):adr of bgNameTable @cpu.a @cpu.x @cpu.y @_TEMPB1 
 
 
 ; Information : Sets Background Scroll Position (x position , y position)
-bgSetScrolling:macro x:byte y:byte=
+bgSetScrolling:macro x:byte,y:byte=
 			   PPU_SCROLL_POS = x
 			   PPU_SCROLL_POS = y

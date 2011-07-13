@@ -39,10 +39,10 @@ Purpose:
 
 	for(i = 0; i < CPU->REG_CNT; i++) {
 		reg = CPU->REG[i];
-		if (FlagOff(reg->flags, VarUsed)) {
+		if (reg->mode == MODE_VAR && FlagOff(reg->flags, VarUsed)) {
 			if (reg->type->range.max == 1) continue;			// exclude flag registers
-			if (byte_size != VarByteSize(reg)) continue;			// exclude registers with different size
-			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;	// out registers can not be used to replace variables
+			if (byte_size != VarByteSize(reg)) continue;		// exclude registers with different size
+			if (OutVar(reg) || InVar(reg)) continue;	// out registers can not be used to replace variables
 			if (reg->var != NULL) continue;
 			VarUseReg(reg);
 			return reg;

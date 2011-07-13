@@ -10,7 +10,7 @@
 type sprPal:array(15)
 
 ;--------------------------------------------FUNCTIONS FOR SPRITE-MODULE---------------------------------------------
-sprLoadPal:proc a@(_a,_x):adr of sprPal @_a @_x @_y @_TEMPB1
+sprLoadPal:proc a@(cpu.a,cpu.x):adr of sprPal @cpu.a @cpu.x @cpu.y @_TEMPB1
 
 ;Information: Loads Sprite-Pal to the PPU (gfx chip)
 ;sprLoadPal:macro a:sprPal = 
@@ -22,10 +22,11 @@ sprLoadPal:proc a@(_a,_x):adr of sprPal @_a @_x @_y @_TEMPB1
 
 ;Information: Function write's one sprite to OAM ram
 ;  Important: For moving more Sprites on the screen,its better to use the sprite_dma module
-setSprite:proc(<oamnr:byte <nr:byte <x:byte <y:byte) = 
+setSprite:proc(oamnr:0..63, nr:byte, x:byte, y:byte) = 
 		  PPU_OAM_ADR  = 0 ; write to oam index nr * 4
-		  PPU_OAM_ADR  = oamnr * 4; 
+		  PPU_OAM_ADR  = lo (oamnr * 4); 
 		  PPU_OAM_DATA = y
 		  PPU_OAM_DATA = nr
 		  PPU_OAM_DATA = 0
 		  PPU_OAM_DATA = x
+		

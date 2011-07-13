@@ -315,6 +315,8 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(CheckValues);
 	ProcessUsedProc(TypeInfer);
 
+	if (ERROR_CNT > 0) goto failure;
+
 	//***** Translation
 	ProcessUsedProc(ProcTranslate);
 
@@ -415,7 +417,6 @@ int main(int argc, char *argv[])
 		EmitCloseBuffer();
 		result = system(command);
 	}
-
 done:	
 	PrintCleanup();
 	exit(result);

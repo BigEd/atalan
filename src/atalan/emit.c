@@ -100,6 +100,11 @@ void Print(char * text)
 */
 }
 
+void PrintChar(char c)
+{
+	fputc(c, G_PRINT_OUTPUT);
+}
+
 void PrintEOL()
 {
 	Print("\n");

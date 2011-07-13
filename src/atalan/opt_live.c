@@ -97,6 +97,7 @@ void MarkBlockAsUnprocessed(InstrBlock * block)
 
 Bool VarInTuple(Var * var, Var * find_var)
 {
+	if (var == NULL) return false;
 	if (var == find_var) return true;
 	if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && var->adr != NULL) {
 		return VarInTuple(var->adr, find_var);
