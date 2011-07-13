@@ -37,12 +37,22 @@ GLOBAL UInt32 LOGIC_ERROR_CNT;
 
 UInt16 BOOKMARK_LINE_NO;
 UInt16 BOOKMARK_LINE_POS;
+Instr * ERR_INSTR;
 
 #define STDERR stderr
 
 #define MAX_ERR_ARG_COUNT 26
 GLOBAL Var * ERR_ARGS[MAX_ERR_ARG_COUNT];
 static UInt8 ERR_ARG_POS;
+FILE * ERR_OLD_DESTINATION;
+UInt8 ERR_OLD_COLOR;
+
+void EndErrorReport()
+{
+	PrintEOL();
+	PrintColor(ERR_OLD_COLOR);
+	PrintDestination(ERR_OLD_DESTINATION);
+}
 
 static void ReportError(char * kind, char * text, UInt16 bookmark)
 /*
@@ -61,7 +71,9 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	UInt8 used_args[26];		// list of variables used in error message (in the order of use)
 	UInt8 arg_cnt = 0;
 	Bool no_rep = false;
-	FILE * f;
+	UInt8 color;
+	Bool will_continue = false;
+	UInt16 len;
 
 	if (*text == '$') {
 		name = true;
@@ -73,6 +85,11 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		text++;
 	}
 
+	if (*text == '~') {
+		will_continue = true;
+		text++;
+	}
+
 	i = LINE_NO;
 	token_pos = TOKEN_POS;
 	if (bookmark != 0) {
@@ -80,11 +97,14 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
-	f = PrintDestination(STDERR);
+	ERR_OLD_DESTINATION = PrintDestination(STDERR);
 
+	color = RED+LIGHT;
+	if (*kind == 'W') color = RED+GREEN+LIGHT;
 	line_cnt = 0;
-	PrintColor(RED);
+	ERR_OLD_COLOR = PrintColor(color);
 
+	PrintEOL();
 	if (SRC_FILE != NULL) {
 		fprintf(STDERR, "%s(%d) %s: ", SRC_FILE->name, i, kind);
 	} else {
@@ -131,14 +151,16 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 				if (VarIsIntConst(var)) {
 					PrintInt(var->n);
 				} else {
-					Print("\'");
-					PrintVarUser(var);
-					Print("\'");
+					PrintQuotedVarName(var);
 				}
 
 			} else if (c == '$') {
 				Print("\'");
 				Print(NAME);
+				Print("\'");
+			} else if (c == '*') {
+				Print("\'");
+				Print(OpName(ERR_INSTR->op));
 				Print("\'");
 			}
 
@@ -196,6 +218,9 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 	if (line != NULL) {
 
+		PrintEOL();
+		PrintColor(RED+GREEN+BLUE);
+
 		while(*line == SPC || *line == TAB) {
 			if (show_indent) {
 				if (*line == SPC) Print(".");
@@ -205,27 +230,32 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			if (token_pos > 0) token_pos--;
 		}
 
+		// Print line. If it does contain end new line, print one extra new line.
 		Print(line);
+		len = StrLen(line);
+		if (line[len-1] != '\n') {
+			PrintEOL();
+		}
 
 		if (!show_indent) {
 			if (token_pos > 0) {
 				for(i=0; i<token_pos; i++) {
 					c = line[i];
 					if (c != 9) c = 32;
-					fprintf(STDERR, "%c", c);
+					PrintChar(c);
 				}
 				// There can be some spaces or tabs before at the token pos
 				while((c = line[i]) == SPC || c == TAB) {
-					fprintf(STDERR, "%c", c);
+					PrintChar(c);
 					i++;
 				}
-				fprintf(STDERR, "^\n");
+				Print("^\n");
 			}
 		}
+		PrintColor(color);
 	}
-	fprintf(STDERR, "\n");
-	PrintColor(RED+GREEN+BLUE);
-	PrintDestination(f);
+
+	if (!will_continue) EndErrorReport();
 
 }
 
@@ -319,11 +349,15 @@ UInt16 SetBookmarkLine(Loc * loc)
 		i = blk->last;
 	} while (true);
 
+	ERR_INSTR = loc->i;
 	LINE_NO = i->line_no;
 	BOOKMARK_LINE_NO  = i->line_no;
 	SRC_FILE = i->result;
 	strcpy(LINE, i->line);
 	BOOKMARK_LINE_POS = 0;
+	if (ERR_INSTR != NULL && ERR_INSTR->line_pos != 0) {
+		BOOKMARK_LINE_POS = ERR_INSTR->line_pos - 1;
+	}
 	return 1;
 }
 

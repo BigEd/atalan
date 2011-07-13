@@ -1,4 +1,4 @@
-;********************************
+﻿;********************************
 ;ATALAN NES Platform definition
 ;********************************
 ; changed by Marcel Cevani 03.01.2011
@@ -40,6 +40,15 @@ out INPUT_PAD1_RESET@$4016:byte
 out INPUT_PAD2_RESET@$4017:byte
 in  sequence INPUT_PAD1_READ@$4016:byte
 in  sequence INPUT_PAD2_READ@$4017:byte
+
+;ppu:scope =
+;	ptr:0..$ffff
+	
+;To allow simple addressing like: PPU_OAM_ADR = $23ff
+;rule let ppu.adr, %A:0..$ffff = instr
+;	let PPU_OAM_ADR, %A$0
+;	let PPU_OAM_ADR, %A$1
+	  
 ;------------------------------------------IN/OUT DEFINES FOR THE SYSTEM-MODULE-----------------------------------------
 
 ;--------------------------------------------FUNCTIONS FOR SYSTEM-MODULE---------------------------------------------
@@ -49,7 +58,7 @@ waitvbl:proc =
 
 ;Information: Use this Function to set the Display mode 
 ; parameter : 1 ctrl Byte for PPU 1 REG , 2 ctrl Byte for PPU 2 REG
-setDisplayMode:macro(<ctrl1:byte <ctrl2:byte) =
+setDisplayMode:macro(ctrl1:byte, ctrl2:byte) =
 			   PPU_REG1 = ctrl1
 			   PPU_REG2 = ctrl2
 

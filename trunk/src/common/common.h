@@ -46,6 +46,7 @@ char * StrAllocLen(char * str, UInt16 len);
 Bool   StrEqual(char * str1, char * str2);
 Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #define StrLen(str) strlen(str)
+Int16 StrEditDistance(char * s, char * t);
 
 // Flag (bit) testing and setting
 

@@ -1867,15 +1867,15 @@ rule let a,y      = "   tya"
 ;LDX
 
 rule let x,const %A:byte1   = "   ldx #%A"
-rule let x,%A:byte1        = "   ldx %A"
 rule let x,%A$const %B = "   ldx %A-%A.index.min+%B"
 rule let x,%A$y       = "   ldx %A-%A.index.min,y"
+rule let x,%A:byte1        = "   ldx %A"
 
 ;LDY
 rule let y,const% A:byte1   = "   ldy #%A"
-rule let y,%A:byte1        = "   ldy %A"
 rule let y,%A$const %B = "   ldy %A-%A.index.min+%B"
 rule let y,%A$x       = "   ldy %A-%A.index.min,x"
+rule let y,%A:byte1        = "   ldy %A"
 
 ;LDA
 
@@ -1924,14 +1924,17 @@ rule divc a,a,2 = "   lsr"
 ;rule mul a,a,0 = "   lda #0"
 ;rule mul a,a,1 = "   ;"
 rule mul a,a,2 = "   asl"
-rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
+;rule mul %A:byte,%A:byte,0 = "   lda #0" "   sta %A"
+;TODO: Unrecognized error superfluous )!!!
+;rule mul %A$const %B),%A$%B,2  = "  asl %A-%A.index.min+%B"
+rule mul %A$const %B,%A$%B,2  = "   asl %A-%A.index.min+%B"
+rule mul %A(const %B),%A(%B),2  = "   asl %A-%A.index.min+%B"
 rule mul %A:byte,%A:byte,1 = "   ;"
 rule mul %A:byte,%A:byte,2 = "   asl %A"
 rule mul %A$0,%A$0,2 = "   asl %A-%A.index.min"
 rule mul %A$1,%A$1,2 = "   asl %A-%A.index.min+1"
-rule mul %A(const %B),%A(%B),2  = "  asl %A-%A.index.min+%B"
 ;TODO: This should be rewritten as top level rule
-rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
+;rule mul %A:card,%A:card,0 = "   lda #0" "   sta %A" "   sta %A+1"
 ;rule mul %A:card,%A:card,1 = "   ;"
 
 ;ROL, ROR

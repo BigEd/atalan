@@ -1094,7 +1094,7 @@ Bool InstrIsSelfReferencing(Instr * i)
 	return i != NULL && i->result != NULL && (i->result == i->arg1 || i->result == i->arg2);
 }
 
-Type * FindType(Loc * loc, Var * var);
+Type * FindType(Loc * loc, Var * var, Bool report_errors);
 
 UInt16 g_fb_level;
 
@@ -1167,8 +1167,8 @@ Result:
 			// We have found the same instruction again.
 			// This means, it is part of some loop.
 			if (i == loc->i) {
+				looped = true;
 				if (InstrIsSelfReferencing(i)) {
-					looped = true;
 
 					if (!VarIdentical(i->arg2, i->result)) {
 						var2 = i->arg2;
@@ -1265,7 +1265,7 @@ done2:
 	return blk->type;
 }
 
-Type * FindType(Loc * loc, Var * var)
+Type * FindType(Loc * loc, Var * var, Bool report_errors)
 /*
 Purpose:
 	Find type of variable at specified location.
@@ -1302,35 +1302,26 @@ Result:
 			}
 		}
 
-		// Instruction is in loop and is self referencing.
-		// We were not able to find the type of variable.
-		// TODO: Maybe we do not need this condition?
-
-		if (type == NULL) {
-			if (looped) {
-				return NULL;
-			}
-		}
-
 		// Type was not found. This means, the variable has not been assigned yet (or at least at some path).
 		// In such case, we are not able to infer the type (or infer it completely).
 		// User will be asked to specify the type for the variable.
 		// It also means, we may be using undefined variable!
 
-//		if (type == NULL) {
-//			type = var->type;
-//		}
-
 		if (type->variant == TYPE_UNDEFINED) {
-			if (undefined > 0) {
-				// Input register does not have to be explicitly initialized.
-				if (!InVar(var) && (var->mode == MODE_VAR)) {
-					ErrArg(var);
-					if (paths > 1) {
-						LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
-					} else {
-						LogicWarningLoc("Use of uninitialized variable [A].", loc);
+
+			if (report_errors) {
+				if (undefined > 0) {
+					// Input register does not have to be explicitly initialized.
+					if (!InVar(var) && (var->mode == MODE_VAR)) {
+						ErrArg(var);
+						if (paths > 1) {
+							LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
+						} else {
+							LogicWarningLoc("Use of uninitialized variable [A].", loc);
+						}
 					}
+				} else if (looped) {
+					LogicWarningLoc("looped variable", loc);
 				}
 			}
 		}
@@ -1491,6 +1482,7 @@ Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 
 typedef struct {
 	Bool modified;
+	Bool final_pass;
 } InferData;
 
 void VarConstraints(Loc * loc, Var * var, InferData * d)
@@ -1502,7 +1494,7 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 	if (VarIsArrayElement(var)) {
 		idx = var->var;
 		if (idx->mode == MODE_VAR || idx->mode == MODE_ARG || idx->mode == MODE_CONST) {
-			ti = FindType(loc, idx);
+			ti = FindType(loc, idx, d->final_pass);
 			// Type of the index is undefined, this is restriction
 			if (ti == NULL || ti->variant == TYPE_UNDEFINED) {
 				if (PropagateConstraint(loc, idx, var->adr->type->dim[0], loc->blk, loc->i)) {
@@ -1570,12 +1562,12 @@ Bool InstrInferType(Loc * loc, void * data)
 	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
 
 		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
-			i->type[ARG1] = FindType(loc, i->arg1);
+			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
 			if (i->type[ARG1] != NULL) d->modified = true;
 		}
 
 		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
-			i->type[ARG2] = FindType(loc, i->arg2);
+			i->type[ARG2] = FindType(loc, i->arg2, d->final_pass);
 			if (i->type[ARG2] != NULL) d->modified = true;
 		}
 
@@ -1600,13 +1592,15 @@ Bool InstrInferType(Loc * loc, void * data)
 			//TODO: Result & argument indexes should be checked in separate pass after type inferring
 			if (result->mode == MODE_ELEMENT) {
 				if (result->var->mode == MODE_VAR || result->var->mode == MODE_CONST || result->var->mode == MODE_ARG) {
-					ti = FindType(loc, result->var);
+					ti = FindType(loc, result->var, d->final_pass);
 					if (ti != NULL) {
-						if (!TypeIsSubsetOf(ti, result->adr->type->dim[0])) {
-							ErrArg(VarNewInt(ti->range.max));
-							ErrArg(VarNewInt(ti->range.min));
-							ErrArg(result->adr);
-							LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
+						if (d->final_pass) {
+							if (!TypeIsSubsetOf(ti, result->adr->type->dim[0])) {
+								ErrArg(VarNewInt(ti->range.max));
+								ErrArg(VarNewInt(ti->range.min));
+								ErrArg(result->adr);
+								LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
+							}
 						}
 					} else {
 						// failed to compute index, what does it means?
@@ -1633,19 +1627,21 @@ Bool InstrInferType(Loc * loc, void * data)
 					}
 
 					if (!TypeIsSubsetOf(tr, ti)) {
-						if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
-							ErrArg(result);
-							ErrArg(VarNewInt(ti->range.max));
-							ErrArg(VarNewInt(ti->range.min));
-							ErrArg(VarNewInt(tr->range.max));
-							ErrArg(VarNewInt(tr->range.min));
-							if (TypeIsIntConst(tr)) {
-								LogicWarningLoc("The value [A] does not fit into variable", loc);
+						if (d->final_pass) {
+							if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
+								ErrArg(result);
+								ErrArg(VarNewInt(ti->range.max));
+								ErrArg(VarNewInt(ti->range.min));
+								ErrArg(VarNewInt(tr->range.max));
+								ErrArg(VarNewInt(tr->range.min));
+								if (TypeIsIntConst(tr)) {
+									LogicWarningLoc("The value [A] does not fit into variable", loc);
+								} else {
+									LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", loc);
+								}
 							} else {
-								LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", loc);
+								LogicWarningLoc("Value does not fit into variable", loc);								
 							}
-						} else {
-							LogicWarningLoc("Value does not fit into variable", loc);								
 						}
 					}
 				}
@@ -1691,11 +1687,12 @@ Purpose:
 {
 
 	Instr * i;
-	Type * tr;
+	Type * tr, * tl;
 	Var * var;
 	Loc loc;
 	UInt16 steps;
 	InferData data;
+	UInt32 n;
 
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
@@ -1714,6 +1711,7 @@ Purpose:
 	// 1. For every instruction in the code try to infer the type of it's result
 	// 2. Repeat this until no new result type was inferred
 
+	data.final_pass = false;
 	do {
 
 		steps = 0;
@@ -1732,6 +1730,11 @@ Purpose:
 
 	} while (steps > 1);
 
+	// Perform final pass, which will print error messages.
+	data.final_pass = true;
+	ProcInstrEnum(proc, &InstrInferType, &data);
+	ProcInstrEnum(proc, &InstrConstraints, &data);
+
 
 	// Extend the type of variables to handle
 	// - Check variables, whose types can not be inferred here
@@ -1739,22 +1742,37 @@ Purpose:
 
 	loc.proc = proc;
 	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
-		for(loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next) {
+		for(n = 1, loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next, n++) {
 			i = loc.i;
 
 			if (i->op == INSTR_LINE) continue;
 
 			var = i->result;
-			if (var != NULL && VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
+			if (var != NULL) {
 				tr = i->type[RESULT];
-				if (tr != NULL && tr->variant != TYPE_UNDEFINED && FlagOff(i->flags, InstrRestriction)) {
-					var->type = TypeExpand(var->type, i->type[RESULT]);
-				} else {
-					if (var->type->variant == TYPE_UNDEFINED) {
-						ErrArg(var);
-						LogicErrorLoc("Cannot infer type of variable [A].\nPlease specify the type explicitly.", &loc);
-					}
+				if (VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
+					if (tr != NULL && tr->variant != TYPE_UNDEFINED && FlagOff(i->flags, InstrRestriction)) {
+						var->type = TypeExpand(var->type, i->type[RESULT]);
+					} else {
+						if (var->type->variant == TYPE_UNDEFINED) {
 
+							// For temporary variable, there is no reason to define 
+							if (VarIsTmp(var)) {
+								LogicErrorLoc("Cannot infer type of result of operator [*].", &loc);
+							} else {
+								ErrArg(var);
+								LogicErrorLoc("Cannot infer type of variable [A].\nPlease specify the type explicitly.", &loc);
+							}
+						}
+					}
+				} else if (tr == NULL) {
+					tl = i->type[ARG1];
+					if (tl != NULL) {
+						if (tl->variant == TYPE_SEQUENCE) {
+							ErrArg(var);
+							LogicErrorLoc("Cyclic modification of variable [A].\nVariable will eventually go out of it's defined bounds.\n", &loc);
+						}
+					}
 				}
 			}
 		}

@@ -76,6 +76,80 @@ Var * InstrFindCode(UInt16 code)
 	return var;
 }
 
+static char * g_InstrName[INSTR_CNT] = 
+{
+	"NULL",
+	"", // INSTR_VOID = 0,
+	"<-", //INSTR_LET,		// var, val
+
+	"",   // INSTR_GOTO,
+	"=",  //INSTR_IFEQ,		// must be even!!!.
+	"<>", //INSTR_IFNE,
+	"<",   //INSTR_IFLT,
+	">=",   // INSTR_IFGE,
+	">",   // INSTR_IFGT,
+	"<=",   // INSTR_IFLE,
+	"ov",   // INSTR_IFOVERFLOW,
+	"!ov",   // INSTR_IFNOVERFLOW,
+
+	"",   // INSTR_PROLOGUE,
+	"",   // INSTR_EPILOGUE,
+	"",   // INSTR_EMIT,
+	"",   // INSTR_VARDEF,
+	"",   // INSTR_LABEL,
+	"+",   // INSTR_ADD,
+	"-",   // INSTR_SUB,
+	"*",   // INSTR_MUL,
+	"/",   // INSTR_DIV,
+	"sqrt",   // INSTR_SQRT,
+
+	"and",   // INSTR_AND,
+	"or",   // INSTR_OR,
+
+	"",   // INSTR_ALLOC,
+	"",   // INSTR_PROC,
+	"",   // INSTR_ENDPROC,
+	"",   // INSTR_CALL,
+	"",   // INSTR_VAR_ARG,
+	"",   // INSTR_STR_ARG,			// generate str
+	"",   // INSTR_DATA,
+	"",   // INSTR_FILE,
+	"",   // INSTR_ALIGN,
+	"hi",   // INSTR_HI,
+	"lo",   // INSTR_LO,
+	"ptr",   // INSTR_PTR,
+	"",   // INSTR_ARRAY_INDEX,		// generate index for array
+	"=@",   // INSTR_LET_ADR,
+	"<<",   // INSTR_ROL,				// bitwise rotate right
+	">>",   // INSTR_ROR,				// bitwise rotate left
+	"",   // INSTR_DEBUG,
+	"mod",   // INSTR_MOD,
+	"bitnot",
+	"bitand",
+	"bitor"
+	"bitxor",   // INSTR_XOR,
+	"not",   // INSTR_NOT,
+
+	"",   // INSTR_LINE,				// reference line in the source code
+	"",   // INSTR_INCLUDE,
+	"",   // INSTR_MULA,				// templates for 8 - bit multiply 
+	"",   // INSTR_MULA16,           // templates for 8 - bit multiply 
+
+	"",   // INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
+	"",   // INSTR_DIVCARRY,
+
+	// Following 'instructions' are used in expressions
+	"[",   // INSTR_ELEMENT,		// access array element (left operand is array or reference to array, right is index)
+	",",    // INSTR_LIST,			// create list of two elements
+	"@"     // INSTR_DEREF
+};
+
+
+char * OpName(InstrOp op)
+{
+	return g_InstrName[op];
+}
+
 void InstrDetach(InstrBlock * blk, Instr * first, Instr * last)
 {
 	Instr * next;
@@ -428,6 +502,14 @@ void PrintVarName(Var * var)
 		PrintVarNameNoScope(var);
 	}
 }
+
+void PrintQuotedVarName(Var * var)
+{
+	PrintChar('\'');
+	PrintVarUser(var);
+	PrintChar('\'');
+}
+
 
 void PrintVarVal(Var * var)
 {

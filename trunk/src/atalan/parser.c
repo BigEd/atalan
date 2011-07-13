@@ -38,7 +38,11 @@ Var *  EXP_EXTRA_SCOPE;						// Scope used by expression parsing to find extra v
 
 //TODO: Remove
 Type   EXP_TYPE;			// Type returned by expression
-							// Is modified as the expression gets generated
+
+LineNo  OP_LINE_NO;
+LinePos OP_LINE_POS;				// Position of last parsed binary operator
+
+// Is modified as the expression gets generated
 
 void ParseExpRoot();
 
@@ -556,7 +560,11 @@ Purpose:
 		//TODO: Other than numeric types (
 //		type = TypeCopy(&EXP_TYPE);
 		result = VarAllocScopeTmp(NULL, MODE_VAR, NULL);
-		Gen(op, result, arg1, arg2);
+		result->line_no = OP_LINE_NO;
+		result->line_pos = OP_LINE_POS;
+		GenPos(op, result, arg1, arg2);
+		OP_LINE_NO = 0;
+		OP_LINE_POS = 0;
 	}
 
 	TOP--;
@@ -877,6 +885,45 @@ Syntax:
 	return var;
 }
 
+void ReportSimilarNames(char * name)
+{
+	Var * min[5];
+	Var * v;
+	Int16 min_dist, dist;
+	UInt16 cnt, i;
+	min_dist = 3;
+	v = NULL;
+
+	FOR_EACH_VAR(v)
+		if (v->name != NULL && v->idx == 0) {
+			dist = StrEditDistance(name, v->name);
+			if (dist < min_dist) {
+				min[0] = v;
+				min_dist = dist;
+				cnt = 1;
+			} else if (dist == min_dist) {
+				if (cnt < 5) min[cnt] = v;
+				cnt++;
+			}
+		}
+	NEXT_VAR
+
+	if (cnt > 0) {
+		Print("Did you mean ");
+		if (cnt > 5) cnt = 5;
+		for(i=0; i<cnt; i++) {
+			if (i>0) {
+				if (i == cnt-1) {
+					Print(" or ");
+				} else {
+					Print(" ,");
+				}
+			}
+			PrintQuotedVarName(min[i]);
+		}
+		Print("?\n");
+	}
+}
 
 void ParseOperand()
 {
@@ -966,9 +1013,13 @@ void ParseOperand()
 			}
 
 			if (var == NULL) {
-				SyntaxError("unknown variable [$]");
+				SyntaxError("~unknown variable [$]");
 				//TODO: Try to search in all scopes and list found places
 				//TODO: Try to search using edit distance
+
+				ReportSimilarNames(NAME);
+				EndErrorReport();
+
 				return;
 			}
 no_id:
@@ -1119,23 +1170,39 @@ done:
 	}
 }
 
+Bool NextOpIs(Token tok)
+{
+	Bool r;
+	LinePos line_pos;
+	LineNo line_no;
+
+	line_pos = TOKEN_POS;
+	line_no  = LINE_NO;
+	r = NextIs(tok);
+	if (r) {
+		OP_LINE_NO  = line_no;
+		OP_LINE_POS = line_pos+1;
+	}
+	return r;
+}
+
 void ParseUnary()
 {
-	if (NextIs(TOKEN_MINUS)) {
+	if (NextOpIs(TOKEN_MINUS)) {
 		// Unary minus before X is interpreted as 0 - X
 		BufPush(VarNewInt(0));
 		ParseOperand();
 		InstrBinary(INSTR_SUB);
-	} else if (NextIs(TOKEN_HI)) {
+	} else if (NextOpIs(TOKEN_HI)) {
 		ParseOperand();
 		InstrUnary(INSTR_HI);
-	} else if (NextIs(TOKEN_LO)) {
+	} else if (NextOpIs(TOKEN_LO)) {
 		ParseOperand();
 		InstrUnary(INSTR_LO);
-	}  else if (NextIs(TOKEN_BITNOT)) {
+	}  else if (NextOpIs(TOKEN_BITNOT)) {
 		ParseOperand();
 		InstrUnary(INSTR_NOT);
-	} else if (NextIs(TOKEN_SQRT)) {
+	} else if (NextOpIs(TOKEN_SQRT)) {
 		ParseOperand();
 		InstrUnary(INSTR_SQRT);
 	} else {
@@ -1147,19 +1214,19 @@ void ParseMulDiv()
 {
 	ParseUnary();
 retry:
-	if (NextIs(TOKEN_MUL)) {
+	if (NextOpIs(TOKEN_MUL)) {
 		ParseUnary();
 		if (TOK) {
 			InstrBinary(INSTR_MUL);
 		}
 		goto retry;
-	} else if (NextIs(TOKEN_DIV)) {
+	} else if (NextOpIs(TOKEN_DIV)) {
 		ParseUnary();
 		if (TOK) {
 			InstrBinary(INSTR_DIV);
 		}
 		goto retry;
-	}  else if (NextIs(TOKEN_MOD)) {
+	}  else if (NextOpIs(TOKEN_MOD)) {
 		ParseUnary();
 		if (TOK) {
 			InstrBinary(INSTR_MOD);
@@ -1170,15 +1237,18 @@ retry:
 
 void ParsePlusMinus()
 {
+	LinePos pos;
+
 	ParseMulDiv();
 retry:
-	if (NextIs(TOKEN_PLUS)) {
+	pos = TOKEN_POS;
+	if (NextOpIs(TOKEN_PLUS)) {
 		ParseMulDiv();
 		if (TOK) {
 			InstrBinary(INSTR_ADD);
 		}
 		goto retry;
-	} else if (NextIs(TOKEN_MINUS)) {
+	} else if (NextOpIs(TOKEN_MINUS)) {
 		ParseMulDiv();
 		if (TOK) {
 			InstrBinary(INSTR_SUB);
@@ -1209,13 +1279,13 @@ void ParseBinaryOr()
 {
 	ParseBinaryAnd();
 retry:
-	if (NextIs(TOKEN_BITOR)) {
+	if (NextOpIs(TOKEN_BITOR)) {
 		ParseBinaryAnd();
 		if (TOK) {
 			InstrBinary(INSTR_OR);
 		}
 		goto retry;
-	} else if (NextIs(TOKEN_BITXOR)) {
+	} else if (NextOpIs(TOKEN_BITXOR)) {
 		ParseBinaryAnd();
 		if (TOK) {
 			InstrBinary(INSTR_XOR);
@@ -2399,6 +2469,7 @@ retry:
 
 			var = VarAllocScope(scope, MODE_UNDEFINED, NAME, 0);
 			var->line_no = LINE_NO;
+			var->line_pos = TOKEN_POS;
 			var->file    = SRC_FILE;
 			if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
 			existed = false;
@@ -3231,6 +3302,9 @@ Arguments:
 	no_next_args = false;
 	reg_arg_cnt = 0;
 	arg_no = 0;
+
+	TOP = 0;		// Currently ExpressionParser sets the TOP to 0, so we must do it too.
+	                // In future, we may need to solve it in a better way (ExpressionParser should not do it).
 	first = idx = TOP;
 	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
@@ -3344,15 +3418,12 @@ Syntax: "return" arg*
 
 void ParseMacro(Var * macro)
 {
-//	VarSet args;
 	Var * args[32];
 
-//	VarSetInit(&args);
 	ParseArgs(macro, SUBMODE_ARG_IN, args);
 	if (TOK != TOKEN_ERROR) {
 		GenMacro(macro, args);
 	}
-//	VarSetCleanup(&args);
 }
 
 /*
@@ -3645,4 +3716,6 @@ void ParseInit()
 	SYSTEM_PARSE = true;
 	USE_PARSE = false;
 	EXP_EXTRA_SCOPE = NULL;
+	OP_LINE_POS = 0;
+	OP_LINE_NO  = 0;
 }

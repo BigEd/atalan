@@ -138,6 +138,18 @@ Purpose:
 	GenInternal(op, result, arg1, arg2);
 }
 
+void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	Instr * i;
+	Gen(op, result, arg1, arg2);
+	if (INSTR == NULL) {
+		i = BLK->last;
+	} else {
+		i = INSTR->prev;
+	}
+	i->line_pos = OP_LINE_POS;
+}
+
 void GenLet(Var * result, Var * arg1)
 {
 	Type * rtype, * atype;

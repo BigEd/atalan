@@ -18,6 +18,7 @@ Bool Verbose(Var * proc);
 #define SPC 32
 
 typedef UInt16 LineNo;
+typedef UInt16 LinePos;
 
 typedef enum {
 	TOKEN_VOID = -2,
@@ -115,8 +116,8 @@ typedef struct {
 	char * line;
 	char * prev_line;
 	LineNo line_no;
-	UInt16 line_len;
-	UInt16 line_pos;
+	LinePos line_len;
+	LinePos line_pos;
 	Token   token;
 	Int16   prev_char;
 } ParseState;
@@ -264,6 +265,7 @@ void LogicError(char * text, UInt16 bookmark);
 void LogicErrorLoc(char * text, Loc * loc);
 void InternalError(char * text, ...);
 void Warning(char * text);
+void EndErrorReport();
 
 void InitErrors();
 
@@ -474,6 +476,7 @@ struct VarTag {
 
 	Var *   file;			// file in which the variable has been defined
 	LineNo  line_no;		// line of number, on which the variable has been defined
+	LinePos line_pos;		// position on line at which the variable has been declared
 
 	Var *   current_val;	// current value assigned during optimization
 							// TODO: Maybe this may be variable value.
@@ -694,6 +697,7 @@ void VarEmitAlloc();
 void PrintVar(Var * var);
 void PrintVarName(Var * var);
 void PrintVarUser(Var * var);
+void PrintQuotedVarName(Var * var);
 void PrintScope(Var * scope);
 
 void ProcUse(Var * proc, UInt8 flag);
@@ -791,6 +795,11 @@ struct InstrTag {
 		char * line;
 	};
 
+	// Position on line, on which is the token that generated the instruction.
+	// If 0, it means the position is not specified (previous token should be used)
+
+	LinePos  line_pos;
+
 	// Type of result computed by this instruction
 	// This type may differ from type defined in instruction result variable 
 	// (it may be it's subset).
@@ -868,6 +877,8 @@ void InstrPrint(Instr * i);
 void InstrPrintInline(Instr * i);
 void InstrFree(Instr * i);
 
+char * OpName(InstrOp op);
+
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
 
@@ -918,6 +929,7 @@ void GenBlock(InstrBlock * blk);
 void GenMacro(Var * macro, Var ** args);
 void GenLastResult(Var * var);
 void GenArrayInit(Var * arr, Var * init);
+void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 
 /***********************************************************
@@ -1011,6 +1023,7 @@ void BufPush(Var * var);
 #define STACK_LIMIT 100
 Var *  STACK[STACK_LIMIT];
 UInt16 TOP;
+extern LinePos OP_LINE_POS;				// Position of last parsed binary operator
 
 /*************************************************************
 
@@ -1064,9 +1077,10 @@ UInt8 PrintColor(UInt8 color);
 void PrintHeader(char * text);
 void PrintOptim(char * text);
 void Print(char * text);
+void PrintEOL();
+void PrintChar(char c);
 void PrintInt(Int32 n);
 void PrintRepeat(char * text, UInt16 cnt);
-void PrintEOL();
 
 Rule * InstrRule(Instr * instr);
 Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);

@@ -51,12 +51,12 @@ GLOBAL Var *  SRC_FILE;					// current source file
 GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
 GLOBAL LineNo  LINE_NO;
-GLOBAL UInt16  LINE_LEN;
-GLOBAL UInt16  LINE_POS;				// index of next character in line
+GLOBAL LinePos  LINE_LEN;
+GLOBAL LinePos  LINE_POS;				// index of next character in line
 static LineIndent     LINE_INDENT;
 static Int16    PREV_CHAR;
 
-GLOBAL UInt16  TOKEN_POS;
+GLOBAL LinePos  TOKEN_POS;
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
