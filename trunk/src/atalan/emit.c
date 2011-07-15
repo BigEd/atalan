@@ -325,10 +325,10 @@ Purpose:
 void EmitVar(Var * var, UInt8 format)
 {
 	if (var != NULL) {
-		if (var->mode == MODE_SRC_FILE) {
+		if (var->mode == INSTR_SRC_FILE) {
 			EmitStr(var->name);
 
-		} else if (var->mode == MODE_ELEMENT) {
+		} else if (var->mode == INSTR_ELEMENT) {
 			if (VarIsStructElement(var)) {
 				EmitVar(var->adr, format);
 				EmitStr("+");
@@ -336,14 +336,14 @@ void EmitVar(Var * var, UInt8 format)
 			} else {
 				InternalError("don't know how to emit array element");
 			}
-		} else if (var->mode == MODE_BYTE) {
+		} else if (var->mode == INSTR_BYTE) {
 			InternalError("don't know how to emit byte array element");
 		} else if (var->name != NULL) {
 			// *** Module parameters (4)
 			// When parameter name is emmited, it is prefixed with PARAM_ prefix
-			if (var->mode == MODE_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+			if (var->mode == INSTR_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
 				EmitStr("PARAM_");
-			} else if (var->mode == MODE_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
+			} else if (var->mode == INSTR_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
 				EmitStr("__");
 			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
@@ -559,22 +559,22 @@ Purpose:
 //			printf("");
 //		}
 
-		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == MODE_CONST) continue;
+		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_CONST) continue;
 		if (VarIsReg(var)) continue;
 
 		adr = var->adr;
 		if (
-			   (adr != NULL && !VarIsReg(adr) && (var->mode == MODE_VAR || var->mode == MODE_ARG) && (var->read > 0 || var->write > 0))
-			|| (var->mode == MODE_CONST && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
+			   (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
+			|| (var->mode == INSTR_CONST && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
 		) {
 
-			if (adr != NULL && adr->mode == MODE_CONST && adr->n >= DATA_SEGMENT) continue;
+			if (adr != NULL && adr->mode == INSTR_CONST && adr->n >= DATA_SEGMENT) continue;
 
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
 			instr.arg2 = NULL;
 
-			if (var->mode != MODE_CONST) {
+			if (var->mode != INSTR_CONST) {
 				//n = var->adr; 
 				ov = var->adr;
 			} else {
@@ -595,7 +595,7 @@ void EmitProcedures()
 
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
-		if (var->mode != MODE_TYPE && var->mode != MODE_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
+		if (var->mode != INSTR_TYPE && var->mode != INSTR_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
 			if (var->read > 0) {
 				MemEmptyVar(vardef);
 				vardef.op = INSTR_PROC;
@@ -626,7 +626,7 @@ Purpose:
 	MemEmptyVar(i);
 	i.op = INSTR_INCLUDE;
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		if (var->mode == MODE_SRC_FILE) {
+		if (var->mode == INSTR_SRC_FILE) {
 			if (FlagOff(var->submode, SUBMODE_MAIN_FILE)) {
 
 				strcpy(name, var->name);

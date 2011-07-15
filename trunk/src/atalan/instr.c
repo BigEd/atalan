@@ -136,12 +136,16 @@ static char * g_InstrName[INSTR_CNT] =
 	"",   // INSTR_MULA16,           // templates for 8 - bit multiply 
 
 	"",   // INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
+	"",   // INSTR_ARG_REF
 	"",   // INSTR_DIVCARRY,
 
 	// Following 'instructions' are used in expressions
-	"[",   // INSTR_ELEMENT,		// access array element (left operand is array or reference to array, right is index)
-	",",    // INSTR_LIST,			// create list of two elements
-	"@"     // INSTR_DEREF
+	"",     // INSTR_VAR
+	"",     // INSTR_ARG
+	"#",    // INSTR_ELEMENT,		// access array element (left operand is array or reference to array, right is index)
+	",",    // INSTR_TUPLE,			// create list of two elements
+	"@",    // INSTR_DEREF
+	"."     // INSTR_FIELD
 };
 
 
@@ -403,18 +407,18 @@ Arguments:
 		idx1_type = type->dim[0]	;
 	}
 
-	if (arr->mode == MODE_ELEMENT) {
+	if (arr->mode == INSTR_ELEMENT) {
 
 		// If this is array of array, we may need to initialize index variable differently
 		
-		if (arr->adr->mode == MODE_ELEMENT) {
+		if (arr->adr->mode == INSTR_ELEMENT) {
 			idx1_type = arr->adr->type->dim[0];
-		} else if (arr->adr->mode == MODE_VAR) {
+		} else if (arr->adr->mode == INSTR_VAR) {
 			idx1_type = arr->adr->type->dim[0];
 		}
 
 		range = arr->var;
-		if (range->mode == MODE_RANGE) {
+		if (range->mode == INSTR_RANGE) {
 			min1 = range->adr;
 			max1 = range->var;
 		} else {
@@ -441,7 +445,7 @@ Arguments:
 		label_done = VarNewTmpLabel();
 	}
 
-	if (max1->mode == MODE_CONST) {
+	if (max1->mode == INSTR_CONST) {
 		stop_n = max1->n;
 	
 		nmask = ByteMask(stop_n);
@@ -519,16 +523,16 @@ void PrintVarVal(Var * var)
 
 	if (var == NULL) return;
 
-	if (var->mode == MODE_DEREF) {
+	if (var->mode == INSTR_DEREF) {
 //	if (FlagOn(var->submode, SUBMODE_REF)) {
 		printf("@");
 		var = var->var;
 	}
 
 	if (var->name == NULL) {
-		if (var->mode == MODE_ARG) {
+		if (VarIsArg(var)) {
 			printf("#%ld", var->idx-1);
-		} else if (var->mode == MODE_ELEMENT) {
+		} else if (var->mode == INSTR_ELEMENT) {
 			PrintVarVal(var->adr);
 			if (var->adr->type->variant == TYPE_STRUCT) {
 				printf(".");
@@ -536,7 +540,7 @@ void PrintVarVal(Var * var)
 			} else {
 				printf("(");
 				index = var->var;
-				while(index->mode == MODE_ELEMENT) {
+				while(index->mode == INSTR_ELEMENT) {
 					PrintVarVal(index->adr);
 					printf(",");
 					index = index->var;
@@ -544,7 +548,7 @@ void PrintVarVal(Var * var)
 				PrintVarVal(index);
 				printf(")");
 			}
-		} else if (var->mode == MODE_BYTE) {
+		} else if (var->mode == INSTR_BYTE) {
 			PrintVarVal(var->adr);
 			oc = PrintColor(GREEN+BLUE);
 			Print("$");
@@ -552,9 +556,9 @@ void PrintVarVal(Var * var)
 			PrintVarVal(var->var);
 
 		} else {
-			if (var->mode == MODE_RANGE) {
+			if (var->mode == INSTR_RANGE) {
 				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
-			} else if (var->mode == MODE_TUPLE) {
+			} else if (var->mode == INSTR_TUPLE) {
 				printf("(");
 				PrintVarVal(var->adr);
 				printf(",");
@@ -580,7 +584,7 @@ void PrintVarVal(Var * var)
 		}
 
 		if (var->adr != NULL) {
-			if (var->adr->mode == MODE_TUPLE) {
+			if (var->adr->mode == INSTR_TUPLE) {
 				if (!VarIsReg(var)) {
 					printf("@");
 					PrintVarVal(var->adr);
@@ -605,11 +609,11 @@ void PrintVarArgs(Var * var)
 {
 	Var * arg;
 	printf("(");
-	for(arg = var->next; arg != NULL; arg = arg->next) {
-		if (arg->mode == MODE_ARG && arg->scope == var) {
+	FOR_EACH_LOCAL(var, arg)
+		if (VarIsArg(arg)) {
 			printf(" %s", arg->name);
 		}
-	}
+	NEXT_LOCAL
 	printf(")");
 }
 
@@ -623,9 +627,9 @@ void PrintVarNameUser(Var * var)
 
 void PrintVarUser(Var * var)
 {
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		PrintVarNameUser(var->adr); Print("("); PrintVarUser(var->var); Print(")");
-	} else if (var->mode == MODE_BYTE) {
+	} else if (var->mode == INSTR_BYTE) {
 		PrintVarNameUser(var->adr);
 		Print("$");
 		PrintVarUser(var->var);
@@ -638,7 +642,7 @@ void PrintVar(Var * var)
 {
 	Type * type;
 
-	if (var->mode == MODE_DEREF) {
+	if (var->mode == INSTR_DEREF) {
 		printf("@");
 		var = var->var;
 	}
@@ -646,16 +650,16 @@ void PrintVar(Var * var)
 //		printf("@");
 //	}
 
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		PrintVarName(var->adr);
 		Print("(");
 		PrintVar(var->var);
 		Print(")");
-	} else if (var->mode == MODE_BYTE) {
+	} else if (var->mode == INSTR_BYTE) {
 		PrintVarName(var->adr);
 		Print("$");
 		PrintVar(var->var);
-	} else if (var->mode == MODE_CONST) {
+	} else if (var->mode == INSTR_CONST) {
 		printf("%ld", var->n);
 		return;
 	} else {

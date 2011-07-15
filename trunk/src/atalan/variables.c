@@ -56,7 +56,7 @@ void VarInit()
 
 Var * VarNewRange(Var * min, Var * max)
 {
-	Var * var = VarAlloc(MODE_RANGE, NULL, 0);
+	Var * var = VarAlloc(INSTR_RANGE, NULL, 0);
 
 	var->adr = min;
 	var->var = max;
@@ -71,10 +71,10 @@ Var * VarNewTuple(Var * left, Var * right)
 	if (right == NULL) return left;
 
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == MODE_TUPLE && var->adr == left && var->var == right) return var;
+		if (var->mode == INSTR_TUPLE && var->adr == left && var->var == right) return var;
 	}
 
-	var = VarAllocScope(NO_SCOPE, MODE_TUPLE, NULL, 0);
+	var = VarAllocScope(NO_SCOPE, INSTR_TUPLE, NULL, 0);
 	var->type = TypeTuple();
 	var->adr = left;
 	var->var = right;
@@ -85,10 +85,10 @@ Var * VarNewDeref(Var * adr)
 {
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == MODE_DEREF && var->var == adr) return var;
+		if (var->mode == INSTR_DEREF && var->var == adr) return var;
 	}
 
-	var = VarAlloc(MODE_DEREF, NULL, 0);
+	var = VarAlloc(INSTR_DEREF, NULL, 0);
 	var->var = adr;
 	if (adr->type != NULL && adr->type->variant == TYPE_ADR) {
 		var->type = adr->type->element;
@@ -96,7 +96,7 @@ Var * VarNewDeref(Var * adr)
 	return var;
 }
 
-Var * VarNewOp(VarMode op, Var * arr, Var * idx)
+Var * VarNewOp(InstrOp op, Var * arr, Var * idx)
 /*
 Purpose:
 	Alloc new reference to array element.
@@ -141,7 +141,7 @@ Argument:
 
 Var * VarNewElement(Var * arr, Var * idx)
 {
-	return VarNewOp(MODE_ELEMENT, arr, idx);
+	return VarNewOp(INSTR_ELEMENT, arr, idx);
 }
 
 Var * VarNewByteElement(Var * arr, Var * idx)
@@ -154,7 +154,7 @@ Argument:
 {	
 	//TODO: VarNewByteElement may create simple integer when used with two integer constants
 
-	Var * item = VarNewOp(MODE_BYTE, arr, idx);
+	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
 	item->type = TypeByte();
 	return item;
 /*
@@ -164,12 +164,12 @@ Argument:
 
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == MODE_BYTE) {
+		if (var->mode == INSTR_BYTE) {
 			if (var->adr == arr && var->var == idx) return var;
 		}
 	}
 
-	item = VarAlloc(MODE_BYTE, NULL, 0);
+	item = VarAlloc(INSTR_BYTE, NULL, 0);
 	item->adr = arr;
 	item->var = idx;
 	item->type = TypeByte();
@@ -199,7 +199,7 @@ void EnterLocalScope()
 {
 	Var * var;
 	SCOPE_IDX++;
-	var = VarAlloc(MODE_SCOPE, SCOPE_NAME, SCOPE_IDX);
+	var = VarAlloc(INSTR_SCOPE, SCOPE_NAME, SCOPE_IDX);
 	var->type = TypeScope();
 	var->scope = SCOPE;
 	SCOPE = var;
@@ -222,7 +222,7 @@ Var * VarFindType(char * name, VarIdx idx, Type * type)
 Var * VarNewTmp(long idx, Type * type)
 {
 	Var * var;
-	var = VarAllocScopeTmp(NULL, MODE_VAR, type);
+	var = VarAllocScopeTmp(NULL, INSTR_VAR, type);
 	return var;
 }
 
@@ -244,19 +244,19 @@ Bool VarIsStructElement(Var * var)
 Bool VarIsArrayElement(Var * var)
 {
 	Var * adr;
-	if (var == NULL || var->mode != MODE_ELEMENT) return false;
+	if (var == NULL || var->mode != INSTR_ELEMENT) return false;
 	adr = var->adr;
 //	if (adr == NULL) return false;			// TODO: ELEMENT with NULL adr?
-	if (adr->mode == MODE_DEREF) return true;
+	if (adr->mode == INSTR_DEREF) return true;
 	return adr->type != NULL && adr->type->variant == TYPE_ARRAY;
-//	return var != NULL && var->mode == MODE_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
+//	return var != NULL && var->mode == INSTR_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
 }
 /*
 Bool VarIsOut(Var * var)
 {
 	if (var == NULL) return false;
 	if (FlagOn(var->submode, SUBMODE_OUT)) return true;
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		return VarIsOut(var->adr);
 	}
 	return false;
@@ -267,7 +267,7 @@ Var * VarFindInt(Var * scope, UInt32 n)
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->scope == scope && var->mode == MODE_CONST && var->n == n) return var;
+		if (var->scope == scope && var->mode == INSTR_CONST && var->n == n) return var;
 	NEXT_VAR
 	return NULL;
 }
@@ -281,11 +281,11 @@ Purpose:
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->mode == MODE_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
+		if (var->mode == INSTR_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
 	NEXT_VAR
 
 	//TODO: Integer constants may be in special 'const' scope
-	var = VarAlloc(MODE_CONST, NULL, 0);
+	var = VarAlloc(INSTR_CONST, NULL, 0);
 	var->scope = NULL;
 	var->type = &TINT;
 	var->value_nonempty = true;
@@ -303,7 +303,7 @@ void VarLetStr(Var * var, char * str)
 Var * VarNewStr(char * str)
 {
 	Var * var;
-	var = VarAlloc(MODE_CONST, NULL, 0);
+	var = VarAlloc(INSTR_CONST, NULL, 0);
 	VarLetStr(var, str);
 	return var;
 }
@@ -311,7 +311,7 @@ Var * VarNewStr(char * str)
 Var * VarNewLabel(char * name)
 {
 	Var * var;
-	var = VarAlloc(MODE_LABEL, name, 0);
+	var = VarAlloc(INSTR_VAR, name, 0);
 	var->type = &TLBL;
 	return var;
 }
@@ -337,7 +337,7 @@ Var * FindOrAllocLabel(char * name, UInt16 idx)
 void VarToLabel(Var * var)
 {
 	var->type = &TLBL;
-	var->mode = MODE_VAR;
+	var->mode = INSTR_VAR;
 }
 
 Var * VarNewTmpLabel()
@@ -351,7 +351,7 @@ Var * VarNewTmpLabel()
 }
 
 
-Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
+Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx)
 {
 	Var * var;
 	if (scope == NULL) scope = SCOPE;
@@ -377,7 +377,7 @@ Var * VarAllocScope(Var * scope, VarMode mode, Name name, VarIdx idx)
 
 }
 
-Var * VarAllocScopeTmp(Var * scope, VarMode mode, Type * type)
+Var * VarAllocScopeTmp(Var * scope, InstrOp mode, Type * type)
 /*
 Purpose:
 	Alloc new temporary variable in specified scope.
@@ -403,7 +403,7 @@ Var * VarClone(Var * scope, Var * var)
 	return copy;
 }
 
-Var * VarAlloc(VarMode mode, char * name, VarIdx idx)
+Var * VarAlloc(InstrOp mode, char * name, VarIdx idx)
 /*
 Purpose:
 	Alloc new variable.
@@ -421,7 +421,7 @@ Purpose:
 {
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->scope == scope && var->mode != MODE_UNDEFINED) {
+		if (var->scope == scope && var->mode != INSTR_VOID) {
 			if (var->idx == idx && StrEqual(name, var->name)) break;
 		}
 	}
@@ -505,11 +505,11 @@ Var * VarFind(char * name, VarIdx idx)
 	return var;
 }
 
-Var * VarFindMode(Name name, VarIdx idx, VarMode mode)
+Var * VarFindTypeVariant(Name name, VarIdx idx, TypeVariant type_variant)
 {
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == mode && var->idx == idx && StrEqual(name, var->name)) break;
+		if (var->idx == idx && StrEqual(name, var->name) && (type_variant == TYPE_UNDEFINED || (var->type != NULL && var->type->variant == type_variant))) break;
 	}
 	return var;
 }
@@ -528,12 +528,12 @@ Bool VarIsLabel(Var * var)
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
-	return var->mode == MODE_CONST;
+	return var->mode == INSTR_CONST;
 }
 
 Bool VarIsIntConst(Var * var)
 {
-	return var != NULL && var->mode == MODE_CONST && var->type->variant == TYPE_INT;
+	return var != NULL && var->mode == INSTR_CONST && var->type->variant == TYPE_INT;
 }
 
 Bool VarIsN(Var * var, Int32 n)
@@ -545,7 +545,7 @@ Var * VarNewType(TypeVariant variant)
 {
 	Var * var;
 //	Type * type;
-	var = VarAlloc(MODE_TYPE, NULL, 0);
+	var = VarAlloc(INSTR_TYPE, NULL, 0);
 	var->type = TypeAlloc(variant);
 	return var;
 }
@@ -583,7 +583,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type != NULL) {
-			if (var->mode == MODE_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
+			if (var->mode == INSTR_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
 
 				if (VarIsUsed(var)) {
 					size = 1;	// size of basic element (byte by default)
@@ -637,7 +637,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr == NULL) {		
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr == NULL) {		
 				if (VarIsUsed(var)) {
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -655,7 +655,7 @@ Purpose:
 	// Generate array indexes
 
 	FOR_EACH_VAR(var)
-		if (var->mode == MODE_VAR || var->mode == MODE_CONST) {
+		if (var->mode == INSTR_VAR || var->mode == INSTR_CONST) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
 				if (VarIsUsed(var)) {
@@ -673,7 +673,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == MODE_VAR || var->mode == MODE_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				Gen(INSTR_ORG, NULL, var->adr, NULL);
 				GenLabel(var);
 				GenBlock(var->instr);
@@ -738,10 +738,10 @@ Purpose:
 {
 	if (var == NULL) return false;
 
-	if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+	if (var->mode == INSTR_VAR) {
 		if (FlagOn(var->submode, SUBMODE_REG)) return true;
 		return VarIsReg(var->adr);		// variable address may be register
-	} else if (var->mode == MODE_TUPLE) {
+	} else if (var->mode == INSTR_TUPLE) {
 		return VarIsReg(var->adr) || VarIsReg(var->var);
 	}
 	return false;
@@ -756,7 +756,7 @@ Purpose:
 	Type * type;
 	if (var != NULL) {
 		type = var->type;
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT) {
 			return 1;		//TODO: Compute size in a better way
 		}
 		return TypeSize(type);
@@ -786,7 +786,7 @@ Arguments:
 {
 	Instr * i;
 	InstrBlock * blk;
-	Var * var;
+	Var * var, * label;
 	UInt16 bmk;
 	Loc loc;
 
@@ -841,14 +841,15 @@ Arguments:
 						}
 					}
 */
-					if (i->result != NULL && i->result->mode == MODE_LABEL) {
-						if (FlagOff(i->result->flags, VarLabelDefined)) {
+					label = i->result;
+					if (label != NULL && label->type->variant == TYPE_LABEL) {
+						if (FlagOff(label->flags, VarLabelDefined)) {
 
 							loc.blk = blk;
 							loc.i   = i;
 							bmk = SetBookmarkLine(&loc);
 
-							var = VarFindMode(i->result->name, i->result->idx, MODE_LABEL);
+							var = VarFindTypeVariant(label->name, label->idx, TYPE_LABEL);
 							if (var != NULL) {
 								ErrArg(var);
 								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								
@@ -876,12 +877,12 @@ Purpose:
 	if (var == NULL) return NULL;
 	if (var == from) return to;
 
-	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_RANGE) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_RANGE) {
 		l = VarReplaceVar(var->var, from, to);
 		r = VarReplaceVar(var->adr, from, to);
 		if (l != var->var || r != var->adr) var = VarNewOp(var->mode, l, r);
 
-	} else if (var->mode == MODE_DEREF) {
+	} else if (var->mode == INSTR_DEREF) {
 		l = VarReplaceVar(var->var, from, to);
 		if (l != var->var) var = VarNewDeref(l);
 	}
@@ -928,8 +929,8 @@ Purpose:
 	This means normal variable, argument or reference to array element with constant index.
 */
 {
-	if (var->mode == MODE_VAR || var->mode == MODE_ARG) return true;
-	if (var->mode == MODE_ELEMENT && var->var->mode == MODE_CONST) return true;		// access to constant array element
+	if (var->mode == INSTR_VAR) return true;
+	if (var->mode == INSTR_ELEMENT && var->var->mode == INSTR_CONST) return true;		// access to constant array element
 	return false;
 }
 
@@ -945,9 +946,9 @@ Purpose:
 		if (var == test_var) {
 			uses = true;
 		} else {
-			if (var->mode == MODE_DEREF) {
+			if (var->mode == INSTR_DEREF) {
 				uses = VarUsesVar(var->var, test_var);
-			} else if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE) {
+			} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE) {
 				uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
 			}
 		}
@@ -964,10 +965,10 @@ Purpose:
 	Var * reg;
 
 	reg = var;
-	while(reg != NULL && (reg->mode == MODE_VAR || reg->mode == MODE_ARG)) {
+	while(reg != NULL && reg->mode == INSTR_VAR) {
 		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
 		reg = reg->adr;
-		if (reg != NULL && reg->mode == MODE_TUPLE) return reg;
+		if (reg != NULL && reg->mode == INSTR_TUPLE) return reg;
 	}
 	return var;
 }
@@ -999,7 +1000,7 @@ Var * VarFirstLocal(Var * scope)
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
 {
 	Var * var = arg->next;
-	while(var != NULL && (var->mode != MODE_ARG || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
 	return var;
 }
 
@@ -1007,6 +1008,7 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 {
 	return NextArg(proc, proc, submode);
 }
+
 
 Var * VarField(Var * var, char * fld_name)
 /*
@@ -1046,7 +1048,7 @@ Var * VarEvalConst(Var * var)
 	IntLimit a, idx;
 
 	if (var != NULL) {
-		if (var->mode == MODE_BYTE) {
+		if (var->mode == INSTR_BYTE) {
 			if (VarIsIntConst(var->adr) && VarIsIntConst(var->var)) {
 				a = var->adr->n;
 				idx = var->var->n;
@@ -1071,4 +1073,19 @@ Purpose:
 			var->value_nonempty = true;
 		}
 	}
+}
+
+Bool VarIsInArg(Var * var)
+{
+	return FlagOn(var->submode, SUBMODE_ARG_IN);
+}
+
+Bool VarIsOutArg(Var * var)
+{
+	return FlagOn(var->submode, SUBMODE_ARG_OUT);
+}
+
+Bool VarIsArg(Var * var)
+{
+	return FlagOn(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT);
 }

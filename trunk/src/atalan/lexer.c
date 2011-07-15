@@ -830,7 +830,7 @@ Syntax:
 								
 						// Parse till comma or closing brace
 						if (!SkipOnly) {
-							param = VarAllocScope(SRC_FILE, MODE_CONST, opt_name, 0);
+							param = VarAllocScope(SRC_FILE, INSTR_CONST, opt_name, 0);
 							if (TOK == TOKEN_INT) {
 								param->type    = &TINT;
 								param->n       = LEX.n;
@@ -903,9 +903,9 @@ Purpose:
 		BLK[BLK_TOP].indent    = 0;
 		BLK[BLK_TOP].stop_token = TOKEN_VOID;
 
-		// Reference to file is stored in variable of MODE_SRC_FILE
+		// Reference to file is stored in variable of INSTR_SRC_FILE
 
-		file_var = VarAlloc(MODE_SRC_FILE, filename, 0);
+		file_var = VarAlloc(INSTR_SRC_FILE, filename, 0);
 		file_var->n    = 0;
 		file_var->scope = SRC_FILE;
 		SRC_FILE = file_var;

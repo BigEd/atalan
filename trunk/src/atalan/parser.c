@@ -46,7 +46,7 @@ LinePos OP_LINE_POS;				// Position of last parsed binary operator
 
 void ParseExpRoot();
 
-void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type);
+void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
 void ExpectExpression(Var * result);
 Var * BufPop();
@@ -108,7 +108,7 @@ Var * ParseScope()
 			var = VarFind2(NAME);
 		}
 
-		if (var == NULL || var->mode != MODE_SCOPE) break;
+		if (var == NULL || var->mode != INSTR_SCOPE) break;
 		NextToken();
 
 		scope = var;
@@ -154,7 +154,7 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 	return var;
 }
 
-void ParseArgList(VarMode mode, Type * to_type)
+void ParseArgList(VarSubmode mode, Type * to_type)
 /*
 Purpose:
 	Parse block with list of arguments.
@@ -176,7 +176,7 @@ Purpose:
 			out_part = true;
 		}
 
-		submode = SUBMODE_ARG_IN;
+		submode = mode;
 
 		if (out_part) {
 			submode = SUBMODE_ARG_OUT;
@@ -194,7 +194,7 @@ Purpose:
 		if (NextIs(TOKEN_ADR)) {
 			adr = ParseVariable();
 			if (TOK) {
-				var = VarAllocScopeTmp(to_type->owner, MODE_VAR, adr->type);
+				var = VarAllocScopeTmp(to_type->owner, INSTR_VAR, adr->type);
 				var->adr  = adr;
 				NextIs(TOKEN_EOL);
 				continue;
@@ -202,7 +202,7 @@ Purpose:
 		}
 
 		if (TOK == TOKEN_ID) {
-			ParseAssign(mode, submode, to_type);
+			ParseAssign(INSTR_VAR, submode, to_type);
 			NextIs(TOKEN_COMMA);
 			NextIs(TOKEN_EOL);
 		} else {
@@ -237,7 +237,7 @@ Type * ParseIntType()
 	} else if (TOK == TOKEN_ID) {
 		var = VarFind2(NAME);
 		if (var != NULL) {
-			if (var->mode == MODE_CONST) {
+			if (var->mode == INSTR_CONST) {
 				if (var->type->variant == TYPE_INT) {
 					type = TypeAlloc(TYPE_INT);
 					type->range.min = 0;
@@ -258,7 +258,7 @@ Type * ParseIntType()
 	return type;
 }
 
-Type * ParseType2(VarMode mode)
+Type * ParseType2(InstrOp mode)
 /*
 Purpose:
 	Parse: <int> [".." <int>] | <var> | proc <VarList>
@@ -289,7 +289,7 @@ range:
 		ExpectExpression(NULL);
 		if (TOK) {
 			var = BufPop();
-			if (var->mode == MODE_CONST) {
+			if (var->mode == INSTR_CONST) {
 				type->range.min = var->n;
 			} else {
 				SyntaxError("expected constant expression");
@@ -303,7 +303,7 @@ range:
 			ExpectExpression(NULL);
 			if (TOK) {
 				var = BufPop();
-				if (var->mode == MODE_CONST) {
+				if (var->mode == INSTR_CONST) {
 					type->range.max = var->n;
 				} else {
 					SyntaxError("expected constant expression");
@@ -332,7 +332,7 @@ const_list:
 				while(NextIs(TOKEN_EOL));
 
 				if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-					var = VarAlloc(MODE_CONST, NAME, 0);
+					var = VarAlloc(INSTR_CONST, NAME, 0);
 					NextToken();
 					if (NextIs(TOKEN_EQUAL)) {
 						// Parse const expression
@@ -369,7 +369,7 @@ const_list:
 	// Procedure
 	} else if (NextIs(TOKEN_PROC)) {
 		type = TypeAlloc(TYPE_PROC);
-		ParseArgList(MODE_ARG, type);
+		ParseArgList(SUBMODE_ARG_IN, type);
 		if (TOK) {
 			ProcTypeFinalize(type);
 		}
@@ -377,12 +377,12 @@ const_list:
 	} else if (NextIs(TOKEN_MACRO)) {
 
 		type = TypeAlloc(TYPE_MACRO);
-		ParseArgList(MODE_ARG, type);
+		ParseArgList(SUBMODE_ARG_IN, type);
 
 	// Struct
 	} else if (NextIs(TOKEN_STRUCT)) {
 		type = TypeAlloc(TYPE_STRUCT);
-		ParseArgList(MODE_VAR, type);
+		ParseArgList(SUBMODE_EMPTY, type);
 
 	// Array
 	} else if (NextIs(TOKEN_ARRAY)) {		
@@ -422,7 +422,7 @@ const_list:
 				ExpectExpression(NULL);
 				if (TOK) {
 					var = STACK[0];
-					if (var->mode == MODE_CONST && var->type->variant == TYPE_INT) {
+					if (var->mode == INSTR_CONST && var->type->variant == TYPE_INT) {
 						type->step = var->n;
 					} else {
 						SyntaxError("Expected integer constant");
@@ -456,7 +456,7 @@ const_list:
 	} else if (TOK == TOKEN_ID) {
 		var = ParseVariable();
 		if (TOK != TOKEN_ERROR) {
-			if (mode == MODE_TYPE) {
+			if (mode == INSTR_TYPE) {
 				type = TypeDerive(var->type);
 				// For integer type, constants may be defined
 				if (type->variant == TYPE_INT) goto const_list;
@@ -484,7 +484,7 @@ const_list:
 
 Type * ParseType()
 {
-	return ParseType2(MODE_VAR);
+	return ParseType2(INSTR_VAR);
 }
 
 void ParseCommands();
@@ -559,7 +559,7 @@ Purpose:
 
 		//TODO: Other than numeric types (
 //		type = TypeCopy(&EXP_TYPE);
-		result = VarAllocScopeTmp(NULL, MODE_VAR, NULL);
+		result = VarAllocScopeTmp(NULL, INSTR_VAR, NULL);
 		result->line_no = OP_LINE_NO;
 		result->line_pos = OP_LINE_POS;
 		GenPos(op, result, arg1, arg2);
@@ -613,7 +613,7 @@ Purpose:
 		}
 	}
 unknown_unary:
-	result = VarAllocScopeTmp(NULL, MODE_VAR, RESULT_TYPE);
+	result = VarAllocScopeTmp(NULL, INSTR_VAR, RESULT_TYPE);
 	Gen(op, result, top, NULL);
 done:
 	STACK[TOP-1] = result;
@@ -665,7 +665,7 @@ Purpose:
 {
 	if (idx_type != NULL) {
 		if (!VarMatchType(idx, idx_type)) {
-			if (idx->mode == MODE_CONST) {
+			if (idx->mode == INSTR_CONST) {
 				LogicWarning("array index is out of bounds", bookmark);
 			} else {
 				LogicWarning("array index may get out of bounds", bookmark);
@@ -685,7 +685,7 @@ Syntax:
 	Var * idx = NULL;
 	Var * item;
 
-	if (arr->mode == MODE_ELEMENT && arr->adr->mode == MODE_SCOPE) {
+	if (arr->mode == INSTR_ELEMENT && arr->adr->mode == INSTR_SCOPE) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
 			item = VarFindScope(arr->adr, NAME, 0);
@@ -933,6 +933,7 @@ void ParseOperand()
 	UInt8 arg_no;
 	Bool spaces;
 	Type * type;
+	UInt32 arg_cnt;
 
 	if (TOK == TOKEN_OPEN_P) {
 		ParseParenthesis();
@@ -950,7 +951,7 @@ void ParseOperand()
 					type = TypeAlloc(TYPE_ARRAY);
 				}
 				var = VarNewTmp(0, type);
-				var->mode = MODE_CONST;
+				var->mode = INSTR_CONST;
 
 				GenBegin();
 				Gen(INSTR_FILE, NULL, item, NULL);
@@ -1040,18 +1041,18 @@ no_id:
 					// After the procedure has been called, we must store values of all output register arguments to temporary variables.
 					// This prevents trashing the value in register by some following computation.
 
-					arg = FirstArg(proc, SUBMODE_ARG_OUT);
-					if (arg != NULL) {
-						do {
-							var = arg;
-							if (VarIsReg(arg)) {
-								var = VarNewTmp(0, arg->type);
-								GenLet(var, arg);
-							}
-							BufPush(var);		
-							arg = NextArg(proc, arg, SUBMODE_ARG_OUT);
-						} while (arg != NULL);
-					} else {
+					arg_cnt = 0;
+					FOR_EACH_OUT_ARG(proc, arg)
+						var = arg;
+						if (VarIsReg(arg)) {
+							var = VarNewTmp(0, arg->type);
+							GenLet(var, arg);
+						}
+						BufPush(var);		
+						arg_cnt++;
+					NEXT_OUT_ARG
+
+					if (arg_cnt == 0) {
 						SyntaxError("PROC does not return any result");
 					}
 					return;
@@ -1102,7 +1103,7 @@ indices:
 			if (!spaces) {
 				if (NextIs(TOKEN_DOT)) {
 					//TODO: Why is this?
-					if (var->mode == MODE_ARG) {
+					if (VarIsArg(var)) {
 						var = VarNewElement(var, VarNewStr(NAME));
 						NextToken();
 					} else {
@@ -1347,7 +1348,7 @@ void ParseExpressionType(Type * result_type)
 void ParseExpression(Var * result)
 /*
 Parse expression, performing evaluation if possible.
-If result mode is MODE_CONST, no code is to be generated.
+If result mode is INSTR_CONST, no code is to be generated.
 */
 {
 	Type * type;
@@ -1357,7 +1358,7 @@ If result mode is MODE_CONST, no code is to be generated.
 	} else {
 		type = result->type;
 
-		if (result->mode == MODE_ELEMENT) {
+		if (result->mode == INSTR_ELEMENT) {
 			type = result->adr->type;
 			if (type->variant == TYPE_ARRAY) {
 				RESULT_TYPE = type->element;
@@ -1759,13 +1760,13 @@ void ParseRange(Var ** p_min, Var ** p_max)
 			max = STACK[1];
 			//TODO: Free other variables on stack
 		} else {
-			if (min->mode == MODE_CONST) {
+			if (min->mode == INSTR_CONST) {
 				max = min;
 				min = VarNewInt(0);
 			} else {
-				if (min->mode == MODE_TYPE) {
+				if (min->mode == INSTR_TYPE) {
 					type = min->type;
-				} else if (min->mode == MODE_VAR || min->mode == MODE_ARG) {
+				} else if (min->mode == INSTR_VAR) {
 					type = min->type;
 				}
 		
@@ -1792,13 +1793,13 @@ Purpose:
 	Int32 l;
 	Type * type = TUNDEFINED;
 
-	if (min->mode == MODE_CONST) {
+	if (min->mode == INSTR_CONST) {
 		if (min->type->variant == TYPE_INT) {
 			nmin = min->n;
 		} else {
 			SyntaxError("Range minimum is not integer type");
 		}
-	} else if (min->mode == MODE_VAR || min->mode == MODE_ARG) {
+	} else if (min->mode == INSTR_VAR) {
 		if (min->type->variant == TYPE_INT) {
 			nmin = min->type->range.min;
 			nmax = min->type->range.max;
@@ -1807,13 +1808,13 @@ Purpose:
 		}
 	}
 
-	if (max->mode == MODE_CONST) {
+	if (max->mode == INSTR_CONST) {
 		if (max->type->variant == TYPE_INT) {
 			if (max->n > nmax) nmax = max->n;
 		} else {
 			SyntaxError("Range maximum is not integer type");
 		}
-	} else if (max->mode == MODE_VAR) {
+	} else if (max->mode == INSTR_VAR) {
 		if (max->type->variant == TYPE_INT) {
 			l = max->type->range.max;
 			if (l > nmax) nmax = l;
@@ -1864,7 +1865,7 @@ Syntax:
 				if (TOK) {
 					type = TypeAllocRange(min, max);
 					if (TOK) {
-						var = VarAlloc(MODE_VAR, name, 0);
+						var = VarAlloc(INSTR_VAR, name, 0);
 						var->type = type;
 					}
 				}
@@ -2001,18 +2002,18 @@ Syntax:
 		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
 		//    to set overflow flag.
 
-		if (max->mode == MODE_CONST) {
+		if (max->mode == INSTR_CONST) {
 			n = max->n;
 			nmask = 0xff;
 			while(n > nmask) nmask = (nmask << 8) | 0xff;
 
-			if (n == nmask && (step->mode != MODE_CONST || step->n > 255)) {
+			if (n == nmask && (step->mode != INSTR_CONST || step->n > 255)) {
 				GenInternal(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
 				goto var_done;
-			} else if (step->mode == MODE_CONST) {
+			} else if (step->mode == INSTR_CONST) {
 
 				// 2. Min,max,step are constants, in such case we may use IFNE and calculate correct stop value
-				if (min->mode == MODE_CONST) {
+				if (min->mode == INSTR_CONST) {
 					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
 					n = n & nmask;
 					max = VarNewInt(n);
@@ -2031,7 +2032,7 @@ Syntax:
 		}
 
 		// If step is 1, it is not necessary to test the overflow
-		if (step->mode != MODE_CONST || step->n != 1) {
+		if (step->mode != INSTR_CONST || step->n != 1) {
 			GenInternal(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
 		}
 no_overflow:
@@ -2143,7 +2144,7 @@ Arguments:
 			item = STACK[0];
 		}
 
-		if (item->mode == MODE_CONST) {
+		if (item->mode == INSTR_CONST) {
 			if (item->type->variant != TYPE_ARRAY) {
 				if (!VarMatchType(item, item_type)) {
 					LogicError("value does not fit into array", bookmark);
@@ -2211,7 +2212,7 @@ Bool VarIsImplemented(Var * var)
 	// Type declarations do not need to be implemented
 	// (we think of them as being implemented by compiler).
 
-	if (var->mode == MODE_TYPE) return true;
+	if (var->mode == INSTR_TYPE) return true;
 
 	// Macros and procedures are considered imp
 
@@ -2307,7 +2308,7 @@ dot:
 					}
 				}
 
-				if (adr->mode == MODE_SCOPE) {
+				if (adr->mode == INSTR_SCOPE) {
 					SyntaxError("scope can not be used as address");
 				} 
 				// name(slice)
@@ -2328,17 +2329,20 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 {
 	Var * arg, * tmp;
 
-	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
-		if (VarIsReg(arg)) {
-			tmp = VarAllocScopeTmp(proc, MODE_VAR, arg->type);
-			ProcReplaceVar(proc, arg, tmp);
+//	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
+	FOR_EACH_LOCAL(proc, arg)
+		if (FlagOn(arg->submode, submode)) {
+			if (VarIsReg(arg)) {
+				tmp = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
+				ProcReplaceVar(proc, arg, tmp);
 
-			if (submode == SUBMODE_ARG_IN) {
-				InstrInsert(proc->instr, i, INSTR_LET, tmp, arg, NULL);
-			} else {
-				InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
+				if (submode == SUBMODE_ARG_IN) {
+					InstrInsert(proc->instr, i, INSTR_LET, tmp, arg, NULL);
+				} else {
+					InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
+				}
 			}
-		}
+			}
 	}
 }
 
@@ -2411,7 +2415,7 @@ void ParseProcBody(Var * proc)
 
 }
 
-void ParseAssign(VarMode mode, VarSubmode submode, Type * to_type)
+void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type)
 /*
 Purpose:
 	Parse variable assignment/declaration.
@@ -2464,10 +2468,10 @@ retry:
 		if (var == NULL) {			
 
 			// We need to prevent the variable from finding itself in case it has same name as type from outer scope
-			// This is done by assigning it mode MODE_UNDEFINED (search ignores such variables).
+			// This is done by assigning it mode INSTR_VOID (search ignores such variables).
 			// Real mode is assigned when the variable type is parsed.
 
-			var = VarAllocScope(scope, MODE_UNDEFINED, NAME, 0);
+			var = VarAllocScope(scope, INSTR_VOID, NAME, 0);
 			var->line_no = LINE_NO;
 			var->line_pos = TOKEN_POS;
 			var->file    = SRC_FILE;
@@ -2479,7 +2483,7 @@ retry:
 
 			var->submode = submode;
 		} else {
-			if (var->mode == MODE_SCOPE) {
+			if (var->mode == INSTR_SCOPE) {
 				NextToken();
 				scope = var;
 
@@ -2501,9 +2505,9 @@ no_dot:
 
 		//===== Array index like ARR(x, y)
 
-		if (mode != MODE_CONST && mode != MODE_ARG && mode != MODE_TYPE && !Spaces()) {
+		if (mode != INSTR_CONST && mode != INSTR_TYPE && !Spaces()) {
 			if (TOK == TOKEN_OPEN_P) {
-				if (var->mode != MODE_UNDEFINED) {
+				if (var->mode != INSTR_VOID) {
 					var = ParseArrayElement(var);
 				} else {
 					SyntaxErrorBmk("Array variable [A] is not declared", bookmark);
@@ -2548,7 +2552,7 @@ parsed:
 
 		// Scope
 		if (NextIs(TOKEN_SCOPE)) {
-			mode = MODE_SCOPE;
+			mode = INSTR_SCOPE;
 			type = TypeScope();
 			is_assign = true;
 
@@ -2581,7 +2585,7 @@ parsed:
 			var->scope = SCOPE;
 		}
 
-		if (var->mode == MODE_UNDEFINED) {
+		if (var->mode == INSTR_VOID) {
 
 			var->mode = mode;
 
@@ -2590,7 +2594,7 @@ parsed:
 				SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
 				// Definition of named constant assigned to type (name:xxx = 34)
-				if (var->mode == MODE_CONST && FlagOff(submode, SUBMODE_PARAM)) {
+				if (var->mode == INSTR_CONST && FlagOff(submode, SUBMODE_PARAM)) {
 					if (var->type->variant != TYPE_UNDEFINED) {
 						TypeAddConst(var->type, var);
 					}
@@ -2609,20 +2613,20 @@ parsed:
 				if (adr != NULL) {
 
 					// We are parsing procedure or macro argument
-					if (adr->mode == MODE_VAR) {
+					if (adr->mode == INSTR_VAR) {
 						var->type = adr->type;
-					} else if (adr->mode == MODE_TUPLE) {
+					} else if (adr->mode == INSTR_TUPLE) {
 						is_assign = true;
-					} else if (adr->mode == MODE_ELEMENT) {
+					} else if (adr->mode == INSTR_ELEMENT) {
 						is_assign = true;
 						var->type = adr->type;
 						idx = adr->var;
 
 						// For array ranges, define type as array(0..<range_size>) of <array_element>
 
-						if (idx->mode == MODE_RANGE) {
+						if (idx->mode == INSTR_RANGE) {
 							min = idx->adr; max = idx->var;
-							if (min->mode == MODE_CONST && max->mode == MODE_CONST) {
+							if (min->mode == INSTR_CONST && max->mode == INSTR_CONST) {
 								var->type = TypeAlloc(TYPE_ARRAY);
 								var->type->dim[0] = TypeAllocInt(0, max->n - min->n);
 								var->type->element = adr->adr->type->element;
@@ -2660,13 +2664,13 @@ parsed:
 			ErrArgClear();
 			ErrArg(var);
 
-			if (var->mode == MODE_CONST && existed) {
+			if (var->mode == INSTR_CONST && existed) {
 				SyntaxError("Assigning value to constant [A].");
 				continue;
-			} else if (var->mode == MODE_TYPE) {
+			} else if (var->mode == INSTR_TYPE) {
 				SyntaxError("Assigning value to type [A].");
 				continue;
-			} else if (var->mode == MODE_VAR && FlagOn(var->submode, SUBMODE_IN) && FlagOff(var->submode, SUBMODE_OUT)) {
+			} else if (var->mode == INSTR_VAR && FlagOn(var->submode, SUBMODE_IN) && FlagOff(var->submode, SUBMODE_OUT)) {
 				SyntaxError("Assigning value to read only register [A].");
 				continue;
 			}
@@ -2683,7 +2687,7 @@ parsed:
 				// Initialization of array
 				// Array is initialized as list of constants.
 
-				if (typev == TYPE_ARRAY && var->mode == MODE_CONST) {
+				if (typev == TYPE_ARRAY && var->mode == INSTR_CONST) {
 					flexible = type->dim[0]->range.flexible;
 					i = ParseArrayConst(var);
 					if (flexible) {
@@ -2695,7 +2699,7 @@ parsed:
 
 					if (TOK == TOKEN_STRING) {
 						// We may assign strings to array references
-						if (var->mode == MODE_ELEMENT || var->mode == MODE_VAR) {
+						if (var->mode == INSTR_ELEMENT || var->mode == INSTR_VAR) {
 //							if (MACRO_FORMAT == NULL) {
 //								MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
 //							}
@@ -2707,7 +2711,7 @@ parsed:
 							} else {
 								SyntaxError("printing into array not supported by the platform");
 							}
-						} else if (var->mode == MODE_CONST) {
+						} else if (var->mode == INSTR_CONST) {
 							VarLetStr(var, NAME);
 							NextToken();
 						} else {
@@ -2738,9 +2742,9 @@ parsed:
 
 								item = STACK[stack];
 
-								if (mode == MODE_ARG) {
+								if (FlagOn(submode, SUBMODE_ARG_IN) || FlagOn(submode, SUBMODE_ARG_OUT)) {		// mode == INSTR_ARG
 									var->var = item;
-								} else if (var->mode == MODE_CONST) {
+								} else if (var->mode == INSTR_CONST) {
 									var->n = item->n;
 									var->value_nonempty = item->value_nonempty;
 									// Set the type based on the constant
@@ -2760,7 +2764,7 @@ parsed:
 									if (var->type == NULL) {
 
 										// Variable is initialized by constant, set the type to n..n
-										if (item->mode == MODE_CONST) {
+										if (item->mode == INSTR_CONST) {
 											if (item->type->variant == TYPE_INT) {
 												var->type = TypeAllocInt(item->n, item->n);
 											} else {
@@ -2789,7 +2793,7 @@ parsed:
 									}
 */
 									// Array assignment
-//									if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
+//									if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 //										GenArrayInit(var, item);
 //									} else {
 										// If the result is stored into temporary variable, we may direct the result directly to the assigned variable.
@@ -2833,7 +2837,7 @@ parsed:
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
-		if (var->mode == MODE_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+		if (var->mode == INSTR_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
 			item = VarFindScope2(SRC_FILE, var->name);
 			if (item != NULL) {
 				VarLet(var, item);
@@ -2849,7 +2853,7 @@ parsed:
 
 	if (TOK != TOKEN_ERROR) {
 		if (!is_assign) {
-			if (mode != MODE_ARG) {
+			if (FlagOff(submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
 				SyntaxError("expects : or =");
 			}
 		}
@@ -3236,8 +3240,8 @@ Purpose:
 					// If the parsed value is element, we need to store it to temporary variable first.
 					// Otherwise the code to access the element would get generated into list of arguments.
 
-					if (var->mode == MODE_ELEMENT) {
-						var2 = VarAllocScopeTmp(NULL, MODE_VAR, var->adr->type->element);
+					if (var->mode == INSTR_ELEMENT) {
+						var2 = VarAllocScopeTmp(NULL, INSTR_VAR, var->adr->type->element);
 						GenLet(var2, var);
 						var = var2;
 					}
@@ -3449,10 +3453,10 @@ void ParseId()
 			}
 		}
 	}
-	ParseAssign(MODE_VAR, SUBMODE_EMPTY, NULL);
+	ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL);
 }
 */
-void ParseDeclarations(VarMode mode, VarSubmode submode)
+void ParseDeclarations(InstrOp mode, VarSubmode submode)
 /*
 Purpose:
 	Parse list of declarations of variables of specified mode and submode.
@@ -3497,7 +3501,7 @@ void AssertVar(Var * var)
 	char buf[100];
 
 	if (var == NULL) return;
-	if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && !VarIsReg(var) && var->name != NULL) {
+	if (var->mode == INSTR_VAR && !VarIsReg(var) && var->name != NULL) {
 		buf[0] = ' ';
 		StrCopy(buf+1, var->name);
 		StrCopy(buf + 1+ StrLen(var->name), " = ");
@@ -3595,13 +3599,13 @@ void ParseCommands()
 		// Module parameters are declared in the same way as constant, only prefixed with 'param' keyword.
 		case TOKEN_PARAM: 
 			NextToken();
-			ParseDeclarations(MODE_CONST, SUBMODE_PARAM); break;
+			ParseDeclarations(INSTR_CONST, SUBMODE_PARAM); break;
 		case TOKEN_CONST: 
 			NextToken();
-			ParseDeclarations(MODE_CONST, SUBMODE_EMPTY); break;
+			ParseDeclarations(INSTR_CONST, SUBMODE_EMPTY); break;
 		case TOKEN_TYPE2:  
 			NextToken();
-			ParseDeclarations(MODE_TYPE, SUBMODE_EMPTY); break;
+			ParseDeclarations(INSTR_TYPE, SUBMODE_EMPTY); break;
 		case TOKEN_IN:
 			submode = SUBMODE_IN;
 			NextToken();
@@ -3611,12 +3615,12 @@ void ParseCommands()
 			if (NextIs(TOKEN_OUT)) {
 				submode |= SUBMODE_OUT;
 			}
-			ParseDeclarations(MODE_VAR, submode); 
+			ParseDeclarations(INSTR_VAR, submode); 
 			break;
 		case TOKEN_OUT:  
 			submode = SUBMODE_OUT;
 			NextToken();
-			ParseDeclarations(MODE_VAR, SUBMODE_OUT);	
+			ParseDeclarations(INSTR_VAR, SUBMODE_OUT);	
 			break;
 
 		case TOKEN_USE:
@@ -3648,7 +3652,7 @@ void ParseCommands()
 
 		case TOKEN_ID:
 		case TOKEN_DOT:
-			ParseAssign(MODE_VAR, SUBMODE_EMPTY, NULL); 
+			ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL); 
 			break;
 
 		case TOKEN_RULE: 

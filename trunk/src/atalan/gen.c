@@ -117,7 +117,7 @@ void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
 		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
-			if (arg1->mode == MODE_CONST) {
+			if (arg1->mode == INSTR_CONST) {
 				var = arg1; arg1 = arg2; arg2 = var;
 
 				op = OpRelSwap(op);
@@ -209,29 +209,29 @@ Purpose:
 	// If this is element reference and either array or index is macro argument,
 	// create new array element referencing actual array and index.
 		
-	if (var->mode == MODE_DEREF) {
+	if (var->mode == INSTR_DEREF) {
 		arg = GenArg(macro, var->var, args, locals);
 		if (arg != var->var) {
 			var = VarNewDeref(arg);
 		}
-	} else if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) {
+	} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 
 		arr = GenArg(macro, var->adr, args, locals);
 
-		if (arr != var->adr && var->var->mode == MODE_CONST && var->var->type->variant == TYPE_STRING) {
+		if (arr != var->adr && var->var->mode == INSTR_CONST && var->var->type->variant == TYPE_STRING) {
 			var = VarField(arr, var->var->str);
 		} else {
 			arg = GenArg(macro, var->var, args, locals);	// index
 
 			if (arr != var->adr || arg != var->var) {
-				if (var->mode == MODE_ELEMENT) {
+				if (var->mode == INSTR_ELEMENT) {
 					var = VarNewElement(arr, arg);
 				} else {
 					var = VarNewByteElement(arr, arg);
 				}
 			}
 		}
-	} else if (var->mode == MODE_ARG) {
+	} else if (var->mode == INSTR_VAR && VarIsArg(var)) {
 
 		// Optimization for instruction rule
 		if (var->scope == RULE_PROC) {
@@ -241,7 +241,7 @@ Purpose:
 		//TODO: Make more efficient mechanism for finding argument index
 		n = 0;
 		FOR_EACH_LOCAL(macro, arg)
-			if (arg->mode == MODE_ARG) {
+			if (VarIsArg(arg)) {
 				if (arg == var) return args[n];
 				n++;
 			}
@@ -308,7 +308,7 @@ Argument:
 				// Labels defined in macro are all local.
 				// If there is label in macro, generate new temporary label instead of the label in macro.
 
-//				if (result->mode == MODE_LABEL) {
+//				if (result->mode == INSTR_LABEL) {
 //					r = VarSetFind(&locals, result);
 //					if (r == NULL) {
 //						r = VarNewTmpLabel();
@@ -317,7 +317,7 @@ Argument:
 //					result = r;
 //				} else {
 					// %Z variable is used as forced local argument.
-					local_result = result->mode == MODE_ARG && result->idx == ('Z' - 'A' + 1);
+					local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
 					if (!local_result) {
 						result = GenArg(macro, result, args, &locals);
 					}

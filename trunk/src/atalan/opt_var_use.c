@@ -60,11 +60,11 @@ Purpose:
 	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
 
 		// Scope can contain variables in subscope, we need to allocate them too
-		if (var->mode == MODE_SCOPE) {
+		if (var->mode == INSTR_SCOPE) {
 			AllocateVariablesFromHeap(var, heap);
 		} else {
 			if ((var->write > 0 || var->read > 0) && !VarIsLabel(var)) {
-				if (var->adr == NULL && (var->mode == MODE_VAR || var->mode == MODE_ARG)) {
+				if (var->adr == NULL && var->mode == INSTR_VAR) {
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
@@ -90,14 +90,14 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 
 	if (var == NULL) return;
 
-	if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+	if (var->mode == INSTR_VAR) {
 		size = TypeSize(var->type);
 		vadr = var->adr;
 		if (size > 0 && vadr != NULL) {
-			if (vadr->mode == MODE_TUPLE) {
+			if (vadr->mode == INSTR_TUPLE) {
 				HeapVarOp(heap, vadr, op);
 			} else {
-				if (vadr->mode == MODE_CONST && vadr->type->variant == TYPE_INT) {
+				if (vadr->mode == INSTR_CONST && vadr->type->variant == TYPE_INT) {
 					adr  = vadr->n;
 					if (op == VAR_REMOVE) {
 						HeapRemoveBlock(heap, adr, size);
@@ -108,7 +108,7 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 			}
 		}
 
-	} else if (var->mode == MODE_TUPLE) {
+	} else if (var->mode == INSTR_TUPLE) {
 		// Tuple is ignored. If it references variables local to this scope, they will be processed separately anyways.
 		//HeapVarOp(heap, var->adr, op);
 		//HeapVarOp(heap, var->var, op);
@@ -120,7 +120,7 @@ void HeapVariablesOp(MemHeap * heap, Var * scope, int op)
 	Var * var;
 
 	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
-		if (var->mode == MODE_SCOPE) {
+		if (var->mode == INSTR_SCOPE) {
 			HeapVariablesOp(heap, var, op);
 		} else {
 			HeapVarOp(heap, var, op);

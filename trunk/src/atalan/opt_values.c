@@ -92,11 +92,11 @@ Purpose:
 
 	var = res->adr;
 	if (var != NULL) {
-		if (var->mode == MODE_VAR || var->mode == MODE_ARG || var->mode == MODE_TUPLE) {
+		if (var->mode == INSTR_VAR || var->mode == INSTR_TUPLE) {
 			ResetValue(var);
 		}
 	} else {
-		if (res->mode == MODE_TUPLE) {
+		if (res->mode == INSTR_TUPLE) {
 			ResetValue(res->adr);
 			ResetValue(res->var);
 		}
@@ -114,8 +114,8 @@ Purpose:
 {
 	if (var == NULL || alias == NULL) return false;
 	if (var == alias) return true;
-	if (var->adr != NULL && (var->adr->mode == MODE_VAR || var->adr->mode == MODE_ARG)) if (VarIsAlias(var->adr, alias)) return true;
-	if (alias->adr != NULL &&  (alias->adr->mode == MODE_VAR || alias->adr->mode == MODE_ARG)) if (VarIsAlias(var, alias->adr)) return true;
+	if (var->adr != NULL && var->adr->mode == INSTR_VAR) if (VarIsAlias(var->adr, alias)) return true;
+	if (alias->adr != NULL &&  alias->adr->mode == INSTR_VAR) if (VarIsAlias(var, alias->adr)) return true;
 	return false;
 }
 
@@ -164,11 +164,11 @@ Purpose:
 
 	var = res->adr;
 	if (var != NULL) {
-		if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+		if (var->mode == INSTR_VAR) {
 			ResetVarDep(var);
 		}
 	} else {
-		if (res->mode == MODE_TUPLE) {
+		if (res->mode == INSTR_TUPLE) {
 			ResetVarDep(var->adr);
 			ResetVarDep(var->var);
 		}
@@ -200,13 +200,13 @@ Purpose:
 
 		src_dep = arg->dep;
 
-		if (arg->mode == MODE_DEREF) {
+		if (arg->mode == INSTR_DEREF) {
 			src_dep = ExpAlloc(INSTR_DEREF);
 			ExpArg(src_dep, 0, arg->var);
 		} else if (VarIsArrayElement(arg)) {
 			//TODO: Support for 2d arrays
 			//      In assembler phase is not required (we do not have instructions for 2d indexed arrays).
-			if (arg->var->mode != MODE_CONST) {
+			if (arg->var->mode != INSTR_CONST) {
 				src_dep = ExpAlloc(INSTR_ELEMENT);
 				ExpArg(src_dep, 0, arg->adr);
 				ExpArg(src_dep, 1, arg->var);
@@ -265,7 +265,7 @@ Purpose:
 	op = i->op;
 	arg = i->arg1;
 
-	if (op == INSTR_LET && (!VarIsArrayElement(arg) || arg->var->mode == MODE_CONST)) {
+	if (op == INSTR_LET && (!VarIsArrayElement(arg) || arg->var->mode == INSTR_CONST)) {
 		if (arg->dep != NULL) {
 			if (op == INSTR_VAR) {
 				arg = arg->dep->var;
@@ -297,7 +297,7 @@ void Dependency(Instr * i)
 	// If we set a value to result and arg1 is NULL, set the dependency to source value too (they are both same)
 	// This may happen, when some self-reference expression is calculated.
 
-	if (i->op == INSTR_LET && i->arg1->dep == NULL && i->arg1->mode != MODE_CONST) {
+	if (i->op == INSTR_LET && i->arg1->dep == NULL && i->arg1->mode != INSTR_CONST) {
 		exp = ExpAlloc(INSTR_VAR);
 		exp->var = i->result;
 		i->arg1->dep = exp;
@@ -336,7 +336,7 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 
 			if (v1->mode == v2->mode) {
 				if (v1->type->variant == v2->type->variant) {
-					if (v1->mode == MODE_CONST) {
+					if (v1->mode == INSTR_CONST) {
 						eq = (v1->n == v2->n);
 						goto done;
 					}
@@ -375,7 +375,7 @@ Bool CodeModifiesVar(Instr * from, Instr * to, Var * var)
 			result = i->result;
 			if (result != NULL)  {
 				if (result == var) return true;
-				if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) {
+				if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 					if (result == var->adr) return true;
 					if (result == var->var) return true;
 				}
@@ -402,13 +402,14 @@ void ProcValuesUse(Var * proc)
 		// we just clear it's output variables
 
 		if (proc->instr == NULL) {
-			for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
-				if (var->mode != MODE_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
+			FOR_EACH_LOCAL(proc, var)
+				if (!VarIsInArg(var)) {
+//				if (var->mode != INSTR_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
 					ResetValue(var);
 					ResetVarDep(var);
 					ResetVarDepRoot(var);
 				}
-			}
+			NEXT_LOCAL
 		} else {
 			for(blk = proc->instr; blk != NULL; blk = blk->next) {
 				for(i = blk->first; i != NULL; i = i->next) {
@@ -570,7 +571,7 @@ retry:
 						// Array references, that have non-const index may not be removed, as
 						// we can not be sure, that the index variable has not changed since last
 						// use.
-						if ((result->mode == MODE_ELEMENT || result->mode == MODE_BYTE) && result->var->mode != MODE_CONST) {
+						if ((result->mode == INSTR_ELEMENT || result->mode == INSTR_BYTE) && result->var->mode != INSTR_CONST) {
 						
 						} else {
 	delete_instr:
@@ -609,7 +610,7 @@ retry:
 							// If instruction uses register, do not replace with instruction that does not use it
 							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
-								if (!(arg1->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
+								if (!(arg1->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
 									arg1 = src_i->arg1;
 									m2 = true;
 								}
@@ -625,8 +626,8 @@ retry:
 						if (src_op == INSTR_LET) {
 							if (!InVar(src_i->arg1) && !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
 								// Do not replace simple variable with array access
-								if (arg2->read == 1 || !(arg2->mode == MODE_VAR && src_i->arg1->mode == MODE_ELEMENT)) {
-									if (src_i->arg1->mode != MODE_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
+								if (arg2->read == 1 || !(arg2->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
+									if (src_i->arg1->mode != INSTR_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
 										arg2 = src_i->arg1;
 										m2 = true;
 									}
@@ -734,7 +735,7 @@ Purpose:
 			}
 
 			result = i->result;
-			if (result != NULL && result->mode != MODE_LABEL) {
+			if (result != NULL && !VarIsLabel(result)) {
 				arg1 = SrcVar(i->arg1);
 				arg2 = SrcVar(i->arg2);
 

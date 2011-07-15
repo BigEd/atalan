@@ -124,7 +124,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 
 	// Pattern expects reference to array with one or more indices
 	if (pattern->index != NULL) {
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT) {
 			if (VarIsStructElement(var)) {
 				// This is reference to structure
 				// We may treat it as normal variable
@@ -157,19 +157,19 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 	
 	switch(pattern->variant) {
 	case RULE_RANGE:
-		if (arg->mode != MODE_RANGE) return false;		// pattern expects element, and variable is not an element
+		if (arg->mode != INSTR_RANGE) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, false)) return false;
 		return ArgMatch(pattern->arr, arg->adr, false); 
 		break;
 
 	case RULE_TUPLE:
-		if (arg->mode != MODE_TUPLE) return false;
+		if (arg->mode != INSTR_TUPLE) return false;
 		if (!ArgMatch(pattern->index, arg->var, true)) return false;
 		return ArgMatch(pattern->arr, arg->adr, true); 
 		break;
 
 	case RULE_BYTE:
-		if (arg->mode != MODE_BYTE) return false;		// pattern expects byte, and variable is not an byte
+		if (arg->mode != INSTR_BYTE) return false;		// pattern expects byte, and variable is not an byte
 		if (!ArgMatch(pattern->index, arg->var, false)) return false;		
 //		return ArgMatch(pattern->arr, arg->adr, false); 
 		pattern = pattern->arr;
@@ -177,7 +177,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		break;
 
 	case RULE_ELEMENT:
-		if (arg->mode != MODE_ELEMENT) return false;		// pattern expects element, and variable is not an element
+		if (arg->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, false)) return false;
 		return ArgMatch(pattern->arr, arg->adr, false); 
 		break;
@@ -210,19 +210,19 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		break;
 
 	case RULE_VARIABLE:
-		if (arg->mode == MODE_CONST) return false;
+		if (arg->mode == INSTR_CONST) return false;
 		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 	
 	case RULE_DEREF:
-		if (arg->mode != MODE_DEREF) return false;
+		if (arg->mode != INSTR_DEREF) return false;
 		arg = arg->var;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
 	case RULE_ARG:
-		if (arg->mode == MODE_DEREF || arg->mode == MODE_RANGE) return false;
+		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE) return false;
 		if (!in_tuple && FlagOn(arg->submode, SUBMODE_REG)) return false; 
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
@@ -240,7 +240,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		// For array element variable store array into the macro argument
 
 		pvar = arg;
-//		if (arg->mode == MODE_ELEMENT && !VarIsStructElement(arg)) {
+//		if (arg->mode == INSTR_ELEMENT && !VarIsStructElement(arg)) {
 //			pvar = arg->adr;
 //		}
 
@@ -392,7 +392,7 @@ Purpose:
 					if (i->op == INSTR_LET) {
 						var = i->result;
 						item = i->arg1;
-						if (var->type->variant == TYPE_ARRAY || var->mode == MODE_ELEMENT && var->var->mode == MODE_RANGE || (var->mode == MODE_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
+						if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 							GenArrayInit(var, item);
 							goto next;
 						}
@@ -413,7 +413,7 @@ Purpose:
 						Gen(i->op, i->result, i->arg1, a);
 						modified = true;
 					} else if (VarIsArrayElement(i->result)) {
-						if (i->op != INSTR_LET || (i->arg1->mode != MODE_VAR && i->arg1->mode != MODE_ARG)) {
+						if (i->op != INSTR_LET || i->arg1->mode != INSTR_VAR) {
 							a = VarNewTmp(102, i->result->type);
 							Gen(i->op, a, i->arg1, i->arg2);
 							GenLet(i->result, a);
@@ -455,11 +455,12 @@ void TranslateInit()
 	Type * type;
 
 	type = TypeAlloc(TYPE_PROC);
-	RULE_PROC = VarAlloc(MODE_VAR, NULL, 0);
+	RULE_PROC = VarAlloc(INSTR_VAR, NULL, 0);
 	RULE_PROC->type = type;
 
 	for(i=0; i<MACRO_ARG_CNT; i++) {
-		var = VarAllocScope(RULE_PROC, MODE_ARG, NULL, i+1);
+		var = VarAllocScope(RULE_PROC, INSTR_VAR, NULL, i+1);
+		var->submode = SUBMODE_ARG_IN;
 		MACRO_ARG_VAR[i] = var;
 	}
 

@@ -37,18 +37,18 @@ Input:
 	if (var == NULL) return;
 
 	// Dereferencing reads the variable (even if it is used for writing at that address later)
-	if (var->mode == MODE_DEREF) {
+	if (var->mode == INSTR_DEREF) {
 		VarMarkLive(var->var);
 
 	// Tuple just marks both variables in the same manner same
-	} else if (var->mode == MODE_TUPLE) {
+	} else if (var->mode == INSTR_TUPLE) {
 		VarMark(var->adr, state);
 		VarMark(var->var, state);
 
 	// If this is array access variable, mark indices as live (used)
-	} if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) {
+	} if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 
-		if (var->adr->mode == MODE_DEREF) {
+		if (var->adr->mode == INSTR_DEREF) {
 			VarMarkLive(var->adr);
 		}
 		
@@ -56,12 +56,12 @@ Input:
 		VarMarkLive(var->var);
 
 		// Array references with variable indexes are always live
-		if (var->var->mode != MODE_CONST) state = VarLive;
+		if (var->var->mode != INSTR_CONST) state = VarLive;
 
 	} else {
 		// If variable is alias for some other variable, mark the other variable too
 		if (var->adr != NULL) {
-			if (var->adr->mode == MODE_VAR || var->adr->mode == MODE_TUPLE) {
+			if (var->adr->mode == INSTR_VAR || var->adr->mode == INSTR_TUPLE) {
 				VarMark(var->adr, state);
 			}
 		}
@@ -74,7 +74,7 @@ Input:
 
 		// Each element, which has this variable as an array is marked same
 		FOR_EACH_VAR(var2)
-			if (var2->mode == MODE_ELEMENT || var2->mode == MODE_BYTE) {
+			if (var2->mode == INSTR_ELEMENT || var2->mode == INSTR_BYTE) {
 				if (var2->adr == var) {
 					var2->flags = (var2->flags & ~VarLive) | state;
 				}
@@ -99,10 +99,10 @@ Bool VarInTuple(Var * var, Var * find_var)
 {
 	if (var == NULL) return false;
 	if (var == find_var) return true;
-	if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && var->adr != NULL) {
+	if (var->mode == INSTR_VAR && var->adr != NULL) {
 		return VarInTuple(var->adr, find_var);
 	}
-	if (var->mode == MODE_TUPLE) {
+	if (var->mode == INSTR_TUPLE) {
 		return VarInTuple(var->adr, find_var) || VarInTuple(var->var, find_var);
 	}
 	return false;
@@ -124,7 +124,7 @@ Purpose:
 	res1 = res2 = 2;
 
 	// var may be _arr(0)  -> in such case, we want to test _arr as it is to check usage like @_arr
-	if ((var->mode == MODE_ELEMENT || var->mode == MODE_BYTE) && var->var->mode == MODE_CONST) {
+	if ((var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) && var->var->mode == INSTR_CONST) {
 		var = var->adr;
 	}
 
@@ -141,7 +141,7 @@ Purpose:
 
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
-				if (var->mode == MODE_ELEMENT) {
+				if (var->mode == INSTR_ELEMENT) {
 					if (var->adr == i->arg1->adr) { res1 = 1; goto done; }
 				}
 			}
@@ -191,7 +191,7 @@ void MarkProcLive(Var * proc)
 void VarMarkNextUse(Var * var, Instr * i)
 {
 	if (var == NULL) return;
-	if (var->mode == MODE_ELEMENT || var->mode == MODE_TUPLE || var->mode == MODE_DEREF) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_DEREF) {
 		VarMarkNextUse(var->var, i);
 		VarMarkNextUse(var->adr, i);
 	} else {
@@ -202,17 +202,17 @@ void VarMarkNextUse(Var * var, Instr * i)
 Bool VarDereferences(Var * var)
 {
 	if (var != NULL) {
-		if (var->mode == MODE_DEREF) return true;
-		if (var->mode == MODE_ELEMENT || var->mode == MODE_BYTE || var->mode == MODE_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
+		if (var->mode == INSTR_DEREF) return true;
+		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
 	}
 	return false;
 }
 
 Bool VarIsDead(Var * var)
 {
-	if (var->mode == MODE_TUPLE) {
+	if (var->mode == INSTR_TUPLE) {
 		return VarIsDead(var->adr) && VarIsDead(var->var);
-	} if ((var->mode == MODE_VAR || var->mode == MODE_ARG) && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
 		return VarIsDead(var->adr);
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);
@@ -257,7 +257,7 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-//			if (var->mode == MODE_ELEMENT && var->adr->mode == MODE_DEREF && StrEqual(var->adr->var->name, "_arr")) {
+//			if (var->mode == INSTR_ELEMENT && var->adr->mode == INSTR_DEREF && StrEqual(var->adr->var->name, "_arr")) {
 //				printf("");
 //			}
 
@@ -292,9 +292,9 @@ Bool OptimizeLive(Var * proc)
 		// All output arguments are marked as live (in last block)
 
 		if (blk->to == NULL) {
-			for(var = FirstArg(proc, SUBMODE_ARG_OUT); var != NULL; var = NextArg(proc, var, SUBMODE_ARG_OUT)) {
+			FOR_EACH_OUT_ARG(proc, var)
 				VarMarkLive(var);
-			}
+			NEXT_OUT_ARG
 		}
 
 		n = BlkInstrCount(blk);
