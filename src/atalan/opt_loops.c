@@ -36,18 +36,18 @@ Purpose:
 //				printf("Var: "); PrintVar(var);
 //			}
 
-			if (var->mode == MODE_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT) {
 				if (FlagOn(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG)) continue;
-				if (var->var->mode != MODE_CONST) continue;
+				if (var->var->mode != INSTR_CONST) continue;
 //				continue;
 				// If array index is loop dependent, do not attempt to replace it with register
 //				if (FlagOn(var->var->flags, VarLoopDependent)) continue;
 			}
 
 			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG /*| SUBMODE_REF*/) 
-//			 && (var->mode != MODE_ELEMENT || FlagOff(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG))
-			 && var->mode != MODE_CONST 
-			 && var->mode != MODE_DEREF
+//			 && (var->mode != INSTR_ELEMENT || FlagOff(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG))
+			 && var->mode != INSTR_CONST 
+			 && var->mode != INSTR_DEREF
 			 && var->type != NULL && var->type->variant != TYPE_PROC
 			 && !VarIsLabel(var) 
 			 && !VarIsArray(var)
@@ -318,7 +318,7 @@ Bool VarIsLoopDependent(Var * var, VarSet * liveset)
 	if (var == NULL) return false;
 	if (VarSetFind(liveset, var)) return false;
 	if (FlagOn(var->flags, VarLoop|VarLoopDependent)) return true;
-	if (var->mode != MODE_CONST) {
+	if (var->mode != INSTR_CONST) {
 		if (VarIsLoopDependent(var->adr, liveset)) return true;
 		if (VarIsLoopDependent(var->adr, liveset)) return true;
 	}
@@ -434,11 +434,11 @@ Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
 	Bool out_of_loop;
 
 	if (var == NULL) return true;
-	if (var->mode == MODE_CONST) return true;
+	if (var->mode == INSTR_CONST) return true;
 	if (InVar(var)) return false;
 
 	// For array access, array adr is constant (except referenced array), important is index change
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		return VarInvariant(proc, var->var, loc, loop);
 	}
 
@@ -491,11 +491,11 @@ Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
 {
 
 	if (var == NULL) return false;
-	if (var->mode == MODE_CONST) return false;
+	if (var->mode == INSTR_CONST) return false;
 	if (InVar(var)) return true;
 
 	// For array access, array adr is constant (except referenced array), important is index change
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		return VarLoopDep(proc, var->var, loc, loop);
 	}
 

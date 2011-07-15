@@ -21,10 +21,10 @@ void VarIncRead(Var * var)
 			// variable should not be marked as uninitialized, if there has been label or jump or call
 			var->flags |= VarUninitialized;
 		}
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT) {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);
-		} else if (var->mode == MODE_TUPLE) {
+		} else if (var->mode == INSTR_TUPLE) {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);			
 		} else {
@@ -37,10 +37,10 @@ void VarIncWrite(Var * var)
 {
 	if (var != NULL) {
 		var->write++;
-		if (var->mode == MODE_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT) {
 			VarIncWrite(var->adr);
 			VarIncRead(var->var);
-		} else if (var->mode == MODE_TUPLE) {
+		} else if (var->mode == INSTR_TUPLE) {
 			VarIncWrite(var->adr);
 			VarIncWrite(var->var);
 		} else {
@@ -128,7 +128,7 @@ Purpose:
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode == MODE_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT) {
 				v2 = var->adr;
 				v3 = var->var;
 				n2 = VarTestReplace(&v2, from, to);
@@ -164,7 +164,7 @@ Int16 VarReplace(Var ** p_var, Var * from, Var * to)
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode == MODE_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT) {
 				n += VarReplace(&var->adr, from, to);
 				n += VarReplace(&var->var, from, to);
 			}
@@ -200,8 +200,8 @@ Bool ArgNeedsSpill(Var * arg, Var * var)
 {
 	Bool spill = false;
 	if (arg != NULL) {
-		if (arg->mode == MODE_ELEMENT) {
-			if (arg->adr->mode == MODE_DEREF && arg->adr->var == var->adr) {
+		if (arg->mode == INSTR_ELEMENT) {
+			if (arg->adr->mode == INSTR_DEREF && arg->adr->var == var->adr) {
 				spill = true;
 			}			
 		}
@@ -215,7 +215,7 @@ Bool InstrSpill(Instr * i, Var * var)
 	//TODO: What about call?
 //	if (i->op == INSTR_PRINT || i->op == INSTR_FORMAT) return true;
 
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 
 		spill = ArgNeedsSpill(i->result, var) 
 			 || ArgNeedsSpill(i->arg1, var) 
@@ -297,17 +297,15 @@ Purpose:
 
 					if (subproc->instr != NULL) {
 						BufEmpty();
-						FOR_EACH_LOCAL(subproc, arg)
-							if (arg->mode == MODE_ARG) {
-								if (arg->adr == NULL) {
-									var = VarAllocScopeTmp(proc, MODE_VAR, arg->type);
-								} else {
-									var = arg->adr;
-								}
-								BufPush(var);
-								ProcReplaceVar(proc, arg, var);
+						FOR_EACH_ARG(subproc, arg)
+							if (arg->adr == NULL) {
+								var = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
+							} else {
+								var = arg->adr;
 							}
-						NEXT_LOCAL
+							BufPush(var);
+							ProcReplaceVar(proc, arg, var);
+						NEXT_ARG
 
 						InScope(proc);
 						GenSetDestination(blk, i);

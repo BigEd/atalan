@@ -17,12 +17,12 @@ Purpose:
 {
 	if (var == NULL) return false;
 
-	if (var->mode == MODE_VAR || var->mode == MODE_ARG) {
+	if (var->mode == INSTR_VAR) {
 		if (FlagOn(var->submode, SUBMODE_REG)) {
 			SetFlagOn(var->flags, VarUsed);
 			return true;
 		}
-	} else if (var->mode == MODE_TUPLE) {
+	} else if (var->mode == INSTR_TUPLE) {
 		return VarUseReg(var->adr) || VarUseReg(var->var);
 	}
 	return false;
@@ -39,7 +39,7 @@ Purpose:
 
 	for(i = 0; i < CPU->REG_CNT; i++) {
 		reg = CPU->REG[i];
-		if (reg->mode == MODE_VAR && FlagOff(reg->flags, VarUsed)) {
+		if (reg->mode == INSTR_VAR && FlagOff(reg->flags, VarUsed)) {
 			if (reg->type->range.max == 1) continue;			// exclude flag registers
 			if (byte_size != VarByteSize(reg)) continue;		// exclude registers with different size
 			if (OutVar(reg) || InVar(reg)) continue;	// out registers can not be used to replace variables
@@ -99,7 +99,7 @@ Purpose:
 					} else {
 						SetFlagOff(reg->flags, VarUsed);
 						reg = NULL;
-//						tmp = VarAllocScopeTmp(proc, MODE_VAR, TypeByte());		// todo: alloc proper type
+//						tmp = VarAllocScopeTmp(proc, INSTR_VAR, TypeByte());		// todo: alloc proper type
 					}
 				}
 			}
@@ -108,7 +108,7 @@ Purpose:
 			if (reg != NULL) {
 				arg->adr = reg;
 				VarUseReg(reg);
-				tmp = VarAllocScopeTmp(proc, MODE_VAR, arg->type);
+				tmp = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
 				ProcReplaceVar(proc, arg, tmp);
 				InstrInsert(proc->instr, i, INSTR_LET, tmp, arg, NULL);
 			}

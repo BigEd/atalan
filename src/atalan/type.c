@@ -166,7 +166,7 @@ void TypeLet(Type * type, Var * var)
 
 	// Assigning array element sets the type to the type of the array element
 
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		arr = var->adr;
 		if (arr->type->variant == TYPE_ARRAY) {
 			vtype = arr->type->element;
@@ -182,7 +182,7 @@ void TypeLet(Type * type, Var * var)
 
 		// When setting constant N to the variable, it's range is set to N..N
 		// Variables with type like this are in fact constants.
-		if (var->mode == MODE_CONST) {
+		if (var->mode == INSTR_CONST) {
 			min = max = var->n;
 		} else {
 			min = vtype->range.min;
@@ -259,7 +259,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 	vtype = var->type;
 	if (vtype == NULL) return;
 
-	if (var->mode == MODE_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT) {
 		arr = var->adr;
 		if (arr->type->variant == TYPE_ARRAY) {
 			vtype = arr->type;
@@ -280,7 +280,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 		}
 
 		if (vtype->variant == TYPE_INT) {
-			if (var->mode == MODE_CONST) {
+			if (var->mode == INSTR_CONST) {
 				min = max = var->n;
 			} else {
 				min = vtype->range.min;
@@ -411,7 +411,7 @@ Type * TypeTuple()
 Var * NextItem(Var * scope, Var * arg, VarSubmode submode)
 {
 	Var * var = arg->next;
-	while(var != NULL && (var->mode != MODE_VAR || var->scope != scope || (submode != 0 && FlagOff(var->submode, submode)))) var = var->next;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != scope || (submode != 0 && FlagOff(var->submode, submode)))) var = var->next;
 	return var;
 }
 
@@ -472,7 +472,7 @@ Purpose:
 	Var * item;
 	item = FirstItem(var, 0);
 	while(item != NULL) {
-		if (item->mode == MODE_VAR) {
+		if (item->mode == INSTR_VAR) {
 			size += TypeSize(item->type);
 		}
 		item = NextItem(var, item, 0);
@@ -490,7 +490,7 @@ Purpose:
 	Var * item;
 	item = FirstItem(type->owner, 0);
 	while(item != NULL) {
-		if (item->mode == MODE_VAR) {
+		if (item->mode == INSTR_VAR) {
 			if (item->adr == NULL) {
 				item->adr = VarNewInt(offset);
 				offset += TypeSize(item->type);
@@ -597,10 +597,10 @@ Purpose:
 	// Integer type
 	if (type->variant == TYPE_INT) {
 		if (vtype->variant != TYPE_INT) return false;
-		if (var->mode == MODE_CONST) {
+		if (var->mode == INSTR_CONST) {
 			if (var->n < type->range.min) return false;
 			if (var->n > type->range.max) return false;
-		} else if (var->mode == MODE_VAR || var->mode == MODE_ARG || var->mode == MODE_ELEMENT) {
+		} else if (var->mode == INSTR_VAR || var->mode == INSTR_ELEMENT) {
 			if (vtype->range.min < type->range.min) return false;
 			if (vtype->range.max > type->range.max) return false;
 		} else {
@@ -634,17 +634,17 @@ Purpose:
 		return VarMatchesType(var, type->dim[0]) || VarMatchesType(var, type->dim[1]);
 
 	case TYPE_INT:
-		if (var->mode == MODE_TUPLE) {
+		if (var->mode == INSTR_TUPLE) {
 			return false;
 		}
 
 		if (vtype != NULL) {
 			// If variable is constant, the check is different
-			if (var->mode == MODE_CONST) {
+			if (var->mode == INSTR_CONST) {
 				if (vtype->variant != TYPE_INT) return false;
 				if (var->n < type->range.min) return false;
 				if (var->n > type->range.max) return false;
-			} else if (var->mode == MODE_ELEMENT) {
+			} else if (var->mode == INSTR_ELEMENT) {
 				// Specified variable is element, but the type is not array
 				if (type->variant != TYPE_ARRAY) return false;
 			} else {
@@ -720,10 +720,10 @@ void PrintVars(Var * proc)
 	Type * type;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (var->mode == MODE_SCOPE) {
+		if (var->mode == INSTR_SCOPE) {
 			PrintVars(var);
 		} else {
-			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && (var->mode == MODE_VAR || var->mode == MODE_ARG)) {
+			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR) {
 				type = var->type;
 				if (type != NULL && type->variant == TYPE_LABEL) continue;
 				printf("%s: ", var->name);
@@ -1109,8 +1109,8 @@ Bool VarIdentical(Var * left, Var * right)
 
 	if ((left->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE)) != (right->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE))) return false;
 
-	while (left->adr != NULL && left->adr->mode == MODE_VAR) left = left->adr;
-	while (right->adr != NULL && right->adr->mode == MODE_VAR) right = right->adr;
+	while (left->adr != NULL && left->adr->mode == INSTR_VAR) left = left->adr;
+	while (right->adr != NULL && right->adr->mode == INSTR_VAR) right = right->adr;
 
 	if (left == right) return true;
 
@@ -1193,8 +1193,8 @@ sub1:
 			#endif
 			goto done;
 		// For array, we check, that A(x) fits B(y) so, that A = B and x contains y
-		} else if (var->mode == MODE_ELEMENT) {
-			if (i->result->mode == MODE_ELEMENT && var->adr == i->result->adr) {
+		} else if (var->mode == INSTR_ELEMENT) {
+			if (i->result->mode == INSTR_ELEMENT && var->adr == i->result->adr) {
 
 			}
 		}
@@ -1207,7 +1207,7 @@ sub1:
 	if (blk->from == NULL && blk->callers == NULL) {
 		// If we are at the beginning of the procedure and this is an input argument, we can use the type of variable as an argument.
 		// Input register variables are considered defined here too.
-		if ((var->mode == MODE_ARG && FlagOn(var->submode, SUBMODE_ARG_IN)) || InVar(var)) {
+		if (VarIsInArg(var) || InVar(var)) {
 			type = var->type;
 		} else {
 			undefined++;
@@ -1276,13 +1276,13 @@ Result:
 	Type * type = NULL;
 
 	if (var == NULL) return NULL;
-	if (var->mode == MODE_CONST) {
+	if (var->mode == INSTR_CONST) {
 		//TODO: Use type from constant (if it exists)
 		if (var->type->variant == TYPE_INT) {
 			type = TypeAllocInt(var->n, var->n);
 			type->flexible = false;
 		}
-	} else if (var->mode == MODE_BYTE) {
+	} else if (var->mode == INSTR_BYTE) {
 		type = TypeByte();
 	} else {
 
@@ -1312,7 +1312,7 @@ Result:
 			if (report_errors) {
 				if (undefined > 0) {
 					// Input register does not have to be explicitly initialized.
-					if (!InVar(var) && (var->mode == MODE_VAR)) {
+					if (!InVar(var) && (var->mode == INSTR_VAR)) {
 						ErrArg(var);
 						if (paths > 1) {
 							LogicWarningLoc("Possible use of uninitialized variable [A].\nThere exists a path where it is not initialized before it is used here.", loc);
@@ -1339,7 +1339,7 @@ Purpose:
 {
 	Var * var;
 	var = *p_var;
-	if (var != NULL && var->mode != MODE_CONST && !InVar(var)) {
+	if (var != NULL && var->mode != INSTR_CONST && !InVar(var)) {
 		if (type != NULL && type->variant == TYPE_INT && type->range.min == type->range.max) {
 			*p_var = VarNewInt(type->range.min);
 		}
@@ -1356,7 +1356,7 @@ Purpose:
 	Type * type;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == MODE_VAR) {
+		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_LABEL) continue;
 			if (var->read == 0) {
@@ -1493,7 +1493,7 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 	// Index of array access must match the type specified in array
 	if (VarIsArrayElement(var)) {
 		idx = var->var;
-		if (idx->mode == MODE_VAR || idx->mode == MODE_ARG || idx->mode == MODE_CONST) {
+		if (idx->mode == INSTR_VAR || idx->mode == INSTR_CONST) {
 			ti = FindType(loc, idx, d->final_pass);
 			// Type of the index is undefined, this is restriction
 			if (ti == NULL || ti->variant == TYPE_UNDEFINED) {
@@ -1590,8 +1590,8 @@ Bool InstrInferType(Loc * loc, void * data)
 			// Index may be simple, or it can be range
 
 			//TODO: Result & argument indexes should be checked in separate pass after type inferring
-			if (result->mode == MODE_ELEMENT) {
-				if (result->var->mode == MODE_VAR || result->var->mode == MODE_CONST || result->var->mode == MODE_ARG) {
+			if (result->mode == INSTR_ELEMENT) {
+				if (result->var->mode == INSTR_VAR || result->var->mode == INSTR_CONST) {
 					ti = FindType(loc, result->var, d->final_pass);
 					if (ti != NULL) {
 						if (d->final_pass) {
@@ -1612,7 +1612,7 @@ Bool InstrInferType(Loc * loc, void * data)
 
 			// Type was evaluated, test, whether there is not an error while assigning it
 			if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
-				if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == MODE_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
+				if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == INSTR_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
 
 					// We allow assigning values to arrays, so we must allow this operation in type checker
 
