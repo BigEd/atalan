@@ -695,36 +695,36 @@ rule sub %A:byte1, %B:byte1, 1 = instr
 rule sub %A:byte1, %B:byte1, %C:byte1 = instr
   let a,%B
   let c,1
-  sub a,a,%C
+  sub as,ac,%C
   let %A,a
 
 rule sub %A:card, %B:card, const %C:card = instr
 	let a, %B$0
 	lo %Z, %C           ; %Z is macro local variable
 	let c, 1
-	sub a, a, %Z
+	sub as, ac, %Z
 	let %A$0, a
 	let a, %B$1
 	hi %Z, %C           ; %Z is macro local variable
-	sub a, a, %Z
+	sub as, ac, %Z
 	let %A$1, a
 
 rule sub %A:card, const %B:card, %C:card = instr
 	lo a, %B
 	let c, 1
-	sub a, a, %C$0
+	sub as, ac, %C$0
 	let %A$0, a
 	hi a, %B
-	sub a, a, %C$1
+	sub as, ac, %C$1
 	let %A$1, a
 
 rule sub %A:card, %B:card, %C:card = instr
 	let a, %B$0
 	let c, 1
-	sub a, a, %C$0
+	sub as, ac, %C$0
 	let %A$0, a
 	let a, %B$1
-	sub a, a, %C$1
+	sub as, ac, %C$1
 	let %A$1, a
 	
 
@@ -1813,7 +1813,9 @@ rule ifge %L,%B:int, %C:card   = instr
 ;Some rule must match every compiler instruction possible in this stage.
 ;(Previous compilation stages are responsible to prepare the
 ; code in such a way, that this is true). 
- 
+
+
+rule nop = "   nop" 
 ;CLC,SEC
 
 rule let c, 0  = "   clc"

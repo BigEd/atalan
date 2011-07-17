@@ -1035,6 +1035,7 @@ no_id:
 						ParseCall(proc);
 					} else {
 						ParseMacro(proc);
+						return;
 					}
 
 					// *** Register Arguments (5)
@@ -2800,7 +2801,7 @@ parsed:
 										// This can be done only if there is just one result.
 										// For multiple results, we can not use this optimization, as it is not last instruction, what generated the result.
 										if (TOP == 1 && VarIsTmp(item)) {
-											GenLastResult(var);
+											GenLastResult(var, item);
 										} else {
 											GenLet(var, item);
 										}
@@ -3280,7 +3281,7 @@ Purpose:
 }
 
 
-void ParseArgs(Var * proc, VarSubmode submode, Var ** args)
+UInt16 ParseArgs(Var * proc, VarSubmode submode, Var ** args)
 /*
 Purpose:
 	Parse arguments passed to procedure or macro.
@@ -3353,7 +3354,7 @@ Arguments:
 						reg_arg_cnt++;
 					} else {
 						if (VarIsTmp(val)) {
-							GenLastResult(arg);
+							GenLastResult(arg, val);
 						} else {
 							GenLet(arg, val);
 						}
@@ -3393,6 +3394,8 @@ Arguments:
 			}
 		}
 	}
+
+	return arg_no;
 }
 
 void ParseCall(Var * proc)
@@ -3423,8 +3426,21 @@ Syntax: "return" arg*
 void ParseMacro(Var * macro)
 {
 	Var * args[32];
+	Var * arg, * var;
+	UInt16 arg_cnt;
+	UInt16 in_cnt;
 
-	ParseArgs(macro, SUBMODE_ARG_IN, args);
+	in_cnt = ParseArgs(macro, SUBMODE_ARG_IN, args);
+
+	arg_cnt = in_cnt;
+	// We must generate temporary variables for results and store them to expression stack
+	FOR_EACH_OUT_ARG(macro, arg)
+		var = VarAllocScopeTmp(NULL, INSTR_VAR, arg->type);
+		args[arg_cnt] = var;
+		BufPush(var);
+		arg_cnt++;
+	NEXT_OUT_ARG
+
 	if (TOK != TOKEN_ERROR) {
 		GenMacro(macro, args);
 	}

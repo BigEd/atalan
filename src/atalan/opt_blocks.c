@@ -150,6 +150,13 @@ repeat:
 	blk = proc->instr;
 	while(blk != NULL) {
 
+		// Basic block merging
+		if (blk->from != NULL && blk->callers == NULL && blk->from->cond_to == NULL) {
+			InstrMoveCode(blk->from, NULL, blk, blk->first, blk->last);
+
+			goto remove_block;
+		}
+
 		if (FirstInstr(blk) == NULL && blk->to != NULL) {
 
 			dst = blk->from;
@@ -171,7 +178,7 @@ repeat:
 					}
 				}
 			}
-
+remove_block:
 			// Remove block from chain and delete it
 			if (prev_blk != NULL) {
 				prev_blk->next = blk->next;
@@ -440,6 +447,7 @@ x = 1
 void DeadCodeElimination(Var * proc)
 {
 	InstrBlock * blk, * prev_blk;
+	Bool modified = false;
 
 	LinkBlocks(proc);
 
@@ -461,6 +469,7 @@ void DeadCodeElimination(Var * proc)
 					InstrBlockFree(blk);
 					MemFree(blk);
 					blk = prev_blk;
+					modified = true;
 				}
 			}
 		}
@@ -468,6 +477,9 @@ void DeadCodeElimination(Var * proc)
 		blk = blk->next;
 	}
 
+	if (modified) {
+		OptimizeJumps(proc);
+	}
 }
 
 /*

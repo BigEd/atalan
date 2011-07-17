@@ -323,7 +323,11 @@ typedef struct {
 	Type * init;		// initial value of the step
 } TypeSequence;
 
+typedef Int16 Relation;
+
 typedef Int32 IntLimit;
+#define INTLIMIT_MIN (-2147483648L)
+#define INTLIMIT_MAX 2147483647L
 
 // min + N * mul  (<max)
 typedef struct {
@@ -917,7 +921,7 @@ void GenLabel(Var * var);
 void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
 void GenMacro(Var * macro, Var ** args);
-void GenLastResult(Var * var);
+void GenLastResult(Var * var, Var * item);
 void GenArrayInit(Var * arr, Var * init);
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
