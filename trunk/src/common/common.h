@@ -20,10 +20,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 // Basic types
 
 typedef int Bool;
-typedef int Int16;
+typedef signed int Int16;
 typedef unsigned int UInt16;
 typedef unsigned long UInt32;
-typedef long Int32;
+typedef signed long Int32;
 typedef unsigned char UInt8;
 
 #define true 1

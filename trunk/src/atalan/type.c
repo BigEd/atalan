@@ -1463,6 +1463,7 @@ Bool PropagateConstraint(Loc * loc, Var * var, Type * restriction, InstrBlock * 
 Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 {
 	Instr * i;
+	Instr * next_i;
 	InstrBlock * blk;
 	Loc loc;
 	UInt32 n;
@@ -1471,7 +1472,8 @@ Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		loc.blk = blk;
-		for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
+		for(i = blk->first, n=1; i != NULL; i = next_i, n++) {
+			next_i = i->next;
 			if (i->op == INSTR_LINE) continue;
 			loc.i = i;
 			if (fn(&loc, data)) return true;
@@ -1482,6 +1484,7 @@ Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 
 typedef struct {
 	Bool modified;
+	Bool modified_blocks;
 	Bool final_pass;
 } InferData;
 
@@ -1550,12 +1553,33 @@ Bool InstrConstraints(Loc * loc, void * data)
 	return false;
 }
 
+IntLimit TypeMin(Type * type)
+{
+	if (type != NULL) {
+		if (type->variant == TYPE_INT) {
+			return type->range.min;
+		}
+	}
+	return INTLIMIT_MIN;
+}
+
+IntLimit TypeMax(Type * type)
+{
+	if (type != NULL) {
+		if (type->variant == TYPE_INT) {
+			return type->range.max;
+		}
+	}
+	return INTLIMIT_MAX;
+}
+
 Bool InstrInferType(Loc * loc, void * data)
 {
 	Var * result;
 	Instr * i;
 	Type * tr, * ti;
 	InferData * d = (InferData *)data;
+	Bool taken, not_taken;
 
 	i = loc->i;
 
@@ -1580,7 +1604,40 @@ Bool InstrInferType(Loc * loc, void * data)
 
 		// For comparisons, we may check whether the condition is not always true or always false
 		if (IS_INSTR_BRANCH(i->op)) {
+			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
+				taken = false;
+				switch (i->op) {
+				case INSTR_IFEQ:
+					break;
+				case INSTR_IFNE:
+					break;
+				case INSTR_IFLT:
+					break;
+				case INSTR_IFLE:
+					break;
 
+				// if arg1 >= arg2 goto result
+				case INSTR_IFGE:
+					taken = TypeMin(i->type[ARG1]) >= TypeMax(i->type[ARG2]);
+					not_taken = TypeMax(i->type[ARG1]) < TypeMin(i->type[ARG2]);
+					break;
+				case INSTR_IFGT:
+					break;
+				}
+
+				if (taken) {
+					i->op = INSTR_GOTO;
+					i->arg1 = i->arg2 = NULL;
+					d->modified_blocks = true;
+					return true;
+				} else if (not_taken) {
+					InstrDelete(loc->blk, i);
+//					i->op = INSTR_VOID;
+//					i->result = i->arg1 = i->arg2 = NULL;
+					d->modified_blocks = true;
+					return true;
+				}
+			}
 		} else {
 
 			result = i->result;
@@ -1717,7 +1774,13 @@ Purpose:
 		steps = 0;
 		do {
 			data.modified = false;
+			data.modified_blocks = false;
 			ProcInstrEnum(proc, &InstrInferType, &data);
+			if (data.modified_blocks) {
+				GenerateBasicBlocks(proc);
+				DeadCodeElimination(proc);
+				PrintProc(proc);
+			}
 			steps++;
 		} while (data.modified);
 

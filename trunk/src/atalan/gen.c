@@ -185,13 +185,18 @@ void GenLabel(Var * var)
 	}
 }
 
-void GenLastResult(Var * var)
+void GenLastResult(Var * var, Var * item)
 /*
 Purpose:
 	Set result of last generated instruction.
 */
 {
-	BLK->last->result = var;
+	Instr * i = BLK->last;
+	if (i->op != INSTR_LABEL) {
+		i->result = var;
+	} else {
+		GenLet(var, item);
+	}
 }
 
 Var * GenArg(Var * macro, Var * var, Var ** args, VarSet * locals)
