@@ -326,8 +326,9 @@ typedef struct {
 typedef Int16 Relation;
 
 typedef Int32 IntLimit;
-#define INTLIMIT_MIN (-2147483648L)
+#define INTLIMIT_MIN (-2147483647 - 1)		// To prevent error in some compilers parser
 #define INTLIMIT_MAX 2147483647L
+
 
 // min + N * mul  (<max)
 typedef struct {

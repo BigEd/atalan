@@ -8,7 +8,7 @@ VarTag{
 	  	#if ($e.name != 0) ([$e.name,sb]),
 	  	#if ($e.idx != 0) ( $e.idx -1 ),
 	  	" ",
-	  	#if ($e.mode == 4) ($e.n)
+	  	#if ($e.mode == 59) ($e.n)
 	  )
 	)
 }

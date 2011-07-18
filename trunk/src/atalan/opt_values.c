@@ -211,6 +211,13 @@ Purpose:
 				ExpArg(src_dep, 0, arg->adr);
 				ExpArg(src_dep, 1, arg->var);
 			}
+		} else if (arg->mode == INSTR_TUPLE) {
+			src_dep = ExpAlloc(arg->mode);
+			ExpArg(src_dep, 0, arg->adr);
+			ExpArg(src_dep, 1, arg->var);
+		} else if (arg->mode == INSTR_VAR && arg->adr != NULL && arg->adr->mode == INSTR_TUPLE) {
+			ExpArg(exp, arg_idx, arg->adr);
+			return;
 		}
 
 		if (src_dep != NULL) {
@@ -287,12 +294,29 @@ done:
 	return exp;
 }
 
+void SetDependency(Var * var, Exp * exp)
+{
+	if (var == NULL) return;
+	if (var->mode == INSTR_TUPLE) {
+		SetDependency(var->adr, exp);
+		SetDependency(var->var, exp);
+	} else {
+		var->dep = exp;
+	}
+
+	if (var->mode == INSTR_VAR && var->adr != NULL && (var->adr->mode == INSTR_TUPLE || var->adr->mode == INSTR_VAR)) {
+		SetDependency(var->adr, exp);
+	}
+}
+
 void Dependency(Instr * i)
 {
 	Exp * exp;
 
 	exp = ExpInstr(i);
-	i->result->dep = exp;
+
+	SetDependency(i->result, exp);
+//	i->result->dep = exp;
 
 	// If we set a value to result and arg1 is NULL, set the dependency to source value too (they are both same)
 	// This may happen, when some self-reference expression is calculated.
@@ -300,7 +324,7 @@ void Dependency(Instr * i)
 	if (i->op == INSTR_LET && i->arg1->dep == NULL && i->arg1->mode != INSTR_CONST) {
 		exp = ExpAlloc(INSTR_VAR);
 		exp->var = i->result;
-		i->arg1->dep = exp;
+		SetDependency(i->arg1, exp);
 	}
 
 /*

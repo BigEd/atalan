@@ -152,9 +152,11 @@ repeat:
 
 		// Basic block merging
 		if (blk->from != NULL && blk->callers == NULL && blk->from->cond_to == NULL) {
-			InstrMoveCode(blk->from, NULL, blk, blk->first, blk->last);
 
-			goto remove_block;
+			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
+				InstrMoveCode(blk->from, NULL, blk, blk->first, blk->last);
+				goto remove_block;
+			}
 		}
 
 		if (FirstInstr(blk) == NULL && blk->to != NULL) {
@@ -444,6 +446,14 @@ x = 1
 
 */
 
+Bool DataBlock(InstrBlock * blk)
+{
+	InstrOp op;
+	if (blk->first == NULL) return false;
+	op = blk->first->op;
+	return op == INSTR_ALIGN || op == INSTR_ARRAY_INDEX || op == INSTR_DATA;
+}
+
 void DeadCodeElimination(Var * proc)
 {
 	InstrBlock * blk, * prev_blk;
@@ -464,7 +474,7 @@ void DeadCodeElimination(Var * proc)
 		if (blk->from == NULL && blk->callers == NULL) {
 			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
 				//TODO: We should solve alignment using some other means (probably block, or label, should have alignment)
-				if (blk->first == NULL || (blk->first->op != INSTR_ALIGN && blk->first->op != INSTR_ARRAY_INDEX)) {
+				if (!DataBlock(blk)) {		//blk->first == NULL || (blk->first->op != INSTR_ALIGN && blk->first->op != INSTR_ARRAY_INDEX)) {
 					prev_blk->next = blk->next;
 					InstrBlockFree(blk);
 					MemFree(blk);
