@@ -2,6 +2,51 @@
 TODO
 ****
 
+*********************************************************
+
+Optimized Flags Code for 6502
+Tuesday, July 15th, 2008
+When I disassembled Steve Wozniak’s Apple I BASIC, I found a 6502 trick that I had never seen before, although I had read a lot of 6502 code, including the very well-written Commodore BASIC (i.e. Microsoft BASIC for 6502).
+
+What is the most optimized way (shortest code) to set, clear and test a flag?
+
+Normally, you would do this (“flag” is a byte in the zero page):
+
+function	code	bytes	cycles
+set	
+lda #1
+sta flag
+4	5
+clear	
+lda #0
+sta flag
+4	5
+test	
+lda flag
+beq cleared
+4	5/6
+Woz did it like this:
+
+function	code	bytes	cycles
+set	
+lda #$80
+sta flag
+4	5
+clear	
+lsr flag
+2	5
+test	
+bit flag
+bpl cleared
+4	5/6
+The trick is to store the flag in bit #7. Clearing bit #7 is easy: Just do a logical shift right, which will always write a zero into the MSB; we don’t care about the contents of the other bits. The “lsr zp” is the same speed as the “lda/sta zp” combination, but only occupies 2 bytes instead of four.
+
+The other advantage of this method is that it is possible to test the flag without destroying a register. The “bit” instruction will just copy the MSB into the negative flag, while the “lda” would have overwritten the accumulator.
+
+I can’t see why this couldn’t be adapted to other (CISC, RMW-capable) CPUs as well. If you are fluent in any other assembly language, please post a comment.
+
+*********************************************************
+
 
 Flags and other information is part of rule, not instruction.
 Instruction must have reference to rule (pointer to rule).

@@ -1606,6 +1606,7 @@ Bool InstrInferType(Loc * loc, void * data)
 		if (IS_INSTR_BRANCH(i->op)) {
 			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
 				taken = false;
+				not_taken = false;
 				switch (i->op) {
 				case INSTR_IFEQ:
 					break;
@@ -1631,9 +1632,8 @@ Bool InstrInferType(Loc * loc, void * data)
 					d->modified_blocks = true;
 					return true;
 				} else if (not_taken) {
+					i->result->write--;
 					InstrDelete(loc->blk, i);
-//					i->op = INSTR_VOID;
-//					i->result = i->arg1 = i->arg2 = NULL;
 					d->modified_blocks = true;
 					return true;
 				}
