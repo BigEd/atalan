@@ -61,10 +61,6 @@ Int16 StrEditDistance(char * s, char * t);
 
 // Asserts
 
-#ifndef ASSERT
-	#define ASSERT(x) if (!(x)) exit(-1)
-#endif
-
 
 // Path functions
 
@@ -82,6 +78,14 @@ Int16 StrEditDistance(char * s, char * t);
 #define __Windows__
 #define DIRSEP '\\'
 
+#endif
+
+#ifdef __Windows__
+#define ASSERT(x) if (!(x)) { printf("Assert: %s:%ld: %s", __FILE__, __LINE__, #x); while(1); }
+#endif
+
+#ifndef ASSERT
+	#define ASSERT(x) if (!(x)) exit(-1)
 #endif
 
 // Path functions

@@ -1102,4 +1102,5 @@ extern Var * MACRO_FORMAT;		// Format macro
 extern Var * MACRO_ASSERT;		// Assert procedure
 extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
 extern Var * VARS;				// list of variables
+extern Bool  ASSERTS_OFF;		// do not generate asserts into output code
 

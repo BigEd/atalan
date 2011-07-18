@@ -115,10 +115,10 @@ repeat:
 		if (i != NULL) op = i->op;
 
 		// Continue with instruction in next block 
-		// This is not true for block ending with GOTO
+		// This is not true for block ending with GOTO and ASSERT_END
 
 		dst = nb->next;
-		if (dst != NULL && op != INSTR_GOTO) {
+		if (dst != NULL && op != INSTR_GOTO && op != INSTR_ASSERT_END) {
 			nb->to = nb->next;
 			dst->from = nb;
 		}

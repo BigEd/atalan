@@ -76,6 +76,12 @@ Purpose:
 	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
 	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
 
+	// If platform does not implement 'assert' instruction, we always turn the assertions off.
+
+	if (InstrRule2(INSTR_ASSERT, NULL, NULL, NULL) == NULL) {
+		ASSERTS_OFF = true;
+	}
+
 	InitCPU();
 
 	SYSTEM_PARSE = false;
