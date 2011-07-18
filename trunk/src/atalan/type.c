@@ -1849,22 +1849,22 @@ Purpose:
 			if (i->op == INSTR_LINE) continue;
 
 			var = i->result;
-			if (var != NULL) {
+			if (var != NULL && !VarIsLabel(var)) {
 				tr = i->type[RESULT];
 				if (VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
 					if (tr != NULL && tr->variant != TYPE_UNDEFINED && FlagOff(i->flags, InstrRestriction)) {
 						var->type = TypeExpand(var->type, i->type[RESULT]);
 					} else {
-						if (var->type->variant == TYPE_UNDEFINED) {
+//						if (var->type->variant == TYPE_UNDEFINED) {
 
 							// For temporary variable, there is no reason to define 
 							if (VarIsTmp(var)) {
 								LogicErrorLoc("Cannot infer type of result of operator [*].", &loc);
 							} else {
 								ErrArg(var);
-								LogicErrorLoc("Cannot infer type of variable [A].\nPlease specify the type explicitly.", &loc);
+								LogicErrorLoc("Cannot infer type of variable [A].\nPlease define the type or use assert to help the compiler to infer it.", &loc);
 							}
-						}
+//						}
 					}
 				} else if (tr == NULL) {
 					tl = i->type[ARG1];
