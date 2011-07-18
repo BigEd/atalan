@@ -801,6 +801,25 @@ Type * TypeEval(InstrOp op, Type * left, Type * right)
 
 #define TYPE_IS_UNDEFINED(t)  (t == NULL)
 
+Type * ResolveSequence(Type * type)
+{
+	Type * rt;
+	IntLimit init, step, limit;
+	rt = type;
+	if (type != NULL && type->variant == TYPE_SEQUENCE) {
+		if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init) && TypeIsInt(type->seq.limit)) {
+			init = type->seq.init->range.min;
+			step = type->seq.step->range.max;			// maximal step
+			limit = type->seq.limit->range.max;
+
+			if (type->seq.op == INSTR_ADD && type->seq.compare_op == INSTR_IFLE) {
+				rt = TypeAllocInt(init, limit + step - 1);	// we may overstep maximal value by step
+			}
+		}
+	}
+	return rt;
+}
+
 Type * TypeUnion(Type * left, Type * right)
 /*
 Purpose:
@@ -853,7 +872,7 @@ Purpose:
 			if (left->seq.init == NULL) {
 				type = TypeCopy(left);
 				type->seq.init = right;
-				return type;
+				return ResolveSequence(type);
 			}
 
 			if (left->seq.op == INSTR_ADD && left->seq.step->range.min >=0) {
@@ -882,6 +901,9 @@ Purpose:
 				}
 			}
 		}
+		break;
+	case TYPE_VARIANT:
+		if (TypeIsSubsetOf(right, left->dim[0]) || TypeIsSubsetOf(right, left->dim[0])) return left;
 		break;
 	}
 
@@ -1009,12 +1031,15 @@ Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 		op = OpNot(op);
 	}
 
+	//TODO: We may use the inferred type fomn instruction
 	vt = var2->type;
 	if (VarIsIntConst(var2)) {
 		min = max = var2->n;
 	} else if (vt != NULL && vt->variant == TYPE_INT) {
 		min = var2->type->range.min;
 		max = var2->type->range.max;
+	} else {
+		goto done;
 	}
 
 	if (type == NULL) type = var->type;
@@ -1040,6 +1065,11 @@ Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 					step = type->seq.step->range.max;			// maximal step
 					if (type->seq.op == INSTR_ADD) {
 						rt = TypeAllocInt(init, max + step);	// we may overstep maximal value by step
+					}
+				} else {
+					if (type->seq.compare_op != INSTR_IFLE) {
+						type->seq.compare_op = INSTR_IFLE;
+						type->seq.limit = TypeAllocInt(max, max);
 					}
 				}
 				break;
@@ -1135,9 +1165,10 @@ Result:
 {
 	Instr * i;
 	InstrBlock * caller;
-	Type * type, * type2;
+	Type * type, * type2, * old_type;
 	Var * var2;
-	UInt16 caller_count = 0;
+	UInt16 caller_count;
+	UInt16 limit;
 
 	if (blk == NULL) return NULL;
 
@@ -1180,6 +1211,8 @@ Result:
 							type->seq.op = i->op;
 							type->seq.step = i->type[ARG2];
 							type->seq.init = NULL;
+							type->seq.compare_op = INSTR_VOID;
+							type->seq.limit = NULL;
 							goto sub1;		//continue;
 						}
 					}
@@ -1218,48 +1251,59 @@ sub1:
 		}
 	}
 
-	if (blk->from != NULL) {
-		caller_count++;
-#ifdef TRACE_INFER
-		g_fb_level++;
-#endif
-		type2 = FindTypeBlock(loc, var, blk->from, NULL);
-#ifdef TRACE_INFER
-		g_fb_level--;
-#endif
-
-		// This is just speed optimization, if the type is undefined, we do not need to continue processing
-		if (type2 != NULL) {
-			if (type2->variant == TYPE_UNDEFINED) {
-				type = type2;
-				goto done;
-			}
-			type2 = TypeRestrictBlk(type2, var, blk->from, true);
-			type = TypeUnion(type, type2);
-			type = TypeRestrictBlk(type, var, blk->from, true);
+	limit = 0;
+//	do {
+		limit++;
+		if (limit == 1000) {
+			printf("Limit reached\n");
 		}
-	}
 
-	for(caller = blk->callers; caller != NULL; caller = caller->next_caller) {
-		caller_count++;
-//		if (caller_count > 1) paths++;
-#ifdef TRACE_INFER
-		g_fb_level++;
-#endif
-		type2 = FindTypeBlock(loc, var, caller, NULL);
-#ifdef TRACE_INFER		
-		g_fb_level--;
-#endif
-		if (type2 != NULL) {
-			if (type2->variant == TYPE_UNDEFINED) {
-				type = type2;
-				goto done;
+		old_type = type;
+		caller_count = 0;
+		if (blk->from != NULL) {
+			caller_count++;
+	#ifdef TRACE_INFER
+			g_fb_level++;
+	#endif
+			type2 = FindTypeBlock(loc, var, blk->from, NULL);
+	#ifdef TRACE_INFER
+			g_fb_level--;
+	#endif
+
+			// This is just speed optimization, if the type is undefined, we do not need to continue processing
+			if (type2 != NULL) {
+				if (type2->variant == TYPE_UNDEFINED) {
+					type = type2;
+					goto done;
+				}
+				type2 = TypeRestrictBlk(type2, var, blk->from, true);
+				type = TypeUnion(type, type2);
+				type = TypeRestrictBlk(type, var, blk->from, true);
 			}
-			type2 = TypeRestrictBlk(type2, var, caller, false);
-			type = TypeUnion(type, type2);
-			type = TypeRestrictBlk(type, var, caller, false);
 		}
-	}
+
+		for(caller = blk->callers; caller != NULL; caller = caller->next_caller) {
+			caller_count++;
+	//		if (caller_count > 1) paths++;
+	#ifdef TRACE_INFER
+			g_fb_level++;
+	#endif
+			type2 = FindTypeBlock(loc, var, caller, NULL);
+	#ifdef TRACE_INFER		
+			g_fb_level--;
+	#endif
+			if (type2 != NULL) {
+				if (type2->variant == TYPE_UNDEFINED) {
+					type = type2;
+					goto done;
+				}
+				type2 = TypeRestrictBlk(type2, var, caller, false);
+				type = TypeUnion(type, type2);
+				type = TypeRestrictBlk(type, var, caller, false);
+			}
+		}
+//	} while(type != old_type);
+
 	if (caller_count > 0) paths += caller_count - 1;
 
 done:
@@ -1756,17 +1800,8 @@ Purpose:
 
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
-/*
-	// Init the info on types in instruction
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		for(i = blk->first; i != NULL; i = i->next) {
-			i->type[0] = i->type[1] = i->type[2] = NULL;
-			i->flags = 0;
-		}
-	}
-*/
-	printf("======= Infer ===========\n");
-	PrintProc(proc);
+//	printf("======= Infer ===========\n");
+//	PrintProc(proc);
 
 	// 1. For every instruction in the code try to infer the type of it's result
 	// 2. Repeat this until no new result type was inferred
@@ -1843,7 +1878,7 @@ Purpose:
 			}
 		}
 	}
-	PrintVars(proc);
+//	PrintVars(proc);
 
 	ReportUnusedVars(proc);
 }

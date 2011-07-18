@@ -319,8 +319,10 @@ It is partial type. It cannot be used to define.
 
 typedef struct {
 	InstrOp op;			// step_type INSTR_ADD, INSTR_SUB, INSTR_MUL, INSTR_DIV, ...
-	Type * step;			// type of argument (step value)
+	Type * step;		// type of argument (step value)
 	Type * init;		// initial value of the step
+	InstrOp compare_op;
+	Type * limit;		// limit value of step (for ADD, MUL this is top value, for SUB, DIV this is bottom value)
 } TypeSequence;
 
 typedef Int16 Relation;

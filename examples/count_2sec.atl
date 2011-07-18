@@ -4,13 +4,12 @@
 
 use atari
 
-count:0..2'000'000
-
 "Counting 2 seconds..."
 
 count = 0
 timer = 0
 until timer = 100
   inc count
-
+  assert count < 2'000'000
+  
 "Counted to [count]."
