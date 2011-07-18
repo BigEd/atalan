@@ -180,7 +180,7 @@ void InstrDetach(InstrBlock * blk, Instr * first, Instr * last)
 
 void InstrAttach(InstrBlock * blk, Instr * before, Instr * first, Instr * last)
 {
-
+	if (first == NULL) return;
 	if (before == NULL) {
 		first->prev = blk->last;
 		if (blk->last != NULL) {

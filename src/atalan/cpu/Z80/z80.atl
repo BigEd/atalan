@@ -1,18 +1,23 @@
-const    reg:regset			; only a register
-_a@reg:0..255
-_b@reg:0..255
-_c@reg:0..255
-;d@reg:0..255
-;e@reg:0..255
-;h@reg:0..255
-;l@reg:0..255
-
 type
    byte:0..255
    card:0..65535
    int:-32768..32767
    sbyte:-128..127
    byte1:byte() or sbyte()
+
+cpu:scope =
+  a:byte
+  b:byte
+  c:byte
+  d:byte
+  e:byte
+  h:byte
+  l:byte
+  bc@(b,c)
+  de@(d,e)
+  hl@(h,l)
+  ix:card
+  iy:card
 
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"

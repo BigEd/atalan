@@ -327,7 +327,7 @@ Purpose:
 {
 	Instr * i, * first_i, * next_i;
 	InstrBlock * blk;
-	Bool modified, untranslated;
+	Bool modified, untranslated, in_assert;
 	UInt8 step = 0;
 	UInt32 ln;
 	Var * a = NULL, * var, * item;
@@ -358,6 +358,7 @@ Purpose:
 	do {
 		modified = false;
 		untranslated = false;
+		in_assert = false;
 
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
@@ -372,6 +373,18 @@ Purpose:
 			i = first_i;
 
 			while(i != NULL) {
+
+				if (ASSERTS_OFF) {
+					if (i->op == INSTR_ASSERT_BEGIN) {
+						in_assert = true;
+						goto next;
+					} else if (i->op == INSTR_ASSERT_END) {
+						in_assert = false;
+						goto next;
+					} else {
+						if (in_assert) goto next;
+					}
+				}
 
 				if (!InstrTranslate(i, &modified)) {
 

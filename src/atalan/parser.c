@@ -3566,17 +3566,21 @@ void ParseAssert()
 			LogicWarning("assertion has side-effects", bookmark);
 		}
 
-		GenBegin();
+		// Generate arguments for assert only if the ASSERT instruction has beed defined by the platform
 
-		sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
-		Gen(INSTR_STR_ARG, NULL, VarNewStr(location), VarNewInt(StrLen(location)));
-		for(i = cond->first; i != NULL; i = i->next) {
-			AssertVar(i->arg1);
-			AssertVar(i->arg2);
+		if (!ASSERTS_OFF) {
+			GenBegin();
+
+			sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
+			Gen(INSTR_STR_ARG, NULL, VarNewStr(location), VarNewInt(StrLen(location)));
+			for(i = cond->first; i != NULL; i = i->next) {
+				AssertVar(i->arg1);
+				AssertVar(i->arg2);
+			}
+			Gen(INSTR_DATA, NULL, VarNewInt(0), NULL);
+
+			args = GenEnd();
 		}
-		Gen(INSTR_DATA, NULL, VarNewInt(0), NULL);
-
-		args = GenEnd();
 
 		GenBlock(cond);
 
@@ -3588,8 +3592,10 @@ void ParseAssert()
 		}
 
 		// Generate call to assert (variant of print instruction)
-		GenInternal(INSTR_ASSERT, NULL, NULL, NULL);
-		GenBlock(args);
+		if (!ASSERTS_OFF) {
+			GenInternal(INSTR_ASSERT, NULL, NULL, NULL);
+			GenBlock(args);
+		}
 
 		// generate file name and line number
 		// generate list of used variables
@@ -3597,8 +3603,6 @@ void ParseAssert()
 		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
 		GenLabel(G_BLOCK->f_label);
 		EndBlock();
-
-//		SyntaxError("Only string argument for assert supported now.");
 	}
 }
 

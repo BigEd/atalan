@@ -1,5 +1,4 @@
-﻿;ATALAN definitions for 6502 processor
-;This is include file automatically included by Atalan compiler.
+﻿;ATALAN definitions for 6502 CPU
 
 type
    byte:0..255
