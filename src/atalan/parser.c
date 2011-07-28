@@ -895,6 +895,7 @@ void ReportSimilarNames(char * name)
 	UInt16 cnt, i;
 	min_dist = 3;
 	v = NULL;
+	cnt = 0;
 
 	FOR_EACH_VAR(v)
 		if (v->name != NULL && v->idx == 0) {
@@ -2970,9 +2971,36 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	InstrOp op;
 	Var * label, * scope;
 	char inc_path[MAX_PATH_LEN];
+	Var * inop;
 	
-	op = ParseInstrOp();
+	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
+
+		// This is instruction
+		inop = InstrFind(NAME);
+		if (inop == NULL) {
+			inop = VarFindScope(CPU->SCOPE, NAME, 0);
+			if (inop == NULL) {
+				SyntaxError("Unknown instruction or macro [$]");
+				NextToken();
+			} else {
+				if (inop->type->variant == TYPE_MACRO) {
+					NextToken();
+					ParseMacro(inop);
+					return;
+				} else {
+					ErrArg(inop);
+					SyntaxError("[A] must be instruction or macro");
+				}
+			}
+		}
+		NextToken();
+		op = inop->n;
+	} else {
+		SyntaxError("Expected instruction or macro name");
+	}
+
 	if (TOK != TOKEN_ERROR) {
+
 		n = 0;
 	// Include has special handling
 	// We need to make the file relative to current file dir and check the existence of the file
