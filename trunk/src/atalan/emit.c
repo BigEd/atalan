@@ -19,7 +19,6 @@ extern Rule * EMIT_RULES[INSTR_CNT];
 extern Var   ROOT_PROC;
 
 UInt8 G_COLOR;
-
 FILE * G_PRINT_OUTPUT;		// either STDOUT or STDERR
 
 /*
@@ -37,11 +36,8 @@ UInt16 G_OLD_CP;
 void PrintInit()
 {
 #ifdef __Windows__
-//	printf("");
 	G_OLD_CP = GetConsoleOutputCP();
 	SetConsoleOutputCP(CP_UTF8);
-//	fprintf(stdout, "Lower equal: %s\n", "\xe2\x89\xa4");
-
 #endif
 	PrintDestination(stdout);
 	PrintColor(RED+GREEN+BLUE);
@@ -82,22 +78,6 @@ void Print(char * text)
 	if (text != NULL) {
 		fprintf(G_PRINT_OUTPUT, "%s", text);
 	}
-/*
-#ifdef __Windows__
-//	UInt16 len;
-	WCHAR unicode[256];
-	if (text != NULL) {
-	//SetConsoleOutputCP(CP_UTF8);
-	//len = MultiByteToWideChar(CP_UTF8, 0, text, -1, 0, 0);
-		MultiByteToWideChar(CP_UTF8, 0, text, -1, unicode, 256);
-		wprintf(L"%s", unicode);
-	}
-#else
-	if (text != NULL) {
-		fprintf(G_PRINT_OUTPUT, "%s", text);
-	}
-#endif
-*/
 }
 
 void PrintChar(char c)
@@ -336,6 +316,8 @@ void EmitVar(Var * var, UInt8 format)
 			} else {
 				InternalError("don't know how to emit array element");
 			}
+		} else if (var->mode == INSTR_DEREF) {
+			EmitVar(var->var, format);
 		} else if (var->mode == INSTR_BYTE) {
 			InternalError("don't know how to emit byte array element");
 		} else if (var->name != NULL) {
@@ -378,7 +360,7 @@ void EmitInstr2(Instr * instr, char * str)
 	s = str;
 
 	if (instr->op == INSTR_LINE) {
-		PrintColor(BLUE);
+		PrintColor(BLUE+LIGHT);
 	}
 
 	while(c = *s++) {		
@@ -473,7 +455,7 @@ Bool EmitInstr(Instr * i)
 		}
 		return true;
 	} else {
-		InternalError("no rule for translating instruction");
+		InternalError("CPU does not support instruction");
 		InstrPrint(i);
  		return false;
 	}
@@ -494,9 +476,10 @@ Bool EmitInstrBlock(InstrBlock * blk)
 {
 	Bool r = true;
 	Instr * i;
+	UInt32 n;
 
 	if (blk != NULL) {
-		for(i = blk->first; r && i != NULL; i = i->next) {
+		for(i = blk->first, n=1; r && i != NULL; i = i->next, n++) {
 			r = EmitInstr(i);
 		}
 	}

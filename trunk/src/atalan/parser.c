@@ -34,7 +34,9 @@ GLOBAL Bool  USE_PARSE;
 
 Type * RESULT_TYPE;
 Bool   EXP_IS_DESTINATION = false;		// Parsed expression is destination
-Var *  EXP_EXTRA_SCOPE;						// Scope used by expression parsing to find extra variables.
+Var *  EXP_EXTRA_SCOPE;					// Scope used by expression parsing to find extra variables.
+UInt16 EXP_PARENTHESES;					// If > 0, we are parsing parenthesis inside expression
+static Var * UNUSED_RULE_SCOPE = NULL;
 
 //TODO: Remove
 Type   EXP_TYPE;			// Type returned by expression
@@ -445,13 +447,12 @@ const_list:
 			}
 		}
 
-	} else if (NextIs(TOKEN_ADR2)) {		
-		type = TypeAlloc(TYPE_ADR);
+	} else if (NextIs(TOKEN_ADR2)) {
+		elmt = NULL;
 		if (NextIs(TOKEN_OF)) {
-			type->element = ParseType();
-		} else {
-			type->element = TypeByte();
+			elmt = ParseType();
 		}
+		type = TypeAdrOf(elmt);
 
 	} else if (TOK == TOKEN_ID) {
 		var = ParseVariable();
@@ -622,8 +623,10 @@ done:
 void ParseParenthesis()
 {
 	EnterBlock();
+	EXP_PARENTHESES++;
 	ParseExpRoot();
 	if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
+	EXP_PARENTHESES--;
 }
 
 UInt8 ParseArgNo2()
@@ -655,13 +658,11 @@ UInt8 ParseArgNo()
 	return arg_no;
 }
 
-
-void CheckArrayBound(UInt16 no, Var * arr, Type * idx_type, Var * idx, UInt16 bookmark)
 /*
+void CheckArrayBound(UInt16 no, Var * arr, Type * idx_type, Var * idx, UInt16 bookmark)
 Purpose:
 	Test, whether the array index fits array bounds.
 	If not, report error.
-*/
 {
 	if (idx_type != NULL) {
 		if (!VarMatchType(idx, idx_type)) {
@@ -673,6 +674,7 @@ Purpose:
 		}
 	}
 }
+*/
 
 Var * ParseStructElement(Var * arr)
 /*
@@ -780,7 +782,7 @@ Purpose:
 		ParseSubExpression(idx_type);
 		if (TOK) {
 			idx = STACK[top];
-			CheckArrayBound(0, arr, idx_type, idx, bookmark);
+//			CheckArrayBound(0, arr, idx_type, idx, bookmark);
 		}
 	}
 
@@ -797,7 +799,7 @@ Purpose:
 			ParseSubExpression(idx_type);
 			idx2 = STACK[top];
 			if (TOK) {
-				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
+//				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 			}
 		}
 		if (idx2 != NULL) {
@@ -817,7 +819,7 @@ Purpose:
 				ParseSubExpression(idx_type);
 				idx2 = STACK[TOP-1];
 
-				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
+//				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
 
 				idx = VarNewTuple(idx, idx2);
 			} else {
@@ -996,7 +998,7 @@ void ParseOperand()
 
 				// Out-only variables may not be in expressions
 				if (!EXP_IS_DESTINATION) {			
-					if (OutVar(var) && !InVar(var)) {
+					if (var->type->variant != TYPE_PROC && OutVar(var) && !InVar(var)) {
 						ErrArg(var);
 						LogicError("Variable [A] may be only written", 0);
 					}
@@ -1296,9 +1298,27 @@ retry:
 	}
 }
 
+void ParseTuple()
+{
+	Var * var;
+	ParseBinaryOr();
+retry:
+	if (EXP_PARENTHESES > 0) {
+		if (NextOpIs(TOKEN_COMMA)) {
+			ParseBinaryOr();
+			if (TOK) {
+				var = VarNewTuple(STACK[TOP-2], STACK[TOP-1]);
+				TOP--;
+				STACK[TOP-1] = var;
+			}
+			goto retry;
+		}
+	}
+}
+
 void ParseExpRoot()
 {
-	ParseBinaryOr();
+	ParseTuple();
 }
 
 typedef struct {
@@ -1307,6 +1327,7 @@ typedef struct {
 							// For example type of variable, into which the expression result 
 							// gets assigned.
 	UInt16 top;				// top of the stack when the parsing started
+	UInt16 parentheses;
 } ExpState;
 
 UInt16 ParseSubExpression(Type * result_type)
@@ -1326,15 +1347,17 @@ Result:
 	memcpy(&state.type, &EXP_TYPE, sizeof(Type));
 	state.result = RESULT_TYPE;
 	state.top    = TOP;
+	state.parentheses = EXP_PARENTHESES;
 
 	RESULT_TYPE = result_type;
 	EXP_TYPE.variant = TYPE_UNDEFINED;
+	EXP_PARENTHESES = 0;
 
 	ParseExpRoot();
 
 	memcpy(&EXP_TYPE, &state.type, sizeof(Type));
 	RESULT_TYPE = state.result;
-
+	EXP_PARENTHESES = state.parentheses;
 	return TOP - state.top;
 }
 
@@ -1380,6 +1403,7 @@ If result mode is INSTR_CONST, no code is to be generated.
 	}
 	TOP = 0;
 	EXP_TYPE.variant = TYPE_UNDEFINED;
+	EXP_PARENTHESES = 0;
 	ParseExpRoot();
 
 	// When we parse very simple expressions, no instruction gets generated
@@ -1759,7 +1783,6 @@ void ParseRange(Var ** p_min, Var ** p_max)
 		// If there are multiple values on stack, we may use the second value as loop maximal value
 		if (TOP > 1) {
 			max = STACK[1];
-			//TODO: Free other variables on stack
 		} else {
 			if (min->mode == INSTR_CONST) {
 				max = min;
@@ -1843,6 +1866,7 @@ Syntax:
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
 	Int32 n, nmask;
+	LinePos token_pos;
 
 	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL;
 	where_t_label = NULL;
@@ -1860,13 +1884,23 @@ Syntax:
 			strcpy(name, NAME);
 			NextToken();
 
+			token_pos = TOKEN_POS;
 			// for i ":" <range>
 			if (NextIs(TOKEN_COLON)) {
+
+				var = VarAlloc(INSTR_VAR, name, 0);
+				var->line_no = LINE_NO;
+				var->line_pos = token_pos;
+				var->file    = SRC_FILE;
+
 				ParseRange(&min, &max);
 				if (TOK) {
 					type = TypeAllocRange(min, max);
 					if (TOK) {
-						var = VarAlloc(INSTR_VAR, name, 0);
+
+						if (VarIsConst(min) && VarIsConst(max)) {
+							SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
+						}
 						var->type = type;
 					}
 				}
@@ -1893,11 +1927,14 @@ Syntax:
 	BeginBlock(TOKEN_FOR);
 	
 	// STEP can be only used if we have the loop variable defined
+	// Default step is 1.
 
 	if (var != NULL) {
 		if (NextIs(TOKEN_STEP)) {
 			ParseExpression(max);
 			step = STACK[0];
+		} else {
+			step = VarNewInt(1);
 		}
 	}
 
@@ -1936,6 +1973,7 @@ Syntax:
 	}
 
 	/*
+	Case when UNTIL is not used:
 		<i> = min
 		goto loop_label		; only if there is condition (otherwise we expect at least one occurence)
 	body_label@
@@ -1948,6 +1986,23 @@ Syntax:
 	t_label@
 		add <i>,<i>,1
 		ifle body_label,<i>,max
+	f_label@
+	*/
+
+	/*
+	Case, when UNTIL is used:
+		<i> = min
+		goto loop_label		; only if there is condition (otherwise we expect at least one occurence)
+	body_label@
+		if !<condition> goto f_label
+	;WHERE
+		<where_condition>  f_label = loop_label | t_label
+	where_t_label@
+		<body>
+	t_label@
+		add <i>,<i>,1
+	loop_label@
+		ifgt f_label,<i>,max
 	f_label@
 	*/
 
@@ -1964,7 +2019,8 @@ Syntax:
 		GenInternal(INSTR_LET, var, min, NULL);
 	}
 
-	if (cond != NULL) {
+	// Loop with condition, but without variable
+	if (cond != NULL && var == NULL) {
 		GenGoto(G_BLOCK->loop_label);
 	}
 
@@ -1973,29 +2029,33 @@ Syntax:
 	G_BLOCK->body_label = VarNewTmpLabel();
 	GenLabel(G_BLOCK->body_label);
 
+	if (cond != NULL && var != NULL) {
+		GenBlock(cond);
+	}
+
 	if (where_cond != NULL) {
 		GenBlock(where_cond);
 	}
 
 	GenBlock(body);
 
-	if (cond != NULL || where_cond != NULL) {
+	if (where_cond != NULL) {
 		GenLabel(G_BLOCK->loop_label);
 	}
 
-	// Insert condition
-	if (cond != NULL) {
-		GenBlock(cond);
-		if (var == NULL) {
-			GenGoto(G_BLOCK->body_label);
+	// Insert condition (we do not have index variable)
+	if (cond != NULL && var == NULL) {
+		if (where_cond == NULL) {
+			GenLabel(G_BLOCK->loop_label);
 		}
+		GenBlock(cond);
+//		if (var == NULL) {
+			GenGoto(G_BLOCK->body_label);
+//		}
 	}
 
 	if (var != NULL) {
 
-		// Default step is 1
-		if (step == NULL) step = VarNewInt(1);
-		
 		// Add the step to variable
 		GenInternal(INSTR_ADD, var, var, step);
 
@@ -2017,6 +2077,7 @@ Syntax:
 				if (min->mode == INSTR_CONST) {
 					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
 					n = n & nmask;
+					var->type->range.max = n;		// set the computed limit value as max of the index variable
 					max = VarNewInt(n);
 					GenInternal(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
 					goto var_done;
@@ -3110,6 +3171,7 @@ void ParseRule()
 	char buf[255];
 	char *s, *d, c;
 	Bool old_parse;
+//	Var * scope, *old_scope;
 
 	op = ParseInstrOp();
 	if (TOK == TOKEN_ERROR) return;
@@ -3142,9 +3204,25 @@ void ParseRule()
 //		EnterBlock(TOKEN_VOID);
 
 		if (NextIs(TOKEN_INSTR)) {
+
+//			if (UNUSED_RULE_SCOPE != NULL) {
+//				scope = UNUSED_RULE_SCOPE;
+//			} else {
+//				scope = VarAllocScopeTmp(NULL, INSTR_SCOPE, TypeScope());
+//			}
+//			old_scope = InScope(scope);
 			GenBegin();
 			ParseInstr2(&rule->to);
-			rule->to = GenEnd();	
+			rule->to = GenEnd();
+//			ReturnScope(old_scope);
+
+//			if (VarFirstLocal(scope) == NULL) {
+//				UNUSED_RULE_SCOPE = scope;
+//			} else {
+//				scope->scope = RULE_PROC;
+//				rule->scope = scope;
+//			}
+
 		} else {
 
 			// Emitting rule
@@ -3742,4 +3820,5 @@ void ParseInit()
 	EXP_EXTRA_SCOPE = NULL;
 	OP_LINE_POS = 0;
 	OP_LINE_NO  = 0;
+	UNUSED_RULE_SCOPE = NULL;
 }

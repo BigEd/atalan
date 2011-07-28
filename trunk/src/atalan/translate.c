@@ -95,7 +95,7 @@ void EmptyRuleArgs()
 	}
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple);
+static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant);
 
 Bool RuleMatch(Rule * rule, Instr * i)
 {
@@ -105,9 +105,9 @@ Bool RuleMatch(Rule * rule, Instr * i)
 
 	EmptyRuleArgs();
 
-	match = ArgMatch(&rule->arg[0], i->result, false) 
-		&& ArgMatch(&rule->arg[1], i->arg1, false) 
-		&& ArgMatch(&rule->arg[2], i->arg2, false);
+	match = ArgMatch(&rule->arg[0], i->result, RULE_UNDEFINED) 
+		&& ArgMatch(&rule->arg[1], i->arg1, RULE_UNDEFINED) 
+		&& ArgMatch(&rule->arg[2], i->arg2, RULE_UNDEFINED);
 
 	if (match) {
 		if (RULE_MATCH_BREAK) {
@@ -131,7 +131,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 //				printf("");
 			} else {
 				// 1D index
-				if (!ArgMatch(pattern->index, var->var, false)) return false;
+				if (!ArgMatch(pattern->index, var->var, RULE_ELEMENT)) return false;
 				return true;
 			}
 		} else {
@@ -146,43 +146,44 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	return VarMatchesType(var, type);
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
+static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
 {
 	Type * atype;
 	Var * pvar;
 	UInt8 j;
+	RuleArgVariant v = pattern->variant;
 
-	if (arg == NULL) return pattern->variant == RULE_ANY;
+	if (arg == NULL) return v == RULE_ANY;
 	atype = arg->type;
 	
-	switch(pattern->variant) {
+	switch(v) {
 	case RULE_RANGE:
 		if (arg->mode != INSTR_RANGE) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;
-		return ArgMatch(pattern->arr, arg->adr, false); 
+		if (!ArgMatch(pattern->index, arg->var, v)) return false;
+		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
 	case RULE_TUPLE:
 		if (arg->mode != INSTR_TUPLE) return false;
-		if (!ArgMatch(pattern->index, arg->var, true)) return false;
-		return ArgMatch(pattern->arr, arg->adr, true); 
+		if (!ArgMatch(pattern->index, arg->var, v)) return false;
+		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
 	case RULE_BYTE:
 		if (arg->mode != INSTR_BYTE) return false;		// pattern expects byte, and variable is not an byte
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;		
-//		return ArgMatch(pattern->arr, arg->adr, false); 
-		pattern = pattern->arr;
-		arg = arg->adr;
+		if (!ArgMatch(pattern->index, arg->var, v)) return false;		
+		return ArgMatch(pattern->arr, arg->adr, v);
+//		pattern = pattern->arr;
+//		arg = arg->adr;
 		break;
 
 	case RULE_ELEMENT:
 		if (arg->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, false)) return false;
-		return ArgMatch(pattern->arr, arg->adr, false); 
+		if (!ArgMatch(pattern->index, arg->var, v)) return false;
+		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
-	case RULE_CONST:	// var
+	case RULE_CONST:
 		if (!VarIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
@@ -205,14 +206,15 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		}
 		break;
 
+	// Exact variable.
 	case RULE_REGISTER:
-		if (pattern->var != NULL && arg != pattern->var) return false;
+		if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
 		break;
 
 	case RULE_VARIABLE:
-		if (arg->mode == INSTR_CONST) return false;
+		if (arg->mode != INSTR_VAR) return false;
 		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
-		if (!VarMatchesPattern(arg, pattern)) return false;
+		if (parent_variant != RULE_BYTE && !VarMatchesPattern(arg, pattern)) return false;
 		break;
 	
 	case RULE_DEREF:
@@ -221,9 +223,10 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, Bool in_tuple)
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
+	// %A:type
 	case RULE_ARG:
-		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE) return false;
-		if (!in_tuple && FlagOn(arg->submode, SUBMODE_REG)) return false; 
+		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || arg->mode == INSTR_BYTE || arg->mode == INSTR_ELEMENT) return false;
+		if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
@@ -329,12 +332,16 @@ Purpose:
 	InstrBlock * blk;
 	Bool modified, untranslated, in_assert;
 	UInt8 step = 0;
-	UInt32 ln;
+	UInt32 n;
 	Var * a = NULL, * var, * item;
 	Instr i2;
 
 //	printf("============ Registers1 ============\n");
 //	PrintProc(proc);
+
+//	if (StrEqual(proc->name, "cycle")) {
+//		printf("");
+//	}
 
 	// As first step, we translate all variables on register address to actual registers
 
@@ -362,7 +369,7 @@ Purpose:
 
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
-			ln = 1;
+			n = 1;
 			// The translation is done by using procedures for code generating.
 			// We detach the instruction list from block and set the block as destination for instruction generator.
 			// In this moment, the code generating stack must be empty anyways.
@@ -444,7 +451,7 @@ next:
 				next_i = i->next;
 				InstrFree(i);
 				i = next_i;
-				ln++;
+				n++;
 			}
 		} // block
 

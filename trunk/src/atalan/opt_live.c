@@ -257,13 +257,13 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-//			if (var->mode == INSTR_ELEMENT && var->adr->mode == INSTR_DEREF && StrEqual(var->adr->var->name, "_arr")) {
+//			if (blk->seq_no == 1 && var->mode == INSTR_BYTE && var->adr->idx == 28/* && StrEqual(var->adr->var->name, "_arr")*/) {
 //				printf("");
 //			}
 
-			if (StrEqual(var->name, "z") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
-				printf("");
-			}
+//			if (StrEqual(var->name, "z") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
+//				printf("");
+//			}
 
 			// Non-local variables (except registers) are always considered live
 			if (!VarIsLocal(var, proc) && !VarIsReg(var)) {
@@ -327,9 +327,7 @@ Bool OptimizeLive(Var * proc)
 			//      Result must be marked first dead first, to properly handle instructions like x = x + 1
 
 			if (result != NULL) {
-//				if (FlagOff(result->submode, SUBMODE_OUT)) {
-					VarMarkDead(result);
-//				}
+				VarMarkDead(result);
 				i->next_use[0] = result->src_i;
 				result->src_i = NULL;			// next use $$$$
 			}

@@ -705,7 +705,7 @@ void InstrPrintInline(Instr * i)
 	Bool r = false, a1 = false;
 
 	if (i->op == INSTR_LINE) {
-		PrintColor(BLUE);
+		PrintColor(BLUE+LIGHT);
 		printf(";%s(%d) %s", i->result->name, i->line_no, i->line);
 		PrintColor(RED+GREEN+BLUE);
 	} else if (i->op == INSTR_LABEL) {
@@ -780,3 +780,25 @@ void InstrInit()
 	InstrNull = &NULL_INSTR;
 }
 
+Bool InstrIsSelfReferencing(Instr * i)
+/*
+Purpose:
+	Return true, if the instruction references itself.
+	Self referencing instructions are instructions like:
+
+	add x, x, 1 
+	
+	I.e. instructions, where result is one of the arguments.
+
+	We must take tuples into consideration:
+
+	add (a,c,z,n), (a,c), 4
+
+	is self referencing too.
+
+	add x(a), a, 3
+*/
+{
+	if (i == NULL || i->result == NULL) return false;
+	return VarModifiesVar(i->result, i->arg1) || VarModifiesVar(i->result, i->arg2);
+}
