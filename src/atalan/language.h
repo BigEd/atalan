@@ -555,6 +555,8 @@ Type * TypeLongInt();
 Type * TypeScope();
 Type * TypeTuple();
 
+Type * TypeAdrOf(Type * element);
+
 UInt16 TypeItemCount(Type * type);
 void TypeLimits(Type * type, Var ** p_min, Var ** p_max);
 
@@ -586,6 +588,8 @@ extern Type TINT;		// used for int constants
 extern Type TSTR;
 extern Type TLBL;
 extern Type * TUNDEFINED;
+
+#define NO_SCOPE ((Var *)1)
 
 void VarInit();
 void InitCPU();
@@ -638,6 +642,7 @@ Bool VarIsLocal(Var * var, Var * scope);
 Bool VarIsInArg(Var * var);
 Bool VarIsOutArg(Var * var);
 Bool VarIsArg(Var * var);
+Bool VarIsEqual(Var * left, Var * right);
 
 
 Var * VarField(Var * var, char * fld_name);
@@ -669,6 +674,7 @@ Var * VarNewByteElement(Var * arr, Var * idx);
 Var * VarNewDeref(Var * var);
 Var * VarNewRange(Var * min, Var * max);
 Var * VarNewTuple(Var * left, Var * right);
+Var * VarNewOp(InstrOp op, Var * left, Var * right);
 
 Var * VarEvalConst(Var * var);
 
@@ -908,6 +914,7 @@ void InstrReplaceVar(InstrBlock * block, Var * from, Var * to);
 void ProcReplaceVar(Var * proc, Var * from, Var * to);
 
 Bool InstrEquivalent(Instr * i, Instr * i2);
+Bool InstrIsSelfReferencing(Instr * i);
 
 // Instructions generating
 
@@ -943,6 +950,7 @@ typedef struct RuleArgTag RuleArg;
 //TODO: Check ARG type
 
 typedef enum {
+	RULE_UNDEFINED,
 	RULE_ANY = 0,		// any argument
 	RULE_VARIABLE,		// (type) variable of specified type
 	RULE_CONST,			// (type) constant matching specified type
@@ -979,6 +987,7 @@ struct RuleTag {
 	InstrOp op;
 	RuleArg arg[3];
 	InstrBlock * to;
+	Var * scope;
 };
 
 void RuleRegister(Rule * rule);
@@ -1029,6 +1038,7 @@ extern LinePos OP_LINE_POS;				// Position of last parsed binary operator
 *************************************************************/
 
 Bool VarUsesVar(Var * var, Var * test_var);
+Bool VarModifiesVar(Var * var, Var * test_var);
 Int16 VarTestReplace(Var ** p_var, Var * from, Var * to);
 Int16 VarReplace(Var ** p_var, Var * from, Var * to);
 

@@ -35,8 +35,6 @@ char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
-#define NO_SCOPE ((Var *)1)
-
 void VarInit()
 {
 
@@ -758,6 +756,8 @@ Purpose:
 		type = var->type;
 		if (var->mode == INSTR_ELEMENT) {
 			return 1;		//TODO: Compute size in a better way
+		} else if (var->mode == INSTR_BYTE) {
+			return 1;
 		}
 		return TypeSize(type);
 	}
@@ -789,6 +789,7 @@ Arguments:
 	Var * var, * label;
 	UInt16 bmk;
 	Loc loc;
+	UInt16 n;
 
 	loc.proc = proc;
 
@@ -819,7 +820,7 @@ Arguments:
 	}
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		for(i = blk->first; i != NULL; i = i->next) {
+		for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
 			if (i->op == INSTR_CALL) {
 				ProcUse(i->result, flag);
 //				// Procedure has side-effect, if it call a procedure with side effect
@@ -934,6 +935,40 @@ Purpose:
 	return false;
 }
 
+Bool VarModifiesVar(Var * var, Var * test_var)
+{
+	Bool uses = false;
+	if (var != NULL && test_var != NULL) {
+		if (var->mode == INSTR_CONST || test_var->mode == INSTR_CONST) return false;
+
+		if (var == test_var) {
+			uses = true;
+		} else {
+			
+			if (test_var->mode == INSTR_TUPLE) {
+				return VarModifiesVar(var, test_var->adr) || VarModifiesVar(var, test_var->var);
+			} else if (test_var->mode == INSTR_VAR && test_var->adr != NULL) {
+				return VarModifiesVar(var, test_var->adr);
+			}
+
+			if (var->mode == INSTR_TUPLE) {
+				return VarModifiesVar(var->adr, test_var) || VarModifiesVar(var->var, test_var);
+			}
+
+//			if (var->mode == INSTR_DEREF) {
+//				uses = VarUsesVar(var->var, test_var);
+//			} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+//				uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+//			} else if (var->adr != NULL) {
+//				if (var->adr->mode != INSTR_CONST) {
+//					return VarUsesVar(var->adr, test_var);
+//				}
+//			}
+		}
+	}
+	return uses;	
+}
+
 Bool VarUsesVar(Var * var, Var * test_var)
 /*
 Purpose:
@@ -942,14 +977,26 @@ Purpose:
 */
 {
 	Bool uses = false;
-	if (var != NULL) {
+	if (var != NULL && test_var != NULL) {
+		if (test_var->mode == INSTR_CONST) return false;
+
 		if (var == test_var) {
 			uses = true;
 		} else {
-			if (var->mode == INSTR_DEREF) {
-				uses = VarUsesVar(var->var, test_var);
-			} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE) {
-				uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+
+			if (test_var->mode == INSTR_TUPLE) {
+				return VarUsesVar(var, test_var->adr) || VarUsesVar(var, test_var->var);
+			} else {
+
+				if (var->mode == INSTR_DEREF) {
+					uses = VarUsesVar(var->var, test_var);
+				} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+					uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+				} else if (var->adr != NULL) {
+					if (var->adr->mode != INSTR_CONST) {
+						return VarUsesVar(var->adr, test_var);
+					}
+				}
 			}
 		}
 	}
@@ -1088,4 +1135,20 @@ Bool VarIsOutArg(Var * var)
 Bool VarIsArg(Var * var)
 {
 	return FlagOn(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT);
+}
+
+Bool VarIsEqual(Var * left, Var * right)
+{
+	if (left == NULL || right == NULL) return false;
+	if (left == right) return true;
+	if (left->mode == INSTR_VAR && left->adr != NULL) return VarIsEqual(left->adr, right);
+	if (right->mode == INSTR_VAR && right->adr != NULL) return VarIsEqual(left, right->adr);
+
+	if (left->mode == right->mode) {
+		if (left->mode == INSTR_TUPLE) {
+			return VarIsEqual(left->adr, right->adr) && VarIsEqual(left->var, right->var);
+		}
+	}
+
+	return false;
 }

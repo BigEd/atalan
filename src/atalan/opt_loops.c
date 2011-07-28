@@ -36,7 +36,7 @@ Purpose:
 //				printf("Var: "); PrintVar(var);
 //			}
 
-			if (var->mode == INSTR_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 				if (FlagOn(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG)) continue;
 				if (var->var->mode != INSTR_CONST) continue;
 //				continue;
@@ -132,7 +132,7 @@ UInt32 NumberBlocks(InstrBlock * block)
 Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * reg, Bool * p_init)
 //===== Compute usage quotient (q)
 //      The bigger the value, the more suitable the register is
-//      0 means no gain, >0 means using the register would lead to less optimal code
+//      0 means no gain, <0 means using the register would lead to less optimal code
 {
 	Var * prev_var;
 	Int32 q, q1;
@@ -438,7 +438,7 @@ Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
 	if (InVar(var)) return false;
 
 	// For array access, array adr is constant (except referenced array), important is index change
-	if (var->mode == INSTR_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 		return VarInvariant(proc, var->var, loc, loop);
 	}
 
@@ -495,7 +495,7 @@ Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
 	if (InVar(var)) return true;
 
 	// For array access, array adr is constant (except referenced array), important is index change
-	if (var->mode == INSTR_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 		return VarLoopDep(proc, var->var, loc, loop);
 	}
 
@@ -746,8 +746,8 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		if (Verbose(proc)) {
 			printf("Var: "); PrintVar(top_var);
 			printf("Register: "); PrintVar(top_reg);
+			printf("Quotient: %d\n", top_q);
 		}
-
 
 		//TODO: If there is Let reg = var and var is not top_var, we need to spill store
 
@@ -756,7 +756,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		// Generate instruction initializing the register used to replace the variable
 		// before the start of the loop.
 		// We only do this, if the variable is not initialized inside the loop.
-		if (FlagOn(top_var->flags, VarUninitialized) || init) {
+ 		if (FlagOn(top_var->flags, VarUninitialized) || init) {
 
 			LoopInsertPrologue(proc, header, INSTR_LET, top_reg, top_var, NULL);
 

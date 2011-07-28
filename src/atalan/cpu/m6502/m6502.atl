@@ -38,10 +38,12 @@ CPU:scope =
 	c,z,v,n:0..1	
 	ac@(a,c)
 	azn@(a,z,n)
+	xzn@(x,z,n)
+	yzn@(y,z,n)
 	as@(a,c,z,n,v)	; this is set of flags used for result of adc, sbc
 	cznv@(c,z,n,v)
 	in void:0..255  ;This is special variable used to implement touch instructions.
-
+	zn@(z,n)
 	
 ;========================
 ;Temporary variables
@@ -495,6 +497,9 @@ rule hi y, %A     =  "   ldy %A+1"
 
 ;*********** Add
 
+rule add %A:byte1arr(%B), %A(%B), 1 = instr
+	add %A$%B, %A$%B, 1
+	
 rule add %A:byte1, %B:byte1, 1 = instr
 	let a, %B
 	let %A, a
@@ -566,27 +571,12 @@ rule add %A:int,%B:sbyte,%C:sbyte = instr
 	let %A$0,a
 	let %A$1,x	
 
-;s16 = s16 + s8
-;s16 = u16 + s8
-;u16 = u16 + s8
-rule add %R:byte2, %A:byte2, %B:sbyte = instr
-  let x, 0
-  let a, %B
-  ifeq positive, n, 0
-  sub x, x, 1
-  label positive
-  let c, 0
-  add as, ac, %A$0
-	let %R$0, a
-	let a, x
-	add as, ac, %A$1
-	let %R$1, a
-
 ;u16 += 1
-rule add %A:card,%A:card,1 = instr
-  add %A$0, %A$0, 1
+;s16 +=1
+rule add %A:byte2,%A,1 = instr
+  add (%A$0,zn), %A$0, 1
   ifeq _lab1, z, 0
-  add %A$1, %A$1, 1
+  add (%A$1,zn), %A$1, 1
   label _lab1
 
 ;u16 += u8
@@ -642,6 +632,22 @@ rule add %A:card, %B:card, %C:card = instr
 	add as, ac, %C$1
 	let %A$1, a
 
+;s16 = s16 + s8
+;s16 = u16 + s8
+;u16 = u16 + s8
+rule add %R:byte2, %A:byte2, %B:sbyte = instr
+  let x, 0
+  let a, %B
+  ifeq positive, n, 0
+  sub x, x, 1
+  label positive
+  let c, 0
+  add as, ac, %A$0
+	let %R$0, a
+	let a, x
+	add as, ac, %A$1
+	let %R$1, a
+
 ;Signed addition
 rule add %A:int, %B:int, %C:int = instr
 	let a, %B$0
@@ -673,9 +679,14 @@ rule add %A:long,%A:long,1 = instr
   add %A$2, %A$2, 1
   label _lab2
   
-rule add x,x,1 = "   inx"
-rule add y,y,1 = "   iny"
+;rule add x,x,1 = "   inx"
+;rule add y,y,1 = "   iny"
+
+rule add xzn,x,1 = "   inx"
+rule add yzn,y,1 = "   iny"
+
 rule add as, ac, %A$const %B = "   adc %A+%B"
+rule add (%A$const %B,zn), %A$%B, 1 = "   inc %A+%B"
 rule add %A$const %B, %A$%B, 1 = "   inc %A+%B"
 rule add as, ac, const %A:byte1  = "   adc #%A"
 rule add as, ac,%A:byte1 = "   adc %A"
@@ -685,6 +696,9 @@ rule add as, ac, %A$y =  "   adc %A,y"
 rule add %A:byte1,%A,1 = "   inc %A"
 
 ;*********** Sub
+
+rule sub %A:byte1arr(%B), %A(%B), 1 = instr
+	sub %A$%B, %A$%B, 1
 
 rule sub %A:byte1, %B:byte1, 1 = instr
 	let a, %B
@@ -1623,6 +1637,23 @@ rule ifgt %L,%A:sbyte,%B:sbyte   = instr
 
 ;16-bit comparisons
 
+;Matching comparisons must be first, as otherwise for constants or variables
+;in smaller range, compiler may select more complicated version.
+;For example ifeq lab, a:0..10000, b:0..10000 fits signed/unsigned rule, but
+;that is more complicated. 
+
+;if u16 = u16 
+rule ifeq %L,%B:card,%C:card  = instr
+	ifne _loc, %B$0, %C$0
+	ifeq %L, %B$1, %C$1	
+	label _loc
+
+;if s16 = s16
+rule ifeq %L,%B:int,%C:int  = instr
+	ifne _loc, %B$0, %C$0
+	ifeq %L, %B$1, %C$1	
+	label _loc
+
 ;if s16 = u16
 rule ifeq %L,%B:int,%C:card  = instr
 	let a, %B$1
@@ -1645,16 +1676,23 @@ rule ifeq %L,%B:card,%C:int  = instr
 	ifeq %L, z, 1	
 	label diff	
 
-;if u16 = u16 
-;if s16 = s16
-rule ifeq %L,%B:byte2,%C:byte2  = instr
-	let a, %B$1
-	sub cznv, a, %C$1
-	ifne _loc, z, 1
-	let a, %B$0
-	sub cznv, a, %C$0
-	ifeq %L, z, 1
-	label _loc
+;if u16 <> u16
+rule ifne %L,%B:card, %C:card = instr
+  let a, %B$1
+  sub cznv, a, %C$1
+  ifne %L, z, 1
+  let a, %B$0
+  sub cznv, a, %C$0
+  ifne %L, z, 1
+
+;if s16 <> s16
+rule ifne %L,%B:int, %C:int = instr
+  let a, %B$1
+  sub cznv, a, %C$1
+  ifne %L, z, 1
+  let a, %B$0
+  sub cznv, a, %C$0
+  ifne %L, z, 1
 
 ;if s16 <> u16
 rule ifne %L,%B:int, %C:card = instr
@@ -1669,16 +1707,6 @@ rule ifne %L,%B:int, %C:card = instr
 ;if u16 <> s16
 rule ifne %L,%B:card, %C:int = instr
   ifne %L, %C, %B
-
-;if u16 <> u16
-;if s16 <> s16
-rule ifne %L,%B:byte2, %C:byte2 = instr
-  let a, %B$1
-  sub cznv, a, %C$1
-  ifne %L, z, 1
-  let a, %B$0
-  sub cznv, a, %C$0
-  ifne %L, z, 1
 
 ;if u16 < u16
 rule iflt %L,%B:card, %C:card   = instr
@@ -1888,17 +1916,17 @@ rule let a,%A:byte1     = "   lda %A"
 rule let a,%A$const %B  = "   lda %A-%A.index.min+%B"
 rule let a, %A$x = "   lda %A-%A.index.min,x"
 rule let a, %A$y = "   lda %A-%A.index.min,y"
-
 rule let a, @%A$y  = "   lda (%A),y"
+
 
 
 ;STA
 
-rule let %A$const %B,a  = "   sta %A-%A.index.min+%B"
 rule let %A:byte1,a  = "   sta %A"
-rule let @%A$y,a  = "   sta (%A),y"
+rule let %A$const %B,a  = "   sta %A-%A.index.min+%B"
 rule let %A$x,a  = "   sta %A-%A.index.min,x"
 rule let %A$y,a  = "   sta %A-%A.index.min,y"
+rule let @%A$y,a  = "   sta (%A),y"
 
 ;This is special instruction that 'touches' the specified variable (i.e.
 ;writes any value into specified variable).
@@ -1929,7 +1957,6 @@ rule mul a,a,2 = "   asl"
 ;TODO: Unrecognized error superfluous )!!!
 ;rule mul %A$const %B),%A$%B,2  = "  asl %A-%A.index.min+%B"
 rule mul %A$const %B,%A$%B,2  = "   asl %A-%A.index.min+%B"
-rule mul %A(const %B),%A(%B),2  = "   asl %A-%A.index.min+%B"
 rule mul %A:byte,%A:byte,1 = "   ;"
 rule mul %A:byte,%A:byte,2 = "   asl %A"
 rule mul %A$0,%A$0,2 = "   asl %A-%A.index.min"
@@ -1943,17 +1970,16 @@ rule mul %A$1,%A$1,2 = "   asl %A-%A.index.min+1"
 ;TODO: Support void (this optimisation should be in compiler)
 rule ror a,a,0 = "   ;"
 rule ror a,a,1 = "   ror"
-rule ror %A:byte,%A:byte,0 = "   ;"
-rule ror %A:byte,%A:byte,1 = "   ror %A"
-rule ror %A$const %B,%A(%B),1 = "   ror %A-%A.index.min+%B"
+rule ror %A:byte1,%A:byte1,0 = "   ;"
+rule ror %A:byte1,%A:byte1,1 = "   ror %A"
+rule ror %A$const %B,%A$%B,1 = "   ror %A-%A.index.min+%B"
 
 rule rol a,a,0 = "   ;"
 rule rol a,a,1 = "   rol"
-rule rol %A:byte,%A:byte,0 = "   ;"
-rule rol %A:byte,%A:byte,1 = "   rol %A"
+rule rol %A:byte1,%A:byte1,0 = "   ;"
+rule rol %A:byte1,%A:byte1,1 = "   rol %A"
 rule rol %A$0,%A$0,1 = "   rol %A-%A.index.min"
-rule rol %A$const %B,%A(%B),1 = "   rol %A-%A.index.min+%B"
-;rule rol %A:byte$1,%A:byte$1,1 = "   rol %A+1"
+rule rol %A$const %B,%A$%B,1 = "   rol %A-%A.index.min+%B"
 
 
 ;SBC, DEX, DEY, DEC
@@ -1962,15 +1988,12 @@ rule sub as,ac,const %A:byte1  = "   sbc #%A"
 rule sub as,ac, %A$const %B    = "   sbc %A-%A.index.min+%B"
 rule sub as,ac,%A:byte1 = "   sbc %A"
 
-;TODO: This should be removed (there is no such instruction)
-;rule sub a,a,const %A:byte1  = "   sbc #%A"
-;rule sub a,a,%A:byte1 = "   sbc %A"
-rule sub x,x,1 = "   dex"
-rule sub y,y,1 = "   dey"
+rule sub xzn,x,1 = "   dex"
+rule sub yzn,y,1 = "   dey"
 
 rule sub %A:byte1,%A,1 = "   dec %A"
 
-rule sub %A$const %B, %A(%B), 1 = "   dec %A-%A.index.min+%B"
+rule sub %A$const %B, %A$%B, 1 = "   dec %A-%A.index.min+%B"
 
 ;rule sub a,a,%A$const %B = "   sbc %A-%A.index.min+%B"
 
@@ -2014,8 +2037,8 @@ _std_print_adr:proc a@_arr:adr @_arr @_stdbuf @_putchr_proc_adr @cpu.a @cpu.x @c
 std_print:macro = instr
 	call _std_print_out
 
-std_format:macro a:adr = instr
-	let_adr _arr, a
+std_format:macro d:adr = instr
+	let_adr _arr, d
 	call _std_print_adr
 
 ;rule print     = instr

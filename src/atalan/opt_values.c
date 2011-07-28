@@ -73,17 +73,17 @@ Purpose:
 			// let q, _a
 			// add r, p, q
 
-			if (i->op == INSTR_LET) {
-				//TODO: Here may be error, when we get reference to instruction, which in fact uses the variable
-				if (i->arg1 == res) {
-					i->result->src_i = i->arg1->src_i;
-				}
-			} else {
+//			if (i->op == INSTR_LET) {
+//				//TODO: Here may be error, when we get reference to instruction, which in fact uses the variable
+//				if (i->arg1 == res) {
+//					i->result->src_i = i->arg1->src_i;
+//				}
+//			} else {
 				//TODO: Only reset the instruction, if there is no source
 				if (i->arg1 == res || i->arg2 == res) {
 					var->src_i = NULL;
 				}
-			}
+//			}
 		}
 	NEXT_VAR
 
@@ -563,7 +563,6 @@ retry:
 			// We are only interested in instructions that have result
 			if (result != NULL) {
 
-				//TODO: Should be solved by blocks (when blocks are parsed, there can not be jump instruction nor label)
 				if (IS_INSTR_JUMP(i->op)) {
 
 					// jump instructions use label as result, we do not want to remove jumps

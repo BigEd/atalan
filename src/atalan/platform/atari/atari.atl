@@ -120,7 +120,7 @@ color:0..255
 	
 ;Colors
 
-out COLOR0@$02C4:array(5) of color
+in out COLOR0@$02C4:array(5) of color
 out COLPF@$d016:array(0..4) of color
 out COLBK@$d01a:color			;is alias for COLPF(4)
 
@@ -138,7 +138,8 @@ pmg:scope =
 	out hitclr@$D01E:byte		; set to clear collisions
 ;	out sprior@$26F:byte
 	setbase:macro x:pmg.bitmap =
-		pmg.base = hi x
+	  a:adr = x
+		pmg.base = a$1
 	initbase:macro =
 		setbase pmg.memory
 	
@@ -280,7 +281,7 @@ wait'key:proc >k:key =
 
 ;*** DISPLAY LISTS
 
-dl_command:enum
+dl_command:0..255
 	BLANK1  = 0
 	END     = 1      
 	BLANK2  = $10

@@ -1,3 +1,4 @@
+[Visualizer]
 ;------------------------------------------
 ; Atalan
 ;------------------------------------------
@@ -5,10 +6,16 @@
 VarTag{
 	preview(
 	  #(
-	  	#if ($e.name != 0) ([$e.name,sb]),
-	  	#if ($e.idx != 0) ( $e.idx -1 ),
-	  	" ",
-	  	#if ($e.mode == 59) ($e.n)
+			#if   ($e.mode == 60)  ( #( ($e.adr), "(", ($e.var), ")" ))
+			#elif ($e.mode == 61) ( #( ($e.adr), "$", ($e.var) ))
+			#elif ($e.mode == 62) ( #( ($e.adr), "..", ($e.var) ))
+			#elif ($e.mode == 63) ( #( ($e.adr), ",", ($e.var) ))
+			#elif ($e.mode == 64) ( #( "@", ($e.var) ))
+			#else (#(	  
+		  	#if ($e.name != 0) ([$e.name,sb]),
+		  	#if ($e.idx != 0) ( $e.idx -1 ),
+		  	#if ($e.mode == 59) ( #( " ", $e.n))
+		  ))
 	  )
 	)
 }
@@ -16,10 +23,14 @@ VarTag{
 InstrTag{
 	preview(
 		#(
-			$e.op,
-			$e.result,
-			#if ($e.arg1 != 0) (#(", ",$e.arg1)),
-			#if ($e.arg2 != 0) (#(", ",$e.arg2))
+			#if ($e.op == 44) (#($e.line))
+			#else (#(		
+					$e.op,
+					" ",
+					$e.result,
+					#if ($e.arg1 != 0) (#(", ",$e.arg1)),
+					#if ($e.arg2 != 0) (#(", ",$e.arg2))
+			))
 		)
 	)
 }

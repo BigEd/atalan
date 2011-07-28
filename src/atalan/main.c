@@ -61,7 +61,6 @@ void ProcessUsedProc(void (*process)(Var * proc))
 	process(&ROOT_PROC);
 }
 
-
 void InitPlatform()
 /*
 Purpose:
@@ -137,6 +136,7 @@ int main(int argc, char *argv[])
 	OPTIMIZE = 255;
 	ASSERTS_OFF = false;
 	*VERBOSE_PROC = 0;
+//	StrCopy(VERBOSE_PROC, "cycle");
 
 	//
     // Parse arguments.

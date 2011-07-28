@@ -206,7 +206,7 @@ Purpose:
 */
 {
 
-	Var * arg, * arr;
+	Var * arg, * arr, * l, * r;
 	UInt16 n;
 
 	if (var == NULL) return NULL;
@@ -236,6 +236,13 @@ Purpose:
 				}
 			}
 		}
+	} else if (var->mode == INSTR_TUPLE) {
+		l = GenArg(macro, var->adr, args, locals);
+		r = GenArg(macro, var->var, args, locals);
+		if (l != var->adr || r != var->var) {
+			var = VarNewOp(var->mode, l, r);
+		}
+
 	} else if (var->mode == INSTR_VAR && VarIsArg(var)) {
 
 		// Optimization for instruction rule
@@ -255,7 +262,8 @@ Purpose:
 	} else {
 
 		// This is local variable in macro
-		if (VarIsLocal(var, macro)) {
+		// All labels are local in macro
+		if (VarIsLocal(var, macro) || VarIsLabel(var)) {
 			arg = VarSetFind(locals, var);
 			if (arg == NULL) {
 				arg = VarAllocScopeTmp(NULL, var->mode, var->type);

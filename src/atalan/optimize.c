@@ -21,8 +21,10 @@ void VarIncRead(Var * var)
 			// variable should not be marked as uninitialized, if there has been label or jump or call
 			var->flags |= VarUninitialized;
 		}
-		if (var->mode == INSTR_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 			VarIncRead(var->adr);
+			VarIncRead(var->var);
+		} else if (var->mode == INSTR_DEREF) {
 			VarIncRead(var->var);
 		} else if (var->mode == INSTR_TUPLE) {
 			VarIncRead(var->adr);
@@ -37,8 +39,10 @@ void VarIncWrite(Var * var)
 {
 	if (var != NULL) {
 		var->write++;
-		if (var->mode == INSTR_ELEMENT) {
+		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 			VarIncWrite(var->adr);
+			VarIncRead(var->var);
+		} else if (var->mode == INSTR_DEREF) {
 			VarIncRead(var->var);
 		} else if (var->mode == INSTR_TUPLE) {
 			VarIncWrite(var->adr);
@@ -70,11 +74,16 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end)
 
 			// In instructions like op X, X, ? or op X, ?, X, X is induction variable
 
+			if (InstrIsSelfReferencing(i)) {
+				result->flags |= VarLoop;
+			}
+/*
 			if (result != NULL) {
 				if (result == i->arg1 || result == i->arg2) {
 					result->flags |= VarLoop;
 				}
 			}
+*/
 		}
 	}
 }
@@ -128,7 +137,7 @@ Purpose:
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode == INSTR_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
 				v2 = var->adr;
 				v3 = var->var;
 				n2 = VarTestReplace(&v2, from, to);
@@ -164,7 +173,7 @@ Int16 VarReplace(Var ** p_var, Var * from, Var * to)
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode == INSTR_ELEMENT) {
+			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
 				n += VarReplace(&var->adr, from, to);
 				n += VarReplace(&var->var, from, to);
 			}
@@ -200,7 +209,7 @@ Bool ArgNeedsSpill(Var * arg, Var * var)
 {
 	Bool spill = false;
 	if (arg != NULL) {
-		if (arg->mode == INSTR_ELEMENT) {
+		if (arg->mode == INSTR_ELEMENT || arg->mode == INSTR_BYTE) {
 			if (arg->adr->mode == INSTR_DEREF && arg->adr->var == var->adr) {
 				spill = true;
 			}			
@@ -215,7 +224,7 @@ Bool InstrSpill(Instr * i, Var * var)
 	//TODO: What about call?
 //	if (i->op == INSTR_PRINT || i->op == INSTR_FORMAT) return true;
 
-	if (var->mode == INSTR_ELEMENT) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 
 		spill = ArgNeedsSpill(i->result, var) 
 			 || ArgNeedsSpill(i->arg1, var) 

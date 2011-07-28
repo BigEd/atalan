@@ -135,7 +135,7 @@ Variables, types, constants and assignment
 Variables do not have to be defined, they are declared using assignment action.
 
 :::::::::::::
-[const|type|in|out] name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
+[const|type|in|out|in sequence] name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
 :::::::::::::
 
 name	Name of variable, multiple variables may be declared/assigned at once (separated by comma)
@@ -201,9 +201,9 @@ Optimizer will not remove reading from the register even if the read value is ne
 {out} specifies the register used for output. Writing to that register has 
 some side effect. Optimizer will not remove any writes to such register.
 
-=================
-Variable location
-=================
+================
+Variable address
+================
 
 It is possible to place variable to a specified address. This is usually used
 to define system and hardware registers.
@@ -249,19 +249,6 @@ x,y = y,x  [TODO]
 
 x,y = cursor
 ::::::::::::::::::::
-
-===================================
-Writing to thespecified address [TODO]
-===================================
-
-Anonymous variable may be assigned (like POKE in BASIC).
-It is possible to specify type, too.
-
-:::::::::::::::::::::::::::
-@712 = 0				; set background color to black 
-@$230:adr = my_dlist
-@buf:array(100) = 0		; set 100 bytes at address stored in variable buf to 0 (memset)
-:::::::::::::::::::::::::::
  
 ======
 Labels
@@ -666,6 +653,56 @@ Newline will be printed after string, unless it is followed by comma.
 "[x + y]"
 :::::::::::::::::::::::::::::::::::
 
+*******
+Asserts
+*******
+
+{Assert} command may be used to inform the compiler that some fact (boolean condition)
+is always true at specified point in application.
+
+:::::::::::::::::::::::::
+x = 10
+assert x > 5
+:::::::::::::::::::::::::
+
+Assertions may be checked in runtime (if the programmer does require it and platform
+does define necessary means of printing the assert information).
+
+===============
+Type inferencer
+===============
+
+Facts stated in asserts are used by type inferencer to deduce the types of
+variables. In some situations they are necessary, as type inferencer does not
+have enough information to deduce the type correctly.
+
+For example, in following example we need to assert the maximum expected value
+the count variable may have, as compiler can not know the speed of the hardware
+the resulting applicaton will run on.
+
+::::::::::::::::::::::::::::
+use atari
+
+"Counting 2 seconds..."
+
+count = 0
+timer = 0
+until timer = 100
+  inc count
+  assert count < 2'000'000
+  
+"Counted to [count]."
+:::::::::::::::::::::::::::::  
+
+============
+Side effects
+============
+
+Conditions in asserts may not have any side effects, as that would change the
+behaviour of the program when they are removed.
+Atalan will report an error, when it detects assertions have side-effects (call
+a function with side effect, read {sequence in} variable).
+
 **************
 Labels & Jumps
 **************
@@ -719,6 +756,12 @@ Again, it is not necessary to use {then}:
 if &lt;cond&gt; goto &lt;label&gt;
 :::::::::::::::
 
+{unless} can be used instead of {if} to define negated condition. 
+
+::::::::::::::::::::::::
+unless x=0
+   dec x
+::::::::::::::::::::::::
 
 *****
 Loops
@@ -835,22 +878,22 @@ Procedures
 **********
 
 Procedures can be defined using {proc} type. After the {proc} keyword follows block
-defining procedure arguments. Arguments marked using {&gt;} are output arguments (results).
+defining procedure arguments.
 
-Arguments marked {&lt;} are input arguments. Input arguments are default. 
+Procedure may return any number of results. Results are specified after "->" arrow symbol.
 
 :::::::::::::::::::::::
-name ":" "proc" args = code
+name ":" "proc" args -> results = code
 
 
-addw:proc i:word j:word >k:word = 
+addw:proc i:word j:word -> k:word = 
 	k = i + j
 
 add3: word proc
 	i:word
 	j:word
 	k:word
-	>result:word
+	-> result:word
 =
 	result = i + j + k
 :::::::::::::::::::::::
@@ -879,7 +922,7 @@ in procedure header (after equal sign).
 Indented or parenthesized block must be used when specifying default value for an argument.
 
 :::::::::::::::::::::
-addw:proc(i:word j:word = 1 >k:word) =
+addw:proc(i:word j:word = 1 ->k:word) =
    k = i + j
    
 x = addw 14 20		;x is now 34
@@ -893,7 +936,7 @@ Multiple results
 Procedure may define more than one output arguments (results).
 
 :::::::::::::::::::::::::::::::
-sumdiv:proc a,b:byte >sum:byte >div:byte =
+sumdiv:proc a,b:byte ->sum:byte, div:byte =
 	sum = a + b
 	div = a - b
 
@@ -913,7 +956,7 @@ Procedure may return to its caller from using {return} statement.
 It is possible to specify result values as {return} arguments.
 
 :::::::::::::::::::::::::::::::
-sumdiv:proc a,b:byte >sum:byte >div:byte =
+sumdiv:proc a,b:byte ->sum:byte, div:byte =
 	return a + b, a - b
 ::::::::::::::::::::::::::::::::
 
@@ -955,7 +998,7 @@ Although recursive functions are not supported, it is usefull in some special
 situations like when assigning address of a procedure to a variable. 
 
 :::::::::::::::::::::::::::
-sum:proc e,f:byte >s:byte 
+sum:proc e,f:byte ->s:byte 
 
 sum =
   s = e + f
