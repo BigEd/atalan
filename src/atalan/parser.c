@@ -2985,7 +2985,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			} else {
 				if (inop->type->variant == TYPE_MACRO) {
 					NextToken();
+					EXP_EXTRA_SCOPE = CPU->SCOPE;
 					ParseMacro(inop);
+					EXP_EXTRA_SCOPE = NULL;
 					return;
 				} else {
 					ErrArg(inop);

@@ -15,9 +15,82 @@ extern Var * VARS;		// global variables
 GLOBAL Instr NULL_INSTR;
 GLOBAL Instr * InstrNull;
 
-InstrInfo INSTR[2/*INSTR_CNT*/] = {
+InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_NULL, "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_VOID, "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }
+	{ INSTR_VOID, "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_LET, "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+
+	{ INSTR_GOTO, "", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFEQ, "=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFNE, "<>", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFLT, "<=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFGE, ">=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFGT, ">", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFLE, "<", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_IFOVERFLOW, "over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_IFNOVERFLOW, "not over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
+
+	{ INSTR_PROLOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_EPILOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_EMIT, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_VARDEF, "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_LABEL, "", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
+
+	{ INSTR_ADD, "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+	{ INSTR_SUB, "-", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_MUL, "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+	{ INSTR_DIV, "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_SQRT, "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_AND, "bitand", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+	{ INSTR_OR, "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+
+	{ INSTR_ALLOC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_PROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_RETURN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_ENDPROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_CALL, "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_VAR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_STR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// generate str
+
+	{ INSTR_DATA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_ALIGN, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_ORG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// set the destination address of compilation
+	{ INSTR_HI, "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_LO, "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_PTR, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_ARRAY_INDEX, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },		// generate index for array
+	{ INSTR_LET_ADR, "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_ROL, "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },				// bitwise rotate right
+	{ INSTR_ROR, ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },				// bitwise rotate left
+	{ INSTR_DEBUG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_MOD, "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
+	{ INSTR_XOR, "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+	{ INSTR_NOT, "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_ASSERT_BEGIN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_ASSERT, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_ASSERT_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+
+	{ INSTR_LINE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// reference line in the source code
+	{ INSTR_INCLUDE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_MULA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// templates for 8 - bit multiply 
+	{ INSTR_MULA16, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },           // templates for 8 - bit multiply 
+
+	{ INSTR_COMPILER, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_CODE_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// end of BLK segment and start of data segment
+	{ INSTR_DATA_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// end of data segment and start of variables segment
+
+	{ INSTR_VAR, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// Variable (may be argument, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, input, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, output, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, ...)
+	{ INSTR_CONST, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// Constant (depending on type)
+	{ INSTR_ELEMENT, "#", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// <array> <index>     access array or structure element (left operand is array, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, right is index)
+	{ INSTR_BYTE, "$", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// <var> <byte_index>  access byte of specified variable
+	{ INSTR_RANGE, "..", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// x..y  (l = x, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, r = y) Used for slice array references
+	{ INSTR_TUPLE, ",", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// { INSTR_LIST <adr, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },var>  (var may be another tuple)
+	{ INSTR_DEREF, "@", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// dereference an address (var contains reference to dereferenced adr variable, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, type is type in [adr of type]. Byte if untyped adr is used.
+	{ INSTR_FIELD, ".", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// access field of structure
+	{ INSTR_TYPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_SCOPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_SRC_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			//{ INSTR_SRC_FILE variable representing source file
 };
 
 
@@ -53,12 +126,33 @@ Purpose:
 	Return true, if two instructions are equivalent (executing them has same effect).
 */
 {
+	Bool eq;
+
 	if (i == NULL || i2 == NULL) return false;
 	if (i->op != i2->op) return false;
-	if (i->result != i2->result) return false;
-	if (i->arg1 != i2->arg1) return false;
-	if (i->arg2 != i2->arg2) return false;
-	return true;
+	
+	eq = true;
+
+	if (eq && INSTR_INFO[i->op].arg_type[RESULT] != TYPE_VOID) {
+		eq = VarIsEqual(i->result, i2->result);
+	}
+
+	// Arguments must be same
+
+	if (eq && INSTR_INFO[i->op].arg_type[ARG1] != TYPE_VOID) {
+		eq = VarIsEqual(i->arg1, i2->arg1);
+	}
+
+	if (eq && INSTR_INFO[i->op].arg_type[ARG2] != TYPE_VOID) {
+		eq = VarIsEqual(i->arg2, i2->arg2);
+	}
+
+	// Commutative instruction may be equivalent, if the arguments are switched
+	if (!eq && FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE)) {
+		eq = VarIsEqual(i->arg1, i2->arg2) && VarIsEqual(i->arg2, i2->arg1);
+	}
+	
+	return eq;
 }
 
 Var * InstrFind(char * name)
@@ -81,82 +175,9 @@ Var * InstrFindCode(UInt16 code)
 	return var;
 }
 
-static char * g_InstrName[INSTR_CNT] = 
-{
-	"NULL",
-	"", // INSTR_VOID = 0,
-	"<-", //INSTR_LET,		// var, val
-
-	"",   // INSTR_GOTO,
-	"=",  //INSTR_IFEQ,		// must be even!!!.
-	"<>", //INSTR_IFNE,
-	"<",   //INSTR_IFLT,
-	">=",   // INSTR_IFGE,
-	">",   // INSTR_IFGT,
-	"<=",   // INSTR_IFLE,
-	"ov",   // INSTR_IFOVERFLOW,
-	"!ov",   // INSTR_IFNOVERFLOW,
-
-	"",   // INSTR_PROLOGUE,
-	"",   // INSTR_EPILOGUE,
-	"",   // INSTR_EMIT,
-	"",   // INSTR_VARDEF,
-	"",   // INSTR_LABEL,
-	"+",   // INSTR_ADD,
-	"-",   // INSTR_SUB,
-	"*",   // INSTR_MUL,
-	"/",   // INSTR_DIV,
-	"sqrt",   // INSTR_SQRT,
-
-	"and",   // INSTR_AND,
-	"or",   // INSTR_OR,
-
-	"",   // INSTR_ALLOC,
-	"",   // INSTR_PROC,
-	"",   // INSTR_ENDPROC,
-	"",   // INSTR_CALL,
-	"",   // INSTR_VAR_ARG,
-	"",   // INSTR_STR_ARG,			// generate str
-	"",   // INSTR_DATA,
-	"",   // INSTR_FILE,
-	"",   // INSTR_ALIGN,
-	"hi",   // INSTR_HI,
-	"lo",   // INSTR_LO,
-	"ptr",   // INSTR_PTR,
-	"",   // INSTR_ARRAY_INDEX,		// generate index for array
-	"=@",   // INSTR_LET_ADR,
-	"<<",   // INSTR_ROL,				// bitwise rotate right
-	">>",   // INSTR_ROR,				// bitwise rotate left
-	"",   // INSTR_DEBUG,
-	"mod",   // INSTR_MOD,
-	"bitnot",
-	"bitand",
-	"bitor"
-	"bitxor",   // INSTR_XOR,
-	"not",   // INSTR_NOT,
-
-	"",   // INSTR_LINE,				// reference line in the source code
-	"",   // INSTR_INCLUDE,
-	"",   // INSTR_MULA,				// templates for 8 - bit multiply 
-	"",   // INSTR_MULA16,           // templates for 8 - bit multiply 
-
-	"",   // INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
-	"",   // INSTR_ARG_REF
-	"",   // INSTR_DIVCARRY,
-
-	// Following 'instructions' are used in expressions
-	"",     // INSTR_VAR
-	"",     // INSTR_ARG
-	"#",    // INSTR_ELEMENT,		// access array element (left operand is array or reference to array, right is index)
-	",",    // INSTR_TUPLE,			// create list of two elements
-	"@",    // INSTR_DEREF
-	"."     // INSTR_FIELD
-};
-
-
 char * OpName(InstrOp op)
 {
-	return g_InstrName[op];
+	return INSTR_INFO[op].symbol;
 }
 
 void InstrDetach(InstrBlock * blk, Instr * first, Instr * last)
@@ -780,9 +801,15 @@ void PrintProc(Var * proc)
 //$I
 void InstrInit()
 {
+	InstrOp op;
+
 	MemEmptyVar(NULL_INSTR);
 	NULL_INSTR.op = INSTR_NULL;
 	InstrNull = &NULL_INSTR;
+
+	for(op=INSTR_NULL; op < INSTR_CNT; op++) {
+		ASSERT(INSTR_INFO[op].op == op);
+	}
 }
 
 Bool InstrIsSelfReferencing(Instr * i)

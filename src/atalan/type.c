@@ -21,10 +21,7 @@ GLOBAL Type TTUPLE;
 GLOBAL Type * TUNDEFINED;
 
 
-#define RESULT 0
 #define RESTRICTION 0
-#define ARG1   1
-#define ARG2   2
 
 /*
 Types are allocated in blocks.
