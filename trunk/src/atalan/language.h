@@ -229,8 +229,6 @@ typedef enum {
 	INSTR_MULA,				// templates for 8 - bit multiply 
 	INSTR_MULA16,           // templates for 8 - bit multiply 
 
-	INSTR_REF,				// this directive is not translated to any code, but declares, that some variable is used
-	INSTR_DIVCARRY,
 	INSTR_COMPILER,
 	INSTR_CODE_END,			// end of BLK segment and start of data segment
 	INSTR_DATA_END,			// end of data segment and start of variables segment
@@ -305,7 +303,8 @@ typedef enum {
 	TYPE_TUPLE,
 	TYPE_UNDEFINED,
 	TYPE_SCOPE,
-	TYPE_SEQUENCE	// numeric sequence
+	TYPE_SEQUENCE,	// numeric sequence
+	TYPE_ANY
 } TypeVariant;
 
 /*
@@ -935,6 +934,9 @@ void GenLastResult(Var * var, Var * item);
 void GenArrayInit(Var * arr, Var * init);
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
+#define RESULT 0
+#define ARG1   1
+#define ARG2   2
 
 #define INSTR_COMMUTATIVE 1
 
@@ -944,6 +946,8 @@ typedef struct {
 	TypeVariant arg_type[3];		// 0 = result, 1 = arg1, 2 = arg2
 	UInt8   flags;
 } InstrInfo;
+
+extern InstrInfo INSTR_INFO[INSTR_CNT];
 
 /***********************************************************
 

@@ -306,7 +306,7 @@ Bool OptimizeLive(Var * proc)
 
 			result = i->result;
 			if (result != NULL) {
-				if (op != INSTR_LABEL && op != INSTR_REF && op != INSTR_CALL) {
+				if (op != INSTR_LABEL && op != INSTR_CALL) {
 //					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && !OutVar(result)) {
 					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable

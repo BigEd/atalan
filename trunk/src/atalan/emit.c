@@ -445,8 +445,6 @@ Bool EmitInstr(Instr * i)
 	Rule * rule;
 	Instr * to;
 
-	if (i->op == INSTR_REF) return true;
-
 	rule = InstrRule(i);
 
 	if (rule != NULL) {

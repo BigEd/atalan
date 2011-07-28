@@ -396,7 +396,7 @@ Purpose:
 				if (!InstrTranslate(i, &modified)) {
 
 					// If this is commutative instruction, try the other order of rules
-					if (i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL) {
+					if (FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE) /*.i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL*/) {
 						i2.op = i->op;
 						i2.result = i->result;
 						i2.arg1 = i->arg2;
