@@ -936,6 +936,15 @@ void GenArrayInit(Var * arr, Var * init);
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 
+#define INSTR_COMMUTATIVE 1
+
+typedef struct {
+	InstrOp  op;
+	char * symbol;
+	TypeVariant arg_type[3];		// 0 = result, 1 = arg1, 2 = arg2
+	UInt8   flags;
+} InstrInfo;
+
 /***********************************************************
 
   Translate

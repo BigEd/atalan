@@ -15,6 +15,11 @@ extern Var * VARS;		// global variables
 GLOBAL Instr NULL_INSTR;
 GLOBAL Instr * InstrNull;
 
+InstrInfo INSTR[2/*INSTR_CNT*/] = {
+	{ INSTR_NULL, "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_VOID, "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }
+};
+
 
 /*
 

@@ -45,6 +45,18 @@ CPU:scope =
 	in void:0..255  ;This is special variable used to implement touch instructions.
 	zn@(z,n)
 	
+	;Definition of the more common 6502 instructions as macros, so the code is more readable 
+	lda:macro o = instr let a, o
+	ldx:macro o = instr let x, o
+	ldy:macro o = instr let y, o
+	sta:macro o = instr let o, a
+	stx:macro o = instr let o, x
+	sty:macro o = instr let o, y
+	clc:macro = instr let c, 0
+	sec:macro = instr let c, 1	
+	adc:macro o = instr add as, ac, o 
+	sbc:macro o = instr sub as, ac, o 
+		
 ;========================
 ;Temporary variables
 ;========================
@@ -112,8 +124,8 @@ _TEMPL1@$70:CARD		;Should be: 0..$7fffffff
 ;*********** Let
 
 rule let %A:byte, %B:byte = instr
-  let a,%B
-  let %A,a
+  lda %B
+  sta %A
    
 ;signed byte assignment
 ;We cannot use byte1 to define this, as we do not allow assigning from signed to unsigned and vice versa
