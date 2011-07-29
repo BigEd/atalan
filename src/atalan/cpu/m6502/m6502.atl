@@ -55,15 +55,25 @@ CPU:scope =
 	sta:macro o = instr let o, a
 	stx:macro o = instr let o, x
 	sty:macro o = instr let o, y
+
 	clc:macro = instr let c, 0
 	sec:macro = instr let c, 1	
+
 	adc:macro o = instr add as, ac, o 
 	sbc:macro o = instr sub as, ac, o 
-	lsr:macro o = instr div (o,czn), o, 2  
-	asl:macro o = instr mul (o,czn), o, 2  
-	ror:macro o = instr rotr (o,czn), (o,c), 1  
-	rol:macro o = instr rotl (o,czn), (o,c), 1  
-				
+	inx:macro = instr add xzn, x, 1
+	iny:macro = instr add yzn,y,1
+	dex:macro = instr sub xzn,x,1
+	dey:macro = instr sub yzn,y,1
+	inc:macro o = instr add (o,zn), o, 1
+	dec:macro o = instr sub (o,zn), o, 1
+
+	lsr:macro (o=a) = instr div (o,czn), o, 2  
+	asl:macro (o=a) = instr mul (o,czn), o, 2  
+	ror:macro (o=a) = instr rotr (o,czn), (o,c), 1  
+	rol:macro (o=a) = instr rotl (o,czn), (o,c), 1  
+
+						
 ;========================
 ;Temporary variables
 ;========================
@@ -153,7 +163,7 @@ rule let %A:int, %B:sbyte = instr
 	let x, 0
 	let a, %B
 	ifeq _positive, n, 0
-	sub x, x, 1
+	dex
 	label _positive
 	let %A$0, a
 	let %A$1, x
@@ -517,12 +527,12 @@ rule hi y, %A     =  "   ldy %A+1"
 ;*********** Add
 
 rule add %A:byte1arr(%B), %A(%B), 1 = instr
-	add %A$%B, %A$%B, 1
+	inc %A$%B
 	
 rule add %A:byte1, %B:byte1, 1 = instr
 	let a, %B
 	let %A, a
-	add %A, %A, 1
+	inc %A
 
 ;u8 = u8 + u8
 ;s8 = s8 + s8
@@ -585,7 +595,7 @@ rule add %A:int,%B:sbyte,%C:sbyte = instr
 	label _no_overflow
 	ifeq _positive, n, 0	
 	label _negative
-	sub x, x, 1	
+	dex	
 	label _positive
 	let %A$0,a
 	let %A$1,x	
@@ -605,7 +615,7 @@ rule add %A:card,%A:card,%B:byte = instr
 	adc %B
 	let %A$0,a
 	ifeq _skip1,c,0
-	add %A$1,%A$1,1
+	inc %A$1
 	label _skip1
 
 ;u16 = u16 + u8
@@ -658,7 +668,7 @@ rule add %R:byte2, %A:byte2, %B:sbyte = instr
   let x, 0
   let a, %B
   ifeq positive, n, 0
-  sub x, x, 1
+  dex
   label positive
   clc
   adc %A$0
@@ -691,25 +701,12 @@ rule add %A:int, %B:int, const %C:int = instr
 
 ;3-byte Increment
 rule add %A:long,%A:long,1 = instr
-  add %A$0, %A$0, 1
+  inc %A$0
   ifeq _lab2, z, 0
-  add %A$1, %A$1, 1
+  inc %A$1
   ifeq _lab2, z, 0
-  add %A$2, %A$2, 1
-  label _lab2
-  
-rule add xzn,x,1 = "   inx"
-rule add yzn,y,1 = "   iny"
-
-rule add as, ac, %A$const %B = "   adc %A+%B"
-rule add (%A$const %B,zn), %A$%B, 1 = "   inc %A+%B"
-rule add %A$const %B, %A$%B, 1 = "   inc %A+%B"
-rule add as, ac, const %A:byte1  = "   adc #%A"
-rule add as, ac, %A:byte1 = "   adc %A"
-rule add as, ac, %A$x =  "   adc %A,x"
-rule add as, ac, %A$y =  "   adc %A,y"
-
-rule add %A:byte1,%A,1 = "   inc %A"
+  inc %A$2
+  label _lab2  
 
 ;*********** Sub
 
@@ -724,36 +721,36 @@ rule sub %A:byte1, %B:byte1, 1 = instr
 rule sub %A:byte1, %B:byte1, %C:byte1 = instr
   let a,%B
   sec
-  sub as,ac,%C
+  sbc %C
   let %A,a
 
 rule sub %A:card, %B:card, const %C:card = instr
 	let a, %B$0
 	lo %Z, %C           ; %Z is macro local variable
 	sec
-	sub as, ac, %Z
+	sbc %Z
 	let %A$0, a
 	let a, %B$1
 	hi %Z, %C           ; %Z is macro local variable
-	sub as, ac, %Z
+	sbc %Z
 	let %A$1, a
 
 rule sub %A:card, const %B:card, %C:card = instr
 	lo a, %B
 	sec
-	sub as, ac, %C$0
+	sbc %C$0
 	let %A$0, a
 	hi a, %B
-	sub as, ac, %C$1
+	sbc %C$1
 	let %A$1, a
 
 rule sub %A:card, %B:card, %C:card = instr
 	let a, %B$0
 	sec
-	sub as, ac, %C$0
+	sbc %C$0
 	let %A$0, a
 	let a, %B$1
-	sub as, ac, %C$1
+	sbc %C$1
 	let %A$1, a
 	
 
@@ -1538,7 +1535,7 @@ rule ifle %L,%A:byte,%B:sbyte   = instr
 rule ifle %L,%A:sbyte,%B:sbyte   = instr
   let a, %B          ; lda %A
 	sec           ; clc
-  sub as, ac, %A    ; sub %B
+  sbc %A    ; sub %B
   ifeq ok, v, 0			; bvc ok
   xor azn, a, 255
   label ok
@@ -1569,7 +1566,7 @@ rule ifge %L,%A:byte,%B:sbyte   = instr
 rule ifge %L,%A:sbyte,%B:sbyte   = instr
   let a, %A          ; lda %A
 	sec           ; clc
-  sub as, ac, %B    ; sub %B
+  sbc %B    ; sub %B
   ifeq ok, v, 0			; bvc ok
   xor azn, a, 255
   label ok
@@ -1585,7 +1582,7 @@ rule iflt %L,%A:byte,%B:byte   = instr
 rule iflt %L,%A:sbyte,%B:sbyte   = instr
   let a, %A          ; lda %A
 	sec           ; clc
-  sub as, ac, %B    ; sub %B
+  sbc %B    ; sub %B
   ifeq ok, v, 0			; bvc ok
   xor azn, a, 255
   label ok
@@ -1630,7 +1627,7 @@ rule ifgt %L,%A:byte,%B:byte   = instr
 rule ifgt %L,%A:sbyte,%B:sbyte   = instr
   let a, %B          ; lda %A
 	sec           ; clc
-  sub as, ac, %A    ; sub %B
+  sbc %A    ; sub %B
   ifeq ok, v, 0			; bvc ok
   xor azn, a, 255
   label ok
@@ -1725,7 +1722,7 @@ rule sub n, %B:int, %C:int = instr
 	let a, %B$0
 	sub cznv, a, %C$0
 	let a, %B$1
-	sub as, ac, %C$1
+	sbc %C$1
 	ifeq lab, v, 0
 	xor azn, a, 255
 	label lab
@@ -1921,7 +1918,6 @@ rule let a, %A$y = "   lda %A-%A.index.min,y"
 rule let a, @%A$y  = "   lda (%A),y"
 
 
-
 ;STA
 
 rule let %A:byte1,a  = "   sta %A"
@@ -2002,18 +1998,39 @@ rule rotl (%A$x,czn), (%A$x,czn), 1         = "   rol %A-%A.index.min,x"
 ;rule rotl %A$0,%A$0,1 = "   rotl %A-%A.index.min"
 ;rule rotl %A$const %B,%A$%B,1 = "   rotl %A-%A.index.min+%B"
 
-;SBC, DEX, DEY, DEC
-
-rule sub as,ac,const %A:byte1  = "   sbc #%A"
-rule sub as,ac, %A$const %B    = "   sbc %A-%A.index.min+%B"
-rule sub as,ac,%A:byte1 = "   sbc %A"
-
+;INX, INY, DEX, DEY
+rule add xzn,x,1 = "   inx"
+rule add yzn,y,1 = "   iny"
 rule sub xzn,x,1 = "   dex"
 rule sub yzn,y,1 = "   dey"
 
-rule sub %A:byte1,%A,1 = "   dec %A"
+;INC
+rule add (%A:byte1,zn),%A,1         = "   inc %A"
+rule add (%A$const %B,zn), %A$%B, 1 = "   inc %A-%A.index.min+%B"
+rule add (%A$x,zn), %A$x, 1         = "   inc %A-%A.index.min,x"
 
-rule sub %A$const %B, %A$%B, 1 = "   dec %A-%A.index.min+%B"
+;DEC
+rule sub (%A:byte1,zn),%A,1         = "   dec %A"
+rule sub (%A$const %B,zn), %A$%B, 1 = "   dec %A-%A.index.min+%B"
+rule sub (%A$x,zn), %A$x, 1         = "   dec %A-%A.index.min,x"
+
+;ADC
+rule add as, ac, const %A:byte1  = "   adc #%A"
+rule add as, ac, %A:byte1        = "   adc %A"
+rule add as, ac, %A$const %B     = "   adc %A-%A.index.min+%B"
+rule add as, ac, %A$x            = "   adc %A-%A.index.min,x"
+rule add as, ac, %A$y            = "   adc %A-%A.index.min,y"
+rule add as, ac, @%A$y           = "   adc (%A),y"
+
+;SBC
+rule sub as, ac, const %A:byte1  = "   sbc #%A"
+rule sub as, ac, %A:byte1        = "   sbc %A"
+rule sub as, ac, %A$const %B     = "   sbc %A-%A.index.min+%B"
+rule sub as, ac, %A$x            = "   sbc %A-%A.index.min,x"
+rule sub as, ac, %A$y            = "   sbc %A-%A.index.min,y"
+rule sub as, ac, @%A$y           = "   sbc (%A),y"
+
+
 
 rule goto @%A$0  = "   jmp (%A)"					;TODO: goto @%A
 rule goto %A     = "   jmp %A"
