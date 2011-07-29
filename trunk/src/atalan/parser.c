@@ -2478,6 +2478,9 @@ void ParseProcBody(Var * proc)
 
 }
 
+#define LOCAL_SCOPE 0
+#define GLOBAL_SCOPE 1
+
 void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type)
 /*
 Purpose:
@@ -2493,16 +2496,24 @@ Purpose:
 	Type * type;
 	TypeVariant typev;
 	UInt16 bookmark;
+	Bool global_scope;
 
 	type = TUNDEFINED;
 	is_assign = false;
 	existed   = true;
+	global_scope = false;
 	scope = NULL;
 
 	// Force use of current scope
 	// For example .X will try to find X in current scope, not in any other parent scope
-	if (!Spaces() && NextIs(TOKEN_DOT)) {
-		scope = SCOPE;
+	if (!Spaces()) {
+		if (NextIs(TOKEN_DOT)) {
+			scope = SCOPE;
+
+		// It is necessary to use @x to adress global variable.
+		} else if (NextIs(TOKEN_ADR)) {
+			global_scope = true;
+		}
 	}
 
 	if (TOK != TOKEN_ID) {
@@ -2523,7 +2534,6 @@ retry:
 			if (scope == NULL) {
 				var = VarFind2(NAME);
 			} else {
-//				PrintScope(scope);
 				var = VarFindScope(scope, NAME, 0);
 			}
 		}
@@ -2540,10 +2550,6 @@ retry:
 			var->file    = SRC_FILE;
 			if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
 			existed = false;
-//			if (scope != NULL) {
-//				PrintScope(scope);
-//			}
-
 			var->submode = submode;
 		} else {
 			if (var->mode == INSTR_SCOPE) {
@@ -2613,6 +2619,22 @@ parsed:
 
 	if (NextIs(TOKEN_COLON)) {
 
+		for(j = 0; j<cnt; j++) {
+			var = vars[j];
+			// We have found the variable and we have type explicitly defined, but not in current scope, so we may create it in current scope
+			if (var->mode != INSTR_VOID && var->scope != SCOPE) {
+				var = VarAllocScope(scope, INSTR_VOID, var->name, 0);
+				var->line_no = LINE_NO;
+	//			var->line_pos = TOKEN_POS;
+				var->file    = SRC_FILE;
+				if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
+				existed = false;
+				var->submode = submode;
+				vars[j] = var;
+			}
+		}
+
+
 		// Scope
 		if (NextIs(TOKEN_SCOPE)) {
 			mode = INSTR_SCOPE;
@@ -2629,7 +2651,7 @@ parsed:
 
 			// Parsing may create new constants, arguments etc. so we must enter subscope, to assign the
 			// type elements to this variable
-			scope = InScope(var);
+			scope = InScope(vars[0]);
 			bookmark = SetBookmark();
 			type = ParseType2(mode);
 			ReturnScope(scope);
