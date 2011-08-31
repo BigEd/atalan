@@ -592,6 +592,7 @@ Operators
 *********
 
 :::::::::::
+$              Acess n-th byte of the value. 0 means least significant byte.
 * / mod        Multiplication, division, modulus
 + -            Addition, substraction
 sqrt           Square root
@@ -622,12 +623,8 @@ Relational operators may be chained, so it is possible to write for example 10&l
 Logical operators are evaluated using short circuit evaluation.
 
 ********
-Commands
-********
-
-========
 Printing
-========
+********
 
 String constant used as a command will be printed to the screen.
 

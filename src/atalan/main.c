@@ -27,6 +27,7 @@ Var * INTERRUPT;
 Var * SYSTEM_SCOPE;
 Var * MACRO_PRINT;
 Var * MACRO_ASSERT;
+Var * MACRO_ASSERT_PRINT;
 Var * MACRO_FORMAT;
 char PLATFORM[64];			// name of platform
 UInt8 OPTIMIZE;
@@ -73,11 +74,12 @@ Purpose:
 	}
 
 	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
-	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
+	MACRO_ASSERT_PRINT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
+	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "assert", 0);
 
 	// If platform does not implement 'assert' instruction, we always turn the assertions off.
 
-	if (InstrRule2(INSTR_ASSERT, NULL, NULL, NULL) == NULL) {
+	if (MACRO_ASSERT == NULL) {
 		ASSERTS_OFF = true;
 	}
 
@@ -136,7 +138,7 @@ int main(int argc, char *argv[])
 	OPTIMIZE = 255;
 	ASSERTS_OFF = false;
 	*VERBOSE_PROC = 0;
-//	StrCopy(VERBOSE_PROC, "cycle");
+//	StrCopy(VERBOSE_PROC, "print2");
 
 	//
     // Parse arguments.

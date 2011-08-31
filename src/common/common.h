@@ -15,6 +15,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <memory.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 
 // Basic types
@@ -25,6 +26,7 @@ typedef unsigned int UInt16;
 typedef unsigned long UInt32;
 typedef signed long Int32;
 typedef unsigned char UInt8;
+typedef signed char Int8;
 
 #define true 1
 #define false 0
@@ -54,6 +56,28 @@ Int16 StrEditDistance(char * s, char * t);
 #define FlagOff(set, flag)  (((set) & (flag))==0)
 #define SetFlagOff(set, flag) set &= ~(flag)
 #define SetFlagOn(set, flag) set |= (flag)
+
+// Console output
+
+#define EOL 10
+#define TAB 9
+#define SPC 32
+
+#define BLUE 1
+#define GREEN 2
+#define RED 4
+#define LIGHT 8
+
+void PrintInit();
+void PrintCleanup();
+
+FILE * PrintDestination(FILE * file);
+UInt8 PrintColor(UInt8 color);
+void Print(char * text);
+void PrintEOL();
+void PrintChar(char c);
+void PrintInt(Int32 n);
+void PrintRepeat(char * text, UInt16 cnt);
 
 
 //GLOBAL is used to mark global variables, so it is easy to find all of them

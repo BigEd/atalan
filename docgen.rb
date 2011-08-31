@@ -169,22 +169,25 @@ def  txt_file(filename)
   o_file("doc/" + filename, true)
 end
 
-def ata_example(filenames)
-  put_file("header.html")
-  a_file("doc/" + "examples.txt", true)
+def ata_example(name, filenames)
+  puts("<h2>#{name}</h2>")
+  puts("<p>")
+  a_file("examples/" + name + "/readme.txt", true)
+  puts("</p>")
   puts "<table>"
-  filenames.each { |filename|
+  filenames.each { |filename1|    
+    filename = name + "/" + filename1
     puts "<tr>"
-    puts "  <td><a href=\"examples/#{filename}.html\">#{filename}</a></td><td><a href=\"examples/#{filename}.atl\">#{filename}.atl</a></td>"
-    puts "  <td><a href=\"examples/#{filename}.asm\">#{filename}.asm</a></td>"
-    puts "  <td><a href=\"examples/#{filename}.xex\">#{filename}.xex</a></td>"
+    puts "  <td><a href=\"examples/#{filename}.html\">#{filename1}</a></td><td><a href=\"examples/#{filename}.atl\">#{filename1}.atl</a></td>"
+    puts "  <td><a href=\"examples/#{filename}.asm\">#{filename1}.asm</a></td>"
+    puts "  <td><a href=\"examples/#{filename}.xex\">#{filename1}.xex</a></td>"
     puts "</tr>"
   }
   
   puts "</table>"
-  put_file("footer.html") 
   
- filenames.each { |filename|
+ filenames.each { |filename1|
+    filename = name + "/" + filename1
     f = load_file("examples/#{filename}.atl")
     $stdout = File.new($proj_folder + "www/examples/" + filename + ".html", "w")
 puts <<XXXX
@@ -266,9 +269,11 @@ $stdout = File.new($proj_folder + 'www/howto.html', 'w')
 txt_file "howto.txt"
 
 $stdout = File.new($proj_folder + 'www/examples.html', 'w')
-#txt_file "examples.txt"
-ata_example ["hello_world","loop","unit_test","hello_font","rainbow","esieve","count_2sec","stars","tetris","interrupts","bit_sieve","pmg"]
+put_file("header.html")
+puts("<h1>Examples</h1>")
 
+ata_example("Atari", ["hello_font","rainbow","esieve","count_2sec","stars","interrupts","pmg"])
+put_file("footer.html") 
 
 
 $stdout = File.new($proj_folder + 'www/tutorial.html', 'w')

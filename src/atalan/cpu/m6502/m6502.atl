@@ -8,7 +8,6 @@ type
    sbyte:-128..127
    byte1:byte() or sbyte()
    byte2:card() or int()
-   byte2a:byte2 or adr
    byte1arr:array(card) of byte1
    _byte1arr2D:array(card,card) of byte1
 
@@ -25,7 +24,6 @@ rule alloc %A:array(byte,byte) of byte1, %B, %C   = "   .ds %B*%C"
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
 rule alloc %A:long                               = "   .ds 3"
-rule alloc %A:adr                                = "   .ds 2"
 rule alloc %A:-128..127                          = "   .ds 1"
 rule alloc %A:int                                = "   .ds 2"
 
@@ -47,7 +45,9 @@ CPU:scope =
 	in void:0..255  ;This is special variable used to implement touch instructions.
 	zn@(z,n)
 	xy@(x,y)
-		
+
+	type memory:array(0..$ffff) of 0..255
+
 	;Definition of the more common 6502 instructions as macros, so the code is more readable 
 	lda:macro o = instr let a, o
 	ldx:macro o = instr let x, o
@@ -61,19 +61,23 @@ CPU:scope =
 
 	adc:macro o = instr add as, ac, o 
 	sbc:macro o = instr sub as, ac, o 
-	inx:macro = instr add xzn, x, 1
-	iny:macro = instr add yzn,y,1
-	dex:macro = instr sub xzn,x,1
-	dey:macro = instr sub yzn,y,1
-	inc:macro o = instr add (o,zn), o, 1
-	dec:macro o = instr sub (o,zn), o, 1
+	inx:macro = instr add x, x, 1
+	iny:macro = instr add y, y, 1
+	dex:macro = instr sub x, x, 1
+	dey:macro = instr sub y, y, 1
+	inc:macro o = instr add o, o, 1
+	dec:macro o = instr sub o, o, 1
 
 	lsr:macro (o=a) = instr div (o,czn), o, 2  
 	asl:macro (o=a) = instr mul (o,czn), o, 2  
 	ror:macro (o=a) = instr rotr (o,czn), (o,c), 1  
 	rol:macro (o=a) = instr rotl (o,czn), (o,c), 1  
 
-						
+type
+	byte2a:byte2 or adr
+
+rule alloc %A:adr = "   .ds 2"
+
 ;========================
 ;Temporary variables
 ;========================
@@ -85,7 +89,7 @@ CPU:scope =
 
 _stdbuf:array(0..15) of byte
 _arr:adr
-_putchr_proc_adr:adr			;address of print procedure
+_putchr_proc_adr:adr of proc			;address of print procedure
 
 ;TODO: Temporary variables should be allocated dynamically
 _TEMPW1@$32:CARD
@@ -171,13 +175,13 @@ rule let %A:int, %B:sbyte = instr
 ;======= Address of array
 
 rule let %A:byte1, %B:adr(%C:byte) = instr
-	let y, %C
+	ldy %C
 	let a, @%B$y
 	let %A, a
 
 rule let %B:adr(%C:byte), %A:byte1 = instr
 	let a, %A
-	let y, %C
+	ldy %C
 	let @%B$y, a
 
 rule let_adr %A:adr, %B:adr(const %C) = instr
@@ -224,7 +228,7 @@ rule let a,%A:byte1arr(%B:byte) = instr
 	let a,%A$x
 
 rule let %A:byte1arr(%B:byte), a = instr
-	let y, a 
+	ldy a 
 	let a, %B
 	mul a, a, %A.step
 	let x,a 
@@ -250,9 +254,6 @@ rule let %A:byte1,%B:byte1arr(%C:byte) = instr
 	let a,%B$x
 	let %A, a
 
-;rule let %A:byte1arr(%B:byte),%C:byte1arr(%D:byte) = instr 
-;	let a,%C(%D)
-;	let %A(%B), a
 
 rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 	lo a, %B(%D)
@@ -264,24 +265,21 @@ rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 
 type arr_of_arr:array(byte) of array(byte) of byte1
 
-;rule alloc %A:array(byte) of array(byte) of byte1, %B, %C = "   .ds %B*%C"
-;rule arrindex %A:array(byte) of array(byte) of byte1,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C)" "%A_hi:  :%B dta h(%A + #*%C)"
-
 rule alloc %A:array(byte) of array(byte) of byte1, %B, %C = "   .ds %B*%C"
 rule arrindex %A:array(byte) of array(byte) of byte1,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C)" "%A_hi:  :%B dta h(%A + #*%C)"
 
 rule let %A:arr_of_arr(%B:byte)(%C:byte), %D:byte1 = instr
-	let y, %B
+	ldy %B
 	lo a, %A$y			;this accesses lower byte of array of pointers
 	let _arr$0, a
 	hi a, %A$y
 	let _arr$1, a
-	let y, %C
+	ldy %C
 	let a, %D
-	let @_arr$y, a	
+	let @_arr$y, a
 
 rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
-	let y, %C
+	ldy %C
 	lo a, %A$y
 	clc
 	adc %B
@@ -296,27 +294,27 @@ rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
 ;We use indexing using Y register.
 
 rule let %A:_byte1arr2D(%B:byte, %C:byte), %D:byte = instr
-	let y, %C
+	ldy %C
 	lo a, %A$y			;this accesses lower byte of array of pointers
 	let _arr$0, a
 	hi a, %A$y
 	let _arr$1, a
-	let y, %B
+	ldy %B
 	let a, %D
 	let @_arr$y, a	
 
 rule let %D:byte, %A:_byte1arr2D(%B:byte, %C:byte)  = instr
-	let y, %C
+	ldy %C
 	lo a, %A$y
 	let _arr$0, a
 	hi a, %A$y
 	let _arr$1, a
-	let y, %B
+	ldy %B
 	let a, @_arr$y	
 	let %D, a
 
 rule let_adr %D:adr, %A:_byte1arr2D(%B:byte,%C:byte) = instr
-	let y, %C
+	ldy %C
 	lo a, %A$y
 	clc
 	adc %B
@@ -432,7 +430,7 @@ rule let %C:byte1arr(%D:card), %A:byte = instr
   clc
   adc  %D$1
   let _arr$1, a
-  let y,%D$0
+  ldy %D$0
   let a,%A
   let @_arr$y, a  
 
@@ -444,7 +442,7 @@ rule let %C:byte1arr(%D:card), a = instr
   clc
   adc  %D$1
   let _arr$1, a
-  let y,%D$0
+  ldy %D$0
   let a,x
   let @_arr$y, a  
 
@@ -455,7 +453,7 @@ rule let %A:byte, %C:byte1arr(%D:card)  = instr
   clc
   adc  %D$1
   let _arr$1, a
-  let y,%D$0
+  ldy %D$0
   let a, @_arr$y  
   let %A,a
 
@@ -491,24 +489,24 @@ rule lo %A, %B = instr
 rule lo a, %A:byte2 = instr
 	let a, %A$0
 	  
-rule lo a, %A$y = "   lda %A_lo,y"
-rule lo a,const %A     = "   lda #<%A"
-rule lo x,const %A     = "   ldx #<%A"
-rule lo y,const %A     = "   ldy #<%A"
+rule lo a, %A$y @zn = "   lda %A_lo,y"
+rule lo a,const %A @zn    = "   lda #<%A"
+rule lo x,const %A @zn    = "   ldx #<%A"
+rule lo y,const %A @zn    = "   ldy #<%A"
 
-rule lo a,%A:byte1 = "   lda %A"
-rule lo x, %A     =  "   ldx %A"
-rule lo y, %A     =  "   ldy %A"
+rule lo a,%A:byte1 @zn = "   lda %A"
+rule lo x, %A     @zn =  "   ldx %A"
+rule lo y, %A   @zn  =  "   ldy %A"
 
 ;These rules return hi and lo byte of an one byte array element
-rule lo a, %A:byte1arr(const %B) = "   lda #<(%A-%A.index.min+%B)"
-rule hi a, %A:byte1arr(const %B) = "   lda #>(%A-%A.index.min+%B)"
+rule lo a, %A:byte1arr(const %B) @zn = "   lda #<(%A-%A.index.min+%B)"
+rule hi a, %A:byte1arr(const %B) @zn = "   lda #>(%A-%A.index.min+%B)"
 
-rule lo x, %A:byte1arr(const %B) = "   ldx #<(%A-%A.index.min+%B)"
-rule hi x, %A:byte1arr(const %B) = "   ldx #>(%A-%A.index.min+%B)"
+rule lo x, %A:byte1arr(const %B) @zn = "   ldx #<(%A-%A.index.min+%B)"
+rule hi x, %A:byte1arr(const %B) @zn = "   ldx #>(%A-%A.index.min+%B)"
 
-rule lo y, %A:byte1arr(const %B) = "   ldy #<(%A-%A.index.min+%B)"
-rule hi y, %A:byte1arr(const %B) = "   ldy #>(%A-%A.index.min+%B)"
+rule lo y, %A:byte1arr(const %B) @zn = "   ldy #<(%A-%A.index.min+%B)"
+rule hi y, %A:byte1arr(const %B) @zn = "   ldy #>(%A-%A.index.min+%B)"
 
 
 ;*********** Hi
@@ -517,12 +515,12 @@ rule hi %A, %B = instr
   hi a, %B
   let %A, a
 
-rule hi a, %A$y      = "   lda %A_hi,y"
-rule hi a, %A:arr_of_arr = "   lda #>%A"
-rule hi a, const %A    = "   lda #>%A"
-rule hi a,%A:card      = "   lda %A+1"
-rule hi x, %A     =  "   ldx %A+1"
-rule hi y, %A     =  "   ldy %A+1"
+rule hi a, %A$y @zn    = "   lda %A_hi,y"
+rule hi a, %A:arr_of_arr @zn = "   lda #>%A"
+rule hi a, const %A @zn   = "   lda #>%A"
+rule hi a,%A:card @zn     = "   lda %A+1"
+rule hi x, %A  @zn   =  "   ldx %A+1"
+rule hi y, %A  @zn   =  "   ldy %A+1"
 
 ;*********** Add
 
@@ -603,9 +601,9 @@ rule add %A:int,%B:sbyte,%C:sbyte = instr
 ;u16 += 1
 ;s16 +=1
 rule add %A:byte2,%A,1 = instr
-  add (%A$0,zn), %A$0, 1
+  inc %A$0
   ifeq _lab1, z, 0
-  add (%A$1,zn), %A$1, 1
+  inc %A$1
   label _lab1
 
 ;u16 += u8
@@ -1887,10 +1885,10 @@ rule sub cznv, y, %A:byte1       = "   cpy %A"
 
 ;TAX,TAY,TYA,TXA
 
-rule let x,a      = "   tax"
-rule let y,a      = "   tay"
-rule let a,x      = "   txa"
-rule let a,y      = "   tya"
+rule let x,a @zn     = "   tax"
+rule let y,a @zn     = "   tay"
+rule let a,x @zn     = "   txa"
+rule let a,y @zn     = "   tya"
 
 ;LDX
 
@@ -1900,14 +1898,14 @@ rule let x,%A$y       = "   ldx %A-%A.index.min,y"
 rule let x,%A:byte1        = "   ldx %A"
 
 ;LDY
-rule let y,const% A:byte1   = "   ldy #%A"
-rule let y,%A$const %B = "   ldy %A-%A.index.min+%B"
-rule let y,%A$x       = "   ldy %A-%A.index.min,x"
-rule let y,%A:byte1        = "   ldy %A"
+rule let y, const% A:byte1 @zn  = "   ldy #%A"
+rule let y, %A$const %B @zn = "   ldy %A-%A.index.min+%B"
+rule let y, %A$x  @zn     = "   ldy %A-%A.index.min,x"
+rule let y, %A:byte1 @zn       = "   ldy %A"
 
 ;LDA
 
-rule let a,%A$%B             = "   lda %A+%B"
+;rule let a,%A$%B             = "   lda %A-%A.index.min+%B"
 rule let a,const %A:byte1    = "   lda #%A"
 rule let a,%A:byte1     = "   lda %A"
 
@@ -1999,20 +1997,20 @@ rule rotl (%A$x,czn), (%A$x,czn), 1         = "   rol %A-%A.index.min,x"
 ;rule rotl %A$const %B,%A$%B,1 = "   rotl %A-%A.index.min+%B"
 
 ;INX, INY, DEX, DEY
-rule add xzn,x,1 = "   inx"
-rule add yzn,y,1 = "   iny"
-rule sub xzn,x,1 = "   dex"
-rule sub yzn,y,1 = "   dey"
+rule add x,x,1 @zn = "   inx"
+rule add y,y,1 @zn = "   iny"
+rule sub x,x,1 @zn = "   dex"
+rule sub y,y,1 @zn = "   dey"
 
 ;INC
-rule add (%A:byte1,zn),%A,1         = "   inc %A"
-rule add (%A$const %B,zn), %A$%B, 1 = "   inc %A-%A.index.min+%B"
-rule add (%A$x,zn), %A$x, 1         = "   inc %A-%A.index.min,x"
+rule add %A:byte1,%A,1  @zn       = "   inc %A"
+rule add %A$const %B, %A$%B, 1  @zn = "   inc %A-%A.index.min+%B"
+rule add %A$x, %A$x, 1 @zn        = "   inc %A-%A.index.min,x"
 
 ;DEC
-rule sub (%A:byte1,zn),%A,1         = "   dec %A"
-rule sub (%A$const %B,zn), %A$%B, 1 = "   dec %A-%A.index.min+%B"
-rule sub (%A$x,zn), %A$x, 1         = "   dec %A-%A.index.min,x"
+rule sub %A:byte1,%A,1  @zn       = "   dec %A"
+rule sub %A$const %B, %A$%B, 1 @zn = "   dec %A-%A.index.min+%B"
+rule sub %A$x, %A$x, 1  @zn       = "   dec %A-%A.index.min,x"
 
 ;ADC
 rule add as, ac, const %A:byte1  = "   adc #%A"
