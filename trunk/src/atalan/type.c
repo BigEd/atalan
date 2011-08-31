@@ -20,7 +20,6 @@ GLOBAL Type TSCOPE;
 GLOBAL Type TTUPLE;
 GLOBAL Type * TUNDEFINED;
 
-
 #define RESTRICTION 0
 
 /*
@@ -137,10 +136,18 @@ Type * TypeAllocInt(Int32 min, Int32 max)
 }
 
 Type * TypeAdrOf(Type * element)
+/*
+Purpose:
+	Alloc type as "adr of <element>".
+	If the element is not specified, it is "adr of <memory>".
+*/
 {
 	Type * type = TypeAlloc(TYPE_ADR);
 	if (element == NULL) {
-		element = TypeByte();
+		if (CPU->MEMORY == NULL) {
+			InitCPU();
+		}
+		element = CPU->MEMORY;
 	}
 	type->element = element;
 	return type;
@@ -708,6 +715,11 @@ void PrintType(Type * type)
 		Print("seq "); PrintType(type->seq.init); Print(" + "); PrintType(type->seq.step);
 		break;
 
+	case TYPE_ADR:
+		Print("adr of ");
+		PrintType(type->element);
+		break;
+
 	case TYPE_ARRAY:
 		Print("array (");
 		PrintType(type->dim[0]);
@@ -717,6 +729,14 @@ void PrintType(Type * type)
 		}
 		Print(") of ");
 		PrintType(type->element);
+		break;
+
+	case TYPE_PROC:
+		Print("proc");
+		break;
+
+	case TYPE_MACRO:
+		Print("proc");
 		break;
 	}
 }
@@ -1218,8 +1238,8 @@ Bool VarIdentical(Var * left, Var * right)
 
 	if ((left->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE)) != (right->submode & (SUBMODE_IN | SUBMODE_OUT | SUBMODE_IN_SEQUENCE | SUBMODE_OUT_SEQUENCE))) return false;
 
-	while (left->adr != NULL && left->adr->mode == INSTR_VAR) left = left->adr;
-	while (right->adr != NULL && right->adr->mode == INSTR_VAR) right = right->adr;
+	while (left->adr != NULL && left->mode == INSTR_VAR && left->adr->mode == INSTR_VAR) left = left->adr;
+	while (right->adr != NULL && right->mode == INSTR_VAR && right->adr->mode == INSTR_VAR) right = right->adr;
 
 	if (left == right) return true;
 
@@ -1393,13 +1413,17 @@ Result:
 */
 {
 	Type * type = NULL;
+	Type * arr_type;
 
 	if (var == NULL) return NULL;
 	if (var->mode == INSTR_CONST) {
+		type = var->type;
 		//TODO: Use type from constant (if it exists)
-		if (var->type->variant == TYPE_INT) {
-			type = TypeAllocInt(var->n, var->n);
-			type->flexible = false;
+		if (type->variant == TYPE_INT) {
+			if (type->range.min != var->n || type->range.max != var->n) {
+				type = TypeAllocInt(var->n, var->n);
+				type->flexible = false;
+			}
 		}
 	} else if (var->mode == INSTR_BYTE) {
 		type = TypeByte();
@@ -1419,8 +1443,20 @@ Result:
 
 			// Type has not been specified in previous code
 			if (type->variant == TYPE_UNDEFINED) {
-				if (VarIsArrayElement(var)) {
-					type = var->adr->type->element;
+
+				if (var->mode == INSTR_ELEMENT) {
+					arr_type = var->adr->type;
+					if (VarIsArrayElement(var)) {
+						type = arr_type->element;
+					//Using address to access array element
+					} else if (arr_type->variant == TYPE_ADR) {
+						if (arr_type->element->variant == TYPE_ARRAY) {
+							// adr of array of type
+							type = arr_type->element->element;
+						} else {
+							printf("");
+						}
+					}
 				}
 			}
 
@@ -1744,6 +1780,10 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
+//	if (i->op == INSTR_LET_ADR && i->result->idx == 31) {
+//		printf("");
+//	}
+
 	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
 
 		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
@@ -1896,8 +1936,10 @@ Purpose:
 
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
-	printf("======= Infer ===========\n");
-	PrintProc(proc);
+	if (Verbose(proc)) {
+		printf("======= Infer ===========\n");
+		PrintProc(proc);
+	}
 
 	// 1. For every instruction in the code try to infer the type of it's result
 	// 2. Repeat this until no new result type was inferred
@@ -1958,7 +2000,7 @@ Purpose:
 								LogicErrorLoc("Cannot infer type of result of operator [*].", &loc);
 							} else {
 								ErrArg(var);
-								LogicErrorLoc("Cannot infer type of variable [A].\nPlease define the type or use assert to help the compiler to infer it.", &loc);
+								LogicErrorLoc("Cannot infer type of variable [A].\nPlease define the type or use assert to give the compiler some more information.", &loc);
 							}
 //						}
 					}
@@ -1974,7 +2016,10 @@ Purpose:
 			}
 		}
 	}
-	PrintVars(proc);
+
+	if (Verbose(proc)) {
+		PrintVars(proc);
+	}
 
 	ReportUnusedVars(proc);
 }

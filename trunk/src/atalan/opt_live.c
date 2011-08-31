@@ -219,16 +219,6 @@ Bool VarIsDead(Var * var)
 	}
 }
 
-UInt32 BlkInstrCount(InstrBlock * blk)
-{
-	Instr * i;
-	UInt32 n = 0;
-	if (blk != NULL) {
-		for(i = blk->first; i != NULL; i = i->next) n++;
-	}
-	return n;
-}
-
 Bool OptimizeLive(Var * proc)
 {
 	Bool modified = false;
@@ -297,17 +287,16 @@ Bool OptimizeLive(Var * proc)
 			NEXT_OUT_ARG
 		}
 
-		n = BlkInstrCount(blk);
+		n = InstrBlockInstrCount(blk);
 
 		for(i = blk->last; i != NULL; i = i->prev, n--) {
 
 			op = i->op;
-			if (op == INSTR_LINE) continue;
+			if (op == INSTR_LINE || op == INSTR_RETURN) continue;
 
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_CALL) {
-//					if (FlagOff(result->flags, VarLive) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result) && !OutVar(result)) {
 					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {

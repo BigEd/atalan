@@ -30,6 +30,36 @@ GLOBAL Rule * LAST_RULE[INSTR_CNT];
 GLOBAL Rule * EMIT_RULES[INSTR_CNT];
 GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
 
+Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
+/*
+	Return true if l is more specific than r.
+*/
+{
+	if (l == r) return false;
+	if (l == NULL) return false;
+	if (r == NULL) return true;
+
+	if (l->variant == RULE_REGISTER) {
+		if (r->variant != RULE_REGISTER) return true;
+	}
+
+	return false;
+}
+
+Bool RuleIsMoreSpecific(Rule * l, Rule * r)
+/*
+Purpose:
+	Compare two rule filters for specificity.
+	In case we are not able to decide, which rule is more specific, we return false.
+*/
+{
+	UInt8 i;
+	for(i=0; i<3; i++) {
+		if (RuleArgIsMoreSpecific(&l->arg[i], &r->arg[i])) return true;
+	}
+	return false;
+}
+
 void RuleRegister(Rule * rule)
 /*
 Purpose:
@@ -37,6 +67,7 @@ Purpose:
 */
 {
 	InstrOp op = rule->op;
+	Rule * r, * prev_r;
 	if (!rule->to->first) InternalError("Empty rule");
 
 	if (rule->to->first->op == INSTR_EMIT) {
@@ -44,9 +75,25 @@ Purpose:
 		if (EMIT_RULES[op] == NULL) EMIT_RULES[op] = rule;
 		LAST_EMIT_RULE[op] = rule;
 	} else {
-		if (LAST_RULE[op] != NULL) LAST_RULE[op]->next = rule;
-		if (RULES[op] == NULL) RULES[op] = rule;
-		LAST_RULE[op] = rule;
+
+		prev_r = NULL; r = RULES[op];
+
+		while(r != NULL && !RuleIsMoreSpecific(rule, r)) {
+			prev_r = r;
+			r = r->next;
+		}
+
+		rule->next = r;
+
+		if (prev_r == NULL) {
+			RULES[op] = rule;
+		} else {
+			prev_r->next = rule;
+		}
+
+//		if (LAST_RULE[op] != NULL) LAST_RULE[op]->next = rule;
+//		if (RULES[op] == NULL) RULES[op] = rule;
+//		LAST_RULE[op] = rule;
 	}
 }
 
@@ -146,6 +193,11 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	return VarMatchesType(var, type);
 }
 
+Bool VarIsFlagReg(Var * var)
+{
+	return VarIsReg(var) && var->type->range.max == 1 && var->type->range.min == 0;
+}
+
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
 {
 	Type * atype;
@@ -162,6 +214,10 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
+
+	// In case of destination register, we ignore all flag registers, that are specified in pattern and not specified in argument.
+	// I.e. instruction may affect more flags, than the source instruction requires.
+	// All flags defined by source instruction (argument) must be part of pattern though.
 
 	case RULE_TUPLE:
 		if (arg->mode != INSTR_TUPLE) return false;
@@ -299,8 +355,8 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 
 	if (i->op == INSTR_LINE) {
 		Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
-	} else if (InstrRule(i)) {
-		Gen(i->op, i->result, i->arg1, i->arg2);
+	} else if ((rule = InstrRule(i))) {
+		GenRule(rule, i->result, i->arg1, i->arg2);
 	} else {
 		// Find translating rule
 		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {

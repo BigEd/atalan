@@ -46,7 +46,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 
 	{ INSTR_ALLOC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_PROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_RETURN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_RETURN, "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_ENDPROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_CALL, "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_VAR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
@@ -68,7 +68,6 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_XOR, "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
 	{ INSTR_NOT, "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
 	{ INSTR_ASSERT_BEGIN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_ASSERT, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_ASSERT_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 
 	{ INSTR_LINE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// reference line in the source code
@@ -118,6 +117,20 @@ void InstrBlockFree(InstrBlock * blk)
 		}
 		blk->first = blk->last = NULL;
 	}
+}
+
+UInt32 InstrBlockInstrCount(InstrBlock * blk)
+/*
+Purpose:
+	Return number of instructions in the block.
+*/
+{
+	Instr * i;
+	UInt32 n = 0;
+	if (blk != NULL) {
+		for(i = blk->first; i != NULL; i = i->next) n++;
+	}
+	return n;
 }
 
 Bool InstrEquivalent(Instr * i, Instr * i2)

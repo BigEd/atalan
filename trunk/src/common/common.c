@@ -202,3 +202,80 @@ Int16 StrEditDistance(char * s, char * t)
     return -1; //a negative return value means that one or both strings are empty.
 }
 
+
+#if defined(__Windows__)
+    #include <windows.h>
+#endif
+
+UInt16 G_OLD_CP;
+UInt8 G_COLOR;
+FILE * G_PRINT_OUTPUT;		// either STDOUT or STDERR
+
+void PrintInit()
+{
+#ifdef __Windows__
+	G_OLD_CP = GetConsoleOutputCP();
+	SetConsoleOutputCP(CP_UTF8);
+#endif
+	PrintDestination(stdout);
+	PrintColor(RED+GREEN+BLUE);
+}
+
+void PrintCleanup()
+{
+#ifdef __Windows__
+	SetConsoleOutputCP(G_OLD_CP);
+#endif
+}
+
+FILE * PrintDestination(FILE * file)
+{
+	FILE * f = G_PRINT_OUTPUT;
+	G_PRINT_OUTPUT = file;
+	return f;
+}
+
+UInt8 PrintColor(UInt8 color)
+/*
+Purpose:
+	Change the color of printed text.
+*/
+{
+	UInt8 old_color = G_COLOR;
+#ifdef __Windows__
+	HANDLE hStdout; 
+	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
+	SetConsoleTextAttribute(hStdout, color);
+#endif
+	G_COLOR = color;
+	return old_color;
+}
+
+void Print(char * text)
+{
+	if (text != NULL) {
+		fprintf(G_PRINT_OUTPUT, "%s", text);
+	}
+}
+
+void PrintChar(char c)
+{
+	fputc(c, G_PRINT_OUTPUT);
+}
+
+void PrintEOL()
+{
+	Print("\n");
+}
+
+void PrintInt(Int32 n)
+{
+	fprintf(G_PRINT_OUTPUT, "%d", n);
+}
+
+void PrintRepeat(char * text, UInt16 cnt)
+{
+	while(cnt-- > 0) {
+		Print(text);
+	}
+}

@@ -33,13 +33,34 @@ Purpose:
 {
 	if (exp == NULL) return false;
 	if (exp->op == INSTR_VAR) {
+		return VarUsesVar(exp->var, var);
+/*
 		if (exp->var == var) return true;
 		// If variables are aliases (have same address)
 		if (var->adr == exp->var || exp->var->adr == var || (var->adr != NULL && exp->var->adr == var->adr)) return true;
 		return false;
+*/
 	} else {
 		return ExpUsesValue(exp->arg[0], var) || ExpUsesValue(exp->arg[1], var);
 	}
+}
+
+Bool ExpIsOffset(Exp * l, Var * r, Int32 * diff)
+/*
+Purpose:
+	Test, whether r expression gives same result as l expression, except incremented by some constant value.
+*/
+{
+	Var * vl;
+	if (l == NULL || r == NULL) return false;
+	if (l->op == INSTR_VAR) {
+		vl = l->var;
+		if (vl->mode == INSTR_CONST && r->mode == INSTR_CONST) {
+			*diff = r->n - vl->n;
+			return true;
+		}
+	}
+	return false;
 }
 
 void ResetValues()
@@ -73,17 +94,17 @@ Purpose:
 			// let q, _a
 			// add r, p, q
 
-//			if (i->op == INSTR_LET) {
+			if (i->op == INSTR_LET) {
 //				//TODO: Here may be error, when we get reference to instruction, which in fact uses the variable
-//				if (i->arg1 == res) {
-//					i->result->src_i = i->arg1->src_i;
-//				}
-//			} else {
+				if (i->arg1 == res) {
+					i->result->src_i = i->arg1->src_i;
+				}
+			} else {
 				//TODO: Only reset the instruction, if there is no source
 				if (i->arg1 == res || i->arg2 == res) {
 					var->src_i = NULL;
 				}
-//			}
+			}
 		}
 	NEXT_VAR
 
@@ -91,15 +112,13 @@ Purpose:
 	//TODO: How about element (non constant, let's say?)
 
 	var = res->adr;
-	if (var != NULL) {
+	if (res->mode == INSTR_VAR && var != NULL) {
 		if (var->mode == INSTR_VAR || var->mode == INSTR_TUPLE) {
 			ResetValue(var);
 		}
-	} else {
-		if (res->mode == INSTR_TUPLE) {
-			ResetValue(res->adr);
-			ResetValue(res->var);
-		}
+	} else if (res->mode == INSTR_TUPLE) {
+		ResetValue(res->adr);
+		ResetValue(res->var);
 	}
 
 	res->src_i = NULL;
@@ -507,8 +526,48 @@ Var * SrcVar(Var * var)
 	return var;
 }
 
+/*
+Var * VarStripFlags(Var * var)
+
+Purpose:
+	Return variable with register flags stripped off.
+
+{
+	Var * l, * r;
+	if (VarIsReg(var) && var->type->variant == TYPE_INT && var->type->range.min == 0 && var->type->range.max == 1) {
+		return NULL;
+	}
+	if (var->mode == INSTR_TUPLE) {
+		l = VarStripFlags(var->adr);
+		r = VarStripFlags(var->var);
+		if (l == NULL) return r;
+		if (r == NULL) return l;
+	} else if (var->mode == INSTR_VAR && var->adr != NULL) {
+		return VarStripFlags(var->adr);
+	}
+
+	return var;
+}
+*/
 UInt32 GOG = 0;
 //UInt32 GOG2 = 0;
+
+void VarSetSrcInstr(Var * var, Instr * i)
+{
+	if (var == NULL) return;
+	if (var->mode == INSTR_CONST) return;
+
+	var->src_i = i;
+	if (var->mode == INSTR_TUPLE) {
+		VarSetSrcInstr(var->adr, i);
+		VarSetSrcInstr(var->var, i);
+	} else if (var->mode == INSTR_VAR) {
+		if (var->adr != NULL) {
+			VarSetSrcInstr(var->adr, i);
+		}
+	}
+}
+
 
 Bool OptimizeValues(Var * proc)
 /*
@@ -526,10 +585,12 @@ Bool OptimizeValues(Var * proc)
 	Bool modified, m2, m3;
 	Instr * i, * src_i;
 	UInt32 n;
-	Var * r, * result, * arg1, * arg2;
+	Var * r, * result, * arg1, * arg2, * r2;
 	InstrBlock * blk;
 	InstrOp op, src_op;
 	char buf[32];
+	Int32 diff;
+	Bool  opt_increment;
 
 	if (Verbose(proc)) {
 		printf("------ optimize values -----\n");
@@ -572,6 +633,7 @@ retry:
 					// If the instruction sets it's result to the same value it already contains,
 					// remove the instruction.
 
+					opt_increment = false;
 					arg1 = i->arg1;
 					src_i = result->src_i;
 
@@ -599,13 +661,39 @@ retry:
 						} else {
 	delete_instr:
 							if (Verbose(proc)) {
-								printf("Removing %ld#%ld:", blk->seq_no, n); InstrPrint(i);
+								printf("%ld#%ld Removing:", blk->seq_no, n); InstrPrint(i);
 							}
 							i = InstrDelete(blk, i);
 							modified = true;
 							goto retry;
 						}
 					} else {
+
+						if (i->op == INSTR_LET && ExpIsOffset(result->dep, arg1, &diff)) {
+							op = INSTR_ADD;
+							if (diff < 0) {
+								op = INSTR_SUB;
+								diff = -diff;
+							}
+							//TODO: When we know the price of an instruction, use the resulting instruction search to search for the instruction
+							if (diff == 1) {
+								r2 = VarNewInt(diff);
+								//r = VarStripFlags(result);
+								if (InstrRule2(op, result, result, r2)) {
+									if (Verbose(proc)) {
+										printf("%ld#%ld Converting to inc/dec:", blk->seq_no, n); InstrPrint(i);
+									}
+									i->op = op;
+									i->arg1 = result;
+									i->arg2 = r2;
+									arg1 = result;
+									arg2 = r2;
+									opt_increment = true;
+									modified = true;
+								}
+							}
+						}
+
 						// Instruction result is set to different value, we must therefore reset
 						// all references to this value from all other values.
 						ResetValue(result);
@@ -669,6 +757,7 @@ retry:
 							i->op   = op;
 							i->arg1 = arg1;
 							i->arg2 = arg2;
+							modified = true;
 						}
 					}
 
@@ -692,8 +781,8 @@ retry:
 							modified = true;
 						}
 					}
-					result->src_i = i;
 
+					VarSetSrcInstr(result, i);
 					// Create dependency tree
 					Dependency(i);
 

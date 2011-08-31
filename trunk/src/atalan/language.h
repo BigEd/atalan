@@ -1,9 +1,10 @@
 #include "../common/common.h"
-#include <stdio.h>
 
 typedef struct VarTag Var;
 typedef struct LocTag Loc;
 typedef struct VarSetTag VarSet;
+typedef struct RuleTag Rule;
+typedef struct RuleArgTag RuleArg;
 
 Bool Verbose(Var * proc);
 
@@ -12,10 +13,6 @@ Bool Verbose(Var * proc);
  Lexer
 
 *************************************************************/
-
-#define EOL 10
-#define TAB 9
-#define SPC 32
 
 typedef UInt16 LineNo;
 typedef UInt16 LinePos;
@@ -221,7 +218,6 @@ typedef enum {
 	INSTR_XOR,
 	INSTR_NOT,
 	INSTR_ASSERT_BEGIN,
-	INSTR_ASSERT,
 	INSTR_ASSERT_END,
 
 	INSTR_LINE,				// reference line in the source code
@@ -353,7 +349,7 @@ struct TypeTag {
 	Var * owner;			// original owner of this type
 	union {
 		Range range;
-		// TYPE_ARRAY
+		// TYPE_ARRAY, TYPE_ADR
 		struct {
 			Type * dim[MAX_DIM_COUNT];		// array dimension types (integer ranges)
 			Type * element;
@@ -740,6 +736,7 @@ typedef struct {
 	Var * SCOPE;
 	Var * REG[MAX_CPU_REG_COUNT];		// Array of registers
 	RegIdx REG_CNT;		// Count of registers
+	Type * MEMORY;		// Array (adr) of cpu_word
 } CPUType;
 
 extern CPUType * CPU;
@@ -783,6 +780,7 @@ We use three-address instructions. in the form  result = arg1 op arg2.
 
 struct InstrTag {
 	InstrOp op;
+	Rule *  rule;		// after translation, this is pointer to rule defining the operator (may be NULL for INSTR_LINE)
 
 	//--- dest
 	Var * result;
@@ -891,6 +889,8 @@ Var * InstrFind(char * name);
 
 
 void InstrBlockFree(InstrBlock * blk);
+UInt32 InstrBlockInstrCount(InstrBlock * blk);
+
 void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * first, Instr * last);
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
@@ -924,6 +924,7 @@ InstrBlock * GenEnd();
 
 void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2);
 void GenLet(Var * result, Var * arg1);
 void GenLine();
 void GenLabel(Var * var);
@@ -957,11 +958,6 @@ extern InstrInfo INSTR_INFO[INSTR_CNT];
 
 extern Var * RULE_PROC;
 
-typedef struct RuleTag Rule;
-typedef struct RuleArgTag RuleArg;
-
-//TODO: Check ARG type
-
 typedef enum {
 	RULE_UNDEFINED,
 	RULE_ANY = 0,		// any argument
@@ -975,7 +971,9 @@ typedef enum {
 	RULE_TUPLE,
 	RULE_RANGE,
 	RULE_BYTE,
-//	RULE_ARRAY_ARG      // argument that should be array of specified type
+
+	RULE_DESTINATION
+
 } RuleArgVariant;
 
 struct RuleArgTag {
@@ -997,10 +995,11 @@ struct RuleTag {
 	Rule * next;
 	Var *  file;			// file in which the rule has been defined
 	LineNo line_no;			// line in the source code, on which the rule was defined
+
 	InstrOp op;
 	RuleArg arg[3];
 	InstrBlock * to;
-	Var * scope;
+	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
 };
 
 void RuleRegister(Rule * rule);
@@ -1084,23 +1083,8 @@ void OptimizeProcInline(Var * proc);
 
 *************************************************************/
 
-#define BLUE 1
-#define GREEN 2
-#define RED 4
-#define LIGHT 8
-
-void PrintInit();
-void PrintCleanup();
-
-FILE * PrintDestination(FILE * file);
-UInt8 PrintColor(UInt8 color);
 void PrintHeader(char * text);
 void PrintOptim(char * text);
-void Print(char * text);
-void PrintEOL();
-void PrintChar(char c);
-void PrintInt(Int32 n);
-void PrintRepeat(char * text, UInt16 cnt);
 
 Rule * InstrRule(Instr * instr);
 Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2);
@@ -1124,6 +1108,7 @@ void InitPlatform();
 extern Var * INTERRUPT;
 extern Var * MACRO_PRINT;		// Print macro
 extern Var * MACRO_FORMAT;		// Format macro
+extern Var * MACRO_ASSERT_PRINT;		// Assert procedure
 extern Var * MACRO_ASSERT;		// Assert procedure
 extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
 extern Var * VARS;				// list of variables

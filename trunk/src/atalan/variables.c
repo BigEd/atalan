@@ -703,21 +703,29 @@ Purpose:
 {
 	Var * var;
 
-//	CPU->SCOPE = VarFindScope(&ROOT_PROC, "CPU", 0);
-	CPU->REG_CNT = 0;
+	if (CPU->MEMORY == NULL) {
+		CPU->REG_CNT = 0;
 
-	if (CPU->SCOPE == NULL) {
-		InternalError("CPU scope not found");
-	}
-
-	FOR_EACH_LOCAL(CPU->SCOPE, var)
-		// Only variables without address are registers.
-		// The variables with address are register sets.
-		if (var->adr == NULL) {
-			SetFlagOn(var->submode, SUBMODE_REG);
-			CPU->REG[CPU->REG_CNT++] = var;
+		if (CPU->SCOPE == NULL) {
+			InternalError("CPU scope not found");
 		}
-	NEXT_LOCAL
+
+		FOR_EACH_LOCAL(CPU->SCOPE, var)
+			// Only variables without address are registers.
+			// The variables with address are register sets.
+			if (var->mode == INSTR_VAR && var->adr == NULL) {
+				SetFlagOn(var->submode, SUBMODE_REG);
+				CPU->REG[CPU->REG_CNT++] = var;
+			}
+		NEXT_LOCAL
+
+		var = VarFindScope(CPU->SCOPE, "memory", 0);
+		if (var != NULL) {
+			CPU->MEMORY = var->type;
+		} else {
+			InternalError("CPU.memory was not defined");
+		}
+	}
 }
 
 void VarResetRegUse()
@@ -879,9 +887,9 @@ Purpose:
 	if (var == from) return to;
 
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_RANGE) {
-		l = VarReplaceVar(var->var, from, to);
-		r = VarReplaceVar(var->adr, from, to);
-		if (l != var->var || r != var->adr) var = VarNewOp(var->mode, l, r);
+		l = VarReplaceVar(var->adr, from, to);
+		r = VarReplaceVar(var->var, from, to);
+		if (l != var->adr || r != var->var) var = VarNewOp(var->mode, l, r);
 
 	} else if (var->mode == INSTR_DEREF) {
 		l = VarReplaceVar(var->var, from, to);
@@ -981,17 +989,16 @@ Purpose:
 		if (test_var->mode == INSTR_CONST) return false;
 
 		if (var == test_var) {
-			uses = true;
+			return true;
 		} else {
-
 			if (test_var->mode == INSTR_TUPLE) {
 				return VarUsesVar(var, test_var->adr) || VarUsesVar(var, test_var->var);
 			} else {
 
 				if (var->mode == INSTR_DEREF) {
-					uses = VarUsesVar(var->var, test_var);
+					return VarUsesVar(var->var, test_var);
 				} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
-					uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
+					return VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
 				} else if (var->adr != NULL) {
 					if (var->adr->mode != INSTR_CONST) {
 						return VarUsesVar(var->adr, test_var);
@@ -999,8 +1006,11 @@ Purpose:
 				}
 			}
 		}
+		if (test_var->mode == INSTR_VAR && test_var->adr != NULL) {
+			return VarUsesVar(var, test_var->adr);
+		}
 	}
-	return uses;	
+	return false;	
 }
 
 Var * VarReg(Var * var)

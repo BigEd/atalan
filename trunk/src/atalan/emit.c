@@ -9,17 +9,10 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-#if defined(__Windows__)
-    #include <windows.h>
-#endif
-
 FILE * G_OUTPUT;
 
 extern Rule * EMIT_RULES[INSTR_CNT];
 extern Var   ROOT_PROC;
-
-UInt8 G_COLOR;
-FILE * G_PRINT_OUTPUT;		// either STDOUT or STDERR
 
 /*
 When emitting output source code, we sometimes generate texts like X+0, Y-0 etc.
@@ -30,77 +23,6 @@ G_PREV_OP is variable, which remembers the previous operator.
 */
 
 UInt8 G_PREV_OP = 0;
-
-UInt16 G_OLD_CP;
-
-void PrintInit()
-{
-#ifdef __Windows__
-	G_OLD_CP = GetConsoleOutputCP();
-	SetConsoleOutputCP(CP_UTF8);
-#endif
-	PrintDestination(stdout);
-	PrintColor(RED+GREEN+BLUE);
-}
-
-void PrintCleanup()
-{
-#ifdef __Windows__
-	SetConsoleOutputCP(G_OLD_CP);
-#endif
-}
-
-FILE * PrintDestination(FILE * file)
-{
-	FILE * f = G_PRINT_OUTPUT;
-	G_PRINT_OUTPUT = file;
-	return f;
-}
-
-UInt8 PrintColor(UInt8 color)
-/*
-Purpose:
-	Change the color of printed text.
-*/
-{
-	UInt8 old_color = G_COLOR;
-#ifdef __Windows__
-	HANDLE hStdout; 
-	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
-	SetConsoleTextAttribute(hStdout, color);
-#endif
-	G_COLOR = color;
-	return old_color;
-}
-
-void Print(char * text)
-{
-	if (text != NULL) {
-		fprintf(G_PRINT_OUTPUT, "%s", text);
-	}
-}
-
-void PrintChar(char c)
-{
-	fputc(c, G_PRINT_OUTPUT);
-}
-
-void PrintEOL()
-{
-	Print("\n");
-}
-
-void PrintInt(Int32 n)
-{
-	fprintf(G_PRINT_OUTPUT, "%d", n);
-}
-
-void PrintRepeat(char * text, UInt16 cnt)
-{
-	while(cnt-- > 0) {
-		Print(text);
-	}
-}
 
 void PrintHeader(char * text)
 /*
@@ -499,8 +421,11 @@ Bool EmitProc(Var * proc)
 		result = EmitInstrBlock(blk);
 		if (!result) break;
 
+		//TODO: RETURN should be part of procedure
 		if (blk->to == NULL && (blk->last == NULL || blk->last->op != INSTR_GOTO)) {
-			EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
+			if (proc != &ROOT_PROC) {
+				EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
+			}
 		}
 	}
 	return result;

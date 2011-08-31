@@ -138,6 +138,17 @@ Purpose:
 	GenInternal(op, result, arg1, arg2);
 }
 
+void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2)
+/*
+Purpose:
+	Generate cpu instruction translated using specified rule.
+*/
+{
+	GenLine();
+	InstrInsert(BLK, INSTR, rule->op, result, arg1, arg2);
+	BLK->last->rule = rule;
+}
+
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
 	Instr * i;

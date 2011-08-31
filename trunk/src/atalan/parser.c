@@ -215,8 +215,50 @@ Purpose:
 
 Type * ParseIntType()
 {
-	Type * type = NULL;
+	Type * type = TUNDEFINED;
 	Var * var;
+	
+	ExpectExpression(NULL);
+	if (TOK) {
+		var = BufPop();
+
+		// Integer type may be defined using predefined type definition or be defined as type of other variable
+		if (var->mode == INSTR_TYPE || var->mode == INSTR_VAR) {
+			type = var->type;
+			if (type->variant != TYPE_INT) {
+				SyntaxError("Expected integer type");
+			}
+			goto done;
+		} else if (var->mode == INSTR_CONST) {
+			type = TypeAlloc(TYPE_INT);
+			type->range.min = var->n;
+		} else {
+			//TODO: If simple integer variable, use it as type range
+			SyntaxError("expected constant expression");
+		}
+
+		if (TOK == TOKEN_DOTDOT) {
+			NextToken();
+			ExpectExpression(NULL);
+			if (TOK) {
+				var = BufPop();
+				if (var->mode == INSTR_CONST) {
+					type->range.max = var->n;
+				} else {
+					SyntaxError("expected constant expression");
+				}
+			}
+		} else {
+			type->range.max = type->range.min;
+			type->range.min = 0;
+		}
+
+		if (type->range.min > type->range.max) {
+			SyntaxError("range minimum bigger than maximum");
+		}
+	}
+
+/*
 	if (TOK == TOKEN_INT) {
 		type = TypeAlloc(TYPE_INT);
 		type->range.min = LEX.n;
@@ -257,6 +299,8 @@ Type * ParseIntType()
 	} else {
 		SyntaxError("Expected definition of integer type");
 	}
+*/
+done:
 	return type;
 }
 
@@ -285,6 +329,7 @@ next:
 		if (TOK == TOKEN_INT) goto range;
 		goto const_list;
 
+	//TODO: We may solve the integer type as default, when there was no other type involved
 	} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
 		type = TypeAlloc(TYPE_INT);
 range:
@@ -736,9 +781,6 @@ Purpose:
 	UInt16 bookmark;
 	TypeVariant tv;
 
-	// Array element access uses always () block
-	EnterBlock();
-
 	top = TOP;
 
 	atype = arr->type;
@@ -751,6 +793,8 @@ Purpose:
 
 		if (tv == TYPE_ARRAY) {
 			idx_type = atype->dim[0];
+		} else if (tv == TYPE_ADR) {
+			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
 		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
 		} else {
@@ -762,9 +806,27 @@ Purpose:
 		idx_type = NULL;
 	}
 
-	bookmark = SetBookmark();
-
 	idx = idx2 = NULL;
+
+	if (TOK == TOKEN_HASH) {
+		NextToken();
+		if (TOK == TOKEN_INT) {
+			idx = VarNewInt(LEX.n);
+			NextToken();
+			goto done_idx;
+		} else if (TOK == TOKEN_ID) {
+			idx = ParseVariable();
+			goto done_idx;
+		} else if (TOK == TOKEN_OPEN_P) {
+		} else {
+			SyntaxError("Expected integer, variable or () after #");
+		}
+	}
+
+	// Array element access uses always () block
+	EnterBlock();
+
+	bookmark = SetBookmark();
 
 	// Syntax a()  represents whole array
 	if (tv == TYPE_ARRAY && TOK == TOKEN_BLOCK_END) {
@@ -833,9 +895,10 @@ done:
 	if (TOK) {
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
-	item = VarNewElement(arr, idx);
-
 	TOP = top;
+
+done_idx:
+	item = VarNewElement(arr, idx);
 
 	return item;
 }
@@ -1019,7 +1082,6 @@ void ParseOperand()
 			if (var == NULL) {
 				SyntaxError("~unknown variable [$]");
 				//TODO: Try to search in all scopes and list found places
-				//TODO: Try to search using edit distance
 
 				ReportSimilarNames(NAME);
 				EndErrorReport();
@@ -1816,6 +1878,7 @@ Purpose:
 	Int32 nmin = 0, nmax = 0;
 	Int32 mmin = 0, mmax = 0;
 	Int32 l;
+	Bool defined = true;
 	Type * type = TUNDEFINED;
 
 	if (min->mode == INSTR_CONST) {
@@ -1828,28 +1891,36 @@ Purpose:
 		if (min->type->variant == TYPE_INT) {
 			nmin = min->type->range.min;
 			nmax = min->type->range.max;
-		} else {
+		} else if (min->type->variant != TYPE_UNDEFINED) {
 			SyntaxError("Range minimum is not integer type");
+		} else {
+			defined = false;
 		}
 	}
 
-	if (max->mode == INSTR_CONST) {
-		if (max->type->variant == TYPE_INT) {
-			if (max->n > nmax) nmax = max->n;
-		} else {
-			SyntaxError("Range maximum is not integer type");
-		}
-	} else if (max->mode == INSTR_VAR) {
-		if (max->type->variant == TYPE_INT) {
-			l = max->type->range.max;
-			if (l > nmax) nmax = l;
-		} else {
-			SyntaxError("Range maximum is not integer type");
+	if (TOK != TOKEN_ERROR) {
+		if (max->mode == INSTR_CONST) {
+			if (max->type->variant == TYPE_INT) {
+				if (max->n > nmax) nmax = max->n;
+			} else {
+				SyntaxError("Range maximum is not integer type");
+			}
+		} else if (max->mode == INSTR_VAR) {
+			if (max->type->variant == TYPE_INT) {
+				l = max->type->range.max;
+				if (l > nmax) nmax = l;
+			} else if (max->type->variant != TYPE_UNDEFINED) {
+				SyntaxError("Range maximum is not integer type");
+			} else {
+				defined = false;
+			}
 		}
 	}
 
 	if (TOK) {
-		type = TypeAllocInt(nmin, nmax);
+		if (defined) {
+			type = TypeAllocInt(nmin, nmax);
+		}
 	}
 	return type;
 }
@@ -2460,6 +2531,8 @@ void ParseProcBody(Var * proc)
 	}
 	ReturnScope(scope);
 
+//	if (Verbose(proc)) PrintProc(proc);
+
 	// *** Register Arguments (2)
 	// As the first thing in a procedure, we must spill all arguments that are passed in registers
 	// to local variables. 
@@ -2475,6 +2548,8 @@ void ParseProcBody(Var * proc)
 	// the registers available for use in the procedure body.
 
 	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_OUT, NULL);
+
+//	if (Verbose(proc)) PrintProc(proc);
 
 }
 
@@ -2575,7 +2650,7 @@ no_dot:
 		//===== Array index like ARR(x, y)
 
 		if (mode != INSTR_CONST && mode != INSTR_TYPE && !Spaces()) {
-			if (TOK == TOKEN_OPEN_P) {
+			if (TOK == TOKEN_OPEN_P || TOK == TOKEN_HASH) {
 				if (var->mode != INSTR_VOID) {
 					var = ParseArrayElement(var);
 				} else {
@@ -3244,6 +3319,10 @@ void ParseRule()
 	for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
 		ParseRuleArg2(&rule->arg[i]);
 		EXP_IS_DESTINATION = false;
+		if (NextIs(TOKEN_ADR)) {
+			rule->flags = ParseVariable();
+			break;
+		}
 		NextIs(TOKEN_COMMA);
 	}
 	EXP_IS_DESTINATION = false;
@@ -3671,9 +3750,9 @@ void ParseAssert()
 	NextIs(TOKEN_ASSERT);
 
 	if (TOK == TOKEN_STRING) {
-		if (MACRO_ASSERT != NULL) {
+		if (MACRO_ASSERT_PRINT != NULL) {
 			GenBegin();
-			GenMacro(MACRO_ASSERT, NULL);
+			GenMacro(MACRO_ASSERT_PRINT, NULL);
 			ParseString(GenEnd(), 0); 
 		} else {
 			SyntaxError("This platform does not support output asserts");
@@ -3723,7 +3802,7 @@ void ParseAssert()
 
 		// Generate call to assert (variant of print instruction)
 		if (!ASSERTS_OFF) {
-			GenInternal(INSTR_ASSERT, NULL, NULL, NULL);
+			GenMacro(MACRO_ASSERT, NULL);
 			GenBlock(args);
 		}
 
