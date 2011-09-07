@@ -1,7 +1,7 @@
 type frequency:0..255
 type channel:0..3
 
-out freq@$1000:array(channel) step 2 of frequency
+in out freq@$1000:array(channel) step 2 of frequency
 
 in out z:0..3
 

@@ -20,6 +20,13 @@ GLOBAL Bool RULE_MATCH_BREAK;
 GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
 GLOBAL Var * MACRO_ARG[MACRO_ARG_CNT];
 
+typedef enum {
+	PHASE_TRANSLATE,
+	PHASE_EMIT
+} Phase;
+
+GLOBAL Phase MATCH_MODE;		// mode used to match rules (PHASE_TRANSLATE, PHASE_EMIT)
+
 /*
 Translation is done using rules. 
 */
@@ -43,6 +50,15 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 		if (r->variant != RULE_REGISTER) return true;
 	}
 
+	if (l->variant == RULE_CONST) {
+		if (r->variant != RULE_CONST) return true;
+	}
+
+	// Accessing variable using byte or element is more specific than other variants
+	if (l->variant == RULE_BYTE || l->variant == RULE_ELEMENT) {
+		if (r->variant != RULE_BYTE && l->variant != RULE_ELEMENT) return true;
+
+	}
 	return false;
 }
 
@@ -144,13 +160,18 @@ void EmptyRuleArgs()
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant);
 
-Bool RuleMatch(Rule * rule, Instr * i)
+Bool RuleMatch(Rule * rule, Instr * i, Phase match_mode)
+/*
+Purpose:
+	Return true, if the instruction matches specified rule.
+*/
 {
 	Bool match;
 
 	if (i->op != rule->op) return false;
 
 	EmptyRuleArgs();
+	MATCH_MODE = match_mode;
 
 	match = ArgMatch(&rule->arg[0], i->result, RULE_UNDEFINED) 
 		&& ArgMatch(&rule->arg[1], i->arg1, RULE_UNDEFINED) 
@@ -209,6 +230,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	atype = arg->type;
 	
 	switch(v) {
+
+	// <X>..<Y>
 	case RULE_RANGE:
 		if (arg->mode != INSTR_RANGE) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
@@ -219,31 +242,34 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	// I.e. instruction may affect more flags, than the source instruction requires.
 	// All flags defined by source instruction (argument) must be part of pattern though.
 
+	// <X>,<Y>
 	case RULE_TUPLE:
 		if (arg->mode != INSTR_TUPLE) return false;
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
+	// <X>$<Y>
 	case RULE_BYTE:
 		if (arg->mode != INSTR_BYTE) return false;		// pattern expects byte, and variable is not an byte
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;		
 		return ArgMatch(pattern->arr, arg->adr, v);
-//		pattern = pattern->arr;
-//		arg = arg->adr;
 		break;
 
+	// <X>(<Y>)
 	case RULE_ELEMENT:
 		if (arg->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
+	// const %A:type
 	case RULE_CONST:
 		if (!VarIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
+	// 1
 	case RULE_VALUE:
 		if (!VarIsConst(arg)) return false;
 		pvar = pattern->var;
@@ -281,7 +307,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 
 	// %A:type
 	case RULE_ARG:
-		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || arg->mode == INSTR_BYTE || arg->mode == INSTR_ELEMENT) return false;
+		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
+		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || (arg->mode == INSTR_BYTE && MATCH_MODE == PHASE_EMIT) || arg->mode == INSTR_ELEMENT) return false;
 		if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
@@ -332,7 +359,7 @@ Purpose:
 	if (instr->op == INSTR_LINE) return rule;
 
 	for(; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, instr)) break;
+		if (RuleMatch(rule, instr, PHASE_EMIT)) break;
 	}
 	return rule;
 }
@@ -360,7 +387,7 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 	} else {
 		// Find translating rule
 		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-			if (RuleMatch(rule, i)) {
+			if (RuleMatch(rule, i, PHASE_TRANSLATE)) {
 				break;
 			}
 		}
