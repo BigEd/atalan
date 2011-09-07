@@ -68,11 +68,16 @@ CPU:scope =
 	inc:macro o = instr add o, o, 1
 	dec:macro o = instr sub o, o, 1
 
-	lsr:macro (o=a) = instr div (o,czn), o, 2  
-	asl:macro (o=a) = instr mul (o,czn), o, 2  
-	ror:macro (o=a) = instr rotr (o,czn), (o,c), 1  
-	rol:macro (o=a) = instr rotl (o,czn), (o,c), 1  
+	lsr:macro (o=a) = instr div (o,c), o, 2  
+	asl:macro (o=a) = instr mul (o,c), o, 2  
+	ror:macro (o=a) = instr rotr (o,c), (o,c), 1  
+	rol:macro (o=a) = instr rotl (o,c), (o,c), 1  
 
+	tax:macro = instr let x,a
+	tay:macro = instr let y,a
+	txa:macro = instr let a,x
+	tya:macro = instr let a,y
+	
 type
 	byte2a:byte2 or adr
 
@@ -210,34 +215,34 @@ rule let_adr %A:adr, %B:adr(%C:byte) = instr
 ;Optimizer may later change it to Y.
 
 rule let %A:byte1arr(const %B:byte),%C:byte  = instr
-	let a,%C
+	lda %C
 	mul %Z, %B, %A.step
-	let %A$%Z,a    ;with constant, we do not need to load index register X
+	sta %A$%Z      ;with constant, we do not need to load index register X
 
 ;Access to low or high byte of card
 rule let %A:byte2(const %B:byte), %C:byte = instr
-  let a,%C
-  let %A$%B,a    ;with constant, we do not need to load index register X
+  lda %C
+  sta %A$%B      ;with constant, we do not need to load index register X
   
 ;Prevent compiler from generation extra code, when we are already assigning a register.
 
 rule let a,%A:byte1arr(%B:byte) = instr
-	let a, %B
-	mul a, a, %A.step
-	let x,a
-	let a,%A$x
+	lda %B
+	mul ac, a, %A.step
+	tax
+	lda %A$x
 
 rule let %A:byte1arr(%B:byte), a = instr
 	ldy a 
 	let a, %B
-	mul a, a, %A.step
+	mul ac, a, %A.step
 	let x,a 
 	let a, y
 	let %A$x,a
 
 rule let %A:byte1arr(%B:byte),%C:byte1 = instr
 	let a, %B
-	mul a, a, %A.step
+	mul ac, a, %A.step
 	let x,a
 	let a,%C
 	let %A$x,a
@@ -249,7 +254,7 @@ rule let %A:byte1,%B:byte1arr(const %C) = instr
 	
 rule let %A:byte1,%B:byte1arr(%C:byte) = instr 
 	let a, %C
-	mul a, a, %B.step
+	mul ac, a, %B.step
 	let x, a
 	let a,%B$x
 	let %A, a
@@ -1941,10 +1946,10 @@ rule let %A:byte1,y                     = "   sty %A"
 ;rule div %A:byte,%A,1 = "   ;"
 
 ;LSR++
-rule div aczn, a, 2                       = "   lsr"
-rule div (%A:byte,czn), %A, 2             = "   lsr %A"
-rule div (%A$const %B,czn), %A$%B, 2      = "   lsr %A-%A.index.min+%B"
-rule div (%A$x,czn), %A$x, 2              = "   lsr %A-%A.index.min,x"
+rule div ac, a, 2               @zn        = "   lsr"
+rule div (%A:byte,c), %A, 2     @zn        = "   lsr %A"
+rule div (%A$const %B,c), %A$%B, 2 @zn     = "   lsr %A-%A.index.min+%B"
+rule div (%A$x,c), %A$x, 2      @zn        = "   lsr %A-%A.index.min,x"
 
 
 ;TODO: div a(const)
@@ -1957,10 +1962,10 @@ rule div (%A$x,czn), %A$x, 2              = "   lsr %A-%A.index.min,x"
 ;rule mul %A$const %B),%A$%B,2  = "  asl %A-%A.index.min+%B"
 
 ;ASL++
-rule mul aczn, a, 2                   = "   asl"
-rule mul (%A:byte,czn), %A, 2         = "   asl %A"
-rule mul (%A$const %B,czn), %A$%B, 2 = "   asl %A-%A.index.min+%B"
-rule mul (%A$x,czn), %A$x, 2          = "   asl %A-%A.index.min,x"
+rule mul ac, a, 2    @zn               = "   asl"
+rule mul (%A:byte,c), %A, 2   @zn      = "   asl %A"
+rule mul (%A$const %B,c), %A$%B, 2 @zn = "   asl %A-%A.index.min+%B"
+rule mul (%A$x,c), %A$x, 2  @zn        = "   asl %A-%A.index.min,x"
 
 ;rule mul %A$const %B,%A$%B,2  = "   asl %A-%A.index.min+%B"
 ;rule mul %A:byte,%A:byte,1 = "   ;"
@@ -1976,16 +1981,16 @@ rule mul (%A$x,czn), %A$x, 2          = "   asl %A-%A.index.min,x"
 ;TODO: Support void (this optimisation should be in compiler)
 ;rule rotr a,a,0 = "   ;"
 
-rule rotr aczn, ac, 1                       = "   ror"
-rule rotr (%A:byte1,czn), (%A,c), 1         = "   ror %A-%A.index.min"
-rule rotr (%A$const %B,czn), (%A$%B,czn), 1 = "   ror %A-%A.index.min+%B"
-rule rotr (%A$x,czn), (%A$x,czn), 1         = "   ror %A-%A.index.min,x"
+rule rotr ac, ac, 1                 @zn      = "   ror"
+rule rotr (%A:byte1,c), (%A,c), 1   @zn      = "   ror %A-%A.index.min"
+rule rotr (%A$const %B,c), (%A$%B,c), 1 @zn = "   ror %A-%A.index.min+%B"
+rule rotr (%A$x,c), (%A$x,c), 1     @zn    = "   ror %A-%A.index.min,x"
 
 ;rol++
-rule rotl aczn, ac, 1                       = "   rol"
-rule rotl (%A:byte1,czn), (%A,c), 1         = "   rol %A-%A.index.min"
-rule rotl (%A$const %B,czn), (%A$%B,czn), 1 = "   rol %A-%A.index.min+%B"
-rule rotl (%A$x,czn), (%A$x,czn), 1         = "   rol %A-%A.index.min,x"
+rule rotl ac, ac, 1                   @zn    = "   rol"
+rule rotl (%A:byte1,c), (%A,c), 1   @zn      = "   rol %A-%A.index.min"
+rule rotl (%A$const %B,c), (%A$%B,c), 1 @zn = "   rol %A-%A.index.min+%B"
+rule rotl (%A$x,c), (%A$x,c), 1     @zn    = "   rol %A-%A.index.min,x"
 
 ;rule rotr %A:byte1,%A,1 = "   rotr %A"
 

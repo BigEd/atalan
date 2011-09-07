@@ -315,6 +315,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 	}
 }
 */
+/*
 UInt16 TypeItemCount(Type * type)
 {
 	UInt16 cnt;
@@ -324,6 +325,7 @@ UInt16 TypeItemCount(Type * type)
 	cnt = idx->range.max - idx->range.min + 1;
 	return cnt;
 }
+*/
 
 void TypeAddConst(Type * type, Var * var)
 /*
@@ -857,14 +859,15 @@ Purpose:
 */
 {
 	Type * rt;
-	IntLimit init, step, limit, max_over;
+	IntLimit init, step, limit, max_over, step_min;
 	InstrOp op;
 
 	rt = type;
 	if (type != NULL && type->variant == TYPE_SEQUENCE) {
 		if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init) && TypeIsInt(type->seq.limit)) {
 			init = type->seq.init->range.min;
-			step = type->seq.step->range.max;			// maximal step
+			step = type->seq.step->range.max;
+			step_min = type->seq.step->range.min;
 			limit = type->seq.limit->range.max;
 
 			if (type->seq.op == INSTR_ADD) {
@@ -877,6 +880,13 @@ Purpose:
 				if (op == INSTR_IFNE && TypeIsIntConst(type->seq.step) && TypeIsIntConst(type->seq.init) && TypeIsIntConst(type->seq.limit) && max_over == 0) {
 					limit -= step;  // compared value will not be part of the sequence
 				} else if (op == INSTR_IFLE) {
+				} else if (op == INSTR_IFLT) {
+
+					// We only make the limit smaller, if the step is constant
+					if (step == step_min) {
+						limit = ((limit - init - 1) / step_min) * step_min + init;
+						max_over = 0;
+					}
 				} else {
 					goto done;
 				}

@@ -552,7 +552,7 @@ Type * TypeTuple();
 
 Type * TypeAdrOf(Type * element);
 
-UInt16 TypeItemCount(Type * type);
+//UInt16 TypeItemCount(Type * type);
 void TypeLimits(Type * type, Var ** p_min, Var ** p_max);
 
 //void TypeLet(Type * type, Var * var);
@@ -1003,7 +1003,7 @@ struct RuleTag {
 };
 
 void RuleRegister(Rule * rule);
-Bool RuleMatch(Rule * rule, Instr * i);
+//Bool RuleMatch(Rule * rule, Instr * i);
 
 void ProcTranslate(Var * proc);
 void CheckValues(Var * proc);
