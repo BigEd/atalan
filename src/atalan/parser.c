@@ -3809,8 +3809,9 @@ void ParseAssert()
 		// generate file name and line number
 		// generate list of used variables
 
-		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
+		Gen(INSTR_ASSERT, NULL, NULL, NULL);
 		GenLabel(G_BLOCK->f_label);
+		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
 		EndBlock();
 	}
 }

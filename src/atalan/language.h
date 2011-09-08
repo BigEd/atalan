@@ -218,6 +218,7 @@ typedef enum {
 	INSTR_XOR,
 	INSTR_NOT,
 	INSTR_ASSERT_BEGIN,
+	INSTR_ASSERT,
 	INSTR_ASSERT_END,
 
 	INSTR_LINE,				// reference line in the source code
@@ -888,6 +889,8 @@ Var * InstrFind(char * name);
 // Code blocks are managed using those procedures.
 
 
+Instr * FirstInstr(InstrBlock * blk);
+Instr * LastInstr(InstrBlock * blk);
 void InstrBlockFree(InstrBlock * blk);
 UInt32 InstrBlockInstrCount(InstrBlock * blk);
 
@@ -895,6 +898,7 @@ void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * fi
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 
+InstrBlock * LastBlock(InstrBlock * block);
 
 extern Var * SCOPE;		// currently parsed variable (procedure, macro)
 //extern Var * REGSET;	// enumerator with register sets

@@ -34,6 +34,7 @@ system.print_assert:macro = instr call system.assert_print_asm
 
 system.assert:macro = instr call _std_print_out
 
-rule assert_begin = ";assert"
+rule assert_begin = ";assert begin"
+rule assert_end   = ";assert end"
 
-rule assert_end = "   brk"
+rule assert       = "   brk"
