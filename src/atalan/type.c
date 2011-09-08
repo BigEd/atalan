@@ -1993,6 +1993,8 @@ Purpose:
 	InferData data;
 	UInt32 n;
 
+	Bool assert_begin;
+
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
 	if (Verbose(proc)) {
@@ -2085,16 +2087,17 @@ Purpose:
 	// Test, if there is some assert that is known at compile time to be always false.
 	// Such assert reports error.
 
-	loc.blk = LastBlock(proc->instr);
-	i = loc.blk->last;
-
-	while(i != NULL) {
-		if (i->op == INSTR_ASSERT) {
-			loc.i = i;
-			LogicErrorLoc("Assert is always false.", &loc);
-			break;
+	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
+		assert_begin = false;
+		for(i = loc.blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_ASSERT_BEGIN) {
+				assert_begin = true;
+			} else if (i->op == INSTR_ASSERT) {
+				if (assert_begin) {
+					loc.i = i;
+					LogicErrorLoc("Assert is always false.", &loc);
+				}
+			}
 		}
-		i = i->prev;
 	}
-
 }
