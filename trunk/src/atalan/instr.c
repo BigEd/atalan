@@ -68,6 +68,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_XOR, "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
 	{ INSTR_NOT, "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
 	{ INSTR_ASSERT_BEGIN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_ASSERT, "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 	{ INSTR_ASSERT_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
 
 	{ INSTR_LINE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// reference line in the source code
@@ -104,7 +105,6 @@ InstrBlock * InstrBlockAlloc()
 {
 	return MemAllocStruct(InstrBlock);
 }
-
 
 void InstrBlockFree(InstrBlock * blk)
 {

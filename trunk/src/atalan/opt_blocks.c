@@ -52,6 +52,12 @@ Purpose:
 	return nb;
 }
 
+InstrBlock * LastBlock(InstrBlock * block)
+{
+	while(block->next != NULL) block = block->next;
+	return block;
+}
+
 Instr * InstrPrev(Instr * i)
 {
 	if (i != NULL) {
@@ -86,7 +92,6 @@ Purpose:
 	}
 	return i;
 }
-
 
 void LinkBlocks(Var * proc)
 {

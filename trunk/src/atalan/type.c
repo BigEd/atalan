@@ -1730,24 +1730,27 @@ Bool InstrConstraints(Loc * loc, void * data)
 	return false;
 }
 
-IntLimit TypeMin(Type * type)
+static IntLimit LIM_MIN = INTLIMIT_MIN;
+static IntLimit LIM_MAX = INTLIMIT_MAX;
+
+IntLimit * TypeMin(Type * type)
 {
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
-			return type->range.min;
+			return &type->range.min;
 		}
 	}
-	return INTLIMIT_MIN;
+	return &LIM_MIN;
 }
 
-IntLimit TypeMax(Type * type)
+IntLimit * TypeMax(Type * type)
 {
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
-			return type->range.max;
+			return &type->range.max;
 		}
 	}
-	return INTLIMIT_MAX;
+	return &LIM_MAX;
 }
 
 void CheckIndex(Loc * loc, Var * var)
@@ -1780,13 +1783,43 @@ void CheckIndex(Loc * loc, Var * var)
 
 }
 
+Bool IntEq(IntLimit * l, IntLimit * r)
+{
+	return *l == *r;
+}
+
+Bool IntLower(IntLimit * l, IntLimit * r)
+{
+	return *l < *r;
+}
+
+Bool IntHigher(IntLimit * l, IntLimit * r)
+{
+	return *l > *r;
+}
+
+Bool IntLowerEq(IntLimit * l, IntLimit * r)
+{
+	return IntLower(l,r) || IntEq(l,r);
+}
+
+Bool IntHigherEq(IntLimit * l, IntLimit * r)
+{
+	return IntHigher(l,r) || IntEq(l,r);
+}
+
+#define MIN1 TypeMin(i->type[ARG1])
+#define MAX1 TypeMax(i->type[ARG1])
+#define MIN2 TypeMin(i->type[ARG2])
+#define MAX2 TypeMax(i->type[ARG2])
+
 Bool InstrInferType(Loc * loc, void * data)
 {
 	Var * result;
 	Instr * i;
 	Type * tr, * ti;
 	InferData * d = (InferData *)data;
-	Bool taken, not_taken;
+	Bool taken, not_taken, not;
 
 	i = loc->i;
 
@@ -1816,23 +1849,39 @@ Bool InstrInferType(Loc * loc, void * data)
 			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
 				taken = false;
 				not_taken = false;
+				not = false;
 				switch (i->op) {
-				case INSTR_IFEQ:
-					break;
 				case INSTR_IFNE:
-					break;
-				case INSTR_IFLT:
-					break;
-				case INSTR_IFLE:
+					not = true;
+				case INSTR_IFEQ:
+					// We know for sure the condition is true, if both values are in fact same integer constants
+					taken = TypeIsIntConst(i->type[ARG1]) && TypeIsIntConst(i->type[ARG2]) && IntEq(MIN1, MIN2);
+					not_taken = IntLower(MAX1, MIN2) || IntHigher(MIN1, MAX2);
 					break;
 
-				// if arg1 >= arg2 goto result
 				case INSTR_IFGE:
-					taken = TypeMin(i->type[ARG1]) >= TypeMax(i->type[ARG2]);
-					not_taken = TypeMax(i->type[ARG1]) < TypeMin(i->type[ARG2]);
+					not = true;
+				case INSTR_IFLT:
+					taken = IntLower(MAX1, MIN2);
+					not_taken = IntHigherEq(MIN1, MAX2);
 					break;
+
+				case INSTR_IFLE:
+					not = true;
 				case INSTR_IFGT:
+					taken = IntHigher(MIN1, MAX2);
+					not_taken = IntLowerEq(MAX1, MIN2);
 					break;
+				}
+
+				if (not) {
+					if (taken) {
+						not_taken = true;
+						taken = false;
+					} else if (not_taken) {
+						taken = true;
+						not_taken = false;
+					}
 				}
 
 				if (taken) {
@@ -2032,4 +2081,20 @@ Purpose:
 	}
 
 	ReportUnusedVars(proc);
+
+	// Test, if there is some assert that is known at compile time to be always false.
+	// Such assert reports error.
+
+	loc.blk = LastBlock(proc->instr);
+	i = loc.blk->last;
+
+	while(i != NULL) {
+		if (i->op == INSTR_ASSERT) {
+			loc.i = i;
+			LogicErrorLoc("Assert is always false.", &loc);
+			break;
+		}
+		i = i->prev;
+	}
+
 }
