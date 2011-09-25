@@ -820,7 +820,7 @@ retry:
 						::::::::
 						The variable a will be usually register and increment instruction 
 						is shorter (and therefore faster) than assignment in such case.
-						Simmilar variant can be done for 'sub'.
+						Simmilar variant is done for 'sub'.
 						*/
 
 						if (i->op == INSTR_LET && VarIsOffset(result, arg1, &diff)) {
@@ -947,6 +947,25 @@ retry:
 							}
 						}
 					}
+
+					/*
+					===========================================
+					Optimization: Use value already in register
+					===========================================
+					Replace
+					::::::::::::
+					let R, var
+					...
+					let n, var
+					::::::::::::
+					by
+					::::::::::::
+					let R, var
+					...
+					let n, R 
+					::::::::::::
+					in case R is register and var is not register.
+					*/
 
 					if (!VarIsReg(i->arg1) && FlagOff(i->arg1->submode, SUBMODE_IN)) {
 						// If some register contains the value we need to set
