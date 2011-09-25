@@ -131,6 +131,7 @@ Purpose:
 	// 3. If the left variable has a dependency, test this dependency 
 	ldep = l->dep;
 	if (ldep != NULL) {
+		if (r->dep == ldep) goto yes0;
 		if (ExpIsOffsetOfVar(ldep, r, diff)) goto yes;
 	}
 
@@ -145,7 +146,8 @@ Purpose:
 	}
 no:
 	return false;
-
+yes0:
+	*diff = 0;
 yes:
 	return true;
 }
