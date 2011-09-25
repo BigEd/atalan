@@ -21,10 +21,17 @@ or because of a subsequent assignment that will overwrite the first value.
 //TODO: Could we use special value of next_use as live information?
 //      I.e. next_use != NULL means dead, otherwise live
 
+//TODO:
+//   We should use two sets of variables for every block.
+//   1. Live - variables live in this block.
+//   2. Dead - variables killed in this block.
+//
+//   This may easily be done using one set, where one value defines live, another value defines dead.
+
 void VarMark(Var * var, VarFlags state)
 /*
 Purpose:
-	Mark variable as used or dead.
+	Mark variable as live or dead.
 
 	Reference to array using variable may not be marked as dead or alive, as 
 	it may in fact reference other variable than we think in case the variable is changes.
@@ -108,6 +115,25 @@ Bool VarInTuple(Var * var, Var * find_var)
 	return false;
 }
 
+Bool VarMayUseVar(Var * var, Var * test_var)
+/*
+Purpose:
+
+*/
+{
+	if (var != NULL && test_var != NULL) {
+		if (test_var->mode == INSTR_ELEMENT || test_var->mode == INSTR_BYTE) {
+			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+				if (var->adr == test_var->adr) {
+					// Either one of the indexes is non-constant or they are same
+					if (var->var->mode != INSTR_CONST || test_var->var->mode != INSTR_CONST || var->var->n == test_var->var->n) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 UInt8 VarIsLiveInBlock(Var * proc, InstrBlock * block, Var * var)
 /*
 Purpose:
@@ -124,20 +150,27 @@ Purpose:
 	res1 = res2 = 2;
 
 	// var may be _arr(0)  -> in such case, we want to test _arr as it is to check usage like @_arr
-	if ((var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) && var->var->mode == INSTR_CONST) {
-		var = var->adr;
-	}
+//	if ((var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) && var->var->mode == INSTR_CONST) {
+//		var = var->adr;
+//	}
 
 	for (i = block->first; i != NULL; i = i->next) {
 		if (i->op == INSTR_LINE) continue;
+
+		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+			if (VarMayUseVar(i->arg1, var) || VarMayUseVar(i->arg2, var)) { res1 = 1; goto done; }
+		}
+
 		if (VarUsesVar(i->arg1, var) || VarUsesVar(i->arg2, var)) { res1 = 1; goto done; }
-
-//		if (i->arg1 == var || i->arg2 == var) { res1 = 1; goto done; }
-
-//		if (i->result == var) { res1 = 0; goto done;}
 		if (VarInTuple(i->result, var)) { res1 = 0; goto done;}
-		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
 
+		// Handle processor flags modified by instruction.
+
+		if (i->rule != NULL) {
+			if (VarInTuple(i->rule->flags, var)) { res1 = 0; goto done;}
+		}
+
+		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
 
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
@@ -210,6 +243,8 @@ Bool VarDereferences(Var * var)
 
 Bool VarIsDead(Var * var)
 {
+	if (var == NULL) return true;
+
 	if (var->mode == INSTR_TUPLE) {
 		return VarIsDead(var->adr) && VarIsDead(var->var);
 	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
@@ -247,7 +282,7 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
-//			if (blk->seq_no == 1 && var->mode == INSTR_BYTE && var->adr->idx == 28/* && StrEqual(var->adr->var->name, "_arr")*/) {
+//			if (blk->seq_no == 4 && var->mode == INSTR_BYTE && var->var->n == 0 && StrEqual(var->adr->name, "s")) {
 //				printf("");
 //			}
 
@@ -294,10 +329,14 @@ Bool OptimizeLive(Var * proc)
 			op = i->op;
 			if (op == INSTR_LINE || op == INSTR_RETURN) continue;
 
+			if (i->rule == NULL) {
+				InternalError("Missing rule");
+			}
+
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_CALL) {
-					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
+					if (VarIsDead(result) && VarIsDead(i->rule->flags) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
 							if (Verbose(proc)) {
@@ -319,6 +358,7 @@ Bool OptimizeLive(Var * proc)
 				VarMarkDead(result);
 				i->next_use[0] = result->src_i;
 				result->src_i = NULL;			// next use $$$$
+				VarMarkDead(i->rule->flags);
 			}
 
 			//===== Mark arguments as live (used)

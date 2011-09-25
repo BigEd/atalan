@@ -44,6 +44,7 @@ CPU:scope =
 	czn@(c,z,n)
 	in void:0..255  ;This is special variable used to implement touch instructions.
 	zn@(z,n)
+	znv@(z,n,v)
 	xy@(x,y)
 
 	type memory:array(0..$ffff) of 0..255
@@ -68,8 +69,8 @@ CPU:scope =
 	inc:macro o = instr add o, o, 1
 	dec:macro o = instr sub o, o, 1
 
-	lsr:macro (o=a) = instr div (o,c), o, 2  
-	asl:macro (o=a) = instr mul (o,c), o, 2  
+	lsr:macro (o=a) = instr div o, o, 2  
+	asl:macro (o=a) = instr mul o, o, 2  
 	ror:macro (o=a) = instr rotr (o,c), (o,c), 1  
 	rol:macro (o=a) = instr rotl (o,c), (o,c), 1  
 
@@ -77,7 +78,16 @@ CPU:scope =
 	tay:macro = instr let y,a
 	txa:macro = instr let a,x
 	tya:macro = instr let a,y
-	
+
+	bcc:macro lb = instr ifeq lb, c, 0
+	bcs:macro lb = instr ifeq lb, c, 1
+	bne:macro lb = instr ifeq lb, z, 0
+	beq:macro lb = instr ifeq lb, z, 1
+	bpl:macro lb = instr ifeq lb, n, 0
+	bmi:macro lb = instr ifeq lb, n, 1
+	bvc:macro lb = instr ifeq lb, v, 0
+	bvs:macro lb = instr ifeq lb, v, 1
+		
 type
 	byte2a:byte2 or adr
 
@@ -228,22 +238,23 @@ rule let %A:byte2(const %B:byte), %C:byte = instr
 
 rule let a,%A:byte1arr(%B:byte) = instr
 	lda %B
-	mul ac, a, %A.step
+	mul a, a, %A.step
 	tax
 	lda %A$x
 
 rule let %A:byte1arr(%B:byte), a = instr
-	ldy a 
+	tay 
 	let a, %B
-	mul ac, a, %A.step
-	let x,a 
-	let a, y
+;	mul ac, a, %A.step
+	mul a, a, %A.step
+	tax 
+	tya
 	let %A$x,a
 
 rule let %A:byte1arr(%B:byte),%C:byte1 = instr
 	let a, %B
-	mul ac, a, %A.step
-	let x,a
+	mul a, a, %A.step
+	tax
 	let a,%C
 	let %A$x,a
 
@@ -254,11 +265,10 @@ rule let %A:byte1,%B:byte1arr(const %C) = instr
 	
 rule let %A:byte1,%B:byte1arr(%C:byte) = instr 
 	let a, %C
-	mul ac, a, %B.step
+	mul a, a, %B.step
 	let x, a
 	let a,%B$x
 	let %A, a
-
 
 rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 	lo a, %B(%D)
@@ -533,8 +543,8 @@ rule add %A:byte1arr(%B), %A(%B), 1 = instr
 	inc %A$%B
 	
 rule add %A:byte1, %B:byte1, 1 = instr
-	let a, %B
-	let %A, a
+	lda %B
+	sta %A
 	inc %A
 
 ;u8 = u8 + u8
@@ -547,10 +557,10 @@ rule add %A:byte1, %B:byte1, %C:byte1 = instr
   let %A,a
   
 rule add %A:byte, %B:card, %C:byte = instr
-  let a,%B$0
+  lda %B$0
   clc
   adc %C
-  let %A,a
+  sta %A
   
 rule add as, ac, %A:byte1arr(%B:byte) = instr
 	let x,%B
@@ -611,6 +621,16 @@ rule add %A:byte2,%A,1 = instr
   inc %A$1
   label _lab1
 
+rule add %A:card,%A:card,%B:byte1arr(%D:byte) = instr
+	ldx %D
+	lda %A$0
+	clc
+	adc %B$x
+	sta %A$0
+	bcc _lab1
+	inc %A$1
+	label _lab1
+	
 ;u16 += u8
 rule add %A:card,%A:card,%B:byte = instr
 	let a, %A$0
@@ -1461,6 +1481,44 @@ rule not %A:byte, %B:byte = instr
 rule ifoverflow %A = "   jcs %A"
 rule ifnoverflow %A = "   jcc %A"
 
+;Short versions of conditions comparing to specific values.
+;There comparisons are using Z and N flags. 
+
+;if u8,s8 = 0
+rule ifeq %L,%B:byte1,0 = instr
+   lda %B
+   beq %L
+
+;if u8,s8 <> 0
+rule ifne %L,%B:byte1,0 = instr
+   lda %B
+   bne %L
+
+;if u8 <= 127
+rule ifle %L,%B:byte,127 = instr
+   lda %B
+   bpl %L
+
+;if u8 < 128
+rule iflt %L,%B:byte,128 = instr
+   lda %B
+   bpl %L
+
+;if u8 <= 127
+rule ifge %L,%B:byte,128 = instr
+   lda %B
+   bmi %L
+
+;if u8 >= 128
+rule ifge %L,%B:byte,128 = instr
+   lda %B
+   bmi %L
+
+;if u8 > 127
+rule ifgt %L,%B:byte,127 = instr
+   lda %B
+   bmi %L
+
 ;if u8 == u8
 rule ifeq %L,%B:byte,%C:byte   = instr
   let a, %B          ; lda %A
@@ -1844,8 +1902,8 @@ rule ifge %L,%B:int, %C:card   = instr
 
 
 rule nop = "   nop" 
-;CLC,SEC
 
+;CLC,SEC
 rule let c, 0  = "   clc"
 rule let c, 1  = "   sec"
 
@@ -1888,62 +1946,62 @@ rule sub cznv, y, const %A:byte1 = "   cpy #%A"
 rule sub cznv, y, %A$const %B    = "   cpy %A-%A.index.min+%B"
 rule sub cznv, y, %A:byte1       = "   cpy %A"
 
-;TAX,TAY,TYA,TXA
+;TAX,TAY,TYA,TXA++
 
 rule let x,a @zn     = "   tax"
 rule let y,a @zn     = "   tay"
 rule let a,x @zn     = "   txa"
 rule let a,y @zn     = "   tya"
 
-;LDX
+;LDX++
 
-rule let x,const %A:byte1   = "   ldx #%A"
-rule let x,%A$const %B = "   ldx %A-%A.index.min+%B"
-rule let x,%A$y       = "   ldx %A-%A.index.min,y"
-rule let x,%A:byte1        = "   ldx %A"
+rule let x,const %A:byte1  @zn = "   ldx #%A"
+rule let x,%A$const %B     @zn = "   ldx %A-%A.index.min+%B"
+rule let x,%A$y            @zn = "   ldx %A-%A.index.min,y"
+rule let x,%A:byte1        @zn = "   ldx %A"
 
-;LDY
-rule let y, const% A:byte1 @zn  = "   ldy #%A"
-rule let y, %A$const %B @zn = "   ldy %A-%A.index.min+%B"
-rule let y, %A$x  @zn     = "   ldy %A-%A.index.min,x"
-rule let y, %A:byte1 @zn       = "   ldy %A"
+;LDY++
+rule let y,const% A:byte1  @zn = "   ldy #%A"
+rule let y,%A$const %B     @zn = "   ldy %A-%A.index.min+%B"
+rule let y,%A$x            @zn = "   ldy %A-%A.index.min,x"
+rule let y,%A:byte1        @zn = "   ldy %A"
 
-;LDA
+;LDA++
+rule let a,const %A:byte1  @zn = "   lda #%A"
+rule let a,%A:byte1        @zn = "   lda %A"
+rule let a,%A$const %B     @zn = "   lda %A-%A.index.min+%B"
+rule let a,%A$x            @zn = "   lda %A-%A.index.min,x"
+rule let a,%A$y            @zn = "   lda %A-%A.index.min,y"
+rule let a,@%A$y           @zn = "   lda (%A),y"
 
-;rule let a,%A$%B             = "   lda %A-%A.index.min+%B"
-rule let a,const %A:byte1    = "   lda #%A"
-rule let a,%A:byte1     = "   lda %A"
-
-;rule let a, %A$0  = "   lda %A-%A.index.min"       ;would be handled by next rule but we do not want +0 there
-rule let a,%A$const %B  = "   lda %A-%A.index.min+%B"
-rule let a, %A$x = "   lda %A-%A.index.min,x"
-rule let a, %A$y = "   lda %A-%A.index.min,y"
-rule let a, @%A$y  = "   lda (%A),y"
-
-
-;STA
-
-rule let %A:byte1,a  = "   sta %A"
-rule let %A$const %B,a  = "   sta %A-%A.index.min+%B"
-rule let %A$x,a  = "   sta %A-%A.index.min,x"
-rule let %A$y,a  = "   sta %A-%A.index.min,y"
-rule let @%A$y,a  = "   sta (%A),y"
+;STA++
+rule let %A:byte1,     a @zn = "   sta %A"
+rule let %A$const %B,  a @zn = "   sta %A-%A.index.min+%B"
+rule let %A$x,         a @zn = "   sta %A-%A.index.min,x"
+rule let %A$y,         a @zn = "   sta %A-%A.index.min,y"
+rule let @%A$y,        a @zn = "   sta (%A),y"
 
 ;This is special instruction that 'touches' the specified variable (i.e.
 ;writes any value into specified variable).
- 
-rule let %A:byte1, void = "   sta %A"
+;We use A register for this, but it does not really matter. 
+rule let %A:byte1, void @zn = "   sta %A"
 
-;STX
-rule let %A$const %B,x  = "   stx %A-%A.index.min+%B"
-rule let %A:byte1,x  = "   stx %A"
+;STX++
+rule let %A$const %B,  x @zn = "   stx %A-%A.index.min+%B"
+rule let %A:byte1,     x @zn = "   stx %A"
+rule let %A$y,         x @zn = "   stx %A-%A.index.min,y"
 
-;STY
-rule let %A$const %B,y  = "   sty %A-%A.index.min+%B"
-rule let %A:byte1,y                     = "   sty %A"
+;STY++
+rule let %A$const %B,  y @zn = "   sty %A-%A.index.min+%B"
+rule let %A:byte1,     y @zn = "   sty %A"
+rule let %A$x,         y @zn = "   sta %A-%A.index.min,x"
+
+;BIT
+;If we ignore the Z flag, we may consider bit to be let instruction assigning to void.
+rule let void, %A:byte1    @znv    = "   bit %A"
+rule and void, a, %A:byte1 @znv = "   bit %A"
 
 ;LSR,ASL
-;rule div %A:byte,%A,1 = "   ;"
 
 ;LSR++
 rule div ac, a, 2               @zn        = "   lsr"
@@ -1962,10 +2020,15 @@ rule div (%A$x,c), %A$x, 2      @zn        = "   lsr %A-%A.index.min,x"
 ;rule mul %A$const %B),%A$%B,2  = "  asl %A-%A.index.min+%B"
 
 ;ASL++
-rule mul ac, a, 2    @zn               = "   asl"
-rule mul (%A:byte,c), %A, 2   @zn      = "   asl %A"
-rule mul (%A$const %B,c), %A$%B, 2 @zn = "   asl %A-%A.index.min+%B"
-rule mul (%A$x,c), %A$x, 2  @zn        = "   asl %A-%A.index.min,x"
+
+;Following rule is necessary to allow translation of generic access array instructions.
+;It will be later optimized by optimizer, so it will never get generated.
+ 
+rule mul a, a, 1                   = ";!!!!!!!!!!"
+rule mul a, a, 2    @czn            = "   asl"
+rule mul %A:byte, %A, 2   @czn      = "   asl %A"
+rule mul %A$const %B, %A$%B, 2 @czn = "   asl %A-%A.index.min+%B"
+rule mul %A$x, %A$x, 2  @czn        = "   asl %A-%A.index.min,x"
 
 ;rule mul %A$const %B,%A$%B,2  = "   asl %A-%A.index.min+%B"
 ;rule mul %A:byte,%A:byte,1 = "   ;"

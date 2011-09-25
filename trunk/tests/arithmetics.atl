@@ -148,6 +148,8 @@ assert s16 = -16
 
 ;Substraction
 
+;Signed vs. signed
+
 s6w1,s6w2 = 30, 35
 s8 = s6r1 - s6r2
 assert s8 = -5
@@ -160,4 +162,3 @@ s6w1,s6w2 = -64, 63
 s8 = s6r1 - s6r2
 assert s8 = -127
 
-;Unsigned vs signed

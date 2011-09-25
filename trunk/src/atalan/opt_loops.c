@@ -32,6 +32,8 @@ Purpose:
 		cnt = var->read + var->write;
 		if (cnt > 0) {
 
+			if (VarIsReg(var)) continue;
+
 //			if (VERBOSE) {
 //				printf("Var: "); PrintVar(var);
 //			}
@@ -44,9 +46,8 @@ Purpose:
 //				if (FlagOn(var->var->flags, VarLoopDependent)) continue;
 			}
 
-			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG /*| SUBMODE_REF*/) 
-//			 && (var->mode != INSTR_ELEMENT || FlagOff(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG))
-			 && var->mode != INSTR_CONST 
+			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG) 
+//			 && var->mode != INSTR_CONST 
 			 && var->mode != INSTR_DEREF
 			 && var->type != NULL && var->type->variant != TYPE_PROC
 			 && !VarIsLabel(var) 
@@ -137,14 +138,15 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 	Var * prev_var;
 	Int32 q, q1;
 	InstrBlock * blk, * exit;
-	Instr * i2, ti;
-	UInt32 n2;
+	Instr * i, ti;
+	UInt32 n;
 	Bool spill;
 
 	exit = end->next;
 
 	*p_init = false;
 
+	ResetValues();
 	q = 0;
 	reg->current_val = top_var;	// we expect initialization by top_var before loop
 	prev_var = NULL;			// previous variable contained in the register
@@ -153,22 +155,30 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 
 	// Compute usage quotient
 	for(blk = header; blk != exit; blk = blk->next) {
-		for(i2 = blk->first, n2 = 0; i2 != NULL; i2 = i2->next, n2++) {
+		for(i = blk->first, n = 0; i != NULL; i = i->next, n++) {
 
-			if (i2->op == INSTR_LINE) continue;
+			if (i->op == INSTR_LINE) continue;
 
 			// Call to subroutine destroys all registers, there will be spill
-			if (i2->op == INSTR_CALL) {
+			if (i->op == INSTR_CALL) {
 				q = 1;
 				goto done;
 			}
 			// If there is jump except last instruction
-			if (IS_INSTR_JUMP(i2->op) && (i2 != blk->last || blk != end)) {
+			if (IS_INSTR_JUMP(i->op) && (i != blk->last || blk != end)) {
 				*p_init = true;
 			}
 
-			if (i2->op == INSTR_LET) {
-				if (i2->result == top_var && i2->arg1 == reg) {
+			if (i->op == INSTR_LET) {
+
+				if (i->result->current_val == i->arg1 || i->result == i->arg1->current_val) {
+					q -= 3;
+					continue;
+				}
+
+
+				// If we assign register to value and it currently contains the value, we will be able to remove the instruction
+				if (i->result == top_var && i->arg1 == reg) {
 					// Register currently contains the replaced variable
 					if (reg->current_val == top_var) {
 						q -= 3;
@@ -176,33 +186,35 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 					}
 				}
 
-				if (i2->result == reg && i2->arg1 == top_var) {
+				// Result is the top register and we are setting it to top value
+				if (i->result == reg && i->arg1 == top_var) {
 					if (reg->current_val == top_var) {
 						q -= 3;
 						continue;
 					} else {
 						prev_var = reg->current_val;
-						reg->current_val = i2->arg1;
+						reg->current_val = top_var;
 						continue;
 					}
+				}
+
+				i->result->current_val = i->arg1;
+			} else {
+				if (i->result != NULL) {
+					i->result->current_val = NULL;
 				}
 			}
 
 			// If current instruction uses the register, and it is
-			// we need to save the register and load some other
+			// we need to save the register and load some other.
 
-			if (InstrUsesVar(i2, reg) && reg->current_val != top_var) {
+			if (InstrUsesVar(i, reg) && reg->current_val != top_var) {
 				if (prev_var != NULL) {
 					q += 3;
 				}
 			}
 
-			// register value becomes unknown (has different value than top_val)
-			if (i2->result == reg) {
-				reg = NULL;
-			}
-
-			memcpy(&ti, i2, sizeof(Instr));
+			memcpy(&ti, i, sizeof(Instr));
 
 			q1 = VarTestReplace(&ti.result, top_var, reg);
 			q1 += VarTestReplace(&ti.arg1, top_var, reg);
@@ -214,7 +226,7 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 			if (q1 != 0) {
 				if (InstrRule(&ti) == NULL) {
 //					if (VERBOSE) {
-//						printf("     %ld: invalid code\n", n2);
+//						printf("     %ld: invalid code\n", n);
 //					}
 					q = 1;		// do not use this register, as invalid code would get generated
 					goto done;
@@ -223,31 +235,31 @@ Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * 
 				// we would have to load it
 				if (reg->current_val != top_var && prev_var != NULL) {
 //					if (VERBOSE) {
-//						printf("     %ld: load\n", n2);
+//						printf("     %ld: load\n", n);
 //					}
 					q += 3;
 				}
 				q -= q1;
 //				if (VERBOSE) {
-//					printf("     %ld: usage\n", n2);
+//					printf("     %ld: usage\n", n);
 //				}
 			}
 
 			// Will it be necessary to spill?
 			// We use the variable (array) that is stored to register
 
-			spill = InstrSpill(i2, top_var);
+			spill = InstrSpill(i, top_var);
 			if (spill) {
 				q += 4;
 //				if (VERBOSE) {
-//					printf("     %ld: spill\n", n2);
+//					printf("     %ld: spill\n", n);
 //				}
 
 			}
 		} // instr
 	} // blk
 	// Value of register is not known at the end of loop, we need to load it before first use
-	if (reg == NULL) {
+	if (reg->current_val == NULL) {
 		q += 3;
 	}
 done:
@@ -310,6 +322,7 @@ void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * resul
 	i->result = result;
 	i->arg1 = arg1;
 	i->arg2 = arg2;
+	i->rule = InstrRule(i);
 	LoopMoveToPrologue(proc, header, NULL, i, i);
 }
 
@@ -654,7 +667,27 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 	}
 }
 
-void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
+void CheckInstr(Instr * i)
+{
+	if (i->rule == NULL) {
+		InternalError("invalid instruction");
+	}
+}
+
+void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	Instr * i = MemAllocStruct(Instr);
+	i->op = op;
+	i->result = result;
+	i->arg1 = arg1;
+	i->arg2 = arg2;
+	i->rule = InstrRule(i);
+
+	CheckInstr(i);
+	InstrAttach(blk, before, i, i);
+}
+
+Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 /*
 1. Find loop (starting with inner loops)
    - Every jump to label preceding the jump (backjump) forms a label
@@ -678,13 +711,14 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 */
 {
 	Instr * i2;
-	Var * top_var, * reg, * top_reg;
+	Var * top_var, * reg, * top_reg, * current_val;
 	UInt16 r, regi;
 	UInt32 var_size;
 	Int32 q, top_q;
-	Bool init;
+	Bool init, top_init;
 	InstrBlock * blk;
 	InstrBlock * exit;
+	Bool var_modified;
 
 	exit = end->next;
 
@@ -693,7 +727,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	InstrVarLoopDependent(header, end);
 
 	// When processing, we assign var to register
-	for(regi = 1; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
+	for(regi = 0; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
 
 //	if (header->seq_no == 41) {
 //		printf("");
@@ -702,7 +736,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	while(top_var = FindMostUsedVar()) {
 
 		if (Verbose(proc)) {
-			printf("Most user var: "); PrintVar(top_var);
+			Print("Most user var: "); PrintVar(top_var); PrintEOL();
 		}
 
 		top_var->read = top_var->write = 0;
@@ -713,9 +747,9 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		//      use of register instead of variable -1
 		//      spill +3
 
-		top_q = 0; top_reg = NULL;
+		top_q = 0; top_reg = NULL; top_init = false;
 
-		for(regi = 1; regi < CPU->REG_CNT; regi++) {
+		for(regi = 0; regi < CPU->REG_CNT; regi++) {
 
 			reg = CPU->REG[regi];
 			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input registers
@@ -738,6 +772,7 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (q < top_q) {
 				top_q = q;
 				top_reg = reg;
+				top_init = init;
 			}
 		}
 
@@ -752,15 +787,15 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		//TODO: If there is Let reg = var and var is not top_var, we need to spill store
 
 		//=== Replace the use of registers
-				
+	
+		var_modified = false;
+		current_val = NULL;
 		// Generate instruction initializing the register used to replace the variable
 		// before the start of the loop.
 		// We only do this, if the variable is not initialized inside the loop.
- 		if (FlagOn(top_var->flags, VarUninitialized) || init) {
-
+ 		if (FlagOn(top_var->flags, VarUninitialized) || top_init) {
 			LoopInsertPrologue(proc, header, INSTR_LET, top_reg, top_var, NULL);
-
-			top_reg->var = top_var;		// to prevent using the register in subsequent steps
+			current_val = top_var;		// to prevent using the register in subsequent steps
 		}
 		r = 0;
 		
@@ -769,8 +804,25 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 				if (i2->op == INSTR_LINE) continue;
 
 				if (InstrSpill(i2, top_var)) {
-					InstrInsert(blk, i2, INSTR_LET, top_var, top_reg, NULL);
+					InstrInsertRule(blk, i2, INSTR_LET, top_var, top_reg, NULL);
 				}
+
+				// We currently do not have the value in the register, and it is going to be used,
+				// so load it
+				if (current_val != top_var && InstrReadsVar(i2, top_var)) {
+					InstrInsertRule(blk, i2, INSTR_LET, top_reg, top_var, NULL);
+					current_val = top_var;
+				}
+
+				// We need to store the value or the register back to variable (register is going to be used for some other purpose)
+				if (i2->result == top_reg) {
+					if (i2->arg1 != top_var || current_val != top_var) {
+						// The register does not currently contain the top_var
+						InstrInsertRule(blk, i2, INSTR_LET, top_var, top_reg, NULL);
+						current_val = i2->arg1;
+					}
+				}
+
 				r += VarReplace(&i2->result, top_var, top_reg);
 				VarReplace(&i2->arg1, top_var, top_reg);
 				VarReplace(&i2->arg2, top_var, top_reg);
@@ -781,6 +833,9 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 					continue;
 				}
 
+
+				i2->rule = InstrRule(i2);
+				CheckInstr(i2);
 			}
 		}
 
@@ -794,15 +849,17 @@ void OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 				end->next = exit;
 				end->to   = exit;
 			}
-
-			InstrInsert(exit, exit->first, INSTR_LET, top_var, top_reg, NULL);
+			InstrInsertRule(exit, exit->first, INSTR_LET, top_var, top_reg, NULL);
+//			InstrInsert(exit, exit->first, INSTR_LET, top_var, top_reg, NULL);
 		}
 
 		if (FlagOn(top_var->flags, VarLoopDependent)) {
 			reg->flags |= VarLoopDependent;
 		}
 
+		return true;
 	}
+	return false;
 }
 
 void MarkLoops(Var * proc)
@@ -833,7 +890,7 @@ void MarkLoops(Var * proc)
 
 }
 
-void OptimizeLoops(Var * proc)
+Bool OptimizeLoops(Var * proc)
 /*
 Purpose:
 	Find loops in flow graph and call optimization for it.
@@ -841,7 +898,7 @@ Purpose:
 {
 	Loop loop;
 	InstrBlock * nb, * header;
-
+	Bool modified = false;
 
 	MarkLoops(proc);
 
@@ -863,8 +920,10 @@ Purpose:
 			loop.header = header;
 			loop.end    = nb;
 //			OptimizeLoopInvariants(proc, &loop);
-			OptimizeLoop(proc, header, nb);
+			modified |= OptimizeLoop(proc, header, nb);
 		}
 
 	}
+
+	return modified;
 }

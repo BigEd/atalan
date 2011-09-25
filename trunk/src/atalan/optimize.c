@@ -191,6 +191,23 @@ Bool InstrUsesVar(Instr * i, Var * var)
 		|| VarUsesVar(i->arg2, var);
 }
 
+Bool VarReadsVar(Var * var)
+{
+	if (var == NULL) return false;
+	if (var->mode == INSTR_VAR || var->mode == INSTR_CONST || var->mode == INSTR_TUPLE) return false;
+
+	return VarUsesVar(var->adr, var) || VarUsesVar(var->var, var);
+}
+
+Bool InstrReadsVar(Instr * i, Var * var)
+{
+	if (i == NULL || i->op == INSTR_LINE) return false;
+
+	return VarReadsVar(i->result) 
+		|| VarUsesVar(i->arg1, var)
+		|| VarUsesVar(i->arg2, var);
+}
+
 UInt32 InstrVarUseCount(Instr * from, Instr * to, Var * var)
 /*
 Purpose:
@@ -249,6 +266,7 @@ void OptimizeCombined(Var * proc)
 		} while(modified);
 
 		modified |= OptimizeVarMerge(proc);
+		modified |= OptimizeLoops(proc);
 	} while(modified);
 
 }
@@ -269,8 +287,8 @@ void ProcOptimize(Var * proc)
 		PrintProc(proc);
 	}
 	OptimizeCombined(proc);
-	OptimizeLoops(proc);
-	OptimizeCombined(proc);
+//	OptimizeLoops(proc);
+//	OptimizeCombined(proc);
 //	OptimizeLoops(proc);
 //	OptimizeCombined(proc);
 

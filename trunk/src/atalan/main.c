@@ -347,6 +347,7 @@ int main(int argc, char *argv[])
 	if (OPTIMIZE > 0) {
 		ProcessUsedProc(OptimizeJumps);
 		ProcessUsedProc(ProcOptimize);
+		VarUse();
 		ProcessUsedProc(DeadCodeElimination);
 		ProcessUsedProc(OptimizeJumps);
 

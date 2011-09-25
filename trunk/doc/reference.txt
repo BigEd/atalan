@@ -650,11 +650,11 @@ Newline will be printed after string, unless it is followed by comma.
 "[x + y]"
 :::::::::::::::::::::::::::::::::::
 
-*******
-Asserts
-*******
+**********
+Assertions
+**********
 
-{Assert} command may be used to inform the compiler that some fact (boolean condition)
+The {Assert} statement may be used to inform the compiler that some fact (boolean condition)
 is always true at specified point in application.
 
 :::::::::::::::::::::::::
@@ -664,6 +664,14 @@ assert x > 5
 
 Assertions may be checked in runtime (if the programmer does require it and platform
 does define necessary means of printing the assert information).
+
+=============
+Assert output
+=============
+
+When an assertion is false, source file, line number and list of variables
+used in assertion including their current values are printed.
+Program execution is canceled then. 
 
 ===============
 Type inferencer
@@ -699,6 +707,26 @@ Conditions in asserts may not have any side effects, as that would change the
 behaviour of the program when they are removed.
 Atalan will report an error, when it detects assertions have side-effects (call
 a function with side effect, read {sequence in} variable).
+
+==============
+Failed asserts
+==============
+
+In some situations, compiler is able to prove that an assertion is always false.
+Such assert is reported as an error.
+
+For example following snippet of code
+:::::::::::::::::::::
+x = 30
+assert x ≠ 30
+:::::::::::::::::::::
+
+will report an error: 
+:::::::::::::::::::::::
+compares.atl(2) Logic error: Assert is always false.
+
+assert a <> 30
+::::::::::::::::::::::
 
 **************
 Labels & Jumps
