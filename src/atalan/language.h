@@ -541,6 +541,8 @@ void HeapPrint(MemHeap * heap);
 
 void TypeInit();		// initialize the Type subsytem
 
+UInt8 ConstByteSize(Int32 n);
+
 Type * TypeAlloc(TypeVariant variant);
 Type * TypeAllocInt(Int32 min, Int32 max);
 Type * TypeDerive(Type * base);
@@ -607,7 +609,7 @@ Var * FindOrAllocLabel(char * name, UInt16 idx);
 
 void VarLetStr(Var * var, char * str);
 
-Var * VarNewTmp(long idx, Type * type);
+Var * VarNewTmp(Type * type);
 Var * VarNewTmpLabel();
 Var * VarAlloc(InstrOp mode, Name name, VarIdx idx);
 Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx);
@@ -897,6 +899,7 @@ UInt32 InstrBlockInstrCount(InstrBlock * blk);
 void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * first, Instr * last);
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
+void InstrAttach(InstrBlock * blk, Instr * before, Instr * first, Instr * last);
 
 InstrBlock * LastBlock(InstrBlock * block);
 
@@ -909,6 +912,7 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end);
 void VarUse();
 
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2);
+Var * InstrEvalAlgebraic(InstrOp op, Var * arg1, Var * arg2);
 
 UInt16 SetBookmarkLine(Loc * loc);
 UInt16 SetBookmarkVar(Var * var);
@@ -1053,12 +1057,15 @@ extern LinePos OP_LINE_POS;				// Position of last parsed binary operator
 
 *************************************************************/
 
+void ResetValues();
+
 Bool VarUsesVar(Var * var, Var * test_var);
 Bool VarModifiesVar(Var * var, Var * test_var);
 Int16 VarTestReplace(Var ** p_var, Var * from, Var * to);
 Int16 VarReplace(Var ** p_var, Var * from, Var * to);
 
 Bool InstrUsesVar(Instr * i, Var * var);
+Bool InstrReadsVar(Instr * i, Var * var);
 Bool InstrSpill(Instr * i, Var * var);
 
 UInt8 VarIsLiveInBlock(Var * proc, InstrBlock * block, Var * var);
@@ -1070,7 +1077,7 @@ void GenerateBasicBlocks(Var * proc);
 Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
 Bool OptimizeVarMerge(Var * proc);
-void OptimizeLoops(Var * proc);
+Bool OptimizeLoops(Var * proc);
 
 void OptimizeJumps(Var * proc);
 void DeadCodeElimination(Var * proc);

@@ -217,7 +217,7 @@ Var * VarFindType(char * name, VarIdx idx, Type * type)
 	return var;
 }
 
-Var * VarNewTmp(long idx, Type * type)
+Var * VarNewTmp(Type * type)
 {
 	Var * var;
 	var = VarAllocScopeTmp(NULL, INSTR_VAR, type);
@@ -713,7 +713,7 @@ Purpose:
 		FOR_EACH_LOCAL(CPU->SCOPE, var)
 			// Only variables without address are registers.
 			// The variables with address are register sets.
-			if (var->mode == INSTR_VAR && var->adr == NULL) {
+			if (var->mode == INSTR_VAR && var->adr == NULL && var->type->variant == TYPE_INT) {
 				SetFlagOn(var->submode, SUBMODE_REG);
 				CPU->REG[CPU->REG_CNT++] = var;
 			}
@@ -766,6 +766,8 @@ Purpose:
 			return 1;		//TODO: Compute size in a better way
 		} else if (var->mode == INSTR_BYTE) {
 			return 1;
+		} else if (var->mode == INSTR_CONST) {
+			return ConstByteSize(var->n);
 		}
 		return TypeSize(type);
 	}

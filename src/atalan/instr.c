@@ -336,18 +336,21 @@ Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2)
 /*
 Purpose:
 	Try to evaluate instruction.
-	Instruction may be evaluated if it's arguments are constant.
+	Instruction may be evaluated if it's arguments are constant or some algebraic simplification may be applied.
 Result:
-	Return evaluated variable as constant or NULL, if instruction can not be evaluated.
+	Return result as an variable or NULL, if instruction can not be evaluated.
 */
 {
 	Var * r = NULL;
 
-	// Multiplication of A by 1 is same as assigning A
-	if (op == INSTR_MUL) {
-		if (VarIsN(arg1, 1)) return arg2;
-		if (VarIsN(arg2, 1)) return arg1;
-	}
+	/*
+	==============================
+	Optimization: Constant folding
+	==============================
+
+	Evaluate the expressions, whose operands are known to be constant at compile time.
+
+	*/
 
 	if (VarIsConst(arg1) && (arg2 == NULL || VarIsConst(arg2))) {
 		
@@ -397,9 +400,47 @@ Result:
 	return r;
 }
 
+Var * InstrEvalAlgebraic(InstrOp op, Var * arg1, Var * arg2)
+{
+	/*
+	=======================================
+	Optimization: Algebraic simplifications
+	=======================================
 
-//GLOBAL Var * G_MATCH_ARG[MACRO_ARG_CNT];
+	::::::::::::::::::::::
+	add x, a, 0  ->  let x, a
+	add x, 0, a  ->  let x, a
+	sub x, a, 0  ->  let x, a
+	mul x, a, 1  ->  let x, a
+	mul x, 1, a  ->  let x, a
+	div x, a, 1  ->  let x, a
+	::::::::::::::::::::::
 
+	*/
+	switch(op) {
+	case INSTR_MUL:
+		if (VarIsN(arg1, 1)) 
+			return arg2;
+		// continue to INSTR_DIV
+	case INSTR_DIV:
+		if (VarIsN(arg2, 1)) return arg1;
+		break;
+
+	case INSTR_ADD:
+		if (VarIsN(arg1, 0)) return arg2;
+		// continue to INSTR_SUB
+	case INSTR_SUB:
+		if (VarIsN(arg2, 0)) return arg1;
+		break;
+
+	case INSTR_SQRT:
+		if (VarIsN(arg1, 1) || VarIsN(arg1, 0)) return arg1;
+		break;
+	default: break;
+	}
+
+	return InstrEvalConst(op, arg1, arg2);
+}
 
 
 /****************************************************************
@@ -443,7 +484,7 @@ Arguments:
 	idx1_type = NULL;
 
 	if (type->variant == TYPE_ARRAY) {
-		idx1_type = type->dim[0]	;
+		idx1_type = type->dim[0];
 	}
 
 	if (arr->mode == INSTR_ELEMENT) {
@@ -471,15 +512,13 @@ Arguments:
 		dst_arr = arr;
 	}
 
-	idx = VarNewTmp(0, idx1_type);
-
 	src_type = init->type;
 	
 	// This is copy instruction (source is array)
 	if (src_type->variant == TYPE_ARRAY) {		
 		src_min = VarNewInt(src_type->dim[0]->range.min);
 		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
-		src_idx = VarNewTmp(0, src_type->dim[0]);
+		src_idx = VarNewTmp(src_type->dim[0]);
 		init = VarNewElement(init, src_idx);
 		label_done = VarNewTmpLabel();
 	}
@@ -497,6 +536,10 @@ Arguments:
 	} else {
 		stop = max1;
 	}
+
+//	idx1_type = TypeAlloc(TYPE_INT);
+//	idx1_type->range.min = 
+	idx = VarNewTmp(idx1_type);
 
 	GenLet(idx, min1);
 	if (src_idx != NULL) {

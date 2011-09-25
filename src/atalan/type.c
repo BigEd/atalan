@@ -438,6 +438,16 @@ Var * FirstItem(Var * scope, VarSubmode submode)
 
 UInt32 TypeStructSize(Var * var);
 
+UInt8 ConstByteSize(Int32 n)
+{
+	UInt8 size;
+	if (n <= 255) size = 1;
+	else if (n <= 65535) size = 2;
+	else if (n <= 0xffffff) size = 3;
+	else size = 4;		// we currently do not support bigger numbers than 4 byte integers
+	return size;
+}
+
 UInt32 TypeSize(Type * type)
 {
 	UInt32 size;
@@ -450,11 +460,8 @@ UInt32 TypeSize(Type * type)
 			lrange = type->range.min;
 			if (lrange > 0) lrange = 0;
 
-			size = type->range.max - lrange;
-			if (size <= 255) size = 1;
-			else if (size <= 65535) size = 2;
-			else if (size <= 0xffffff) size = 3;
-			else size = 4;		// we currently do not support bigger numbers than 4 byte integers
+			size = ConstByteSize(type->range.max - lrange);
+			
 			break;
 
 		case TYPE_ADR:
@@ -2016,7 +2023,7 @@ Purpose:
 			if (data.modified_blocks) {
 				GenerateBasicBlocks(proc);
 				DeadCodeElimination(proc);
-				PrintProc(proc);
+//				PrintProc(proc);
 			}
 			steps++;
 		} while (data.modified);
@@ -2069,8 +2076,9 @@ Purpose:
 					tl = i->type[ARG1];
 					if (tl != NULL) {
 						if (tl->variant == TYPE_SEQUENCE) {
-							ErrArg(var);
-							LogicErrorLoc("Cyclic modification of variable [A].\nVariable will eventually go out of it's defined bounds.\n", &loc);
+							//TODO: This test is probably never good
+//							ErrArg(var);
+//							LogicErrorLoc("Cyclic modification of variable [A].\nVariable will eventually go out of it's defined bounds.\n", &loc);
 						}
 					}
 				}

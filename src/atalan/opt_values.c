@@ -45,22 +45,125 @@ Purpose:
 	}
 }
 
-Bool ExpIsOffset(Exp * l, Var * r, Int32 * diff)
+Bool VarIsOffset3(Var * l, Var * r, Int32 * diff);
+
+static UInt16 G_EXP_NEST;
+
+Bool ExpIsIntConst(Exp * exp, Int32 * n)
+{
+	if (exp->op == INSTR_VAR) {
+		if (VarIsIntConst(exp->var)) {
+			*n = exp->var->n;
+		}
+	}
+	return false;
+}
+
+Bool ExpIsOffset(Exp * lexp, Exp * rexp, Int32 * diff)
+{
+	return false;
+}
+
+Bool ExpIsOffsetOfVar(Exp * lexp, Var * r, Int32 * diff)
+{
+	Bool result = true;
+	Int32 n;
+	if (G_EXP_NEST == 100) {
+		return false;
+	}
+	G_EXP_NEST++;
+
+	if (lexp == NULL || r == NULL) return false;
+	if (FlagOn(lexp->flags, FlagExpProcessed)) return false;
+
+	SetFlagOn(lexp->flags, FlagExpProcessed);
+
+	// 1. r + <const> = r  => -const
+	// 2. r - <const> = r  => const
+	if (lexp->op == INSTR_ADD || lexp->op == INSTR_SUB) {
+		if (ExpIsIntConst(lexp->arg[1], &n) && ExpIsOffsetOfVar(lexp->arg[0], r, diff)) {
+			if (lexp->op == INSTR_SUB) n = -n;
+			*diff -= n;
+			goto yes;
+		}
+	} else if (lexp->op == INSTR_VAR) {
+		if (VarIsOffset3(lexp->var, r, diff)) goto yes;
+	}
+
+	SetFlagOff(lexp->flags, FlagExpProcessed);
+	result = ExpIsOffset(lexp, r->dep, diff);
+
+yes:
+	SetFlagOff(lexp->flags, FlagExpProcessed);
+	return result;
+}
+
+
+Bool VarIsOffset3(Var * l, Var * r, Int32 * diff)
 /*
 Purpose:
 	Test, whether r expression gives same result as l expression, except incremented by some constant value.
 */
 {
-	Var * vl;
-	if (l == NULL || r == NULL) return false;
-	if (l->op == INSTR_VAR) {
-		vl = l->var;
-		if (vl->mode == INSTR_CONST && r->mode == INSTR_CONST) {
-			*diff = r->n - vl->n;
-			return true;
-		}
+	Exp * ldep;
+
+	if (G_EXP_NEST == 100) {
+		return false;
 	}
+	G_EXP_NEST++;
+
+	if (l == NULL || r == NULL) goto no;
+
+	// 1. If the two variables are same, the difference is zero (no matter, what kind of variable it is)
+	// TODO: Handle input variables
+
+	if (l == r) {
+		*diff = 0;
+		goto yes;
+	}
+
+	// 2. Two constants are just offset
+	if (VarIsIntConst(l) && VarIsIntConst(r)) {
+		*diff = r->n - l->n;
+		goto yes;
+	}
+
+	// 3. If the left variable has a dependency, test this dependency 
+	ldep = l->dep;
+	if (ldep != NULL) {
+		if (ExpIsOffsetOfVar(ldep, r, diff)) goto yes;
+	}
+
+	if (r->dep != NULL) {
+		if (ExpIsOffsetOfVar(r->dep, l, diff)) {
+			*diff = -*diff;
+			goto yes;
+		}
+//		if (r->dep->op == INSTR_VAR) {
+//			if (VarIsOffset3(l, r->dep->var, diff)) goto yes;
+//		}
+	}
+no:
 	return false;
+
+yes:
+	return true;
+}
+
+Bool VarIsOffset(Var * l, Var * r, Int32 * diff)
+/*
+Purpose:
+	Test, whether two variables at specified place differ only by a constant.
+*/
+{
+	Bool result;
+	G_EXP_NEST = 0;
+	result = VarIsOffset3(l, r, diff);
+	if (G_EXP_NEST == 100) {
+		printf("l: "); PrintExp(l->dep); printf("\n");
+		printf("l: "); PrintExp(r->dep); printf("\n");
+	}
+	return result;
 }
 
 void ResetValues()
@@ -569,6 +672,27 @@ void VarSetSrcInstr(Var * var, Instr * i)
 }
 
 
+Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2, char * message, UInt32 n)
+{
+	Instr * i;
+	Rule * rule;
+
+	rule = InstrRule2(op, result, arg1, arg2);
+	if (rule != NULL) {
+		i = loc->i;
+		if (Verbose(loc->proc)) {
+			printf("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrint(i);
+		}
+		i->op = op;
+		i->result = result;
+		i->arg1 = arg1;
+		i->arg2 = arg2;
+		i->rule = rule;
+		return true;
+	}
+	return false;
+}
+
 Bool OptimizeValues(Var * proc)
 /*
    1. If assigning some value to variable (let) and the variable already contains such value, remove the let instruction
@@ -591,6 +715,10 @@ Bool OptimizeValues(Var * proc)
 	char buf[32];
 	Int32 diff;
 	Bool  opt_increment;
+	Loc loc;
+	UInt16 regi;
+
+	loc.proc = proc;
 
 	if (Verbose(proc)) {
 		printf("------ optimize values -----\n");
@@ -602,11 +730,13 @@ Bool OptimizeValues(Var * proc)
 	modified = false;
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		
+		loc.blk = blk;
+
 		ResetValues();
 		n = 0;
 		for(i = blk->first; i != NULL; i = i->next) {
 retry:
+			loc.i = i;
 			n++;
 			// Instruction may be NULL here, if we have deleted the last instruction in the block.
 			if (i == NULL) break;
@@ -668,8 +798,30 @@ retry:
 							goto retry;
 						}
 					} else {
+					
+						/*
+						===============================================
+						Optimization: Replace assignment with increment
+						===============================================
 
-						if (i->op == INSTR_LET && ExpIsOffset(result->dep, arg1, &diff)) {
+						Replace sequence like:
+						::::::::
+						let a,5
+						...
+						let a,6
+						::::::::
+						by
+						::::::::
+						let a,5
+						...
+						add a,a,1
+						::::::::
+						The variable a will be usually register and increment instruction 
+						is shorter (and therefore faster) than assignment in such case.
+						Simmilar variant can be done for 'sub'.
+						*/
+
+						if (i->op == INSTR_LET && VarIsOffset(result, arg1, &diff)) {
 							op = INSTR_ADD;
 							if (diff < 0) {
 								op = INSTR_SUB;
@@ -679,6 +831,13 @@ retry:
 							if (diff == 1) {
 								r2 = VarNewInt(diff);
 								//r = VarStripFlags(result);
+								if (TransformInstr(&loc, op, result, result, r2, "Converting to inc/dec", n)) {
+									arg1 = result;
+									arg2 = r2;
+									opt_increment = true;
+									modified = true;
+								}
+								/*
 								if (InstrRule2(op, result, result, r2)) {
 									if (Verbose(proc)) {
 										printf("%ld#%ld Converting to inc/dec:", blk->seq_no, n); InstrPrint(i);
@@ -691,6 +850,7 @@ retry:
 									opt_increment = true;
 									modified = true;
 								}
+								*/
 							}
 						}
 
@@ -703,63 +863,67 @@ retry:
 					// Try to replace arguments of operation by it's source (or eventually constant)
 
 					op = i->op;
-					m2 = false;
 
-					if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
-						src_i = arg1->src_i;
-						src_op = src_i->op;
+					m3 = false;		// mark when we are at the next step
+//					do {
+						m2 = false;
 
-						// Try to replace LO b,n LET a,b  => LO a,n LO a,n
+						if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
+							src_i = arg1->src_i;
+							src_op = src_i->op;
 
-						if (src_op == INSTR_LO || src_op == INSTR_HI || src_op == INSTR_LET_ADR) {
-							if (op == INSTR_LET) {
-								op = src_op;
-								arg1 = src_i->arg1;
-								m2 = true;
-							}
-						} else if (src_op == INSTR_LET) {
-							// If instruction uses register, do not replace with instruction that does not use it
-							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
-								// Do not replace simple variable with array access
-								if (!(arg1->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
+							// Try to replace LO b,n LET a,b  => LO a,n LO a,n
+
+							if (src_op == INSTR_LO || src_op == INSTR_HI || src_op == INSTR_LET_ADR) {
+								if (op == INSTR_LET) {
+									op = src_op;
 									arg1 = src_i->arg1;
 									m2 = true;
 								}
-							}
-						}
-					}
-
-					arg2 = i->arg2;
-					if (arg2 != NULL && !InVar(arg2) && arg2->src_i != NULL ) {					
-						src_i = arg2->src_i;
-						src_op = src_i->op;
-
-						if (src_op == INSTR_LET) {
-							if (!InVar(src_i->arg1) && !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG)) ) {
-								// Do not replace simple variable with array access
-								if (arg2->read == 1 || !(arg2->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
-									if (src_i->arg1->mode != INSTR_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
-										arg2 = src_i->arg1;
+							} else if (src_op == INSTR_LET) {
+								// If instruction uses register, do not replace with instruction that does not use it
+								if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && (m3 || !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
+									// Do not replace simple variable with array access
+									if (!(arg1->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
+										arg1 = src_i->arg1;
 										m2 = true;
 									}
 								}
 							}
 						}
-					}
 
-					// let x,x is always removed
-					if (op == INSTR_LET && result == arg1) {
-						goto delete_instr;
-					}
+						arg2 = i->arg2;
+						if (arg2 != NULL && !InVar(arg2) && arg2->src_i != NULL ) {					
+							src_i = arg2->src_i;
+							src_op = src_i->op;
 
-					if (m2) {
-						if (InstrRule2(op, result, arg1, arg2)) {
-							i->op   = op;
-							i->arg1 = arg1;
-							i->arg2 = arg2;
-							modified = true;
+							if (src_op == INSTR_LET) {
+								// Do not replace register source with non-register
+								if (!InVar(src_i->arg1) && (m3 || !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
+									// Do not replace simple variable with array access
+									if (arg2->read == 1 || !(arg2->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
+										if (src_i->arg1->mode != INSTR_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
+											arg2 = src_i->arg1;
+											m2 = true;
+										}
+									}
+								}
+							}
 						}
-					}
+
+						// let x,x is always removed
+						if (op == INSTR_LET && result == arg1) {
+							goto delete_instr;
+						}
+
+						if (m2) {
+							if (TransformInstr(&loc, op, result, arg1, arg2, "Arg replace", n)) {
+								modified = true;
+								break;
+							}
+						}
+						m3 = true;
+//					} while(m2);
 
 					//==== Try to evaluate constant instructions
 					// We first try to traverse the chain of assignments to it's root.
@@ -769,16 +933,31 @@ retry:
 					r = NULL;
 					arg1 = SrcVar(i->arg1);
 					arg2 = SrcVar(i->arg2);
-					r = InstrEvalConst(i->op, arg1, arg2);
+					r = InstrEvalAlgebraic(i->op, arg1, arg2);
 
 					// We have evaluated the instruction, change it to LET <result>,r
 					if (r != NULL) {
-						if (InstrRule2(INSTR_LET, i->result, r, NULL)) {
-							i->op = INSTR_LET;
-							i->arg1 = r;
-							i->arg2 = NULL;
-							result->src_i       = i;
-							modified = true;
+						if (VarIsAlias(i->result, r)) {
+							goto delete_instr;
+						} else {
+							if (TransformInstr(&loc, INSTR_LET, i->result, r, NULL, "Const evaluation", n)) {
+								modified = true;
+							}
+						}
+					}
+
+					if (!VarIsReg(i->arg1) && FlagOff(i->arg1->submode, SUBMODE_IN)) {
+						// If some register contains the value we need to set
+						for(regi = 0; regi < CPU->REG_CNT; regi++) {
+							r = CPU->REG[regi];
+							if (!VarIsEqual(r, i->arg1)) {
+								if (VarIsOffset(r, i->arg1, &diff) && diff == 0) {
+									if (TransformInstr(&loc, i->op, i->result, r, i->arg2, "Register reuse", n)) {
+										modified = true;
+										break;
+									}
+								}
+							}
 						}
 					}
 
@@ -796,13 +975,10 @@ retry:
 						while (!InVar(arg1) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
 					if (VarIsIntConst(arg1)) {
-						if (Verbose(proc)) {
-							printf("Arg to const %ld#%ld:", blk->seq_no, n); InstrPrint(i);
-						}
-						i->op = INSTR_STR_ARG;
 						sprintf(buf, "%d", arg1->n);
-						i->arg1 = VarNewStr(buf);
-						i->arg2 = VarNewInt(StrLen(buf));
+						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarNewInt(StrLen(buf)), "Arg to const", n)) {
+							modified = true;
+						}
 					}
 				}
 			}
@@ -924,7 +1100,7 @@ Purpose:
 	InstrBlock * blk;
 	InstrOp op;
 	Bool modified = false;
-	int q;
+	Int16 q;
 	UInt32 n;
 
 //	printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
@@ -959,16 +1135,17 @@ next:
 							//==== We have succeeded, replacing the register
 							
 							if (Verbose(proc)) {
-								printf("Merging %ld", n); InstrPrint(i);
+								printf("Merging %ld#%ld", blk->seq_no, n); InstrPrint(i);
 							}
 
 							modified = true;
 
 							for (;i2 != i; i2 = i2->next) {
 								if (i2->op == INSTR_LINE) continue;
-								VarReplace(&i2->result, arg1, result);
-								VarReplace(&i2->arg1, arg1, result);
-								VarReplace(&i2->arg2, arg1, result);
+								q = VarReplace(&i2->result, arg1, result);
+								q += VarReplace(&i2->arg1, arg1, result);
+								q += VarReplace(&i2->arg2, arg1, result);
+								if (q > 0) i2->rule = InstrRule(i2);
 							}
 							i = InstrDelete(blk, i);
 							goto next;

@@ -1016,7 +1016,7 @@ void ParseOperand()
 				if (type == NULL) {
 					type = TypeAlloc(TYPE_ARRAY);
 				}
-				var = VarNewTmp(0, type);
+				var = VarNewTmp(type);
 				var->mode = INSTR_CONST;
 
 				GenBegin();
@@ -1111,7 +1111,7 @@ no_id:
 					FOR_EACH_OUT_ARG(proc, arg)
 						var = arg;
 						if (VarIsReg(arg)) {
-							var = VarNewTmp(0, arg->type);
+							var = VarNewTmp(arg->type);
 							GenLet(var, arg);
 						}
 						BufPush(var);		
@@ -1481,6 +1481,11 @@ If result mode is INSTR_CONST, no code is to be generated.
 			}
 		}
 	}
+}
+
+void ParseArray()
+{
+	ParseExpression(NULL);
 }
 
 void ExpectExpression(Var * result)
@@ -1928,19 +1933,19 @@ Purpose:
 void ParseFor()
 /*
 Syntax:
-	for: "for" <var> [":" <range>] ["where" cond] ["until" cond | "while" cond]
+	for: "for" <var> [":" <range>][in <array>] ["where" cond] ["until" cond | "while" cond]
 
 */
 {
 	Var * var, * where_t_label;
 	char name[256];
-	Var * min, * max, * step;
+	Var * min, * max, * step, * arr, * idx;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
 	Int32 n, nmask;
 	LinePos token_pos;
 
-	var = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL;
+	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
 
 	EnterLocalScope();
@@ -1976,6 +1981,36 @@ Syntax:
 						var->type = type;
 					}
 				}
+				idx = var;
+
+			// For in, we create two local variables.
+			// One is local (unnamed) index variable that we use to iterate.
+			// The second is named as user specified and represents arr(index).
+			} else if (NextIs(TOKEN_IN)) {
+				ParseArray();
+				if (TOK) {
+					arr = STACK[0];
+					if (arr->type->variant == TYPE_ARRAY) {
+						type = arr->type->dim[0];
+						TypeLimits(type, &min, &max);
+
+						idx = VarAllocScopeTmp(NULL, INSTR_VAR, type);
+						
+						var = VarAlloc(INSTR_ELEMENT, name, 0);
+						var->adr = arr;
+						var->var = idx;
+						var->line_no = LINE_NO;
+						var->line_pos = token_pos;
+						var->file    = SRC_FILE;
+						var->type    = arr->type->element;
+						SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
+
+
+					} else {
+						SyntaxError("Expression after IN must be array");
+					}
+				}
+				
 			// for i (range is not specified, this is reference to global variable or type)
 			} else {
 				var = VarFind2(name);
@@ -2088,7 +2123,7 @@ Syntax:
 	// Variable initialization
 
 	if (var != NULL) {
-		GenInternal(INSTR_LET, var, min, NULL);
+		GenInternal(INSTR_LET, idx, min, NULL);
 	}
 
 	// Loop with condition, but without variable
@@ -2129,7 +2164,7 @@ Syntax:
 	if (var != NULL) {
 
 		// Add the step to variable
-		GenInternal(INSTR_ADD, var, var, step);
+		GenInternal(INSTR_ADD, idx, idx, step);
 
 		// 1. If max equals to byte limit (0xff, 0xffff, 0xffffff, ...), only overflow test is enough
 		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
@@ -2149,9 +2184,9 @@ Syntax:
 				if (min->mode == INSTR_CONST) {
 					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
 					n = n & nmask;
-					var->type->range.max = n;		// set the computed limit value as max of the index variable
+					idx->type->range.max = n;		// set the computed limit value as max of the index variable
 					max = VarNewInt(n);
-					GenInternal(INSTR_IFNE, G_BLOCK->body_label, var, max);	//TODO: Overflow
+					GenInternal(INSTR_IFNE, G_BLOCK->body_label, idx, max);	//TODO: Overflow
 					goto var_done;
 				// 3. max & step are constant, we may detect, that overflow will not occur
 				} else {
@@ -2175,7 +2210,7 @@ no_overflow:
 		// Also user may modify the index variable (although this should be probably discouraged when for is used).
 
 //		GenInternal(INSTR_IFLE, G_BLOCK->body_label, var, max);
-		GenInternal(INSTR_IFGT, G_BLOCK->body_label, max, var);
+		GenInternal(INSTR_IFGT, G_BLOCK->body_label, max, idx);
 	}
 var_done:
 
@@ -3555,7 +3590,7 @@ Arguments:
 				} else {
 					if (VarIsReg(arg)) {
 						//TODO: If var is already tmp, we do not need to create new temporary here
-						tmp = VarNewTmp(0, arg->type);
+						tmp = VarNewTmp(arg->type);
 						GenLet(tmp, val);
 						val = tmp;
 						reg_args[reg_arg_cnt] = arg;

@@ -120,10 +120,10 @@ repeat:
 		if (i != NULL) op = i->op;
 
 		// Continue with instruction in next block 
-		// This is not true for block ending with GOTO and ASSERT_END
+		// This is not true for block ending with GOTO and ASSERT
 
 		dst = nb->next;
-		if (dst != NULL && op != INSTR_GOTO && op != INSTR_ASSERT_END) {
+		if (dst != NULL && op != INSTR_GOTO && op != INSTR_ASSERT) {
 			nb->to = nb->next;
 			dst->from = nb;
 		}
@@ -321,6 +321,7 @@ ifne x,y,l1
 Optimization: Remove zero jumps
 ===============================
 
+Eliminate sequence like
 ::::::::::::::::::::::
 goto l1
 @l1
@@ -453,9 +454,11 @@ x = 1
 
 Bool DataBlock(InstrBlock * blk)
 {
+	Instr * i;
 	InstrOp op;
-	if (blk->first == NULL) return false;
-	op = blk->first->op;
+	i = FirstInstr(blk);
+	if (i == NULL) return false;
+	op = i->op;
 	return op == INSTR_ALIGN || op == INSTR_ARRAY_INDEX || op == INSTR_DATA;
 }
 

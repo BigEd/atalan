@@ -328,24 +328,11 @@ Argument:
 
 			result = i->result;
 			if (result != NULL) {
-
-				// Labels defined in macro are all local.
-				// If there is label in macro, generate new temporary label instead of the label in macro.
-
-//				if (result->mode == INSTR_LABEL) {
-//					r = VarSetFind(&locals, result);
-//					if (r == NULL) {
-//						r = VarNewTmpLabel();
-//						VarSetAdd(&locals, result, r);
-//					}
-//					result = r;
-//				} else {
-					// %Z variable is used as forced local argument.
-					local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
-					if (!local_result) {
-						result = GenArg(macro, result, args, &locals);
-					}
-//				}
+				// %Z variable is used as forced local argument.
+				local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
+				if (!local_result) {
+					result = GenArg(macro, result, args, &locals);
+				}
 			}
 			arg1 = GenArg(macro, i->arg1, args, &locals);
 			arg2 = GenArg(macro, i->arg2, args, &locals);

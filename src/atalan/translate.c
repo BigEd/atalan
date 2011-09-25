@@ -214,11 +214,6 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	return VarMatchesType(var, type);
 }
 
-Bool VarIsFlagReg(Var * var)
-{
-	return VarIsReg(var) && var->type->range.max == 1 && var->type->range.min == 0;
-}
-
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
 {
 	Type * atype;
@@ -374,7 +369,6 @@ Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	return InstrRule(&i);
 }
 
-
 Bool InstrTranslate(Instr * i, Bool * p_modified)
 {
 	Var rule_proc;
@@ -382,6 +376,7 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 
 	if (i->op == INSTR_LINE) {
 		Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
+
 	} else if ((rule = InstrRule(i))) {
 		GenRule(rule, i->result, i->arg1, i->arg2);
 	} else {
@@ -403,6 +398,34 @@ Bool InstrTranslate(Instr * i, Bool * p_modified)
 	return true;
 }
 
+void InstrSwapArgs(Instr * to, InstrOp op, Instr * from)
+{
+	to->op = op;
+	to->result = from->result;
+	to->arg1 = from->arg2;
+	to->arg2 = from->arg1;
+}
+
+Bool InstrTranslate2(Instr * i, Bool * p_modified)
+{
+	Instr i2;
+
+	if (InstrTranslate(i, p_modified)) return true;
+
+	// If this is commutative instruction, try the other order of rules
+	if (FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE)) {
+		InstrSwapArgs(&i2, i->op, i);
+		if (InstrTranslate(&i2, p_modified)) return true;
+
+	// Try opposite branch if this one is not implemented
+	} else if (IS_INSTR_BRANCH(i->op)) {
+		InstrSwapArgs(&i2, OpRelSwap(i->op), i);
+		if (InstrTranslate(&i2, p_modified)) return true;
+	}
+
+	return false;
+}
+
 extern InstrBlock * BLK;
 
 void ProcTranslate(Var * proc)
@@ -417,7 +440,6 @@ Purpose:
 	UInt8 step = 0;
 	UInt32 n;
 	Var * a = NULL, * var, * item;
-	Instr i2;
 
 //	printf("============ Registers1 ============\n");
 //	PrintProc(proc);
@@ -476,20 +498,7 @@ Purpose:
 					}
 				}
 
-				if (!InstrTranslate(i, &modified)) {
-
-					// If this is commutative instruction, try the other order of rules
-					if (FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE) /*.i->op == INSTR_AND || i->op == INSTR_OR || i->op == INSTR_XOR || i->op == INSTR_ADD || i->op == INSTR_MUL*/) {
-						i2.op = i->op;
-						i2.result = i->result;
-						i2.arg1 = i->arg2;
-						i2.arg2 = i->arg1;
-						if (InstrTranslate(&i2, &modified)) goto next;
-					// Try opposite branch if this one is not implemented
-					} else if (IS_INSTR_BRANCH(i->op)) {
-						i2.op = OpRelSwap(i->op); i2.result = i->result; i2.arg1 = i->arg2; i2.arg2 = i->arg1;
-						if (InstrTranslate(&i2, &modified)) goto next;
-					}
+				if (!InstrTranslate2(i, &modified)) {
 
 					// Array assignment default
 					if (i->op == INSTR_LET) {
@@ -497,6 +506,7 @@ Purpose:
 						item = i->arg1;
 						if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
 							GenArrayInit(var, item);
+							modified = true;
 							goto next;
 						}
 					}
@@ -506,18 +516,18 @@ Purpose:
 					// and using the variable instead.
 
 					if (VarIsArrayElement(i->arg1)) {
-						a = VarNewTmp(100, i->arg1->type);		//== adr->type->element
+						a = VarNewTmp(i->arg1->type);		//== adr->type->element
 						GenLet(a, i->arg1);
 						Gen(i->op, i->result, a, i->arg2);
 						modified = true;
 					} else if (VarIsArrayElement(i->arg2)) {
-						a = VarNewTmp(101, i->arg1->type);		//== adr->type->element
+						a = VarNewTmp(i->arg1->type);		//== adr->type->element
 						GenLet(a, i->arg2);
 						Gen(i->op, i->result, i->arg1, a);
 						modified = true;
 					} else if (VarIsArrayElement(i->result)) {
 						if (i->op != INSTR_LET || i->arg1->mode != INSTR_VAR) {
-							a = VarNewTmp(102, i->result->type);
+							a = VarNewTmp(i->result->type);
 							Gen(i->op, a, i->arg1, i->arg2);
 							GenLet(i->result, a);
 							modified = true;
