@@ -3354,12 +3354,23 @@ void ParseRule()
 	for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
 		ParseRuleArg2(&rule->arg[i]);
 		EXP_IS_DESTINATION = false;
+
+		// Flags defined as @flags
 		if (NextIs(TOKEN_ADR)) {
 			rule->flags = ParseVariable();
 			break;
 		}
+
 		NextIs(TOKEN_COMMA);
 	}
+
+	// Number of cycles may be defined after hash '#3'
+	if (TOK == TOKEN_HASH) {
+		ExpectToken(TOKEN_INT);
+		rule->cycles = (UInt8)LEX.n;			
+		NextToken();
+	}
+
 	EXP_IS_DESTINATION = false;
 	EXP_EXTRA_SCOPE = NULL;
 

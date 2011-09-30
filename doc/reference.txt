@@ -795,23 +795,45 @@ Loops
 Loops are written the following way:
 
 :::::::::::::::::::::::::::::::::::
-["for" var [":" range] ["step" step]["where" filter]]["while" cond | "until" cond] code_block
+["for" var [":" range]|["in" array] ["step" step]["where" filter]]["while" cond | "until" cond] code_block
 :::::::::::::::::::::::::::::::::::
 
 ===
 For
 ===
 
-"For" part of loop enables iteration over the specified loop variable.
+"For" part of loop enables iteration over the specified loop variable or enumerating an array elements.
 Loop variable must be an integer. All possible values will be iterated, depending on variable
 type.
 
-Range may be defined as:
+Range after ":" may be defined as:
 
 - min..max (similar to type definition, but min & max may be expressions)
 - integer type (range is defined by the type)
 - integer variable (range will be indentical to that variable)
 - function returning two results
+
+Alternatively, it is possible to use {in} keyword, to enumerate elements in specified array.
+
+The syntax is
+::::::::::::: 
+"for" var "in" array code_block
+::::::::::::: 
+
+For example:
+:::::::::::::
+use con6502
+a:array(0..113) of 0..200
+
+;Initialize the array with 0..113 
+for i:0..113 a(i) = i
+
+;compute the sum of the array
+s:0..65535 = 0
+for v in a s = s + v
+
+assert s = 6441
+:::::::::::::
  
 ==========
 Loop scope
@@ -853,9 +875,8 @@ Usually {where} contains a reference to the loop variable but it is not
 strictly required.
 
 Print random sequence in ascending order:
-
 :::::::::::::::::::::::::::::::
-for x:1..1000 where RANDOM mod 1 = 1 "[x]"
+for x:1..1000 where RANDOM mod 2 = 1 "[x]"
 :::::::::::::::::::::::::::::::
 
 =============
@@ -867,29 +888,23 @@ It is also usable without {for} part.
 
 {while} will repeat commands in the block as long as the specified condition is true. 
 ::::::::::::::::::::::::::
-while <cond>
-	<block>
+"while" cond
+	block
 ::::::::::::::::::::::::::
 	
 {until} will repeat commands in the block as long as the specified condition is not true. 
 ::::::::::::::::::::::::::
-until <cond>
-	<block>
+"until" cond
+	block
 ::::::::::::::::::::::::::
 
 {while} or {until} may be combined with {for}.
-
-::::::::::::::::::::::::::
-for <var> where <filter> 
-	<body>
-::::::::::::::::::::::::::::
-Loop body is executed only if the condition after {where} is true. 
 
 ============
 Combinations
 ============
 
-The following loop will print odd numbers until Q is pressed.
+The following loop will print odd numbers up to 10000 until Q is pressed.
  
 ::::::::::::::::::::::::::::::::::
 use atari
@@ -908,9 +923,11 @@ defining procedure arguments.
 Procedure may return any number of results. Results are specified after "->" arrow symbol.
 
 :::::::::::::::::::::::
-name ":" "proc" args -> results = code
+name ":" "proc" args -> results "=" code
+:::::::::::::::::::::::
 
-
+For example:
+:::::::::::::::::::::::::
 addw:proc i:word j:word -> k:word = 
 	k = i + j
 
@@ -918,7 +935,7 @@ add3: word proc
 	i:word
 	j:word
 	k:word
-	-> result:word
+	&minus;&gt; result:word
 =
 	result = i + j + k
 :::::::::::::::::::::::

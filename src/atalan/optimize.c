@@ -156,6 +156,9 @@ Purpose:
 					n += n2 + n3;
 					*p_var = var2;
 				}
+			} if (var->mode == INSTR_VAR && var->adr != NULL) {
+				*p_var = var->adr;
+				n = VarTestReplace(p_var, from, to);
 			}
 		}
 	}
@@ -191,19 +194,19 @@ Bool InstrUsesVar(Instr * i, Var * var)
 		|| VarUsesVar(i->arg2, var);
 }
 
-Bool VarReadsVar(Var * var)
+Bool VarReadsVar(Var * var, Var * read_var)
 {
 	if (var == NULL) return false;
 	if (var->mode == INSTR_VAR || var->mode == INSTR_CONST || var->mode == INSTR_TUPLE) return false;
 
-	return VarUsesVar(var->adr, var) || VarUsesVar(var->var, var);
+	return VarUsesVar(var->adr, read_var) || VarUsesVar(var->var, read_var);
 }
 
 Bool InstrReadsVar(Instr * i, Var * var)
 {
 	if (i == NULL || i->op == INSTR_LINE) return false;
 
-	return VarReadsVar(i->result) 
+	return VarReadsVar(i->result, var) 
 		|| VarUsesVar(i->arg1, var)
 		|| VarUsesVar(i->arg2, var);
 }
