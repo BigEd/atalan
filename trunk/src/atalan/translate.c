@@ -50,6 +50,11 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 		if (r->variant != RULE_REGISTER) return true;
 	}
 
+	if (l->variant == RULE_VALUE) {
+		if (r->variant != RULE_VALUE) return true;
+	}
+	if (r->variant == RULE_VALUE) return false;
+
 	if (l->variant == RULE_CONST) {
 		if (r->variant != RULE_CONST) return true;
 	}
@@ -72,6 +77,7 @@ Purpose:
 	UInt8 i;
 	for(i=0; i<3; i++) {
 		if (RuleArgIsMoreSpecific(&l->arg[i], &r->arg[i])) return true;
+		if (RuleArgIsMoreSpecific(&r->arg[i], &l->arg[i])) return false;
 	}
 	return false;
 }

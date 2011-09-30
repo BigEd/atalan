@@ -1008,6 +1008,7 @@ struct RuleTag {
 	RuleArg arg[3];
 	InstrBlock * to;
 	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
+	UInt8 cycles;			// How many cycles the instruction uses.
 };
 
 void RuleRegister(Rule * rule);

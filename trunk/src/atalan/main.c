@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
 
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			if (var->write >= 1 || var->read >= 1) {
-				if (var->mode == INSTR_VAR) {
+				if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var)) {
 					PrintVar(var);
 				}
 			}

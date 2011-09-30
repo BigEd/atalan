@@ -683,13 +683,17 @@ Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2,
 	if (rule != NULL) {
 		i = loc->i;
 		if (Verbose(loc->proc)) {
-			printf("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrint(i);
+			printf("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrintInline(i);
 		}
 		i->op = op;
 		i->result = result;
 		i->arg1 = arg1;
 		i->arg2 = arg2;
 		i->rule = rule;
+		if (Verbose(loc->proc)) {
+			Print(" => "); InstrPrint(i);
+		}
+
 		return true;
 	}
 	return false;
@@ -1104,15 +1108,19 @@ Purpose:
 
 Bool OptimizeVarMerge(Var * proc)
 /*
-Purpose:
-	Optimize instruction sequences like:
-
-			let a,10
-			let b,a
-			dead a
-	to
-
-			let b,10
+==========================
+Optimization: Back merging
+==========================
+Optimize instruction sequences like:
+:::::::::::
+let a,10
+let b,a
+dead a
+::::::::::::
+to
+::::::::::::
+let b,10
+::::::::::::
 
 */{
 
