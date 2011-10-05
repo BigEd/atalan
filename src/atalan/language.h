@@ -884,6 +884,8 @@ char * OpName(InstrOp op);
 
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
+void PrintBlockHeader(InstrBlock * blk);
+void PrintInstrLine(Instr * i, UInt32 n);
 
 Var * InstrFind(char * name);
 
@@ -1126,3 +1128,4 @@ extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap fro
 extern Var * VARS;				// list of variables
 extern Bool  ASSERTS_OFF;		// do not generate asserts into output code
 
+#define OPTIMIZE_COLOR (GREEN+LIGHT)

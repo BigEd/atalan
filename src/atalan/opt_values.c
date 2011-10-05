@@ -678,11 +678,13 @@ Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2,
 {
 	Instr * i;
 	Rule * rule;
+	UInt8 old_color;
 
 	rule = InstrRule2(op, result, arg1, arg2);
 	if (rule != NULL) {
 		i = loc->i;
 		if (Verbose(loc->proc)) {
+			old_color = PrintColor(GREEN+LIGHT);
 			printf("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrintInline(i);
 		}
 		i->op = op;
@@ -692,6 +694,7 @@ Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2,
 		i->rule = rule;
 		if (Verbose(loc->proc)) {
 			Print(" => "); InstrPrint(i);
+			PrintColor(old_color);
 		}
 
 		return true;
