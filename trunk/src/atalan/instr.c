@@ -826,6 +826,22 @@ void InstrPrint(Instr * i)
 	printf("\n");
 }
 
+void PrintBlockHeader(InstrBlock * blk)
+{
+	printf("#%ld/  ", blk->seq_no);
+	if (blk->label != NULL) {
+		printf("    ");
+		PrintVarVal(blk->label);
+		printf("@");
+	}
+	printf("\n");
+}
+
+void PrintInstrLine(Instr * i, UInt32 n)
+{
+	printf("%3ld| ", n);
+	InstrPrintInline(i);
+}
 
 void CodePrint(InstrBlock * blk)
 {
@@ -833,16 +849,10 @@ void CodePrint(InstrBlock * blk)
 	UInt32 n;
 	while (blk != NULL) {
 		n = 1;
-		printf("#%ld/  ", blk->seq_no);
-		if (blk->label != NULL) {
-			printf("    ");
-			PrintVarVal(blk->label);
-			printf("@");
-		}
-		printf("\n");
+		PrintBlockHeader(blk);
 		for(i = blk->first; i != NULL; i = i->next, n++) {
-			printf("%3ld| ", n);
-			InstrPrint(i);
+			PrintInstrLine(i, n);
+			PrintEOL();
 		}
 
 		blk = blk->next;
