@@ -988,11 +988,13 @@ Purpose:
 {
 	Bool uses = false;
 	if (var != NULL && test_var != NULL) {
+
 		if (test_var->mode == INSTR_CONST) return false;
 
 		if (var == test_var) {
 			return true;
 		} else {
+
 			if (test_var->mode == INSTR_TUPLE) {
 				return VarUsesVar(var, test_var->adr) || VarUsesVar(var, test_var->var);
 			} else {

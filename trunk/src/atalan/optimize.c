@@ -30,7 +30,7 @@ void VarIncRead(Var * var)
 			VarIncRead(var->adr);
 			VarIncRead(var->var);			
 		} else {
-			if (var->adr != NULL) VarIncRead(var->adr);
+			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
 		}
 	}
 }
@@ -48,7 +48,7 @@ void VarIncWrite(Var * var)
 			VarIncWrite(var->adr);
 			VarIncWrite(var->var);
 		} else {
-			if (var->adr != NULL) VarIncRead(var->adr);
+			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
 		}
 	}
 }
@@ -132,11 +132,11 @@ Purpose:
 	Var * v2, * v3;
 
 	var = *p_var;
-	if (var == from) {
-		*p_var = to;
-		n++;
-	} else {
-		if (var != NULL) {
+	if (var != NULL) {
+		if (var == from || (var->mode == INSTR_CONST && from->mode == INSTR_CONST && var->n == from->n)) {
+			*p_var = to;
+			n++;
+		} else {
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
 				v2 = var->adr;
 				v3 = var->var;
@@ -201,14 +201,18 @@ Bool VarReadsVar(Var * var, Var * read_var)
 
 	return VarUsesVar(var->adr, read_var) || VarUsesVar(var->var, read_var);
 }
+Bool SameVar(Var * l, Var * r)
+{
+	return l != NULL && r != NULL && (l == r || (l->mode == INSTR_CONST && r->mode == INSTR_CONST && l->n == r->n));
+}
 
 Bool InstrReadsVar(Instr * i, Var * var)
 {
 	if (i == NULL || i->op == INSTR_LINE) return false;
 
 	return VarReadsVar(i->result, var) 
-		|| VarUsesVar(i->arg1, var)
-		|| VarUsesVar(i->arg2, var);
+		|| SameVar(i->arg1, var) || VarUsesVar(i->arg1, var)
+		|| SameVar(i->arg2, var) || VarUsesVar(i->arg2, var);
 }
 
 UInt32 InstrVarUseCount(Instr * from, Instr * to, Var * var)

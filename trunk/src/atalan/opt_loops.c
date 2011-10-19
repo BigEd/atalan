@@ -9,6 +9,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+
+static Bool G_VERBOSE;
+
 Var * FindMostUsedVar()
 /*
 Purpose:
@@ -130,17 +133,40 @@ UInt32 NumberBlocks(InstrBlock * block)
 	return seq_no;
 }
 
-void VarSetCurrentVal(Var * var, Var * val)
+Bool VarContains(Var * var, Var * eq)
 {
-	if (var == NULL) return;
-	if (var->mode == INSTR_CONST) return;
+	Var * v, * v2;
+	if (var == NULL) return false;
 
-	if (var->mode == INSTR_TUPLE) {
-		VarSetCurrentVal(var->adr, val);
-		VarSetCurrentVal(var->var, val);
+	v2 = var;
+
+retry:
+	if (v2 == eq) return true;
+	for(v = eq; v->src_i != NULL && v->src_i->op == INSTR_LET; v = v->src_i->arg1) {
+		if (v2 == v) return true;
 	}
-	var->current_val = val;
-	if (var->mode == INSTR_VAR && var->adr != NULL) VarSetCurrentVal(var->adr, val);
+	if (v2->src_i != NULL && v2->src_i->op == INSTR_LET) {
+		v2 = v2->src_i->arg1;
+		if (v2 != var) goto retry;
+	}
+
+//	if (var->src_i != NULL) {
+//		if (var->src_i->op == INSTR_LET) {
+//			if (VarContains(eq, var->src_i->arg1)) return true;
+//		}
+//	}
+//	if (eq->src_i != NULL) {
+//		if (eq->src_i->op == INSTR_LET) {
+//			if (var == eq->src_i->arg1) return true;
+//		}
+//	}
+	return false;
+}
+
+UInt16 LetCycles(Var * result, Var * arg1)
+{
+	Rule * rule = InstrRule2(INSTR_LET, result, arg1, NULL);
+	return rule->cycles;
 }
 
 Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * reg, Bool * p_init)
@@ -157,25 +183,29 @@ Arguments:
 	>p_init	set to true, if we need to init the register with the variable value before the loop
 */{
 	Var * prev_var;
-	Int32 q, q1;
+	Int32 q;
+	UInt16 changed;
 	InstrBlock * blk, * exit;
 	Instr * i, ti;
 	UInt32 n;
-	Bool spill, first_init, mod_reg;
+	Bool first_init, mod_reg;
 	UInt16 reg_use;		// number of times, the value in the register has been used since last loaded
 	Rule * rule;
+	Instr initial;
 
 	exit = end->next;
 
-	// At the begining, the quotiend is 0.
+	// At the begining, the quotient is 0.
 	ResetValues();
+	initial.op = INSTR_LET; initial.result = reg; initial.arg1 = top_var;
+	VarSetSrcInstr(reg, &initial);
+
 	q = 0;
 
 	// We expect, we will initialize the register with the variable value before entering the loop.
 	// This operation is not added to quotient, as it should not affect the speed significantly.
 
 	*p_init = true;
-	VarSetCurrentVal(reg, top_var);	// we expect initialization by top_var before loop
 	prev_var = NULL;			// previous variable contained in the register
 								// this variable must be loaded, when instruction using the register is encountered
 								// (if it is not top_var)
@@ -193,49 +223,20 @@ Arguments:
 			
 			// If there is jump except last instruction
 			if (IS_INSTR_JUMP(i->op) && (i != blk->last || blk != end)) {
-				*p_init = false;
+//				*p_init = false;
 			}
 
 			mod_reg = VarModifiesVar(i->result, reg);
 
 			if (i->op == INSTR_LET) {
-
-
 				// If this is let instruction that initializes a variable to value it already contains,
 				// we will be able to remove it completely.
-				if (i->result->current_val == i->arg1 || i->result == i->arg1->current_val || (i->result->current_val != NULL && i->result->current_val == i->arg1->current_val)) {
+				if (!InVar(i->arg1) && !OutVar(i->result) && VarContains(i->result, i->arg1)) {
 					if (mod_reg) first_init = false;
 					ASSERT(i->rule->cycles > 0);
 					q -= i->rule->cycles;
 					continue;
 				}
-
-/*
-				// If we assign register to value and it currently contains the value, we will be able to remove the instruction
-				if (i->result == top_var && i->arg1 == reg) {
-					// Register currently contains the replaced variable
-					if (reg->current_val == top_var) {
-						q -= 3;
-						continue;
-					}
-				}
-*/
-/*
-				// Result is the top register and we are setting it to top value
-				if (i->result == reg && i->arg1 == top_var) {
-					if (reg->current_val == top_var) {
-						q -= 3;
-						continue;
-					} else {
-						prev_var = reg->current_val;
-						reg->current_val = top_var;
-						continue;
-					}
-				}
-*/
-				VarSetCurrentVal(i->result, i->arg1);
-			} else {
-				VarSetCurrentVal(i->result, NULL);
 			}
 
 			// Instruction uses the register
@@ -253,13 +254,20 @@ Arguments:
 			// Instruction uses top_var and the register does not currently contain the top_var value,
 			// we need to load the value to register first.
 			if (InstrReadsVar(i, top_var)) {
-				if (reg->current_val != top_var) {
-					q += 3;
+				if (!VarContains(reg, top_var)) {
+					if (!(i->op == INSTR_LET && i->result == reg && i->arg1 == top_var)) {
+						q += LetCycles(reg, top_var);
+					}
 					reg_use = 0;
+					// We may not had to add the load, but we still can not remove this instruction, so do not
+					// continue the processing in a normal way, as it would leed to removing the instruction.
+					goto next;
 				}
 			}
 
-			// Instruction modifies the register
+			// Instruction modifies the register.
+			// We may need to store the value of the register in case it has been modified.
+
 			if (mod_reg) {
 				if (reg_use == 0) {
 					if (first_init) {
@@ -270,52 +278,74 @@ Arguments:
 				reg_use = 0;
 			}
 
-			// If current instruction uses the register, and it is
-			// we need to save the register and load some other.
+			// If we assign the register back to variable, we may remove this instruction
+			if (i->op == INSTR_LET && (i->result == top_var && i->arg1 == reg)) {
+				q -= i->rule->cycles;
+				continue;
+			} else {
 
-			if (InstrUsesVar(i, reg) && reg->current_val != top_var) {
-				if (prev_var != NULL) {
-					q += 3;
+				// If current instruction uses the register, and it is
+				// we need to save the register and load some other.
+
+				if (InstrUsesVar(i, reg) && !VarContains(reg, top_var)) {
+					if (prev_var != NULL) {
+						q += LetCycles(reg, top_var);
+					}
 				}
-			}
-
-			memcpy(&ti, i, sizeof(Instr));
-
-			q1 = VarTestReplace(&ti.result, top_var, reg);
-			q1 += VarTestReplace(&ti.arg1, top_var, reg);
-			q1 += VarTestReplace(&ti.arg2, top_var, reg);
-
-			// If the instruction was changed (it used top_var),
-			// test, whether we are able to compile it (some register/adress mode combinations must not be available)
-
-			if (q1 != 0) {
-				rule = InstrRule(&ti);
-				if (rule == NULL) {
-					q = 1;		// do not use this register, as invalid code would get generated
-					goto done;
-				}
-				// If there is currently not the value of top_var in replaced register,
-				// we would have to load it
-				if (reg->current_val != top_var && prev_var != NULL) {
-					q += 3;
-				}
-				ASSERT(rule->cycles > 0);
-				q -= i->rule->cycles;			// we remove the current instruction
-				q += rule->cycles;              // and add new instruction
 			}
 
 			// Will it be necessary to spill?
 			// We use the variable (array) that is stored to register
 
-			spill = InstrSpill(i, top_var);
-			if (spill) {
-				q += 4;
+			if (InstrSpill(i, top_var)) {
+				q += LetCycles(top_var, reg);
+			}
+
+			memcpy(&ti, i, sizeof(Instr));
+			
+			changed = VarTestReplace(&ti.result, top_var, reg);
+			changed += VarTestReplace(&ti.arg1, top_var, reg);
+			changed += VarTestReplace(&ti.arg2, top_var, reg);
+
+			// If the instruction was changed (it used top_var),
+			// test, whether we are able to compile it (some register/adress mode combinations must not be available)
+
+			if (changed > 0) {
+				if (ti.op == INSTR_LET && ti.result == ti.arg1) {
+					q -= i->rule->cycles;
+					continue;
+				} 
+				rule = InstrRule(&ti);
+				if (rule == NULL) {
+					if (top_var->mode != INSTR_CONST) {
+						q = 1;		// do not use this register, as invalid code would get generated
+						goto done;
+					} else {
+						
+					}
+				} else {
+					ASSERT(rule->cycles > 0);
+					if (i->rule->cycles >= rule->cycles) {
+						q -= i->rule->cycles;			// we remove the current instruction
+						q += rule->cycles;              // and add new instruction
+					}
+				}
+			}
+next:
+			ResetValue(i->result);
+			if (i->result == top_var) {
+				VarSetSrcInstr(reg, &initial);
+			} else {
+				VarSetSrcInstr(i->result, i);
 			}
 		} // instr
 	} // blk
-	// Value of register is not known at the end of loop, we need to load it before first use
-	if (reg->current_val == NULL) {
-		q += 3;
+
+	// Value of register is not known at the end of loop, but it is not initialized at the beginning of the loop
+	// We must load it before first use.
+
+	if (!*p_init) {
+		q += LetCycles(reg, top_var);
 	}
 done:
 	return q;
@@ -368,17 +398,6 @@ void LoopMoveToPrologue(Var * proc, InstrBlock * header, InstrBlock * from, Inst
 
 //	printf("========== move to prologue ===========\n");
 //	PrintProc(proc);
-}
-
-void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
-	Instr * i = MemAllocStruct(Instr);
-	i->op = op;
-	i->result = result;
-	i->arg1 = arg1;
-	i->arg2 = arg2;
-	i->rule = InstrRule(i);
-	LoopMoveToPrologue(proc, header, NULL, i, i);
 }
 
 Bool VarIsLoopDependent(Var * var, VarSet * liveset)
@@ -729,8 +748,35 @@ void CheckInstr(Instr * i)
 	}
 }
 
+void PrintInsert(Instr * i)
+{
+	UInt8 color;
+	if (G_VERBOSE) {
+		color = PrintColor(OPTIMIZE_COLOR);
+		Print(" + | ");
+		EmitInstrInline(i);
+		PrintColor(color);
+		PrintEOL();
+	}
+}
+
+void LoopInsertPrologue(Var * proc, InstrBlock * header, InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+
+	Instr * i = MemAllocStruct(Instr);
+	i->op = op;
+	i->result = result;
+	i->arg1 = arg1;
+	i->arg2 = arg2;
+	i->rule = InstrRule(i);
+	LoopMoveToPrologue(proc, header, NULL, i, i);
+	PrintInsert(i);
+}
+
+
 void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
+
 	Instr * i = MemAllocStruct(Instr);
 	i->op = op;
 	i->result = result;
@@ -739,29 +785,28 @@ void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result,
 	i->rule = InstrRule(i);
 
 	CheckInstr(i);
+	PrintInsert(i);
 	InstrAttach(blk, before, i, i);
 }
 
 void PrintChange(Instr * i)
 {
 	UInt8 color;
-	color = PrintColor(OPTIMIZE_COLOR);
-	PrintColor(color);
-}
-
-void PrintInsert(Instr * i)
-{
-	UInt8 color;
-	color = PrintColor(OPTIMIZE_COLOR);
-	PrintColor(color);
+	if (G_VERBOSE) {
+		color = PrintColor(OPTIMIZE_COLOR);
+		Print(" => "); EmitInstrInline(i);
+		PrintColor(color);
+	}
 }
 
 void PrintDelete()
 {
 	UInt8 color;
-	color = PrintColor(OPTIMIZE_COLOR);
-	Print(" => deleted");
-	PrintColor(color);
+	if (G_VERBOSE) {
+		color = PrintColor(OPTIMIZE_COLOR);
+		Print(" => void"); PrintEOL();
+		PrintColor(color);
+	}
 }
 
 Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
@@ -787,19 +832,21 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 */
 {
-	Instr * i2;
-	Var * top_var, * reg, * top_reg, * current_val;
-	UInt16 r, regi;
+	Instr * i, initial, ti, * last_mod;
+	Var * top_var, * reg, * top_reg, * orig_result;
+	UInt16 r, regi, changed;
 	UInt32 var_size;
-	Int32 q, top_q;
+	Int32 q, top_q, n;
 	Bool init, top_init;
-	InstrBlock * blk;
+	InstrBlock * blk, * last_mod_blk;
 	InstrBlock * exit;
 	Bool var_modified;
 	Bool verbose;
+	Rule * rule;
+
 	exit = end->next;
 
-	verbose = Verbose(proc);
+	G_VERBOSE = verbose = Verbose(proc);
 	VarResetUse();
 	InstrVarUse(header, exit);
 	InstrVarLoopDependent(header, end);
@@ -813,9 +860,9 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 	while(top_var = FindMostUsedVar()) {
 
-		if (Verbose(proc)) {
-			Print("Most user var: "); PrintVar(top_var); PrintEOL();
-		}
+//		if (Verbose(proc)) {
+//			Print("Most user var: "); PrintVar(top_var); PrintEOL();
+//		}
 
 		top_var->read = top_var->write = 0;
 		var_size = VarByteSize(top_var);
@@ -830,21 +877,12 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		for(regi = 0; regi < CPU->REG_CNT; regi++) {
 
 			reg = CPU->REG[regi];
-			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input registers
+			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input/output registers
 			if (reg->type->range.max == 1) continue;						// exclude flag registers
-			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different size
-			if (FlagOn(reg->submode, SUBMODE_OUT)) continue;				// out registers can not be used to replace variables
+			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 
-			if (Verbose(proc)) {
-				Print("  Testing register: "); PrintVarName(reg); PrintEOL();
-			}
-
 			q = UsageQuotient(header, end, top_var, reg, &init);
-
-//			if (VERBOSE) {
-//				printf("     Quotient: %d\n", q);
-//			}
 
 			if (q < top_q) {
 				top_q = q;
@@ -857,7 +895,8 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		reg = top_reg;
 		if (Verbose(proc)) {
-			Print("Var: "); PrintVar(top_var); PrintEOL();
+			printf("*** Loop %d..%d\n", header->seq_no, end->seq_no);
+			Print("Var: "); PrintVarVal(top_var); PrintEOL();
 			Print("Register: "); PrintVarName(top_reg); PrintEOL();
 			printf("Quotient: %d\n", top_q);
 		}
@@ -866,60 +905,109 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		//=== Replace the use of registers
 	
+		ResetValues();
+		initial.op = INSTR_LET; initial.result = top_reg; initial.arg1 = top_var;
+
 		var_modified = false;
-		current_val = NULL;
 		// Generate instruction initializing the register used to replace the variable
 		// before the start of the loop.
 		// We only do this, if the variable is not initialized inside the loop.
- 		if (FlagOn(top_var->flags, VarUninitialized) || top_init) {
+
+//		if (FlagOn(top_var->flags, VarUninitialized) && !top_init) {
+//			top_init = true;
+//		}
+
+ 		if (top_init) {
 			LoopInsertPrologue(proc, header, INSTR_LET, top_reg, top_var, NULL);
-			current_val = top_var;		// to prevent using the register in subsequent steps
+			VarSetSrcInstr(top_reg, &initial);
 		}
 		r = 0;
-		
+
+		last_mod = NULL;
+
 		for(blk = header; blk != exit; blk = blk->next) {
 			if (verbose) PrintBlockHeader(blk);
-			for(i2 = blk->first; i2 != NULL; i2 = i2->next) {
-
-				if (verbose) InstrPrint(i2);
-
-				if (i2->op == INSTR_LINE) continue;
-
-				if (InstrSpill(i2, top_var)) {
-					InstrInsertRule(blk, i2, INSTR_LET, top_var, top_reg, NULL);
-				}
-
-				// We currently do not have the value in the register, and it is going to be used,
-				// so load it
-				if (current_val != top_var && InstrReadsVar(i2, top_var)) {
-					InstrInsertRule(blk, i2, INSTR_LET, top_reg, top_var, NULL);
-					current_val = top_var;
-				}
-
-				// We need to store the value or the register back to variable (register is going to be used for some other purpose)
-				if (i2->result == top_reg) {
-					if (i2->arg1 != top_var || current_val != top_var) {
-						// The register does not currently contain the top_var
-						InstrInsertRule(blk, i2, INSTR_LET, top_var, top_reg, NULL);
-						current_val = i2->arg1;
-					}
-				}
-
-				r += VarReplace(&i2->result, top_var, top_reg);
-				VarReplace(&i2->arg1, top_var, top_reg);
-				VarReplace(&i2->arg2, top_var, top_reg);
-
-				if (i2->op == INSTR_LET && i2->result == i2->arg1) {
-					i2 = InstrDelete(blk, i2);
-					if (i2 == NULL) break;
+			for(i = blk->first, n=0; i != NULL; i = i->next) {
+retry:
+				n++;
+				if (i->op == INSTR_LINE) {
+					if (verbose) { PrintInstrLine(n); EmitInstrInline(i); PrintEOL(); }
 					continue;
 				}
 
+				// Delete unnecessary assignment
+				if (i->op == INSTR_LET) {
+					if (!InVar(i->arg1) && !OutVar(i->result) && VarContains(i->result, i->arg1)) {
+del:
+						if (verbose) { PrintInstrLine(n); EmitInstrInline(i); }
+del2:					if (verbose) { PrintDelete(); }
+						i = InstrDelete(blk, i);
+						if (i == NULL) break;
+						goto retry;	//continue;
+					}
+				}
 
-				i2->rule = InstrRule(i2);
-				CheckInstr(i2);
+				// Load the register with variable if necessary
+				if (InstrReadsVar(i, top_var)) {
+					if (!VarContains(top_reg, top_var)) {
+						if (!(i->op == INSTR_LET && i->result == top_reg && i->arg1 == top_var)) {
+							InstrInsertRule(blk, i, INSTR_LET, top_reg, top_var, NULL);
+						}
+					}
+				}
+
+				if (i->op == INSTR_LET && (i->result == top_var && i->arg1 == top_reg)) {
+					goto del;
+				}
+
+				if (InstrSpill(i, top_var)) {
+					InstrInsertRule(blk, i, INSTR_LET, top_var, top_reg, NULL);
+				}
+
+				if (verbose) { PrintInstrLine(n); EmitInstrInline(i); }
+
+				orig_result = i->result;
+
+				memcpy(&ti, i, sizeof(Instr));
+				changed = VarTestReplace(&ti.result, top_var, reg);
+				r += changed;
+				changed += VarTestReplace(&ti.arg1, top_var, reg);
+				changed += VarTestReplace(&ti.arg2, top_var, reg);
+
+				if (changed > 0) {
+
+					if (i->op == INSTR_LET && i->result == i->arg1) {
+						goto del2;
+					}
+
+					rule = InstrRule(&ti);
+					if (rule != NULL && (i->rule->cycles >= rule->cycles)) {
+						VarReplace(&i->result, top_var, top_reg);
+						VarReplace(&i->arg1, top_var, top_reg);
+						VarReplace(&i->arg2, top_var, top_reg);
+						i->rule = rule;
+						CheckInstr(i);
+						PrintChange(i);
+					}
+
+				}
+
 				if (verbose) PrintEOL();
+				ResetValue(i->result);
+				if (orig_result == top_var) {
+					VarSetSrcInstr(i->result, &initial);
+					last_mod = i; last_mod_blk = blk;
+				} else {
+					VarSetSrcInstr(i->result, i);
+				}
 			}
+		}
+
+		// Value of register is not known at the end of loop, but it is not initialized at the beginning of the loop
+		// We must load it before first use.
+
+		if (!top_init && last_mod) {
+			InstrInsertRule(last_mod_blk, last_mod->next, INSTR_LET, top_var, top_reg, NULL);
 		}
 
 		// If we replaced some destination by the register, store the register to destination
@@ -999,9 +1087,9 @@ Purpose:
 		if (nb->to != NULL && nb->to->loop_end == nb) header = nb->to;
 
 		if (header != NULL) {
-			if (Verbose(proc)) {
-				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
-			}
+//			if (Verbose(proc)) {
+//				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
+//			}
 			loop.header = header;
 			loop.end    = nb;
 //			OptimizeLoopInvariants(proc, &loop);

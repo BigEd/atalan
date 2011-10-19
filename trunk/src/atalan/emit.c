@@ -82,7 +82,9 @@ void EmitByte(char c)
 		if (Verbose(NULL)) {
 			putchar(c);	//printf("%c", c);
 		}
-		putc(c, G_OUTPUT);
+		if (G_OUTPUT != NULL) {
+			putc(c, G_OUTPUT);
+		}
 	}
 }
 
@@ -123,7 +125,9 @@ void EmitStr(char * str)
 			if (Verbose(NULL)) {
 				printf("%s", str);
 			}
-			fputs(str, G_OUTPUT);
+			if (G_OUTPUT) {
+				fputs(str, G_OUTPUT);
+			}
 		}
 	}
 }
@@ -354,7 +358,6 @@ void EmitInstr2(Instr * instr, char * str)
 		}
 		EmitChar(c);
 	}
-	EmitChar(EOL);
 	if (instr->op == INSTR_LINE) {
 		PrintColor(RED+GREEN+BLUE);
 	}
@@ -363,6 +366,26 @@ void EmitInstr2(Instr * instr, char * str)
 extern Bool RULE_MATCH_BREAK;
 
 Bool EmitInstr(Instr * i)
+{
+	Rule * rule;
+	Instr * to;
+
+	rule = InstrRule(i);
+
+	if (rule != NULL) {
+		for(to = rule->to->first; to != NULL; to = to->next) {
+			EmitInstr2(i, to->arg1->str);
+			EmitChar(EOL);
+		}
+		return true;
+	} else {
+		InternalError("CPU does not support instruction");
+		InstrPrint(i);
+ 		return false;
+	}
+}
+
+Bool EmitInstrInline(Instr * i)
 {
 	Rule * rule;
 	Instr * to;

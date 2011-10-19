@@ -583,7 +583,7 @@ rule add %A:int,%B:sbyte,%C:sbyte = instr
 ;s16 +=1
 rule add %A:byte2,%A,1 = instr
   inc %A$0
-  ifne _lab1, Z, 0
+  ifeq _lab1, Z, 0
   inc %A$1
   label _lab1
 
