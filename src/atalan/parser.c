@@ -29,7 +29,6 @@ Syntax:
 Var *  STACK[STACK_LIMIT];
 UInt16 TOP;
 
-GLOBAL Bool  SYSTEM_PARSE;  // if set to true, we are parsing system information and line tokens do not get generated
 GLOBAL Bool  USE_PARSE;
 
 Type * RESULT_TYPE;
@@ -43,6 +42,8 @@ Type   EXP_TYPE;			// Type returned by expression
 
 LineNo  OP_LINE_NO;
 LinePos OP_LINE_POS;				// Position of last parsed binary operator
+
+Bool    PARSING_RULE = false;
 
 // Is modified as the expression gets generated
 
@@ -986,6 +987,7 @@ void ReportSimilarNames(char * name)
 	Var * scope;
 	UInt8 proc_cnt;
 	Bool printed = false;
+	UInt16 len;
 
 	v = NULL;
 
@@ -993,28 +995,34 @@ void ReportSimilarNames(char * name)
 	// There may be up to 5 such names.
 	// We are first trying to find the names within scope.
 
-	SimmilarNamesInit(&names);
-	for(scope = SCOPE; scope != NULL; scope = scope->scope) {
-		FOR_EACH_LOCAL(scope, v)
-			SimmilarNamesAdd(&names, name, v);
-		NEXT_LOCAL
-	}
+	len = StrLen(name);
 
-	if (names.cnt > 0) {
-		Print("Did you mean ");
-		if (names.cnt > 5) names.cnt = 5;
-		for(i=0; i<names.cnt; i++) {
-			if (i>0) {
-				if (i == names.cnt-1) {
-					Print(" or ");
-				} else {
-					Print(" ,");
-				}
-			}
-			PrintQuotedVarName(names.min[i]);
+	// Do not try to suggest simmilar names, if the variable consists of only one character
+
+	if (len > 1) {
+		SimmilarNamesInit(&names);
+		for(scope = SCOPE; scope != NULL; scope = scope->scope) {
+			FOR_EACH_LOCAL(scope, v)
+				SimmilarNamesAdd(&names, name, v);
+			NEXT_LOCAL
 		}
-		Print("?\n");
-		printed = true;
+
+		if (names.cnt > 0) {
+			Print("Did you mean ");
+			if (names.cnt > 5) names.cnt = 5;
+			for(i=0; i<names.cnt; i++) {
+				if (i>0) {
+					if (i == names.cnt-1) {
+						Print(" or ");
+					} else {
+						Print(" ,");
+					}
+				}
+				PrintQuotedVarName(names.min[i]);
+			}
+			Print("?\n");
+			printed = true;
+		}
 	}
 
 	// We are trying to locate same variable in different scope
@@ -2727,7 +2735,7 @@ retry:
 			var->line_no = LINE_NO;
 			var->line_pos = TOKEN_POS;
 			var->file    = SRC_FILE;
-			if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
+			if (ParsingSystem()) submode |= SUBMODE_SYSTEM;
 			existed = false;
 			var->submode = submode;
 		} else {
@@ -2806,7 +2814,7 @@ parsed:
 				var->line_no = LINE_NO;
 	//			var->line_pos = TOKEN_POS;
 				var->file    = SRC_FILE;
-				if (SYSTEM_PARSE) submode |= SUBMODE_SYSTEM;
+				if (ParsingSystem()) submode |= SUBMODE_SYSTEM;
 				existed = false;
 				var->submode = submode;
 				vars[j] = var;
@@ -3391,6 +3399,11 @@ parse_byte_item:
 	}
 }
 
+Bool ParsingRule()
+{
+	return PARSING_RULE;
+}
+
 void ParseRule()
 /*
 <instr> "=" ["#" <instr>]+  | "emit"+
@@ -3401,8 +3414,6 @@ void ParseRule()
 	Rule * rule;
 	char buf[255];
 	char *s, *d, c;
-	Bool old_parse;
-//	Var * scope, *old_scope;
 
 	op = ParseInstrOp();
 	if (TOK == TOKEN_ERROR) return;
@@ -3412,8 +3423,7 @@ void ParseRule()
 	rule->line_no = LINE_NO;
 	rule->file    = SRC_FILE;
 
-	old_parse = SYSTEM_PARSE;
-	SYSTEM_PARSE = true;
+	PARSING_RULE = true;
 
 	// Parse three parameters
 
@@ -3505,7 +3515,7 @@ void ParseRule()
 	if (TOK != TOKEN_ERROR) {
 		RuleRegister(rule);
 	}
-	SYSTEM_PARSE = old_parse;
+	PARSING_RULE = false;
 	
 }
 
@@ -4062,7 +4072,6 @@ void ParseInit()
 	MemEmptyVar(G_BLOCKS);
 	G_BLOCK = &G_BLOCKS[0];
 	G_BLOCK->command = TOKEN_PROC;
-	SYSTEM_PARSE = true;
 	USE_PARSE = false;
 	EXP_EXTRA_SCOPE = NULL;
 	OP_LINE_POS = 0;

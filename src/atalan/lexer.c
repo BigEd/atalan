@@ -679,6 +679,11 @@ void ExpectToken(Token tok)
 ************************************************/
 //$B
 
+Bool ParsingSystem()
+{
+	return SRC_FILE == NULL || FlagOn(SRC_FILE->submode, SUBMODE_SYSTEM);
+}
+
 ParseState * ParseStateLabel()
 {
 	ParseState * s;
@@ -726,18 +731,22 @@ FILE * FindFile2(char * base_dir, char * name, char * ext)
 	return f;
 }
 
-void PlatformPath(char * path, char * name)
+void SystemSubdir(char * path, char * subdir)
 {
 	char sep[2];
 	sep[0] = DIRSEP;
 	sep[1] = 0;
+
+	strcpy(path, SYSTEM_DIR);
+	strcat(path, subdir);
+	strcat(path, sep);
+
 }
 
 FILE * FindFile(char * name, char * ext, char * path)
 {
 	FILE * f;
 	char sep[2];
-//	char path[MAX_PATH_LEN];
 
 	sep[0] = DIRSEP;
 	sep[1] = 0;
@@ -759,9 +768,7 @@ FILE * FindFile(char * name, char * ext, char * path)
 	// %SYSTEM%/platform/%PLATFORM%/
 
 	if (f == NULL) {
-		strcpy(path, SYSTEM_DIR);
-		strcat(path, "platform");
-		strcat(path, sep);
+		SystemSubdir(path, "platform");
 		if (*PLATFORM != 0) {
 			strcat(path, PLATFORM);
 		} else {
@@ -772,7 +779,6 @@ FILE * FindFile(char * name, char * ext, char * path)
 		if (f != NULL) {
 			if (*PLATFORM == 0) {
 				strcpy(PLATFORM, name);
-				SYSTEM_PARSE = true;
 			}
 		}
 	}
@@ -780,9 +786,7 @@ FILE * FindFile(char * name, char * ext, char * path)
 	// %SYSTEM%/cpu/%name%/
 
 	if (f == NULL) {
-		strcpy(path, SYSTEM_DIR);
-		strcat(path, "cpu");
-		strcat(path, sep);
+		SystemSubdir(path, "cpu");
 		strcat(path, name);
 		strcat(path, sep);
 		f = FindFile2(path, name, ext);
@@ -791,9 +795,7 @@ FILE * FindFile(char * name, char * ext, char * path)
 	// %SYSTEM%/
 
 	if (f == NULL) {
-		strcpy(path, SYSTEM_DIR);
-		strcat(path, "module");
-		strcat(path, sep);
+		SystemSubdir(path, "module");
 		f = FindFile2(path, name, ext);
 	}
 
@@ -867,7 +869,6 @@ Purpose:
 
 	// When parsing system files, use SYSTEM folder
 	// Build the file name to compare for duplicity.
-	// Maybe we may try to use FindFile.
 
 	f = FindFile(name, ".atl", path);
 
@@ -908,6 +909,11 @@ Purpose:
 		file_var = VarAlloc(INSTR_SRC_FILE, filename, 0);
 		file_var->n    = 0;
 		file_var->scope = SRC_FILE;
+
+		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
+			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);
+		}
+
 		SRC_FILE = file_var;
 
 		if (parse_options) {

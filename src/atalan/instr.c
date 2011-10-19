@@ -837,10 +837,9 @@ void PrintBlockHeader(InstrBlock * blk)
 	printf("\n");
 }
 
-void PrintInstrLine(Instr * i, UInt32 n)
+void PrintInstrLine(UInt32 n)
 {
 	printf("%3ld| ", n);
-	InstrPrintInline(i);
 }
 
 void CodePrint(InstrBlock * blk)
@@ -851,7 +850,8 @@ void CodePrint(InstrBlock * blk)
 		n = 1;
 		PrintBlockHeader(blk);
 		for(i = blk->first; i != NULL; i = i->next, n++) {
-			PrintInstrLine(i, n);
+			PrintInstrLine(n);
+			InstrPrintInline(i);
 			PrintEOL();
 		}
 

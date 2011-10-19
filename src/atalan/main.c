@@ -84,8 +84,6 @@ Purpose:
 	}
 
 	InitCPU();
-
-	SYSTEM_PARSE = false;
 }
 
 int main(int argc, char *argv[])
@@ -248,9 +246,7 @@ int main(int argc, char *argv[])
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
 
 	GenInternal(INSTR_PROLOGUE, NULL, NULL, NULL);
-	SYSTEM_PARSE = false;
 	if (!Parse(filename, true, false)) goto failure;
-	SYSTEM_PARSE = true;
 
 	if (*PLATFORM == 0) {
 		SyntaxError("No target platform defined");

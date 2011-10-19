@@ -93,7 +93,7 @@ void GenLine()
 	// Line instructions are used to be able to reference back from instructions to line of source code.
 	// That way, we can report logical errors detected in instructions to user.
 
-	if (!SYSTEM_PARSE && CURRENT_LINE_NO != LINE_NO) {
+	if (!ParsingRule() && !ParsingSystem() && CURRENT_LINE_NO != LINE_NO) {
 		InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
 		line = LINE;
 		line_no = LINE_NO;
@@ -305,7 +305,7 @@ Argument:
 	macro	Variable containing the macro to expand.
 	args	Macro arguments (according to macro header).
 */{
-	Instr * i;
+	Instr * i, * i2;
 	InstrOp op;
 	Var * result, * arg1, * arg2, * r;
 	VarSet locals;
@@ -320,8 +320,16 @@ Argument:
 	for(i = blk->first; i != NULL; i = i->next) {
 		op = i->op;
 		local_result = false;
-		// Line instructions are not processed in any special way (TODO: We should mark them as macro generated)
+
+		// In case, we are generating variable (means we are inlining a procedure), generate lines too
 		if (op == INSTR_LINE) {
+			if (macro->type->variant == TYPE_PROC) {
+				InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
+				i2 = INSTR->prev;
+				i2->result    = i->result;
+				i2->line_no   = i->line_no;
+				i2->line      = StrAlloc(i->line);
+			}
 
 		// Macro may contain NOP instruction, we do not generate it to result
 		} else if (op != INSTR_VOID) {

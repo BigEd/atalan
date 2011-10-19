@@ -172,7 +172,6 @@ void ResetValues()
 {
 	Var * var;
 	FOR_EACH_VAR(var)
-		var->current_val = NULL;
 		var->src_i       = NULL;
 		ExpFree(&var->dep);		// TODO: Release the expression objects
 	NEXT_VAR

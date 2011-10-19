@@ -131,7 +131,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			// Get argument and print it's property
 			if (c>='A' && c<='Z') {
 				c = c - 'A';
-				if (c > ERR_ARG_POS) {
+				if (c >= ERR_ARG_POS) {
 					c = ERR_ARG_POS + MAX_ERR_ARG_COUNT - c;
 				} else {
 					c = ERR_ARG_POS - c;
