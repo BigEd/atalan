@@ -185,7 +185,7 @@ Arguments:
 	Var * prev_var;
 	Int32 q;
 	UInt16 changed;
-	InstrBlock * blk, * exit;
+	InstrBlock * blk, * blk_exit;
 	Instr * i, ti;
 	UInt32 n;
 	Bool first_init, mod_reg;
@@ -193,7 +193,7 @@ Arguments:
 	Rule * rule;
 	Instr initial;
 
-	exit = end->next;
+	blk_exit = end->next;
 
 	// At the begining, the quotient is 0.
 	ResetValues();
@@ -213,7 +213,7 @@ Arguments:
 	first_init = true;
 
 	// Compute usage quotient
-	for(blk = header; blk != exit; blk = blk->next) {
+	for(blk = header; blk != blk_exit; blk = blk->next) {
 		for(i = blk->first, n = 0; i != NULL; i = i->next, n++) {
 
 			if (i->op == INSTR_LINE) continue;
@@ -619,13 +619,13 @@ Bool VarInvariant2(Var * proc, Var * var, Loc * loc, Loop * loop)
 
 void PrintLoopInvariants(Loop * loop)
 {
-	InstrBlock * blk, * exit;
+	InstrBlock * blk, * blk_exit;
 	Instr * i;
 	UInt32 n;
 
-	exit = loop->end->next;
+	blk_exit = loop->end->next;
 
-	for(blk = loop->header; blk != exit; blk = blk->next) {
+	for(blk = loop->header; blk != blk_exit; blk = blk->next) {
 		i = blk->first; n = 1;
 		while(i != NULL) {
 			printf("#%d/%d ", blk->seq_no, n);
@@ -644,7 +644,7 @@ void PrintLoopInvariants(Loop * loop)
 
 void OptimizeLoopInvariants(Var * proc, Loop * loop)
 {
-	InstrBlock * blk, * exit;
+	InstrBlock * blk, * blk_exit;
 	Instr * i, * i2;
 	Bool change;
 	Loc loc, preheader;
@@ -653,11 +653,11 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 //	printf("========== Invariants ================\n");
 //	PrintProc(proc);
 
-	exit = loop->end->next;
+	blk_exit = loop->end->next;
 
 	//=== Mark all instructions as variant
 
-	for(blk = loop->header; blk != exit; blk = blk->next) {
+	for(blk = loop->header; blk != blk_exit; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			i->flags = 0;
 		}
@@ -665,7 +665,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 
 	do {
 		change = false;
-		for (blk = loop->header; blk != exit; blk = blk->next) {
+		for (blk = loop->header; blk != blk_exit; blk = blk->next) {
 			loc.blk = blk;
 			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
 				loc.i = i;
@@ -686,7 +686,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 
 	// Mark all instructions that are self-referencing and are not marked as constant
 /*
-	for (blk = loop->header; blk != exit; blk = blk->next) {
+	for (blk = loop->header; blk != blk_exit; blk = blk->next) {
 		for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
 			if (FlagOff(i->flags, InstrInvariant) && i->op != INSTR_LINE) {
 				if (VarUsesVar(i->arg1, i->result) || VarUsesVar(i->arg2, i->result)) {
@@ -702,7 +702,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 
 	do {
 		change = false;
-		for (blk = loop->header; blk != exit; blk = blk->next) {
+		for (blk = loop->header; blk != blk_exit; blk = blk->next) {
 			loc.blk = blk;
 			i2 = NULL;
 			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
@@ -729,7 +729,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 	//==== Move all invariant instructions to preheader
 	
 	LoopPreheader(proc, loop, &preheader);
-	for(blk = loop->header; blk != exit; blk = blk->next) {
+	for(blk = loop->header; blk != blk_exit; blk = blk->next) {
 		i = blk->first;
 		while(i != NULL) {
 			i2 = i->next;
@@ -839,16 +839,16 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	Int32 q, top_q, n;
 	Bool init, top_init;
 	InstrBlock * blk, * last_mod_blk;
-	InstrBlock * exit;
+	InstrBlock * blk_exit;
 	Bool var_modified;
 	Bool verbose;
 	Rule * rule;
 
-	exit = end->next;
+	blk_exit = end->next;
 
 	G_VERBOSE = verbose = Verbose(proc);
 	VarResetUse();
-	InstrVarUse(header, exit);
+	InstrVarUse(header, blk_exit);
 	InstrVarLoopDependent(header, end);
 
 	// When processing, we assign var to register
@@ -925,7 +925,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		last_mod = NULL;
 
-		for(blk = header; blk != exit; blk = blk->next) {
+		for(blk = header; blk != blk_exit; blk = blk->next) {
 			if (verbose) PrintBlockHeader(blk);
 			for(i = blk->first, n=0; i != NULL; i = i->next) {
 retry:
@@ -1015,15 +1015,15 @@ del2:					if (verbose) { PrintDelete(); }
 			// There may be exit label as part of the loop
 			// We need to spill after it
 
-			if (exit == NULL || exit->callers != NULL || exit->from != end) {
-				exit = InstrBlockAlloc();
-				exit->to = end->to;
-				exit->next = end->to;
-				end->next = exit;
-				end->to   = exit;
+			if (blk_exit == NULL || blk_exit->callers != NULL || blk_exit->from != end) {
+				blk_exit = InstrBlockAlloc();
+				blk_exit->to = end->to;
+				blk_exit->next = end->to;
+				end->next = blk_exit;
+				end->to   = blk_exit;
 			}
-			InstrInsertRule(exit, exit->first, INSTR_LET, top_var, top_reg, NULL);
-//			InstrInsert(exit, exit->first, INSTR_LET, top_var, top_reg, NULL);
+			InstrInsertRule(blk_exit, blk_exit->first, INSTR_LET, top_var, top_reg, NULL);
+//			InstrInsert(blk_exit, blk_exit->first, INSTR_LET, top_var, top_reg, NULL);
 		}
 
 		if (FlagOn(top_var->flags, VarLoopDependent)) {
