@@ -8,6 +8,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 */
 
 #include "language.h"
+#ifdef __Darwin__
+#include "limits.h"
+#endif
 
 extern char * TMP_NAME;
 
@@ -708,6 +711,8 @@ Purpose:
 		if (vtype != NULL) {
 			if (vtype->variant != TYPE_STRUCT) return false;
 		}
+		default:
+		break;
 	}
 
 	return true;
@@ -746,6 +751,8 @@ void PrintType(Type * type)
 
 	case TYPE_MACRO:
 		Print("proc");
+		break;
+		default:
 		break;
 	}
 }
@@ -821,6 +828,8 @@ Type * AdrTypeEval(InstrOp op, Type * left, Type * right)
 	case INSTR_LO:
 	case INSTR_HI:
 		rt = TypeByte();
+		break;
+		default:
 		break;
 	}
 	return rt;
@@ -991,6 +1000,8 @@ Purpose:
 	case TYPE_VARIANT:
 		if (TypeIsSubsetOf(right, left->dim[0]) || TypeIsSubsetOf(right, left->dim[0])) return left;
 		break;
+		default:
+		break;
 	}
 
 	// Default case is VARIANT type
@@ -1033,6 +1044,8 @@ Purpose:
 			type = TypeExpand(left, right->dim[0]);
 			type = TypeExpand(type, right->dim[1]);
 		}
+		break;
+		default:
 		break;
 	}
 
@@ -1083,6 +1096,8 @@ Type * TypeRestrictRange(Type * type, IntLimit rmin, IntLimit rmax)
 	case TYPE_TUPLE:
 		r = TypeUnion(TypeRestrictRange(type->dim[0], rmin, rmax), TypeRestrictRange(type->dim[1], rmin, rmax));
 		break;
+		default:
+		break;
 	}
 
 	return r;
@@ -1100,6 +1115,8 @@ Type * TypeRestrict(Type * type, Type * restriction)
 		break;
 	case TYPE_TUPLE:
 		r = TypeUnion(TypeRestrict(type, restriction->dim[0]), TypeRestrict(type, restriction->dim[1]));
+		break;
+		default:
 		break;
 	}
 	return r;
@@ -1878,6 +1895,8 @@ Bool InstrInferType(Loc * loc, void * data)
 				case INSTR_IFGT:
 					taken = IntHigher(MIN1, MAX2);
 					not_taken = IntLowerEq(MAX1, MIN2);
+					break;
+					default:
 					break;
 				}
 
