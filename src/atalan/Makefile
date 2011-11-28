@@ -15,8 +15,8 @@ BINDIR = $(DESTDIR)/usr/local/bin
 LIBDIR = $(DESTDIR)/usr/local/lib
 MANDIR = $(DESTDIR)/usr/local/share/man
 
-SOURCES= ../common/common.c gen.c translate.c emit.c errors.c instr.c lexer.c main.c mem_heap.c opt_blocks.c opt_live.c opt_values.c opt_var_use.c optimize.c parser.c type.c variables.c type_proc.c opt_loops.c var_set.c
-OBJS= common.o emit.o errors.o gen.o translate.o instr.o lexer.o main.o mem_heap.o opt_blocks.o opt_live.o opt_values.o opt_var_use.o optimize.o parser.o type.o variables.o type_proc.o opt_loops.o var_set.o
+SOURCES= gen.c translate.c emit.c errors.c instr.c lexer.c main.c mem_heap.c opt_blocks.c opt_live.c opt_values.c opt_var_use.c optimize.c parser.c type.c variables.c type_proc.c opt_loops.c var_set.c
+OBJS= ../common/common.o emit.o errors.o gen.o translate.o instr.o lexer.o main.o mem_heap.o opt_blocks.o opt_live.o opt_values.o opt_var_use.o optimize.o parser.o type.o variables.o type_proc.o opt_loops.o var_set.o
 
 CC = gcc
 CXX = gcc
@@ -29,7 +29,7 @@ all:	atalan
 
 atalan: $(OBJS)
 
-	@$(CC) $(CFLAGS) -o $@ $(OBJS) && echo "Compile OK"
+	$(CC) $(CFLAGS) -o $@ $(OBJS) && echo "Compile OK"
 
 %.o: %.c
 
