@@ -120,7 +120,6 @@ typedef struct {
 } ParseState;
 
 typedef struct {
-//	char   name[256];
 	UInt32   n;
 	FILE * f;
 	Bool   ignore_keywords;
@@ -180,6 +179,8 @@ typedef enum {
 	INSTR_IFLE,
 	INSTR_IFOVERFLOW,
 	INSTR_IFNOVERFLOW,
+	INSTR_IFTYPE,
+	INSTR_IFNTYPE,
 
 	INSTR_PROLOGUE,
 	INSTR_EPILOGUE,
@@ -229,19 +230,20 @@ typedef enum {
 	INSTR_COMPILER,
 	INSTR_CODE_END,			// end of BLK segment and start of data segment
 	INSTR_DATA_END,			// end of data segment and start of variables segment
+	INSTR_DECL,
 
 	// Following 'instructions' are used in expressions
-	INSTR_VAR,				// Variable (may be argument, input, output, ...)
-	INSTR_CONST,			// Constant (depending on type)
-	INSTR_ELEMENT,			// <array> <index>     access array or structure element (left operand is array, right is index)
-	INSTR_BYTE,				// <var> <byte_index>  access byte of specified variable
-	INSTR_RANGE,			// x..y  (l = x, r = y) Used for slice array references
-	INSTR_TUPLE,			// INSTR_LIST <adr,var>  (var may be another tuple)
+	INSTR_VAR,				// 59 Variable (may be argument, input, output, ...)
+	INSTR_CONST,			// 60 Constant (depending on type)
+	INSTR_ELEMENT,			// 61 <array> <index>     access array or structure element (left operand is array, right is index)
+	INSTR_BYTE,				// 62 <var> <byte_index>  access byte of specified variable
+	INSTR_RANGE,			// 63 x..y  (l = x, r = y) Used for slice array references
+	INSTR_TUPLE,			// 64 INSTR_LIST <adr,var>  (var may be another tuple)
 						    // Type of tuple may be undefined, or it may be structure of types of variables in tuple
-	INSTR_DEREF,			// dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
-	INSTR_FIELD,			// access field of structure
-	INSTR_TYPE,
-	INSTR_SCOPE,
+	INSTR_DEREF,			// 65 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
+	INSTR_FIELD,			// 66 access field of structure
+	INSTR_TYPE,				// 67
+	INSTR_SCOPE,			// 68
 	INSTR_SRC_FILE,			//INSTR_SRC_FILE variable representing source file
 							// scope   FILE that includes (uses) this file
 							// name    filename
@@ -301,7 +303,8 @@ typedef enum {
 	TYPE_UNDEFINED,
 	TYPE_SCOPE,
 	TYPE_SEQUENCE,	// numeric sequence
-	TYPE_ANY
+	TYPE_ANY,
+	TYPE_RULE_ARG	// type is specified by variable in rule argument
 } TypeVariant;
 
 /*
@@ -348,15 +351,21 @@ struct TypeTag {
 	Bool		 is_enum;	// INSTR_INTEGER is enum
 	Type * base;			// type, on which this type is based (may be NULL)
 	Var * owner;			// original owner of this type
+	Var * arg;				// TYPE_RULE_ARG
 	union {
 		Range range;
 		// TYPE_ARRAY, TYPE_ADR
 		struct {
-			Type * dim[MAX_DIM_COUNT];		// array dimension types (integer ranges)
+			Type * index;
+//			Type * dim[MAX_DIM_COUNT];		// array dimension types (integer ranges)
 			Type * element;
 			UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size.
 		};
-
+		// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left)
+		struct {
+			Type * left;
+			Type * right;
+		};
 		TypeSequence seq;
 	};
 };
@@ -542,14 +551,17 @@ void TypeInit();		// initialize the Type subsytem
 UInt8 ConstByteSize(Int32 n);
 
 Type * TypeAlloc(TypeVariant variant);
-Type * TypeAllocInt(Int32 min, Int32 max);
+Type * TypeAllocConst(IntLimit n);
+Type * TypeAllocInt(IntLimit min, IntLimit max);
+
 Type * TypeDerive(Type * base);
 Type * TypeCopy(Type * base);
 
 Type * TypeByte();
 Type * TypeLongInt();
 Type * TypeScope();
-Type * TypeTuple();
+Type * TypeTuple(Type * left, Type * right);
+Type * TypeArray(Type * index, Type * element);
 
 Type * TypeAdrOf(Type * element);
 
@@ -562,13 +574,14 @@ typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 
 void TypeAddConst(Type * type, Var * var);
 Bool TypeIsSubsetOf(Type * type, Type * master);
-Bool TypeIsBool(Type * type);
 
 UInt32 TypeSize(Type * type);
 UInt32 TypeAdrSize();
 UInt32 TypeStructAssignOffsets(Type * type);
 
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2);
+
+void PrintType(Type * type);
 
 //--- Proc type
 void ProcTypeFinalize(Type * proc);
@@ -640,6 +653,8 @@ Bool VarIsOutArg(Var * var);
 Bool VarIsArg(Var * var);
 Bool VarIsEqual(Var * left, Var * right);
 
+Bool VarIsRuleArg(Var * var);
+
 
 Var * VarField(Var * var, char * fld_name);
 void VarLet(Var * var, Var * val);
@@ -684,14 +699,14 @@ void VarEmitAlloc();
 #define FOR_EACH_LOCAL(SCOPE, VAR) 	for(VAR = VarFirstLocal(SCOPE); VAR != NULL; VAR = VarNextLocal(SCOPE, VAR)) {
 #define NEXT_LOCAL }
 
-#define FOR_EACH_ARG(SCOPE, VAR) 	for(VAR = VarFirstLocal(SCOPE); VAR != NULL; VAR = VarNextLocal(SCOPE, VAR)) { if (VarIsArg(VAR)) {
-#define NEXT_ARG } }
+#define FOR_EACH_ARG(SCOPE, VAR, MODE) 	for(VAR = FirstArg(SCOPE, MODE); VAR != NULL; VAR = NextArg(SCOPE, VAR, MODE)) {
+#define NEXT_ARG }
 
-#define FOR_EACH_IN_ARG(SCOPE, VAR) 	for(VAR = VarFirstLocal(SCOPE); VAR != NULL; VAR = VarNextLocal(SCOPE, VAR)) { if (VarIsInArg(VAR)) {
-#define NEXT_IN_ARG } }
+#define FOR_EACH_IN_ARG(SCOPE, VAR) 	FOR_EACH_ARG(SCOPE, VAR, SUBMODE_ARG_IN)
+#define NEXT_IN_ARG }
 
-#define FOR_EACH_OUT_ARG(SCOPE, VAR) 	for(VAR = VarFirstLocal(SCOPE); VAR != NULL; VAR = VarNextLocal(SCOPE, VAR)) { if (VarIsOutArg(VAR)) {
-#define NEXT_OUT_ARG } }
+#define FOR_EACH_OUT_ARG(SCOPE, VAR) 	FOR_EACH_ARG(SCOPE, VAR, SUBMODE_ARG_OUT)
+#define NEXT_OUT_ARG }
 
 void PrintVar(Var * var);
 void PrintVarName(Var * var);
@@ -748,7 +763,7 @@ extern CPUType * CPU;
 
 ***********************************************************/
 
-#define IS_INSTR_BRANCH(x) ((x)>=INSTR_IFEQ && (x)<=INSTR_IFNOVERFLOW)
+#define IS_INSTR_BRANCH(x) ((x)>=INSTR_IFEQ && (x)<=INSTR_IFNTYPE)
 #define IS_INSTR_JUMP(x) (IS_INSTR_BRANCH(x) || (x) == INSTR_GOTO)
 
 InstrOp OpNot(InstrOp op);
@@ -848,12 +863,20 @@ For instructions, where arg1 or arg2 = result, source points to instruction, tha
 4.      let a,x
 
 */
+typedef enum {
+	JUMP_IF    = 0,
+	JUMP_LOOP  = 1,
+	JUMP_LOOP_EXIT = 2,
+	JUMP_LOOP_ENTRY = 4     // may be combined with loop exit
+} JumpType;
 
 struct InstrBlockTag {
 
 	InstrBlock * next;			// Blocks are linked in chain, so we can traverse them as required.
 								// This is normally in order, in which the blocks were parsed.
 	UInt32 seq_no;				// Block sequence number. It is used to determine order of blocks when detecting loops.
+								// It is also usefull when debugging the compiler, as we can quickly locate an instruction by block number and
+								// sequence number of the caller.
 
 	InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, we leave the routine after the last instruction in the block)
 	InstrBlock * cond_to;		// last instruction conditionally jumps to this block if the condition if true
@@ -863,7 +886,8 @@ struct InstrBlockTag {
 	InstrBlock * callers;		// list of blocks calling this block (excluding from)
 	InstrBlock * next_caller;	// next caller in the chain
 
-	InstrBlock * loop_end;
+//	InstrBlock * loop_end;
+	JumpType     jump_type;		// whether this is end of loop or some other type of branch
 
 	Var * label;				// label that starts the block
 	Bool  processed;
@@ -954,6 +978,7 @@ typedef struct {
 	char * symbol;
 	TypeVariant arg_type[3];		// 0 = result, 1 = arg1, 2 = arg2
 	UInt8   flags;
+	void (*execute_fn)(Instr * i);
 } InstrInfo;
 
 extern InstrInfo INSTR_INFO[INSTR_CNT];
@@ -1018,6 +1043,8 @@ void ProcTranslate(Var * proc);
 void CheckValues(Var * proc);
 void TranslateInit();
 
+Rule * TranslateRule(Instr * i);
+
 // Garbage collector
 
 void RulesGarbageCollect();
@@ -1081,6 +1108,8 @@ void MarkBlockAsUnprocessed(InstrBlock * block);
 
 void ProcOptimize(Var * proc);
 void GenerateBasicBlocks(Var * proc);
+void MarkLoops(Var * proc);
+
 Bool OptimizeLive(Var * proc);
 Bool OptimizeValues(Var * proc);
 Bool OptimizeVarMerge(Var * proc);
@@ -1095,6 +1124,8 @@ void AllocateVariables(Var * proc);
 
 void OptimizeProcInline(Var * proc);
 
+
+void InstrExecute(InstrBlock * blk);
 
 /*************************************************************
 

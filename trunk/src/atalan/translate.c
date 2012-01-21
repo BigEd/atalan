@@ -375,23 +375,29 @@ Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	return InstrRule(&i);
 }
 
+Rule * TranslateRule(Instr * i)
+{
+	Rule * rule;
+	for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
+		if (RuleMatch(rule, i, PHASE_TRANSLATE)) {
+			return rule;
+		}
+	}
+	return NULL;
+}
+
 Bool InstrTranslate(Instr * i, Bool * p_modified)
 {
 	Var rule_proc;
 	Rule * rule;
 
 	if (i->op == INSTR_LINE) {
-		Gen(INSTR_LINE, i->result, i->arg1, i->arg2);
+		GenInternal(INSTR_LINE, i->result, i->arg1, i->arg2);
 
 	} else if ((rule = InstrRule(i))) {
 		GenRule(rule, i->result, i->arg1, i->arg2);
 	} else {
-		// Find translating rule
-		for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-			if (RuleMatch(rule, i, PHASE_TRANSLATE)) {
-				break;
-			}
-		}
+		rule = TranslateRule(i);
 
 		if (rule != NULL) {
 			rule_proc.instr = rule->to;
@@ -542,7 +548,7 @@ Purpose:
 					//==== We were not able to find translation for the instruction, emit it as it is
 					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
 					} else {
-						Gen(i->op, i->result, i->arg1, i->arg2);
+						GenInternal(i->op, i->result, i->arg1, i->arg2);
 						untranslated = true;
 					}
 				}

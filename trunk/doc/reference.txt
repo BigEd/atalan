@@ -712,7 +712,7 @@ a function with side effect, read {sequence in} variable).
 Failed asserts
 ==============
 
-In some situations, compiler is able to prove that an assertion is always false.
+In some situations, the compiler is able to prove that an assertion is always false.
 Such assert is reported as an error.
 
 For example following snippet of code
@@ -725,7 +725,7 @@ will report an error:
 :::::::::::::::::::::::
 compares.atl(2) Logic error: Assert is always false.
 
-assert a <> 30
+assert x ≠ 30
 ::::::::::::::::::::::
 
 **************

@@ -223,8 +223,13 @@ Type * ParseIntType()
 	if (TOK) {
 		var = BufPop();
 
+		// If we parsed rule argument
+		if (var->mode == INSTR_ELEMENT || VarIsRuleArg(var)) {
+			type = TypeAlloc(TYPE_RULE_ARG);
+			type->arg = var;
+			goto done;
 		// Integer type may be defined using predefined type definition or be defined as type of other variable
-		if (var->mode == INSTR_TYPE || var->mode == INSTR_VAR) {
+		} else if (var->mode == INSTR_TYPE || var->mode == INSTR_VAR) {			
 			type = var->type;
 			if (type->variant != TYPE_INT) {
 				SyntaxError("Expected integer type");
@@ -318,8 +323,7 @@ Input:
 	Var * var;
 	Type * type = NULL, * variant_type = NULL;
 	long last_n = 0;
-	long i;
-	Type * elmt;
+	Type * elmt, * t;
 	Bool id_required;
 
 next:
@@ -435,20 +439,30 @@ const_list:
 	// Array
 	} else if (NextIs(TOKEN_ARRAY)) {		
 		type = TypeAlloc(TYPE_ARRAY);
-		i = 0;
+		t = NULL;
+//		i = 0;
 
 		if (TOK == TOKEN_OPEN_P) {
 			EnterBlockWithStop(TOKEN_EQUAL);
 			while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
 				elmt = ParseIntType();
-				if (elmt != NULL) {
-					if (i == MAX_DIM_COUNT) {
-						SyntaxError("too many array indices");
-						return NULL;
-					}
-					type->dim[i] = elmt;
-					i++;
-				}	
+				if (type->index == NULL) {
+					type->index = elmt;
+				} else if (t != NULL) {
+					t->right = TypeTuple(t->right, elmt);
+					t = t->right;
+				} else {
+					t = TypeTuple(type->index, elmt);
+					type->index = t;
+				}
+//				if (elmt != NULL) {
+//					if (i == MAX_DIM_COUNT) {
+//						SyntaxError("too many array indices");
+//						return NULL;
+//					}
+//					type->dim[i] = elmt;
+//					i++;
+//				}	
 				NextIs(TOKEN_COMMA);
 			};
 		}
@@ -457,11 +471,11 @@ const_list:
 		// This is possible only for constants now.
 
 		if (TOK) {
-			if (type->dim[0] == NULL) {
+			if (type->index == NULL) {
 				elmt = TypeAlloc(TYPE_INT);
 				elmt->range.flexible = true;
 				elmt->range.min = 0;
-				type->dim[0] = elmt;
+				type->index = elmt;
 			}
 		}
 
@@ -515,13 +529,13 @@ const_list:
 
 	if (TOK) {
 		if (variant_type != NULL) {
-			variant_type->dim[1] = type;
+			variant_type->right = type;
 			type = variant_type;
 		}
 
 		if (NextIs(TOKEN_OR)) {
 			variant_type = TypeAlloc(TYPE_VARIANT);
-			variant_type->dim[0] = type;
+			variant_type->left = type;
 			goto next;
 		}
 	}
@@ -769,15 +783,21 @@ Syntax:
 	return idx;
 }
 
+Var * ParseArrayIdx(Type * type)
+{
+	return NULL;
+}
+
 Var * ParseArrayElement(Var * arr)
 /*
 Purpose:
 	Parse access to array element.
 	Parsed variable is of type element.
+Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 */
 {
 	UInt16 top;
-	Type * idx_type, * atype;
+	Type * idx_type, * atype, * t;
 	Var * idx, * idx2, * item;
 	UInt16 bookmark;
 	TypeVariant tv;
@@ -788,27 +808,31 @@ Purpose:
 	tv = TYPE_VOID;
 
 	// First dimension (or first element of tuple)
+	idx_type = NULL;
 
 	if (atype != NULL) {
 		tv = atype->variant;
 
 		if (tv == TYPE_ARRAY) {
-			idx_type = atype->dim[0];
+			idx_type = t = atype->index;
+			if (t->variant == TYPE_TUPLE) idx_type = t->left;
 		} else if (tv == TYPE_ADR) {
 			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
 		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
-		} else {
+		} /*else {
 			// This is default case for accessing bytes of variable
 			// It should be replaced by x$0 x$1 syntax in the future.
 			idx_type = TypeByte();
 		}
-	} else {
-		idx_type = NULL;
-	}
+*/
+	} //else {
+//		idx_type = NULL;
+//	}
 
 	idx = idx2 = NULL;
 
+	// Syntax: arr ~ "#" <int> | <id> | "("  ")"
 	if (TOK == TOKEN_HASH) {
 		NextToken();
 		if (TOK == TOKEN_INT) {
@@ -819,6 +843,7 @@ Purpose:
 			idx = ParseVariable();
 			goto done_idx;
 		} else if (TOK == TOKEN_OPEN_P) {
+			// If there is opening brace, continue to parsing index
 		} else {
 			SyntaxError("Expected integer, variable or () after #");
 		}
@@ -837,7 +862,6 @@ Purpose:
 		goto done;
 	}
 
-
 	// It may be (..<n>), or even () use min as default
 	if (TOK == TOKEN_DOTDOT) {
 		idx  = VarNewInt(idx_type->range.min);
@@ -845,7 +869,6 @@ Purpose:
 		ParseSubExpression(idx_type);
 		if (TOK) {
 			idx = STACK[top];
-//			CheckArrayBound(0, arr, idx_type, idx, bookmark);
 		}
 	}
 
@@ -861,9 +884,6 @@ Purpose:
 		} else {
 			ParseSubExpression(idx_type);
 			idx2 = STACK[top];
-			if (TOK) {
-//				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
-			}
 		}
 		if (idx2 != NULL) {
 			idx = VarNewRange(idx, idx2);
@@ -871,22 +891,27 @@ Purpose:
 	}
 
 	if (TOK) {
-		// Second dimension
-		idx_type = NULL;
-		if (tv == TYPE_ARRAY) idx_type = atype->dim[1];
+		
+		while (NextIs(TOKEN_COMMA)) {
 
-		if (NextIs(TOKEN_COMMA)) {
+			// (idx1, (idx2, idx3))
+
+			idx_type = NULL;
+			if (t->variant == TYPE_TUPLE) {
+				idx_type = t = t->right;
+				if (t->variant == TYPE_TUPLE) {
+					idx_type = t->left;
+				}
+			}
+
 			if (idx_type != NULL) {
 				TOP = top;
 				bookmark = SetBookmark();
 				ParseSubExpression(idx_type);
 				idx2 = STACK[TOP-1];
-
-//				CheckArrayBound(1, arr, idx_type, idx2, bookmark);
-
 				idx = VarNewTuple(idx, idx2);
 			} else {
-				SyntaxError("Array has only one dimension");
+				SyntaxError("Too many indexes specified");
 			}
 		}
 
@@ -1167,17 +1192,17 @@ void ParseOperand()
 			}
 no_id:
 			// Procedure call
-			if (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO) {
+			if (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO || (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)) {
 				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
 					// this is address of procedure
 				} else {
 					proc = var;
 					NextToken();
-					if (var->type->variant == TYPE_PROC) {
-						ParseCall(proc);
-					} else {
+					if (var->type->variant == TYPE_MACRO) {
 						ParseMacro(proc);
 						return;
+					} else {
+						ParseCall(proc);
 					}
 
 					// *** Register Arguments (5)
@@ -1207,40 +1232,6 @@ indices:
 				var = item;
 				goto done;
 			}
-/*
-			if (NextCharIs('$')) {
-				NextToken();
-				if (TOK == TOKEN_INT) {
-					item = VarNewInt(LEX.n);
-					NextToken();
-				} else if (TOK == TOKEN_ID) {
-					item = ParseVariable();
-				} else {
-					SyntaxError("Expected constant or variable name");
-				}
-				if (TOK) {
-					var = VarNewByteElement(var, item);
-				}
-				goto done;
-			} else if (NextCharIs('#')) {
-				NextToken();
-				item = NULL;
-				if (TOK == TOKEN_INT) {
-					item = VarNewInt(LEX.n);
-					NextToken();
-				} else if (TOK == TOKEN_ID) {
-					item = ParseVariable();
-				} else if (TOK == TOKEN_OPEN_P) {
-					item = ParseArrayElement(var);
-				} else {
-					SyntaxError("Expected constant or variable name");
-				}
-				if (item != NULL) {
-					var = VarNewElement(var, item);
-				}
-				goto done;
-			}
-*/
 			spaces = Spaces();
 			NextToken();
 			if (!spaces) {
@@ -1248,7 +1239,12 @@ indices:
 					//TODO: Why is this?
 					if (VarIsArg(var)) {
 						var = VarNewElement(var, VarNewStr(NAME));
-						NextToken();
+						item = ParseSpecialArrays(var);
+						if (item != NULL) {
+							var = item;
+						} else {
+							NextToken();
+						}
 					} else {
 						if (var->type->variant == TYPE_STRUCT) {
 							var = ParseStructElement(var);
@@ -1292,9 +1288,7 @@ indices:
 					BufPush(item);
 					return;
 				}
-			} //else {
-			//	NextToken();
-			//}
+			}
 		} else {
 //			SyntaxError("expected operand");
 			return;
@@ -1403,19 +1397,15 @@ retry:
 
 void ParseBinaryAnd()
 {
-//	Var * var;
 	ParsePlusMinus();
 retry:
 	if (TOK == TOKEN_BITAND) {
-//		var = STACK[TOP];
-//		if (!G_CONDITION_EXP || !TypeIsBool(var->type)) {
-			NextToken();
-			ParsePlusMinus();
-			if (TOK) {
-				InstrBinary(INSTR_AND);
-			}
-			goto retry;
-//		}
+		NextToken();
+		ParsePlusMinus();
+		if (TOK) {
+			InstrBinary(INSTR_AND);
+		}
+		goto retry;
 	}
 }
 
@@ -1671,6 +1661,7 @@ void ParseRel()
 {
 	Var * left, * right;
 	InstrOp op;
+	Type * type;
 
 	if (TOK == TOKEN_OPEN_P) {
 		ParseCondParenthesis();
@@ -1680,24 +1671,8 @@ void ParseRel()
 
 		op = RelInstrFromToken();
 
-		// No relation operator follows the expression, this must be test of boolean variable
-		if (op == INSTR_VOID) {
-
-			right = VarFindAssociatedConst(left, "true");
-			if (right != NULL) {
-				op = INSTR_IFEQ;
-			} else {
-				right = VarFindAssociatedConst(left, "false");
-				if (right != NULL) op = INSTR_IFNE;
-			}
-			if (op != INSTR_VOID) {
-				GenRel(op, left, right);
-			} else {
-				SyntaxError("variable is not of boolean type");
-			}
-
 		// var <relop> var [<relop> var]
-		} else {
+		if (op != INSTR_VOID) {
 			do {
 
 				// For normal operation, we jump to false label when the condition does NOT apply
@@ -1716,6 +1691,30 @@ void ParseRel()
 				}
 				op = RelInstrFromToken();
 			} while (op != INSTR_VOID);
+
+		// Type guard
+		} else if (NextIs(TOKEN_COLON)) {
+
+			type = ParseType();
+			right = VarAlloc(INSTR_TYPE, NULL, 0);
+			right->type = type;
+			GenRel(INSTR_IFTYPE, left, right);
+
+		// No relation operator follows the expression, this must be test of boolean variable
+		} else {
+
+			right = VarFindAssociatedConst(left, "true");
+			if (right != NULL) {
+				op = INSTR_IFEQ;
+			} else {
+				right = VarFindAssociatedConst(left, "false");
+				if (right != NULL) op = INSTR_IFNE;
+			}
+			if (op != INSTR_VOID) {
+				GenRel(op, left, right);
+			} else {
+				SyntaxError("variable is not of boolean type");
+			}
 		}
 	}
 }
@@ -2068,7 +2067,7 @@ Syntax:
 				if (TOK) {
 					arr = STACK[0];
 					if (arr->type->variant == TYPE_ARRAY) {
-						type = arr->type->dim[0];
+						type = arr->type->index;
 						TypeLimits(type, &min, &max);
 
 						idx = VarAllocScopeTmp(NULL, INSTR_VAR, type);
@@ -2092,7 +2091,7 @@ Syntax:
 			} else {
 				var = VarFind2(name);
 				if (var != NULL) {
-					if (var->type->variant == TYPE_INT) {
+					if (var->mode == INSTR_VAR && var->type->variant == TYPE_INT) {
 						TypeLimits(var->type, &min, &max);
 					} else {
 						SyntaxError("$Loop variable must be integer");
@@ -2416,23 +2415,28 @@ Arguments:
 
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 {
-	Type * dim;
 	UInt32 size;
+	Type * dim1, * dim2;
 
 	*p_dim1 = NULL;
 	*p_dim2 = NULL;
 	if (type->variant == TYPE_ARRAY) {
-		dim = type->dim[0];
-		*p_dim1 = VarNewInt(dim->range.max - dim->range.min + 1);
-		dim = type->dim[1];
-		if (dim != NULL) {
-			*p_dim2 = VarNewInt(dim->range.max - dim->range.min + 1);
+		dim1 = type->index;
+		dim2 = NULL;
+		if (dim1->variant == TYPE_TUPLE) {
+			dim2 = dim1->right;
+			dim1 = dim1->left;
+		}
+		*p_dim1 = VarNewInt(dim1->range.max - dim1->range.min + 1);
+
+		if (dim2 != NULL) {
+			*p_dim2 = VarNewInt(dim2->range.max - dim2->range.min + 1);
 
 		// Array of array
 		} else {
 			if (type->element != NULL && type->element->variant == TYPE_ARRAY) {
-				dim = type->element->dim[0];
-				*p_dim2 = VarNewInt(dim->range.max - dim->range.min + 1);
+				dim1 = type->element->index;
+				*p_dim2 = VarNewInt(dim1->range.max - dim1->range.min + 1);
 			}
 		}
 	} else if (type->variant == TYPE_STRUCT) {
@@ -2440,7 +2444,6 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 		*p_dim1 = VarNewInt(size);
 	}
 }
-
 
 Bool VarIsImplemented(Var * var)
 {
@@ -2473,7 +2476,19 @@ Bool VarIsImplemented(Var * var)
 	i.result = var;
 	ArraySize(var->type, &i.arg1, &i.arg2);
 	rule = InstrRule(&i);
-	return rule != NULL;
+	if (rule != NULL) return true;
+
+	i.op = INSTR_DECL;
+	i.result = var;
+	i.arg1 = NULL;
+	i.arg2 = NULL;
+	rule = TranslateRule(&i);
+	if (rule != NULL) {
+		InstrExecute(rule->to);
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -2576,8 +2591,8 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 	Var * arg, * tmp;
 
 //	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
-	FOR_EACH_LOCAL(proc, arg)
-		if (FlagOn(arg->submode, submode)) {
+	FOR_EACH_ARG(proc, arg, submode)
+//		if (FlagOn(arg->submode, submode)) {
 			if (VarIsReg(arg)) {
 				tmp = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
 				ProcReplaceVar(proc, arg, tmp);
@@ -2588,7 +2603,7 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 					InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
 				}
 			}
-			}
+//		}
 	}
 }
 
@@ -2618,7 +2633,7 @@ Purpose:
 	return false;
 }
 
-void ParseProcBody(Var * proc)
+void ParseMacroBody(Var * proc)
 {
 	Var * lbl;
 	Var * scope;
@@ -2642,6 +2657,11 @@ void ParseProcBody(Var * proc)
 		SetFlagOn(proc->submode, SUBMODE_OUT);
 	}
 	ReturnScope(scope);
+}
+
+void ParseProcBody(Var * proc)
+{
+	ParseMacroBody(proc);
 
 //	if (Verbose(proc)) PrintProc(proc);
 
@@ -2899,9 +2919,7 @@ parsed:
 						if (idx->mode == INSTR_RANGE) {
 							min = idx->adr; max = idx->var;
 							if (min->mode == INSTR_CONST && max->mode == INSTR_CONST) {
-								var->type = TypeAlloc(TYPE_ARRAY);
-								var->type->dim[0] = TypeAllocInt(0, max->n - min->n);
-								var->type->element = adr->adr->type->element;
+								var->type = TypeArray(TypeAllocInt(0, max->n - min->n), adr->adr->type->element);
 							} else {
 								SyntaxError("Address can not use variable slices");
 							}
@@ -2948,8 +2966,10 @@ parsed:
 			}
 
 			// Procedure or macro is defined using parsing code
-			if (typev == TYPE_PROC || typev == TYPE_MACRO) {
+			if (typev == TYPE_PROC) {
 				ParseProcBody(var);
+			} else if (typev == TYPE_MACRO) {
+				ParseMacroBody(var);
 			} else if (typev == TYPE_SCOPE) {
 				scope = InScope(var);
 				ParseBlock();
@@ -2960,10 +2980,11 @@ parsed:
 				// Array is initialized as list of constants.
 
 				if (typev == TYPE_ARRAY && var->mode == INSTR_CONST) {
-					flexible = type->dim[0]->range.flexible;
+					ASSERT(type->index->variant == TYPE_INT);
+					flexible = type->index->range.flexible;
 					i = ParseArrayConst(var);
 					if (flexible) {
-						type->dim[0]->range.max = i-1;
+						type->index->range.max = i-1;
 					}
 
 				// Normal assignment
@@ -3021,7 +3042,7 @@ parsed:
 									var->value_nonempty = item->value_nonempty;
 									// Set the type based on the constant
 									if (typev == TYPE_UNDEFINED) {
-										var->type = TypeAllocInt(item->n, item->n);
+										var->type = TypeAllocConst(item->n);
 									}
 								} else {
 									// Resulting variable is temporary.
@@ -3169,6 +3190,7 @@ Purpose:
 	return op;
 }
 
+void ParseRuleArg2(RuleArg * arg);
 
 void ParseInstr()
 /*
@@ -3181,7 +3203,8 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	Var * label, * scope;
 	char inc_path[MAX_PATH_LEN];
 	Var * inop;
-	
+	Type * type;
+
 	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
 
 		// This is instruction
@@ -3216,7 +3239,13 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	// Include has special handling
 	// We need to make the file relative to current file dir and check the existence of the file
 
-		if (op == INSTR_INCLUDE) {
+		if (op == INSTR_DECL) {
+			arg[0] = ParseInstrArg();
+			NextIs(TOKEN_COLON);
+			type = ParseType();
+			arg[0]->type = type;
+			n++;
+		} else if (op == INSTR_INCLUDE) {
 
 			if (TOK == TOKEN_STRING) {
 				PathMerge(inc_path, FILE_DIR, NAME);
@@ -3425,6 +3454,7 @@ void ParseRule()
 
 	PARSING_RULE = true;
 
+
 	// Parse three parameters
 
 	EXP_IS_DESTINATION = true;
@@ -3468,7 +3498,7 @@ void ParseRule()
 //			}
 //			old_scope = InScope(scope);
 			GenBegin();
-			ParseInstr2(&rule->to);
+			ParseInstr2();
 			rule->to = GenEnd();
 //			ReturnScope(old_scope);
 
@@ -3732,10 +3762,12 @@ Arguments:
 	return arg_no;
 }
 
-void ParseCall(Var * proc)
+void ParseCall(Var * var)
 {
+	Var * proc = var;
+
 	ParseArgs(proc, SUBMODE_ARG_IN, NULL);
-	Gen(INSTR_CALL, proc, NULL, NULL);
+	Gen(INSTR_CALL, var, NULL, NULL);
 }
 
 void ParseReturn()
@@ -3780,32 +3812,6 @@ void ParseMacro(Var * macro)
 	}
 }
 
-/*
-void ParseId()
-{
-	Var * var;		// may be global?
-
-	//TODO: Procedures & macros in scope or struct
-//	ParseVariable(&var);
-	var = VarFind2(NAME, 0);
-	if (var != NULL) {
-		if (var->type != NULL) {
-			switch(var->type->variant) {
-				case TYPE_PROC:
-					NextToken();
-					ParseCall(var);
-					return;
-				case TYPE_MACRO:
-					NextToken();
-					ParseMacro(var);
-					return;
-				default: break;
-			}
-		}
-	}
-	ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL);
-}
-*/
 void ParseDeclarations(InstrOp mode, VarSubmode submode)
 /*
 Purpose:
@@ -3908,8 +3914,10 @@ void ParseAssert()
 			sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
 			Gen(INSTR_STR_ARG, NULL, VarNewStr(location), VarNewInt(StrLen(location)));
 			for(i = cond->first; i != NULL; i = i->next) {
-				AssertVar(i->arg1);
-				AssertVar(i->arg2);
+				if (i->op != INSTR_LINE) {
+					AssertVar(i->arg1);
+					AssertVar(i->arg2);
+				}
 			}
 			Gen(INSTR_DATA, NULL, VarNewInt(0), NULL);
 

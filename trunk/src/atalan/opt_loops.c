@@ -141,10 +141,19 @@ Bool VarContains(Var * var, Var * eq)
 	v2 = var;
 
 retry:
-	if (v2 == eq) return true;
-	for(v = eq; v->src_i != NULL && v->src_i->op == INSTR_LET; v = v->src_i->arg1) {
-		if (v2 == v) return true;
-	}
+//	if (v2 == eq) return true;
+	v = eq;
+	do {
+		if (v == v2) return true;
+		if (v->src_i == NULL) break;
+		if (v->src_i->op != INSTR_LET) break;
+		v = v->src_i->arg1;
+	} while(true);
+
+//	for(v = eq; v->src_i != NULL && v->src_i->op == INSTR_LET; v = v->src_i->arg1) {
+//		if (v2 == v) return true;
+//	}
+
 	if (v2->src_i != NULL && v2->src_i->op == INSTR_LET) {
 		v2 = v2->src_i->arg1;
 		if (v2 != var) goto retry;
@@ -265,19 +274,6 @@ Arguments:
 				}
 			}
 
-			// Instruction modifies the register.
-			// We may need to store the value of the register in case it has been modified.
-
-			if (mod_reg) {
-				if (reg_use == 0) {
-					if (first_init) {
-						*p_init = false;
-					}
-				}
-				first_init = false;
-				reg_use = 0;
-			}
-
 			// If we assign the register back to variable, we may remove this instruction
 			if (i->op == INSTR_LET && (i->result == top_var && i->arg1 == reg)) {
 				q -= i->rule->cycles;
@@ -331,12 +327,28 @@ Arguments:
 					}
 				}
 			}
+
+			// Instruction modifies the register.
+			// We may need to store the value of the register in case it has been modified.
+
+			if (mod_reg) {
+				*p_init = false;
+				first_init = false;
+				reg_use = 0;
+			}
+
 next:
-			ResetValue(i->result);
-			if (i->result == top_var) {
-				VarSetSrcInstr(reg, &initial);
-			} else {
-				VarSetSrcInstr(i->result, i);
+			if (i->result != NULL) {
+				ResetValue(i->result);
+				if (i->result == top_var) {
+					if (!InstrIsSelfReferencing(i)) {
+						VarSetSrcInstr(reg, &initial);
+					} else {
+						VarSetSrcInstr(reg, NULL);
+					}
+				} else {
+					VarSetSrcInstr(i->result, i);
+				}
 			}
 		} // instr
 	} // blk
@@ -882,6 +894,9 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 
+			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
+				Print(" ");
+			}
 			q = UsageQuotient(header, end, top_var, reg, &init);
 
 			if (q < top_q) {
@@ -957,6 +972,7 @@ del2:					if (verbose) { PrintDelete(); }
 				}
 
 				if (i->op == INSTR_LET && (i->result == top_var && i->arg1 == top_reg)) {
+					r++;
 					goto del;
 				}
 
@@ -974,6 +990,13 @@ del2:					if (verbose) { PrintDelete(); }
 				changed += VarTestReplace(&ti.arg1, top_var, reg);
 				changed += VarTestReplace(&ti.arg2, top_var, reg);
 
+				// If the instruction used variable, that contains same value as replaced register, use the register instead
+				if (ti.arg1 != reg && VarContains(ti.arg1, reg)) {
+					changed += VarTestReplace(&ti.result, ti.arg1, reg);
+					changed += VarTestReplace(&ti.arg2, ti.arg1, reg);
+					changed += VarTestReplace(&ti.arg1, ti.arg1, reg);
+				}
+
 				if (changed > 0) {
 
 					if (i->op == INSTR_LET && i->result == i->arg1) {
@@ -985,6 +1008,13 @@ del2:					if (verbose) { PrintDelete(); }
 						VarReplace(&i->result, top_var, top_reg);
 						VarReplace(&i->arg1, top_var, top_reg);
 						VarReplace(&i->arg2, top_var, top_reg);
+
+						if (i->arg1 != reg && VarContains(i->arg1, reg)) {
+							VarTestReplace(&i->result, i->arg1, reg);
+							VarTestReplace(&i->arg2, i->arg1, reg);
+							VarTestReplace(&i->arg1, i->arg1, reg);
+						}
+
 						i->rule = rule;
 						CheckInstr(i);
 						PrintChange(i);
@@ -995,7 +1025,11 @@ del2:					if (verbose) { PrintDelete(); }
 				if (verbose) PrintEOL();
 				ResetValue(i->result);
 				if (orig_result == top_var) {
-					VarSetSrcInstr(i->result, &initial);
+//					if (!InstrIsSelfReferencing(i)) {
+						VarSetSrcInstr(i->result, &initial);
+//					} else {
+//						VarSetSrcInstr(i->result, NULL);
+//					}
 					last_mod = i; last_mod_blk = blk;
 				} else {
 					VarSetSrcInstr(i->result, i);
@@ -1041,7 +1075,7 @@ void MarkLoops(Var * proc)
 	NumberBlocks(proc->instr);
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		blk->loop_end = NULL;
+		blk->jump_type = JUMP_IF;
 	}
 
 	// Test for each block, if it is end of an loop
@@ -1050,13 +1084,13 @@ void MarkLoops(Var * proc)
 		if (blk->cond_to != NULL) {
 			// We jump to some previous spot in the sequence
 			if (blk->cond_to->seq_no <= blk->seq_no) {
-				blk->cond_to->loop_end = blk;
+				blk->jump_type = JUMP_LOOP;	//->cond_to->loop_end = blk;
 			}
 		}
 
 		if (blk->to != NULL) {
 			if (blk->to->seq_no <= blk->seq_no) {
-				blk->to->loop_end = blk;
+				blk->jump_type = JUMP_LOOP;	//to->loop_end = blk;
 			}
 		}
 	}
@@ -1083,8 +1117,13 @@ Purpose:
 
 	for(nb = proc->instr; nb != NULL; nb = nb->next) {
 		header = NULL;
-		if (nb->cond_to != NULL && nb->cond_to->loop_end == nb) header = nb->cond_to;
-		if (nb->to != NULL && nb->to->loop_end == nb) header = nb->to;
+
+		if (nb->jump_type == JUMP_LOOP) {
+			header = nb->cond_to;
+			if (header == NULL) header = nb->to;
+		}
+//		if (nb->cond_to != NULL && nb->cond_to->loop_end == nb) header = nb->cond_to;
+//		if (nb->to != NULL && nb->to->loop_end == nb) header = nb->to;
 
 		if (header != NULL) {
 //			if (Verbose(proc)) {

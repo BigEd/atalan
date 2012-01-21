@@ -323,7 +323,7 @@ void EmitInstr2(Instr * instr, char * str)
 					} else if (StrEqualPrefix(s, "index.min", 9)) {
 						s += 9;
 						if (var->type->variant == TYPE_ARRAY) {
-							n = var->type->dim[0]->range.min;
+							n = var->type->index->range.min;
 						} else {
 							n = 0;
 						}

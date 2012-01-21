@@ -15,84 +15,165 @@ extern Var * VARS;		// global variables
 GLOBAL Instr NULL_INSTR;
 GLOBAL Instr * InstrNull;
 
+extern Var * MACRO_ARG[26];
+
+Var * VarGen(Var * t)
+/*
+Purpose:
+	Alloc variable according to specified template.
+*/
+{
+	Var * var = NULL;
+	Var * scope;
+	if (t == NULL) return NULL;
+	if (t->mode == INSTR_ELEMENT) {
+		scope = VarGen(t->adr);
+		var = VarAllocScope(scope, INSTR_VAR, t->var->str, 0);
+	} else if (t->mode == INSTR_CONST) {
+		var = t;
+	} if (VarIsRuleArg(t)) {
+		var = MACRO_ARG[t->idx-1];
+	}
+	return var;
+}
+
+Type * TypeGen(Type * t)
+{
+	Type * type;
+	Var * var, * idx;
+	if (t == NULL) return t;
+	type = t;
+	if (t->variant == TYPE_RULE_ARG) {
+		var = t->arg;
+		if (var->mode == INSTR_ELEMENT) {
+			if (VarIsRuleArg(var->adr)) {
+				idx = MACRO_ARG[var->adr->idx-1];
+				type = idx->type;
+			} else {
+				type = var->type;
+			}
+			idx = var->var;
+			if (StrEqual(idx->str, "idx")) {
+				type = type->index;
+			}
+		} else {
+			return var->type;
+		}
+	} else if (t->variant == TYPE_ARRAY) {
+		type = TypeAlloc(TYPE_ARRAY);
+		type->index = TypeGen(t->index);
+		type->element = TypeGen(t->element);
+		type->step   = t->step;
+	}
+	return type;
+}
+
+void InstrDecl(Instr * i)
+{
+	Type * type;
+	Var * var;
+	var = i->result;
+	type = TypeGen(var->type);
+	var = VarGen(i->result);
+	var->type = type;
+}
+
 InstrInfo INSTR_INFO[INSTR_CNT] = {
-	{ INSTR_NULL, "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_VOID, "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_LET, "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
+	{ INSTR_NULL, "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_VOID, "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_LET, "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 
-	{ INSTR_GOTO, "", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFEQ, "=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFNE, "<>", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFLT, "<=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFGE, ">=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFGT, ">", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFLE, "<", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_IFOVERFLOW, "over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_IFNOVERFLOW, "not over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_GOTO, "", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFEQ, "=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFNE, "<>", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFLT, "<=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFGE, ">=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFGT, ">", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFLE, "<", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFOVERFLOW, "over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_IFNOVERFLOW, "not over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_IFTYPE, ":", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_IFNTYPE, "<>:", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
 
-	{ INSTR_PROLOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_EPILOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_EMIT, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_VARDEF, "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_LABEL, "", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_PROLOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_EPILOGUE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_EMIT, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_VARDEF, "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_LABEL, "", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
-	{ INSTR_ADD, "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
-	{ INSTR_SUB, "-", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_MUL, "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
-	{ INSTR_DIV, "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_SQRT, "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_AND, "bitand", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
-	{ INSTR_OR, "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
+	{ INSTR_ADD, "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
+	{ INSTR_SUB, "-", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_MUL, "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
+	{ INSTR_DIV, "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_SQRT, "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_AND, "bitand", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
+	{ INSTR_OR, "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
 
-	{ INSTR_ALLOC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_PROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_RETURN, "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_ENDPROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_CALL, "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_VAR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_STR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// generate str
+	{ INSTR_ALLOC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_PROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_RETURN, "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ENDPROC, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_CALL, "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_VAR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_STR_ARG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// generate str
 
-	{ INSTR_DATA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_ALIGN, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_ORG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// set the destination address of compilation
-	{ INSTR_HI, "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_LO, "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_PTR, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_ARRAY_INDEX, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },		// generate index for array
-	{ INSTR_LET_ADR, "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_ROL, "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },				// bitwise rotate right
-	{ INSTR_ROR, ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },				// bitwise rotate left
-	{ INSTR_DEBUG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_MOD, "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0 },
-	{ INSTR_XOR, "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE },
-	{ INSTR_NOT, "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0 },
-	{ INSTR_ASSERT_BEGIN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_ASSERT, "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_ASSERT_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
+	{ INSTR_DATA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ALIGN, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_ORG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// set the destination address of compilation
+	{ INSTR_HI, "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_LO, "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_PTR, "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_ARRAY_INDEX, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// generate index for array
+	{ INSTR_LET_ADR, "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_ROL, "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
+	{ INSTR_ROR, ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
+	{ INSTR_DEBUG, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_MOD, "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_XOR, "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
+	{ INSTR_NOT, "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_ASSERT_BEGIN, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ASSERT, "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ASSERT_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
-	{ INSTR_LINE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// reference line in the source code
-	{ INSTR_INCLUDE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_MULA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// templates for 8 - bit multiply 
-	{ INSTR_MULA16, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },           // templates for 8 - bit multiply 
+	{ INSTR_LINE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// reference line in the source code
+	{ INSTR_INCLUDE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_MULA, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// templates for 8 - bit multiply 
+	{ INSTR_MULA16, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },           // templates for 8 - bit multiply 
 
-	{ INSTR_COMPILER, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_CODE_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// end of BLK segment and start of data segment
-	{ INSTR_DATA_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// end of data segment and start of variables segment
+	{ INSTR_COMPILER, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_CODE_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of BLK segment and start of data segment
+	{ INSTR_DATA_END, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of data segment and start of variables segment
+	{ INSTR_DECL,     "decl", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, &InstrDecl },			// declare variable
 
-	{ INSTR_VAR, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// Variable (may be argument, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, input, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, output, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, ...)
-	{ INSTR_CONST, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// Constant (depending on type)
-	{ INSTR_ELEMENT, "#", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// <array> <index>     access array or structure element (left operand is array, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, right is index)
-	{ INSTR_BYTE, "$", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },				// <var> <byte_index>  access byte of specified variable
-	{ INSTR_RANGE, "..", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// x..y  (l = x, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, r = y) Used for slice array references
-	{ INSTR_TUPLE, ",", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// { INSTR_LIST <adr, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },var>  (var may be another tuple)
-	{ INSTR_DEREF, "@", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// dereference an address (var contains reference to dereferenced adr variable, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 }, type is type in [adr of type]. Byte if untyped adr is used.
-	{ INSTR_FIELD, ".", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			// access field of structure
-	{ INSTR_TYPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_SCOPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },
-	{ INSTR_SRC_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0 },			//{ INSTR_SRC_FILE variable representing source file
+	{ INSTR_VAR, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// Variable (may be argument, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, input, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, output, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, ...)
+	{ INSTR_CONST, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Constant (depending on type)
+	{ INSTR_ELEMENT, "#", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// <array> <index>     access array or structure element (left operand is array, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, right is index)
+	{ INSTR_BYTE, "$", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// <var> <byte_index>  access byte of specified variable
+	{ INSTR_RANGE, "..", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// x..y  (l = x, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, r = y) Used for slice array references
+	{ INSTR_TUPLE, ",", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// { INSTR_LIST <adr, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },var>  (var may be another tuple)
+	{ INSTR_DEREF, "@", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// dereference an address (var contains reference to dereferenced adr variable, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, type is type in [adr of type]. Byte if untyped adr is used.
+	{ INSTR_FIELD, ".", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// access field of structure
+	{ INSTR_TYPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_SCOPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_SRC_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			//{ INSTR_SRC_FILE variable representing source file
 };
 
+
+void InstrExecute(InstrBlock * blk)
+{
+	Instr * i;
+	InstrInfo * ii;
+	while(blk != NULL) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			ii = &INSTR_INFO[i->op];
+			if (ii->execute_fn != NULL) {
+				ii->execute_fn(i);
+			}
+		}
+		blk = blk->next;
+	}
+}
 
 /*
 
@@ -484,7 +565,7 @@ Arguments:
 	idx1_type = NULL;
 
 	if (type->variant == TYPE_ARRAY) {
-		idx1_type = type->dim[0];
+		idx1_type = type->index;
 	}
 
 	if (arr->mode == INSTR_ELEMENT) {
@@ -492,9 +573,9 @@ Arguments:
 		// If this is array of array, we may need to initialize index variable differently
 		
 		if (arr->adr->mode == INSTR_ELEMENT) {
-			idx1_type = arr->adr->type->dim[0];
+			idx1_type = arr->adr->type->index;
 		} else if (arr->adr->mode == INSTR_VAR) {
-			idx1_type = arr->adr->type->dim[0];
+			idx1_type = arr->adr->type->index;
 		}
 
 		range = arr->var;
@@ -503,12 +584,12 @@ Arguments:
 			max1 = range->var;
 		} else {
 			min1 = arr->var;
-			max1 = VarNewInt(arr->adr->type->dim[0]->range.max);
+			max1 = VarNewInt(arr->adr->type->index->range.max);
 		}
 		dst_arr = arr->adr;
 	} else {
-		min1 = VarNewInt(type->dim[0]->range.min);
-		max1 = VarNewInt(type->dim[0]->range.max);
+		min1 = VarNewInt(type->index->range.min);
+		max1 = VarNewInt(type->index->range.max);
 		dst_arr = arr;
 	}
 
@@ -516,9 +597,9 @@ Arguments:
 	
 	// This is copy instruction (source is array)
 	if (src_type->variant == TYPE_ARRAY) {		
-		src_min = VarNewInt(src_type->dim[0]->range.min);
-		src_max = VarNewInt(src_type->dim[0]->range.max + 1);
-		src_idx = VarNewTmp(src_type->dim[0]);
+		src_min = VarNewInt(src_type->index->range.min);
+		src_max = VarNewInt(src_type->index->range.max + 1);
+		src_idx = VarNewTmp(src_type->index);
 		init = VarNewElement(init, src_idx);
 		label_done = VarNewTmpLabel();
 	}
@@ -637,6 +718,8 @@ void PrintVarVal(Var * var)
 			PrintColor(oc);
 			PrintVarVal(var->var);
 
+		} else if (var->mode == INSTR_TYPE) {
+			PrintType(var->type);
 		} else {
 			if (var->mode == INSTR_RANGE) {
 				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
@@ -715,6 +798,8 @@ void PrintVarUser(Var * var)
 		PrintVarNameUser(var->adr);
 		Print("$");
 		PrintVarUser(var->var);
+	} else if (var->mode == INSTR_TYPE) {
+		PrintType(var->type);
 	} else {
 		PrintVarNameUser(var);
 	}
@@ -744,6 +829,8 @@ void PrintVar(Var * var)
 	} else if (var->mode == INSTR_CONST) {
 		printf("%ld", var->n);
 		return;
+	} else if (var->mode == INSTR_TYPE) {
+		PrintType(var->type);
 	} else {
 
 		PrintVarName(var);

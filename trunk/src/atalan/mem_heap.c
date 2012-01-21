@@ -151,8 +151,8 @@ Purpose:
 		if (type->variant == TYPE_INT) {
 			HeapAddBlock(heap, type->range.min, type->range.max - type->range.min + 1);
 		} else if (type->variant == TYPE_VARIANT) {
-			HeapAddType(heap, type->dim[0]);
-			HeapAddType(heap, type->dim[1]);
+			HeapAddType(heap, type->left);
+			HeapAddType(heap, type->right);
 		}
 	}
 }

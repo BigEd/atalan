@@ -27,7 +27,9 @@ type instrs:enum
 	ifle
 	ifoverflow
 	ifnoverflow
-
+  iftype
+  ifntype
+  
 	prologue	;generated at the beggining of the program
 	epilogue	;generated at the end of programm
 	emit  		;emit string to output
@@ -76,7 +78,8 @@ type instrs:enum
 	compiler
 	code_end
 	data_end
-	
+	decl
+		
 ;=================
 ;Instruction flags
 ;=================

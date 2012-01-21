@@ -118,14 +118,15 @@ Bool VarInTuple(Var * var, Var * find_var)
 Bool VarMayUseVar(Var * var, Var * test_var)
 /*
 Purpose:
-
+	Test, if the two array element variables may point to the same array.
 */
 {
 	if (var != NULL && test_var != NULL) {
 		if (test_var->mode == INSTR_ELEMENT || test_var->mode == INSTR_BYTE) {
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+				// This is the same array and the index of the variable is the same
 				if (var->adr == test_var->adr) {
-					// Either one of the indexes is non-constant or they are same
+//					if (var->var == test_var->var && !InVar(var->var)) return true;
 					if (var->var->mode != INSTR_CONST || test_var->var->mode != INSTR_CONST || var->var->n == test_var->var->n) return true;
 				}
 			}
@@ -157,6 +158,10 @@ Purpose:
 	for (i = block->first; i != NULL; i = i->next) {
 		if (i->op == INSTR_LINE) continue;
 
+		if (i->op == INSTR_CALL || i->op == INSTR_GOTO) {
+			if (VarUsesVar(i->result, var)) { res1 = 1; goto done; }
+		}
+
 		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 			if (VarMayUseVar(i->arg1, var) || VarMayUseVar(i->arg2, var)) { res1 = 1; goto done; }
 		}
@@ -170,7 +175,7 @@ Purpose:
 			if (VarInTuple(i->rule->flags, var)) { res1 = 0; goto done;}
 		}
 
-		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }
+		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }			//TODO: Maybe not necessary? (Tested by VarUsesVar)
 
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
@@ -189,12 +194,15 @@ Purpose:
 
 	res1 = VarIsLiveInBlock(proc, block->to, var);
 	if (res1 != 1) {
-		res2 = VarIsLiveInBlock(proc, block->cond_to, var);
+		res1 = VarIsLiveInBlock(proc, block->cond_to, var);
+		return res1;
 	}
 
 	if (res1 == 1 || res2 == 1) { res1 = 1; goto done; }
 	if (res1 == 0 && res2 == 0) res1 = 0;
 done:
+	//Mark the source instruction, so we can compute next use information
+	if (res1 == 1) { var->src_i = i; }
 //	block->processed = false;
 	return res1;
 }
@@ -207,17 +215,19 @@ void MarkProcLive(Var * proc)
 	FOR_EACH_LOCAL(proc, var)
 		if (FlagOff(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
 			VarMarkDead(var);
-		} else {
-			if (FlagOn(var->submode, SUBMODE_ARG_OUT)) VarMarkDead(var);
 		}
+	NEXT_LOCAL
+
+	FOR_EACH_OUT_ARG(proc, var)
+		VarMarkDead(var);
 	NEXT_LOCAL
 
 	// Procedure may use same variable both for input and output (for example using aliasing)
 	// a:proc >x@_a <y@_a
 	// In such case, marking variable as live has precedence.
 
-	FOR_EACH_LOCAL(proc, var)
-		if (FlagOn(var->submode, SUBMODE_ARG_IN)) VarMarkLive(var);
+	FOR_EACH_IN_ARG(proc, var)
+		VarMarkLive(var);
 	NEXT_LOCAL
 }
 
@@ -355,18 +365,20 @@ Bool OptimizeLive(Var * proc)
 			//      Result must be marked first dead first, to properly handle instructions like x = x + 1
 
 			if (result != NULL) {
-				VarMarkDead(result);
-				i->next_use[0] = result->src_i;
-				result->src_i = NULL;			// next use $$$$
-				VarMarkDead(i->rule->flags);
+				if (i->op != INSTR_CALL && i->op != INSTR_GOTO) {
+					VarMarkDead(result);
+					i->next_use[0] = result->src_i;
+					result->src_i = NULL;			// next use $$$$
+					VarMarkDead(i->rule->flags);
+				}
 			}
 
 			//===== Mark arguments as live (used)
 
 			// For procedure call, we mark as live variable all variables used in that procedure
-			if (result != NULL && result->type->variant == TYPE_PROC) {
-				ASSERT(op == INSTR_CALL || op == INSTR_GOTO);
+			if (i->op == INSTR_CALL || i->op == INSTR_GOTO /*result != NULL && result->type->variant == TYPE_PROC*/) {
 				MarkProcLive(i->result);
+				VarMarkLive(i->result);
 			} else {
 				VarMarkLive(i->arg1);
 				VarMarkLive(i->arg2);
@@ -381,6 +393,14 @@ Bool OptimizeLive(Var * proc)
 					i->next_use[2] = i->arg2->src_i;
 					VarMarkNextUse(i->arg2, i);
 				}
+
+				if (i->result != NULL) {
+					i->next_use[0] = i->result->src_i;
+					//TODO: VarMarkNextUse read (for indexes etc.)
+//					VarMarkNextUse(i->result, i);
+				}
+
+
 			}
 		}
 	}
