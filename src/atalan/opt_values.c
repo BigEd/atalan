@@ -186,6 +186,7 @@ Purpose:
 {
 	Var * var;
 	Instr * i;
+	if (res == NULL) return;
 
 	FOR_EACH_VAR(var)
 		i = var->src_i;
@@ -542,40 +543,44 @@ void ProcValuesUse(Var * proc)
 	InstrBlock * blk;
 	Var * var;
 
-	if (FlagOff(proc->flags, VarProcessed)) {
-		SetFlagOn(proc->flags, VarProcessed);
+	if (proc->type->variant == TYPE_ADR) {
+		ProcValuesUse(proc->type->element->owner);
+	} else {
+		if (FlagOff(proc->flags, VarProcessed)) {
+			SetFlagOn(proc->flags, VarProcessed);
 
-		// Some external procedures may be only declared, in such case,
-		// we just clear it's output variables
+			// Some external procedures may be only declared, in such case,
+			// we just clear it's output variables
 
-		if (proc->instr == NULL) {
-			FOR_EACH_LOCAL(proc, var)
-				if (!VarIsInArg(var)) {
-//				if (var->mode != INSTR_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
-					ResetValue(var);
-					ResetVarDep(var);
-					ResetVarDepRoot(var);
-				}
-			NEXT_LOCAL
-		} else {
-			for(blk = proc->instr; blk != NULL; blk = blk->next) {
-				for(i = blk->first; i != NULL; i = i->next) {
-					if (i->op == INSTR_LINE) {
-					} else if (i->op == INSTR_CALL) {
-						ProcValuesUse(i->result);
-					} else if (IS_INSTR_JUMP(i->op)) {
-						// jump instructions do have result, but it is label we jump to
-					} else {
-						if (i->result != NULL) {
-							ResetValue(i->result);
-							ResetVarDep(i->result);
-							ResetVarDepRoot(i->result);
+			if (proc->instr == NULL) {
+				FOR_EACH_LOCAL(proc, var)
+					if (!VarIsInArg(var)) {
+	//				if (var->mode != INSTR_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
+						ResetValue(var);
+						ResetVarDep(var);
+						ResetVarDepRoot(var);
+					}
+				NEXT_LOCAL
+			} else {
+				for(blk = proc->instr; blk != NULL; blk = blk->next) {
+					for(i = blk->first; i != NULL; i = i->next) {
+						if (i->op == INSTR_LINE) {
+						} else if (i->op == INSTR_CALL) {
+							ProcValuesUse(i->result);
+						} else if (IS_INSTR_JUMP(i->op)) {
+							// jump instructions do have result, but it is label we jump to
+						} else {
+							if (i->result != NULL) {
+								ResetValue(i->result);
+								ResetVarDep(i->result);
+								ResetVarDepRoot(i->result);
+							}
 						}
 					}
 				}
 			}
+			SetFlagOff(proc->flags, VarProcessed);
 		}
-		SetFlagOff(proc->flags, VarProcessed);
 	}
 }
 
@@ -1116,12 +1121,14 @@ Optimization: Back merging
 Optimize instruction sequences like:
 :::::::::::
 let a,10
+...
 let b,a
 dead a
 ::::::::::::
 to
 ::::::::::::
 let b,10
+...
 ::::::::::::
 
 */{
@@ -1133,6 +1140,7 @@ let b,10
 	Bool modified = false;
 	Int16 q;
 	UInt32 n;
+	UInt8 color;
 
 //	printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
 //	PrintProc(proc);
@@ -1166,7 +1174,9 @@ next:
 							//==== We have succeeded, replacing the register
 							
 							if (Verbose(proc)) {
+								color = PrintColor(OPTIMIZE_COLOR);
 								printf("Merging %ld#%ld", blk->seq_no, n); InstrPrint(i);
+								PrintColor(color);
 							}
 
 							modified = true;
@@ -1190,9 +1200,8 @@ next:
 		}
 	}
 
-//	if (modified) {
-//		printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
-//		PrintProc(proc);
-//	}
+	if (modified && Verbose(proc)) {
+		PrintProc(proc);
+	}
 	return modified;
 }

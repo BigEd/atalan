@@ -338,6 +338,8 @@ UInt16 SetBookmarkLine(Loc * loc)
 	Instr * i;
 	InstrBlock * blk = loc->blk;
 
+	ERR_INSTR = loc->i;
+
 	i = loc->i;
 	do {
 
@@ -349,7 +351,6 @@ UInt16 SetBookmarkLine(Loc * loc)
 		i = blk->last;
 	} while (true);
 
-	ERR_INSTR = loc->i;
 	LINE_NO = i->line_no;
 	BOOKMARK_LINE_NO  = i->line_no;
 	SRC_FILE = i->result;

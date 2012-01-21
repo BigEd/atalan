@@ -272,6 +272,7 @@ void OptimizeCombined(Var * proc)
 			modified |= OptimizeMergeBranchCode(proc);
 		} while(modified);
 
+		modified |= OptimizeLive(proc);	
 		modified |= OptimizeVarMerge(proc);
 		modified |= OptimizeLoops(proc);
 	} while(modified);
@@ -331,7 +332,7 @@ Purpose:
 
 					if (subproc->instr != NULL) {
 						BufEmpty();
-						FOR_EACH_ARG(subproc, arg)
+						FOR_EACH_ARG(subproc, arg, SUBMODE_ARG_IN+SUBMODE_ARG_OUT)
 							if (arg->adr == NULL) {
 								var = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
 							} else {

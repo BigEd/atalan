@@ -18,24 +18,23 @@ const
 
 ;Information: Function reads out all Joypad 1 Buttonstates and write them into one byte
 ;             Button states can then be tested with the Const values (JOYPAD_RIGHT....)
-getJoyPad1State:proc(>result:byte) = 
+getJoyPad1State:proc -> result:byte = 
           INPUT_PAD1_RESET = 1
           INPUT_PAD1_RESET = 0
           result	      	 = 0
           for x:0..7
-                result  = result * 2
+                result  = lo (result * 2)
                 if INPUT_PAD1_READ bitAnd 1 <> 0
                     result = result bitOr 1
-          return result
 
 ;Information: Function reads out all Joypad 2 Buttonstates and write them into one byte
 ;             Button states can then be tested with the Const values (JOYPAD_RIGHT....)
-getJoyPad2State:proc(>result:byte) = 
+getJoyPad2State:proc ->result:byte = 
           INPUT_PAD2_RESET = 1
           INPUT_PAD2_RESET = 0
           result	    	   = 0
           for x:0..7
-                result  = result * 2
+                result  = lo (result * 2)
                 if INPUT_PAD2_READ bitAnd 1 <> 0
                     result = result bitOr 1
-          return result
+          

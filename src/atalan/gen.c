@@ -97,7 +97,7 @@ void GenLine()
 		InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
 		line = LINE;
 		line_no = LINE_NO;
-		if (LINE_POS == 0) {
+		if (LINE_POS == 0 && PREV_LINE != NULL) {
 			line = PREV_LINE;
 			line_no--;
 		}
@@ -144,7 +144,7 @@ Purpose:
 	Generate cpu instruction translated using specified rule.
 */
 {
-	GenLine();
+//	GenLine();
 	InstrInsert(BLK, INSTR, rule->op, result, arg1, arg2);
 	BLK->last->rule = rule;
 }
@@ -370,7 +370,7 @@ Argument:
 					SyntaxError("failed to evaluate constant");
 				}
 			} else {
-				Gen(op, result, arg1, arg2);
+				GenInternal(op, result, arg1, arg2);
 			}
 
 		}

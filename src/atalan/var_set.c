@@ -1,7 +1,7 @@
 /*
  VarSet - Set of variables
 
-This is collection of variables.
+VarSet is collection of variables.
 
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php

@@ -20,15 +20,12 @@ GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
 
 /*
-Registers are special type of variable.
-Because we use them a lot, we create an array of references to registers here.
+We have theoretical option of supporting mltiple CPUs simultaneously (this the CPUS array).
+Current CPU used is stored in CPU variable.
 */
-
 
 CPUType CPUS[1];			// currently, there is only one supported CPU
 GLOBAL CPUType * CPU;		// current CPU (in case we use multiple CPUs in the future)
-
-//GLOBAL Var * REGSET;
 
 char * TMP_NAME = "_";
 char * TMP_LBL_NAME = "_lbl";
@@ -47,9 +44,22 @@ void VarInit()
 
 	// Alloc rule procedure and rule arguments (rule arguments are local arguments of RULE_PROC)
 
-//	CPU->REG_CNT = 0;
-
 	CPU = &CPUS[0];
+}
+
+Var * VarFindOp(InstrOp op, Var * left, Var * right)
+/*
+Purpose:
+	Find variable created as combination of two other variables.
+Argument:
+	ref		Array is accessed using reference.
+*/
+{
+	Var * var;
+	for (var = VARS; var != NULL; var = var->next) {
+		if (var->mode == op && var->adr == left && var->var == right) return var;
+	}
+	return NULL;
 }
 
 Var * VarNewRange(Var * min, Var * max)
@@ -63,19 +73,24 @@ Var * VarNewRange(Var * min, Var * max)
 }
 
 Var * VarNewTuple(Var * left, Var * right)
+/*
+Purpose:
+	Create new tuple from the two variables.
+	If the right variable is NULL, left is returned.
+*/
 {
 	Var * var;
 
 	if (right == NULL) return left;
+	if (left == NULL) return right;
 
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == INSTR_TUPLE && var->adr == left && var->var == right) return var;
+	var = VarFindOp(INSTR_TUPLE, left, right);
+	if (var == NULL) {
+		var = VarAllocScope(NO_SCOPE, INSTR_TUPLE, NULL, 0);
+		var->type = TypeTuple(left->type, right->type);
+		var->adr = left;
+		var->var = right;
 	}
-
-	var = VarAllocScope(NO_SCOPE, INSTR_TUPLE, NULL, 0);
-	var->type = TypeTuple();
-	var->adr = left;
-	var->var = right;
 	return var;
 }
 
@@ -106,13 +121,15 @@ Argument:
 
 	// Try to find same element
 
-	Var * var;
+	Var * var = VarFindOp(op, arr, idx);
+	if (var != NULL) return var;
+/*
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->mode == op) {
-			if (var->adr == arr && var->var == idx /*&& (ref == FlagOn(var->submode, SUBMODE_REF))*/ ) return var;
+			if (var->adr == arr && var->var == idx) return var;
 		}
 	}
-
+*/
 	item = VarAlloc(op, NULL, 0);
 //	if (ref) item->submode = SUBMODE_REF;
 	item->adr  = arr;
@@ -155,24 +172,6 @@ Argument:
 	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
 	item->type = TypeByte();
 	return item;
-/*
-	Var * item;
-
-	// Try to find same element
-
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == INSTR_BYTE) {
-			if (var->adr == arr && var->var == idx) return var;
-		}
-	}
-
-	item = VarAlloc(INSTR_BYTE, NULL, 0);
-	item->adr = arr;
-	item->var = idx;
-	item->type = TypeByte();
-	return item;
-*/
 }
 
 Var * InScope(Var * new_scope)
@@ -206,15 +205,6 @@ void EnterLocalScope()
 Var * VarFirst()
 {
 	return VARS;
-}
-
-Var * VarFindType(char * name, VarIdx idx, Type * type)
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->idx == idx && var->type == type && StrEqual(name, var->name)) break;
-	}
-	return var;
 }
 
 Var * VarNewTmp(Type * type)
@@ -260,6 +250,7 @@ Bool VarIsOut(Var * var)
 	return false;
 }
 */
+
 Var * VarFindInt(Var * scope, UInt32 n)
 {
 	Var * var;
@@ -426,17 +417,6 @@ Purpose:
 	return var;
 }
 
-Var * VarFindScope2(Var * scope, char * name)
-{
-	Var * var = NULL;
-	Var * s;
-	for (s = SCOPE; s != NULL; s = s->scope) {
-		var = VarFindScope(s, name, 0);
-		if (var != NULL) break;
-	}
-	return var;
-}
-
 void PrintScope(Var * scope)
 /*
 Purpose:
@@ -453,12 +433,30 @@ Purpose:
 	}
 }
 
+Var * VarFindScope2(Var * scope, char * name)
+{
+	Var * var = NULL;
+	Var * s;
+	for (s = SCOPE; s != NULL; s = s->scope) {
+		var = VarFindScope(s, name, 0);
+		if (var != NULL) break;
+		// For procedures whose type has been defined using predefined type, try to find arguments from this type
+		if (s->type->variant == TYPE_PROC && s->type->owner != NULL && s->type->owner != s) {
+			var = VarFindScope(s->type->owner, name, 0);
+			if (var != NULL) break;
+		}
+	}
+	return var;
+}
+
 Var * VarFind2(char * name)
 /*
 Purpose:
 	Find variable in current scope.
 */
 {
+	return VarFindScope2(SCOPE, name);
+/*
 	Var * var = NULL;
 	Var * s;
 	for (s = SCOPE; s != NULL; s = s->scope) {
@@ -466,6 +464,7 @@ Purpose:
 		if (var != NULL) break;
 	}
 	return var;
+*/
 }
 
 Var * VarProcScope()
@@ -476,23 +475,6 @@ Var * VarProcScope()
 	}
 	return s;
 }
-/*
-Var * VarFindInProc(char * name, VarIdx idx)
-Purpose:
-	Find variable in current scope.
-{
-	Var * var = NULL;
-	Var * s = SCOPE;
-	do {
-		var = VarFindScope(s, name, idx);
-		if (var != NULL) break;
-		if (s->type != NULL && s->type->variant == TYPE_PROC) break;
-		s = s->scope;
-	} while(s != NULL);
-
-	return var;
-}
-*/
 
 Var * VarFind(char * name, VarIdx idx)
 {
@@ -548,17 +530,6 @@ Var * VarNewType(TypeVariant variant)
 	return var;
 }
 
-Int16 TypeDim(Type * type)
-{
-	UInt16 d = 0;
-	Type * dim;
-	for(d=0; d<MAX_DIM_COUNT; d++) {
-		dim = type->dim[d];
-		if (dim == NULL) break;
-	}
-	return d;
-}
-
 Bool VarIsUsed(Var * var)
 {
 	return var != NULL && (var->read > 0 || var->write > 0);
@@ -571,9 +542,8 @@ Purpose:
 */
 {
 	Var * var, *cnst, * type_var;
-	Type * type, * dim;
+	Type * type;
 	UInt32 size;	//, i;
-	UInt8 d;
 	Var * dim1, * dim2;
 
 	// Generate empty arrays
@@ -584,12 +554,16 @@ Purpose:
 			if (var->mode == INSTR_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
 
 				if (VarIsUsed(var)) {
+					
+					size = TypeSize(type);
+/*
 					size = 1;	// size of basic element (byte by default)
 					for(d=0; d<MAX_DIM_COUNT; d++) {			
 						dim = type->dim[d];
 						if (dim == NULL) break;
 						size *= dim->range.max - dim->range.min + 1;
 					}
+*/
 
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -600,19 +574,12 @@ Purpose:
 					ArraySize(type, &dim1, &dim2);
 
 					if (dim2 != NULL) {
-	//					dim = type->dim[0];
-	//					cnst = VarNewInt(dim->range.max - dim->range.min + 1);
-	//					dim = type->dim[1];
-	//					cnst2 = VarNewInt(dim->range.max - dim->range.min + 1);
 						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
 						EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
-	//					Gen(INSTR_ALLOC, var, cnst, cnst2);
 					} else {
 						cnst = VarNewInt(size);
 						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
 						EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
-	//					GenLabel(var);		// use the variable as label - this will set the address part of the variable
-	//					Gen(INSTR_ALLOC, var, cnst, NULL);
 					}
 				}
 			}
@@ -1061,13 +1028,30 @@ Var * VarFirstLocal(Var * scope)
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
 {
 	Var * var = arg->next;
-	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != arg->scope || FlagOff(var->submode, submode))) var = var->next;
 	return var;
 }
 
 Var * FirstArg(Var * proc, VarSubmode submode)
 {
-	return NextArg(proc, proc, submode);
+	Var * var;
+	Var * owner;
+
+	// We may call the procedure using address stored in a variable, but we need to parse the arguments using
+	// procedure itself.
+	if (proc->type->variant == TYPE_ADR) {
+		proc = proc->type->element->owner;
+	}
+
+	// If this procedure type is defined using shared definition, use the definition to fing the arguments
+
+	owner = proc->type->owner;
+	if (owner != NULL && owner != proc) {
+		proc = owner;
+	}
+	var = proc->next;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
+	return var;
 }
 
 
@@ -1099,6 +1083,10 @@ Purpose:
 		if (StrEqual(fld_name, "step")) {
 			fld = VarNewInt(type->step);
 		}
+	}
+
+	if (fld == NULL) {
+		fld = VarFindScope(var, fld_name, 0);
 	}
 	return fld;
 }
@@ -1149,6 +1137,11 @@ Bool VarIsOutArg(Var * var)
 Bool VarIsArg(Var * var)
 {
 	return FlagOn(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT);
+}
+
+Bool VarIsRuleArg(Var * var)
+{
+	return var->scope == RULE_PROC;
 }
 
 Bool VarIsEqual(Var * left, Var * right)

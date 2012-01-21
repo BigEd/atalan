@@ -311,7 +311,7 @@ int main(int argc, char *argv[])
 	if (OPTIMIZE > 0) {
 		// It is important to call the inline optimization before the code is broken to basic blocks.
 		// It makes code inserting easier.
-		ProcessUsedProc(OptimizeProcInline);
+//		ProcessUsedProc(OptimizeProcInline);
 	}
 
 	//***** Analysis
@@ -424,7 +424,7 @@ int main(int argc, char *argv[])
 	}
 done:	
 	PrintCleanup();
-	exit(result);
+ 	exit(result);
 	
 failure:	
 	result = 2;

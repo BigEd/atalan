@@ -19,7 +19,6 @@ type
 
 rule alloc %A:struct(), %B                         = "   .ds %B"
 rule alloc %A:array(card) of byte1, %B            = "   .ds %B"
-rule alloc %A:array(byte) of card, %B            = "%A_lo:" "   .ds %B" "%A_hi:" "   .ds %B" 
 rule alloc %A:array(byte,byte) of byte1, %B, %C   = "   .ds %B*%C"
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
@@ -279,7 +278,35 @@ rule let_adr %A:adr, %B:byte1arr(%D:byte) = instr
 	let %A$0, a
 	hi a, %B(%D)
 	let %A$1, a
- 
+
+;======= Array of 2-byte values
+
+type arr_2b:array(byte) of card
+
+;var instruction declares variable (possibly as local in specified var)
+
+rule decl %A:arr_2b = instr
+  decl %A.lo:array(%A.idx) of byte
+	decl %A.hi:array(%A.idx) of byte  
+  
+;rule alloc %A:arr_2b(%B:byte), %C            = ""
+;	alloc %A.lo
+;	alloc %A.hi 
+
+rule let %A:arr_2b(%B:byte), %D:card = instr
+	ldx %B
+	lda %D$0
+	sta %A.lo$x
+	lda %D$1
+	sta %A.hi$x
+
+rule let %D:card, %A:arr_2b(%B:byte) = instr
+	ldx %B
+	lda %A.lo$x
+	sta %D$0
+	lda %A.hi$x
+	sta %D$1
+		 
 ;======= Array of array (is simmilar to 2D array, but x & y are not switched)
 
 type arr_of_arr:array(byte) of array(byte) of byte1
@@ -477,8 +504,6 @@ rule let %A:byte, %C:byte1arr(%D:card)  = instr
   let %A,a
 
 ;******** Let_adr
-	
-;Compute address of specified element in array and store it to specified variable
 
 rule let_adr %A:adr, %B = instr
   let_adr a, %B$0
@@ -713,6 +738,15 @@ rule sub %A:byte1, %B:byte1, %C:byte1 = instr
   sbc %C
   let %A,a
 
+rule sub %A:int, %B:byte, %C:byte = instr
+	sec
+	lda %B
+	sbc %C
+	sta %A$0
+	lda 0
+	sbc 0
+	sta %A$1
+	
 rule sub %A:card, %B:card, const %C:card = instr
 	let a, %B$0
 	lo %Z, %C           ; %Z is macro local variable
@@ -2091,6 +2125,7 @@ rule proc %A:proc     = "%A .proc"
 rule return %A:proc() #6 = "   rts"
 rule endproc %A:proc  = ".endp"
 rule call %A:proc()  #6 = "   jsr %A"
+rule call %A:adr  #14     = "   jsr *+6" "   jmp *+6" "   jmp (%A)"
 rule call %A #6 = "jsr %A"
 ;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
 rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
