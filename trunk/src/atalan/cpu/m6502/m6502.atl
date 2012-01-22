@@ -1291,6 +1291,12 @@ rule mod %A:byte, %B:card, 8 = instr
 	let a, %B$0
 	and a, a, 7
 	let %A, a
+
+;16-bit
+rule mod %A:, %B:card, 8 = instr
+	let a, %B$0
+	and a, a, 7
+	let %A, a
 		
 rule mod %A:byte, %B:card, %C:byte = instr
 	let _TEMPW1, %B			;divident

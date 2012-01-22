@@ -9,6 +9,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
+#ifndef _COMMON_H_
+#define _COMMON_H_
+
 #define OK 0
 
 #include <stdlib.h>
@@ -33,7 +36,7 @@ typedef signed char Int8;
 
 // Memory management
 
-void * MemAllocEmpty(long size);
+extern void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
 #define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
 #define MemFree(adr) free(adr)
@@ -120,3 +123,5 @@ void PathParent(char * path);
 void PathMerge(char * path, char * dirname, char * filename);
 void GetApplicationDir(char * name, char * path);
 void PathCutExtension(char * path, char * ext);
+
+#endif

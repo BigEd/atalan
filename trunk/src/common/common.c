@@ -17,7 +17,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
     #include <windows.h>
 #endif
 
-void * MemAllocEmpty(long size)
+extern void * MemAllocEmpty(long size)
 /*
 Purpose:
 	Allocate memory and set it to zeroes.
@@ -36,7 +36,7 @@ char * StrAlloc(char * str)
 
 char * StrAllocLen(char * str, UInt16 len)
 {
-	char * s = malloc(len + 1);
+	char * s = (char *)malloc(len + 1);
 	memcpy(s, str, len);
 	s[len] = 0;
 	return s;
@@ -176,7 +176,7 @@ Int16 StrEditDistance(char * s, char * t)
   m = StrLen(t);
 
   if (n!=0&&m!=0) {
-    d = malloc((sizeof(int))*(m+1)*(n+1));
+    d = (int *)malloc((sizeof(int))*(m+1)*(n+1));
     m++;
     n++;
     //Step 2	

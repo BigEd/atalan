@@ -147,7 +147,7 @@ Purpose:
 	Alloc integer type for constant.
 */
 {
-	Type * type;
+	Type * type = NULL;
 	if (n>=0 && n<TYPE_CONST_COUNT) {
 		type = TCONST[n];
 	}
