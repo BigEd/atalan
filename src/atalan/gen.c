@@ -93,7 +93,7 @@ void GenLine()
 	// Line instructions are used to be able to reference back from instructions to line of source code.
 	// That way, we can report logical errors detected in instructions to user.
 
-	if (!ParsingRule() && !ParsingSystem() && CURRENT_LINE_NO != LINE_NO) {
+	if (PHASE == PHASE_PARSE && !ParsingRule() && !ParsingSystem() && CURRENT_LINE_NO != LINE_NO) {
 		InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
 		line = LINE;
 		line_no = LINE_NO;
@@ -144,7 +144,6 @@ Purpose:
 	Generate cpu instruction translated using specified rule.
 */
 {
-//	GenLine();
 	InstrInsert(BLK, INSTR, rule->op, result, arg1, arg2);
 	BLK->last->rule = rule;
 }

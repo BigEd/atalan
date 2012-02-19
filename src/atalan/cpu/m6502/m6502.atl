@@ -26,8 +26,11 @@ rule alloc %A:long                               = "   .ds 3"
 rule alloc %A:-128..127                          = "   .ds 1"
 rule alloc %A:int                                = "   .ds 2"
 
-;Define cpu registers.
-;Any variable defined in cpu scope is considered a register.
+;=============================================
+; CPU definition
+; 
+; Processor registers and macros are defined.
+;=============================================
 
 CPU:scope =
 	a:0..255
@@ -307,7 +310,7 @@ rule let %D:card, %A:arr_2b(%B:byte) = instr
 	lda %A.hi$x
 	sta %D$1
 		 
-;======= Array of array (is simmilar to 2D array, but x & y are not switched)
+;======= Array(0..255) of array(0..255) of byte1 (is simmilar to 2D array, but x & y are not switched)
 
 type arr_of_arr:array(byte) of array(byte) of byte1
 
@@ -333,6 +336,54 @@ rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
 	hi a, %A$y
 	adc 0	
 	let %D$1, a
+
+;======= array(0..255) of array(0..127) of byte2
+
+type arr_of_arr2:array(0..255) of array(0..127) of byte2
+
+rule alloc %A:array(0..255) of array(0..127) of byte2, %B, %C = "   .ds %B*%C*2"
+rule arrindex %A:array(0..255) of array(0..127) of byte2,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C*2)" "%A_hi:  :%B dta h(%A + #*%C*2)"
+
+rule let %A:arr_of_arr2(%B:0..255)(%C:0..127), %D:byte2 = instr
+	ldy %B
+	lo a, %A$y			;this accesses lower byte of array of pointers
+	let _arr$0, a
+	hi a, %A$y
+	let _arr$1, a
+	lda %C
+	asl
+	tay
+	let a, %D$0
+	let @_arr$y, a
+	iny
+	let a, %D$1
+	let @_arr$y, a
+
+rule let %D:byte2, %A:arr_of_arr2(%B:0..255)(%C:0..127)  = instr
+	ldy %B
+	lo a, %A$y			;this accesses lower byte of array of pointers
+	let _arr$0, a
+	hi a, %A$y
+	let _arr$1, a
+	lda %C
+	asl
+	tay
+	lda @_arr$y
+	sta %D$0
+	iny
+	lda @_arr$y
+	sta %D$1
+
+;rule let_adr %D:adr, %A:arr_of_arr(%B:0..255)(%C:0..127) = instr
+;	ldy %C
+;	hi x, %A$y	
+;	lo a, %A$y
+;	clc
+;	adc %B
+;	let %D$0, a
+;	hi a, %A$y
+;	adc 0	
+;	let %D$1, a
 
 ;======= 2D byte array
 	
@@ -961,12 +1012,12 @@ rule mul %A:card, %B:byte, 1    = instr
 	let %A$1, a   ; sta %A+1
 
 rule mul %A:card, %B:byte, 2    = instr
-	let a, %B			; lda %B
-	asl a   ; asl
-	let %A$0, a   ; sta %A
-	let a, 0	; lda #0
-	rol a			
-	let %A$1, a   ; sta %A+1
+	lda %B
+	asl
+	sta %A$0
+	lda 0
+	rol			
+	sta %A$1
 
 ; if no "=instr" segfaults
 rule mula16 %A:card, %B:byte, 2	= instr
@@ -1412,35 +1463,35 @@ rule or %A:card, %B:card, %C:card = instr
 
 rule xor  %A:byte,%B:byte,%C:byte = instr
 	let a,%B
-	xor azn,a,%C
+	xor a,a,%C
 	let %A,a
 
 rule xor %A:byte1arr(%B:byte),%C:byte,%D:byte = instr
 	let a,%C
-	xor azn, a, %D
+	xor a, a, %D
 	let x,%B
 	let %A$x,a
 
 rule xor %A:byte,%B:byte1arr(%C:byte),%D:byte = instr
 	let x,%C
 	let a,%B$x
-	xor azn, a, %D
+	xor a, a, %D
 	let %A, a
 
 rule xor %A:card, %B:card, const %C = instr
 	let a, %B$0
 	lo   %Z, %C
-	xor  azn, a, %Z 
+	xor  a, a, %Z 
  	let %A$0, a
  	
 	let a, %B$1
 	hi   %Z, %C
-	xor  azn, a, %Z 
+	xor  a, a, %Z 
  	let %A$1, a
  	
 rule xor %A:card, %B:card, %C:byte = instr
 	let a, %B$0
-	xor  azn, a, %C
+	xor  a, a, %C
 	let %A$0, a 
 	let a, %B$1
 	let %A$1, a
@@ -1449,11 +1500,11 @@ rule xor %A:card, %B:byte, %C:card = instr xor %A, %C, %B
 
 rule xor %A:card, %B:card, %C:card = instr
 	let a, %B$0
-	xor   azn, a, %C$0
+	xor a, a, %C$0
 	let %A$0, a
 	 
 	let a, %B$1
-	xor   azn, a, %C$1
+	xor a, a, %C$1
 	let %A$1, a
 ;*********** Not
 
@@ -1586,7 +1637,7 @@ rule ifle %L,%A:sbyte,%B:sbyte   = instr
 	sec           ; clc
   sbc %A    ; sub %B
   ifeq ok, v, 0			; bvc ok
-  xor azn, a, 255
+  xor a, a, 255
   label ok
   ifeq %L, n, 0      ; bpl %L
 
@@ -1617,7 +1668,7 @@ rule ifge %L,%A:sbyte,%B:sbyte   = instr
 	sec           ; clc
   sbc %B    ; sub %B
   ifeq ok, v, 0			; bvc ok
-  xor azn, a, 255
+  xor a, a, 255
   label ok
   ifeq %L, n, 0      ; bpl %L
 
@@ -1633,7 +1684,7 @@ rule iflt %L,%A:sbyte,%B:sbyte   = instr
 	sec           ; clc
   sbc %B    ; sub %B
   ifeq ok, v, 0			; bvc ok
-  xor azn, a, 255
+  xor a, a, 255
   label ok
   ifeq %L, n, 1      ; bmi %L
 
@@ -1678,7 +1729,7 @@ rule ifgt %L,%A:sbyte,%B:sbyte   = instr
 	sec           ; clc
   sbc %A    ; sub %B
   ifeq ok, v, 0			; bvc ok
-  xor azn, a, 255
+  xor a, a, 255
   label ok
   ifeq %L, n, 1      ; bmi %L
 
@@ -1773,7 +1824,7 @@ rule sub n, %B:int, %C:int = instr
 	let a, %B$1
 	sbc %C$1
 	ifeq lab, v, 0
-	xor azn, a, 255
+	xor a, a, 255
 	label lab
  
 ;if s16 < s16
@@ -1997,12 +2048,12 @@ rule let %A:byte1, void @zn #3 = "   sta %A"
 ;STX++
 rule let %A$const %B,  x @zn #3 = "   stx %A-%A.index.min+%B"
 rule let %A:byte1,     x @zn #3 = "   stx %A"
-rule let %A$y,         x @zn #5 = "   stx %A-%A.index.min,y"
+;rule let %A$y,         x @zn #5 = "   stx %A-%A.index.min,y"
 
 ;STY++
 rule let %A$const %B,  y @zn #3 = "   sty %A-%A.index.min+%B"
 rule let %A:byte1,     y @zn #3 = "   sty %A"
-rule let %A$x,         y @zn #5 = "   sta %A-%A.index.min,x"
+;rule let %A$x,         y @zn #5 = "   sty %A-%A.index.min,x"
 
 ;BIT
 ;If we ignore the Z flag, we may consider bit to be let instruction assigning to void.

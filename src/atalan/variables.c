@@ -425,7 +425,7 @@ Purpose:
 */
 {
 	Var * var;
-	printf("===== %s =======\n", scope->name);
+	PrintFmt("===== %s =======\n", scope->name);
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->scope == scope) {
 			PrintVar(var);
@@ -1158,4 +1158,10 @@ Bool VarIsEqual(Var * left, Var * right)
 	}
 
 	return false;
+}
+
+Var * VarFindAssociatedConst(Var * var, char * name)
+{
+	if (var == NULL) return NULL;
+	return VarFindScope(var->type->owner, name, 0);
 }

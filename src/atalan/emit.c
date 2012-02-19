@@ -24,34 +24,6 @@ G_PREV_OP is variable, which remembers the previous operator.
 
 UInt8 G_PREV_OP = 0;
 
-void PrintHeader(char * text)
-/*
-Purpose:
-	Print header to output.
-*/
-{
-	UInt16 len, half_len;
-	UInt8 color;
-	if (text == NULL) text = "";
-
-	len = StrLen(text);
-	if (len > 70) {
-		len = 2;
-	} else {
-		len = 70 - len;
-	}
-
-	color = PrintColor(RED+GREEN);
-	half_len = len / 2;
-	PrintRepeat("=", half_len);
-	Print(" ");
-	Print(text);
-	Print(" ");
-	PrintRepeat("=", len - half_len);
-	Print("\n");
-	PrintColor(color);
-
-}
 
 void PrintOptim(char * text)
 {
@@ -80,7 +52,7 @@ void EmitByte(char c)
 		*G_BUF++ = c;
 	} else {
 		if (Verbose(NULL)) {
-			putchar(c);	//printf("%c", c);
+			PrintChar(c);	
 		}
 		if (G_OUTPUT != NULL) {
 			putc(c, G_OUTPUT);
@@ -123,7 +95,7 @@ void EmitStr(char * str)
 	//		if (str[len-1] == '-') {
 	//		}
 			if (Verbose(NULL)) {
-				printf("%s", str);
+				Print(str);
 			}
 			if (G_OUTPUT) {
 				fputs(str, G_OUTPUT);
@@ -485,7 +457,7 @@ Purpose:
 		type = var->type;
 
 //		if (var->idx == 27 && var->scope != NULL && StrEqual(var->scope->name, "music\'init")) {
-//			printf("");
+//			Print("");
 //		}
 
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_CONST) continue;

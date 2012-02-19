@@ -272,9 +272,11 @@ Bool OptimizeLive(Var * proc)
 	Var * var, * result;
 	UInt32 n = 0, blk_n = 0;
 	InstrOp op;
+	Loc loc;
+	UInt8 color;
 
 	if (Verbose(proc)) {
-		printf("------ optimize live %s ------\n", proc->name);
+		PrintHeader(3, "optimize live", proc->name);
 		PrintProc(proc);
 	}
 
@@ -293,11 +295,11 @@ Bool OptimizeLive(Var * proc)
 		FOR_EACH_VAR(var)
 
 //			if (blk->seq_no == 4 && var->mode == INSTR_BYTE && var->var->n == 0 && StrEqual(var->adr->name, "s")) {
-//				printf("");
+//				Print("");
 //			}
 
 //			if (StrEqual(var->name, "z") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
-//				printf("");
+//				Print("");
 //			}
 
 			// Non-local variables (except registers) are always considered live
@@ -340,7 +342,12 @@ Bool OptimizeLive(Var * proc)
 			if (op == INSTR_LINE || op == INSTR_RETURN) continue;
 
 			if (i->rule == NULL) {
-				InternalError("Missing rule");
+				loc.proc = proc;
+				loc.blk = blk;
+				loc.i = i;
+				InternalErrorLoc("Missing rule", &loc);
+				Print("#"); PrintInt(blk->seq_no); Print("/"); PrintInt(n); InstrPrint(i);
+				exit(2);
 			}
 
 			result = i->result;
@@ -350,7 +357,9 @@ Bool OptimizeLive(Var * proc)
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
 							if (Verbose(proc)) {
-								printf("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
+								color = PrintColor(OPTIMIZE_COLOR);
+								PrintFmt("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
+								PrintColor(color);
 							}
 							i = InstrDelete(blk, i);
 							modified = true;

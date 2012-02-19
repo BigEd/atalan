@@ -71,9 +71,15 @@
     <ClCompile Include="gen.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="bigint.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bigint.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

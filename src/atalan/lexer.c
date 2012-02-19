@@ -59,6 +59,7 @@ static Int16    PREV_CHAR;
 GLOBAL LinePos  TOKEN_POS;
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
+GLOBAL Token TOK_NO_SPACES;				// if the current token was not preceded by whitespaces, it is copied here
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
@@ -323,7 +324,7 @@ static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "unless", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "param", "instr", "times", "adr", "debug", "mod", "bitnot", "bitand", "bitor", "bitxor", "struct", "use", "ref", "step", "return",
-	"scope", "sequence", "assert"
+	"scope", "sequence", "assert", "either"
 	
 };
 
@@ -397,6 +398,9 @@ void NextToken()
 	UInt16 top;
 	UInt16 nest;
 	UInt8 c, c2, c3, n;
+	Bool spaces = false;
+
+	TOK_NO_SPACES = TOKEN_VOID;
 
 	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
 	// For blocks ended with stop token, return the stop_token instead
@@ -426,7 +430,7 @@ retry:
 	// Skip spaces
 	// These spaces are in the middle of the line, so we simply skip them, as they do not affect indent
 
-	while((c = LINE[LINE_POS]) == SPC || c == TAB) LINE_POS++;
+	while((c = LINE[LINE_POS]) == SPC || c == TAB) { spaces = true; LINE_POS++; }
 
 	// We have first character of the next token.
 	// Remember it's position on line
@@ -639,6 +643,7 @@ store:
 		TOK = TOKEN_BLOCK_END;
 	}
 
+	if (!spaces) TOK_NO_SPACES = TOK;
 }
 
 Bool NextCharIs(UInt8 chr)
@@ -655,6 +660,12 @@ Bool NextIs(Token tok)
 	return true;
 }
 
+Bool NextNoSpaceIs(Token tok)
+{
+	if (TOK_NO_SPACES != tok) return false;
+	NextToken();
+	return true;
+}
 
 void ExpectToken(Token tok)
 {

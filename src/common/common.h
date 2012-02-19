@@ -75,12 +75,15 @@ void PrintInit();
 void PrintCleanup();
 
 FILE * PrintDestination(FILE * file);
+void PrintLog(FILE * file);
 UInt8 PrintColor(UInt8 color);
 void Print(char * text);
 void PrintEOL();
 void PrintChar(char c);
 void PrintInt(Int32 n);
 void PrintRepeat(char * text, UInt16 cnt);
+void PrintFmt(char * text, ...);
+void PrintHeader(UInt8 level, char * text, ...);
 
 
 //GLOBAL is used to mark global variables, so it is easy to find all of them

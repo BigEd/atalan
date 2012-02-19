@@ -210,6 +210,8 @@ Int16 StrEditDistance(char * s, char * t)
 UInt16 G_OLD_CP;
 UInt8 G_COLOR;
 FILE * G_PRINT_OUTPUT;		// either STDOUT or STDERR
+FILE * G_PRINT_LOG;			// file into which the copy of output gets printed (possibly in HTML)
+Bool   G_IN_COLOR;			// if in color
 
 void PrintInit()
 {
@@ -219,6 +221,9 @@ void PrintInit()
 #endif
 	PrintDestination(stdout);
 	PrintColor(RED+GREEN+BLUE);
+
+	G_IN_COLOR = false;
+	G_PRINT_LOG = NULL;
 }
 
 void PrintCleanup()
@@ -226,6 +231,17 @@ void PrintCleanup()
 #ifdef __Windows__
 	SetConsoleOutputCP(G_OLD_CP);
 #endif
+}
+
+void PrintLog(FILE * file)
+{
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "\n</pre></body></html>\n");
+	}
+	G_PRINT_LOG = file;
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "<html><body bgcolor=\"black\"><pre>\n");
+	}
 }
 
 FILE * PrintDestination(FILE * file)
@@ -242,25 +258,98 @@ Purpose:
 */
 {
 	UInt8 old_color = G_COLOR;
+	UInt8 r, g, b, h;
 #ifdef __Windows__
 	HANDLE hStdout; 
 	hStdout = GetStdHandle(STD_OUTPUT_HANDLE); 
 	SetConsoleTextAttribute(hStdout, color);
 #endif
 	G_COLOR = color;
+
+	if (G_PRINT_LOG != NULL) {
+		if (G_IN_COLOR) { fprintf(G_PRINT_LOG, "</font>"); }
+		h = 200; if (FlagOn(color, LIGHT)) h = 255;
+		r = (FlagOn(color, RED))?h:0;
+		g = (FlagOn(color, GREEN))?h:0;
+		b = (FlagOn(color, BLUE))?h:0;
+
+		fprintf(G_PRINT_LOG, "<font color=\"#%2x%2x%2x\">", r, g, b);
+	}
 	return old_color;
 }
+
+void PrintHeader(UInt8 level, char * text, ...)
+/*
+Purpose:
+	Print header to output.
+*/
+{
+	char buffer[256];
+	UInt16 len, half_len;
+	UInt8 color;
+	va_list argp;
+	char * hchr;
+
+	if (text == NULL) text = "";
+
+	va_start(argp, text);
+	vsprintf(buffer, text, argp);
+	va_end(argp);
+
+	len = StrLen(buffer);
+	if (len > 70) {
+		len = 2;
+	} else {
+		len = 70 - len;
+	}
+
+	hchr = "=";
+	if (level > 1) hchr = "-";
+	if (level > 2) hchr = ".";
+
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "<h%d>", level);
+	}
+
+	color = PrintColor(RED+GREEN);
+	half_len = len / 2;
+	PrintRepeat(hchr, half_len);
+	Print(" ");
+	Print(buffer);
+	Print(" ");
+	PrintRepeat(hchr, len - half_len);
+	PrintColor(color);
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "</h%d>", level);
+	}
+	Print("\n");
+}
+
 
 void Print(char * text)
 {
 	if (text != NULL) {
 		fprintf(G_PRINT_OUTPUT, "%s", text);
 	}
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "%s", text);
+	}
 }
 
 void PrintChar(char c)
 {
 	fputc(c, G_PRINT_OUTPUT);
+	if (G_PRINT_LOG != NULL) {
+		fputc(c, G_PRINT_LOG);
+	}
+}
+
+void PrintInt(Int32 n)
+{
+	fprintf(G_PRINT_OUTPUT, "%d", n);
+	if (G_PRINT_LOG != NULL) {
+		fprintf(G_PRINT_LOG, "%d", n);
+	}
 }
 
 void PrintEOL()
@@ -268,14 +357,20 @@ void PrintEOL()
 	Print("\n");
 }
 
-void PrintInt(Int32 n)
-{
-	fprintf(G_PRINT_OUTPUT, "%d", n);
-}
 
 void PrintRepeat(char * text, UInt16 cnt)
 {
 	while(cnt-- > 0) {
 		Print(text);
 	}
+}
+
+void PrintFmt(char * text, ...)
+{
+	char buffer[256];
+	va_list argp;
+	va_start(argp, text);
+	vsprintf(buffer, text, argp);
+	va_end(argp);
+	Print(buffer);
 }

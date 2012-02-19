@@ -8,6 +8,15 @@ typedef struct RuleArgTag RuleArg;
 
 Bool Verbose(Var * proc);
 
+typedef enum {
+	PHASE_PARSE = 1,
+	PHASE_TRANSLATE = 2,
+	PHASE_OPTIMIZE = 3,
+	PHASE_EMIT = 4
+} CompilerPhase;
+
+extern CompilerPhase PHASE;
+
 /*************************************************************
 
  Lexer
@@ -95,7 +104,8 @@ typedef enum {
 	TOKEN_SCOPE,
 	TOKEN_SEQUENCE,
 	TOKEN_ASSERT,
-	TOKEN_LAST_KEYWORD = TOKEN_ASSERT,
+	TOKEN_EITHER,
+	TOKEN_LAST_KEYWORD = TOKEN_EITHER,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
@@ -142,6 +152,7 @@ UInt16 SetBookmark();
 Bool Spaces();
 Bool NextCharIs(UInt8 chr);
 Bool NextIs(Token tok);
+Bool NextNoSpaceIs(Token tok);
 void EnterBlock();
 void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
@@ -152,6 +163,8 @@ void LexerInit();
 
 extern Lexer LEX;
 extern Token TOK;
+extern Token TOK_NO_SPACES;				// if the current token was not preceded by whitespaces, it is copied here
+
 extern char   LINE[MAX_LINE_LEN+2];		// we reserve one extra byte for terminating EOL, one for 0
 extern LineNo  LINE_NO;
 extern UInt16  LINE_LEN;
@@ -271,6 +284,7 @@ void LogicWarningLoc(char * text, Loc * loc);
 void LogicError(char * text, UInt16 bookmark);
 void LogicErrorLoc(char * text, Loc * loc);
 void InternalError(char * text, ...);
+void InternalErrorLoc(char * text, Loc * loc);
 void Warning(char * text);
 void EndErrorReport();
 
@@ -326,7 +340,16 @@ typedef struct {
 
 typedef Int16 Relation;
 
-typedef Int32 IntLimit;
+
+/*
+
+Integer Limits
+
+*/
+
+#include "bigint.h"
+
+typedef BigInt IntLimit;
 #define INTLIMIT_MIN (-2147483647 - 1)		// To prevent error in some compilers parser
 #define INTLIMIT_MAX 2147483647L
 
@@ -655,6 +678,7 @@ Bool VarIsEqual(Var * left, Var * right);
 
 Bool VarIsRuleArg(Var * var);
 
+Var * VarFindAssociatedConst(Var * var, char * name);
 
 Var * VarField(Var * var, char * fld_name);
 void VarLet(Var * var, Var * val);
@@ -825,6 +849,7 @@ struct InstrTag {
 	// TODO: type may be union with next_use (they are not used at the same time)
 
 	Type * type[3];				// 0 result type, 1 arg1 type 2 arg2 type
+	Type * result_index_type;
 
 	UInt8    flags;
 	Instr * next_use[3];		// next use of result, arg1, arg2
@@ -839,6 +864,7 @@ struct LocTag {
 	Var * proc;
 	InstrBlock * blk;
 	Instr * i;
+	UInt32 n;			// sequence number of instruction in block
 };
 
 typedef struct {
@@ -924,6 +950,7 @@ void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * fi
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
 void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void InstrAttach(InstrBlock * blk, Instr * before, Instr * first, Instr * last);
+void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 InstrBlock * LastBlock(InstrBlock * block);
 
@@ -1133,7 +1160,6 @@ void InstrExecute(InstrBlock * blk);
 
 *************************************************************/
 
-void PrintHeader(char * text);
 void PrintOptim(char * text);
 
 Rule * InstrRule(Instr * instr);

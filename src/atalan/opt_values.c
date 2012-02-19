@@ -34,12 +34,6 @@ Purpose:
 	if (exp == NULL) return false;
 	if (exp->op == INSTR_VAR) {
 		return VarUsesVar(exp->var, var);
-/*
-		if (exp->var == var) return true;
-		// If variables are aliases (have same address)
-		if (var->adr == exp->var || exp->var->adr == var || (var->adr != NULL && exp->var->adr == var->adr)) return true;
-		return false;
-*/
 	} else {
 		return ExpUsesValue(exp->arg[0], var) || ExpUsesValue(exp->arg[1], var);
 	}
@@ -162,8 +156,8 @@ Purpose:
 	G_EXP_NEST = 0;
 	result = VarIsOffset3(l, r, diff);
 	if (G_EXP_NEST == 100) {
-		printf("l: "); PrintExp(l->dep); printf("\n");
-		printf("l: "); PrintExp(r->dep); printf("\n");
+		Print("l: "); PrintExp(l->dep); Print("\n");
+		Print("l: "); PrintExp(r->dep); Print("\n");
 	}
 	return result;
 }
@@ -200,9 +194,21 @@ Purpose:
 			// add r, p, q
 
 			if (i->op == INSTR_LET) {
-//				//TODO: Here may be error, when we get reference to instruction, which in fact uses the variable
 				if (i->arg1 == res) {
 					i->result->src_i = i->arg1->src_i;
+
+					// When the new source instruction uses the changed variable, it cannot be used.
+					// For example:
+					//  9|    let y, a
+					// 10|    let a, @_arr$y
+					// 11|    let w$0, a
+					// 12|    add y, y, 1         <= we must reset dependency of w$0 on instr 10, as y is changing so the value of @_arr$y has changed
+					// 13|    let a, @_arr$y
+					// 14|    let w$1, a
+					// 17|    let a, y$0
+					if (InstrUsesVar(i->result->src_i, res)) {
+						i->result->src_i = NULL;
+					}
 				}
 			} else {
 				//TODO: Only reset the instruction, if there is no source
@@ -267,7 +273,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 
 //		if (var->adr != NULL && StrEqual(var->adr->name, "_arr")) {
-//			printf("");
+//			Print("");
 //			PrintExp(var->dep);
 //		}
 
@@ -327,11 +333,11 @@ Purpose:
 		if (arg->mode == INSTR_DEREF) {
 			src_dep = ExpAlloc(INSTR_DEREF);
 			ExpArg(src_dep, 0, arg->var);
-		} else if (VarIsArrayElement(arg)) {
+		} else if (VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) {
 			//TODO: Support for 2d arrays
 			//      In assembler phase is not required (we do not have instructions for 2d indexed arrays).
 			if (arg->var->mode != INSTR_CONST) {
-				src_dep = ExpAlloc(INSTR_ELEMENT);
+				src_dep = ExpAlloc(arg->mode);
 				ExpArg(src_dep, 0, arg->adr);
 				ExpArg(src_dep, 1, arg->var);
 			}
@@ -358,26 +364,30 @@ void PrintExp(Exp * exp)
 {
 	if (exp != NULL) {
 		if (exp->op == INSTR_DEREF) {
-			printf("@");
+			Print("@");
 			PrintExp(exp->arg[0]);
 		} else if (exp->op == INSTR_VAR) {
 			PrintVarVal(exp->var);
 		} else if (exp->op == INSTR_ELEMENT) {
 			PrintExp(exp->arg[0]);
-			printf("(");
+			Print("(");
 			PrintExp(exp->arg[1]);
-			printf(")");
+			Print(")");
+		} else if (exp->op == INSTR_ELEMENT) {
+			PrintExp(exp->arg[0]);
+			Print("$");
+			PrintExp(exp->arg[1]);
 		} else {
 			// Unary instruction
 			if (exp->arg[1] == NULL) {
-				printf(" %s ", OpName(exp->op));
+				PrintFmt(" %s ", OpName(exp->op));
 				PrintExp(exp->arg[0]);
 			} else {
-				printf("(");
+				Print("(");
 				PrintExp(exp->arg[0]);
-				printf(" %s ", OpName(exp->op));
+				PrintFmt(" %s ", OpName(exp->op));
 				PrintExp(exp->arg[1]);
-				printf(")");
+				Print(")");
 			}
 		}
 	}
@@ -396,17 +406,23 @@ Purpose:
 	op = i->op;
 	arg = i->arg1;
 
-	if (op == INSTR_LET && (!VarIsArrayElement(arg) || arg->var->mode == INSTR_CONST)) {
-		if (arg->dep != NULL) {
-			if (op == INSTR_VAR) {
-				arg = arg->dep->var;
-			} else {
-				exp = arg->dep;
-				goto done;
+	if (op == INSTR_LET) {
+		if ((VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) && arg->var->mode != INSTR_CONST) {
+			exp = ExpAlloc(arg->mode);
+			ExpArg(exp, 0, arg->adr);
+			ExpArg(exp, 1, arg->var);
+		} else {
+			if (arg->dep != NULL) {
+				if (op == INSTR_VAR) {
+					arg = arg->dep->var;
+				} else {
+					exp = arg->dep;
+					goto done;
+				}
 			}
+			exp = ExpAlloc(INSTR_VAR);
+			exp->var = arg;
 		}
-		exp = ExpAlloc(INSTR_VAR);
-		exp->var = arg;
 	} else {
 		exp = ExpAlloc(op);
 		//todo: kill dependency, if source variables are not equal to result
@@ -453,11 +469,11 @@ void Dependency(Instr * i)
 
 /*
 	InstrPrintInline(i);
-	printf("       ");
+	Print("       ");
 	PrintVarVal(i->result);
-	printf(" = ");
+	Print(" = ");
 	PrintExp(exp);
-	printf("\n");
+	Print("\n");
 */
 }
 
@@ -689,7 +705,7 @@ Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2,
 		i = loc->i;
 		if (Verbose(loc->proc)) {
 			old_color = PrintColor(GREEN+LIGHT);
-			printf("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrintInline(i);
+			PrintFmt("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrintInline(i);
 		}
 		i->op = op;
 		i->result = result;
@@ -730,11 +746,12 @@ Bool OptimizeValues(Var * proc)
 	Bool  opt_increment;
 	Loc loc;
 	UInt16 regi;
+	UInt8 color;
 
 	loc.proc = proc;
 
 	if (Verbose(proc)) {
-		printf("------ optimize values -----\n");
+		PrintHeader(3, "optimize values");
 		PrintProc(proc);
 	}
 
@@ -804,7 +821,9 @@ retry:
 						} else {
 	delete_instr:
 							if (Verbose(proc)) {
-								printf("%ld#%ld Removing:", blk->seq_no, n); InstrPrint(i);
+								color = PrintColor(OPTIMIZE_COLOR);
+								PrintFmt("%ld#%ld Removing:", blk->seq_no, n); InstrPrint(i);
+								PrintColor(color);
 							}
 							i = InstrDelete(blk, i);
 							modified = true;
@@ -843,27 +862,12 @@ retry:
 							//TODO: When we know the price of an instruction, use the resulting instruction search to search for the instruction
 							if (diff == 1) {
 								r2 = VarNewInt(diff);
-								//r = VarStripFlags(result);
 								if (TransformInstr(&loc, op, result, result, r2, "Converting to inc/dec", n)) {
 									arg1 = result;
 									arg2 = r2;
 									opt_increment = true;
 									modified = true;
 								}
-								/*
-								if (InstrRule2(op, result, result, r2)) {
-									if (Verbose(proc)) {
-										printf("%ld#%ld Converting to inc/dec:", blk->seq_no, n); InstrPrint(i);
-									}
-									i->op = op;
-									i->arg1 = result;
-									i->arg2 = r2;
-									arg1 = result;
-									arg2 = r2;
-									opt_increment = true;
-									modified = true;
-								}
-								*/
 							}
 						}
 
@@ -1142,7 +1146,7 @@ let b,10
 	UInt32 n;
 	UInt8 color;
 
-//	printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+//	Print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
 //	PrintProc(proc);
 
 	for (blk = proc->instr; blk != NULL; blk = blk->next) {
@@ -1175,7 +1179,7 @@ next:
 							
 							if (Verbose(proc)) {
 								color = PrintColor(OPTIMIZE_COLOR);
-								printf("Merging %ld#%ld", blk->seq_no, n); InstrPrint(i);
+								PrintFmt("Merging %ld#%ld", blk->seq_no, n); InstrPrint(i);
 								PrintColor(color);
 							}
 

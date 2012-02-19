@@ -219,7 +219,7 @@ Purpose:
 	Var * label;
 	InstrBlock * blk, * next_blk, * nb;
 
-//	printf("************* Before Blocks **************\n");
+//	Print("************* Before Blocks **************\n");
 //	PrintProc(proc);
 
 	blk = proc->instr;
@@ -270,7 +270,7 @@ Purpose:
 
 	LinkBlocks(proc);
 
-//	printf("************* Blocks **************\n");
+//	Print("************* Blocks **************\n");
 //	PrintProc(proc);
 
 	// TODO: Dead code blocks
@@ -356,7 +356,7 @@ void OptimizeJumps(Var * proc)
 
 	LinkBlocks(proc);
 
-//	printf("============= jumps =============\n");
+//	Print("============= jumps =============\n");
 //	PrintProc(proc);
 
 	blk = proc->instr;
@@ -500,6 +500,10 @@ void DeadCodeElimination(Var * proc)
 	}
 }
 
+void InstrInsertBeforeBlock(InstrBlock * blk, InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+}
+
 /*
 
 =================================
@@ -538,7 +542,10 @@ Bool OptimizeMergeBranchCode(Var * proc)
 	Instr * i, * i2;
 	Bool modified = false;
 
+
 	LinkBlocks(proc);
+
+//	PrintProc(proc);
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
@@ -570,7 +577,7 @@ Bool OptimizeMergeBranchCode(Var * proc)
 					InstrDelete(prev_blk, i2);
 				}
 
-				InstrInsert(blk, NULL, i->op, i->result, i->arg1, i->arg2);
+				InstrInsertRule(blk, blk->first, i->op, i->result, i->arg1, i->arg2);
 
 				prev_blk = blk->from;
 				InstrDelete(prev_blk, i);
