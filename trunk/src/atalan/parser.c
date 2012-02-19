@@ -33,6 +33,7 @@ GLOBAL Bool  USE_PARSE;
 
 Type * RESULT_TYPE;
 Bool   EXP_IS_DESTINATION = false;		// Parsed expression is destination
+Bool   EXP_IS_REF = false;				// Parsed expression will be used as a reference
 Var *  EXP_EXTRA_SCOPE;					// Scope used by expression parsing to find extra variables.
 UInt16 EXP_PARENTHESES;					// If > 0, we are parsing parenthesis inside expression
 static Var * UNUSED_RULE_SCOPE = NULL;
@@ -122,6 +123,30 @@ Var * ParseScope()
 	} while(1);
 
 	return scope;
+}
+
+Var * ParseSimpleVariable()
+/*
+Purpose:
+	Parse variable name.
+	Use either extra context or current context.
+Syntax:  var_name
+*/
+{
+	Var * var = NULL;
+	if (EXP_EXTRA_SCOPE != NULL) {
+		var = VarFindScope(EXP_EXTRA_SCOPE, NAME, 0);
+	} 
+	if (var == NULL) {
+		var = VarFind2(NAME);
+	}
+	if (var == NULL) {
+		SyntaxError("Unknown variable");
+	} else {
+		NextToken();
+	}
+
+	return var;
 }
 
 Var * ParseVariable()
@@ -334,6 +359,95 @@ next:
 		if (TOK == TOKEN_INT) goto range;
 		goto const_list;
 
+
+	// Procedure
+	} else if (NextIs(TOKEN_PROC)) {
+		type = TypeAlloc(TYPE_PROC);
+		ParseArgList(SUBMODE_ARG_IN, type);
+		if (TOK) {
+			ProcTypeFinalize(type);
+		}
+	// Macro
+	} else if (NextIs(TOKEN_MACRO)) {
+
+		type = TypeAlloc(TYPE_MACRO);
+		ParseArgList(SUBMODE_ARG_IN, type);
+
+	// Struct
+	} else if (NextIs(TOKEN_STRUCT)) {
+		type = TypeAlloc(TYPE_STRUCT);
+		ParseArgList(SUBMODE_EMPTY, type);
+
+	// Array
+	} else if (NextIs(TOKEN_ARRAY)) {		
+		type = TypeAlloc(TYPE_ARRAY);
+		t = NULL;
+
+		if (TOK == TOKEN_OPEN_P) {
+			EnterBlockWithStop(TOKEN_EQUAL);
+			while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+				elmt = ParseIntType();
+				if (type->index == NULL) {
+					type->index = elmt;
+				} else if (t != NULL) {
+					t->right = TypeTuple(t->right, elmt);
+					t = t->right;
+				} else {
+					t = TypeTuple(type->index, elmt);
+					type->index = t;
+				}
+				NextIs(TOKEN_COMMA);
+			};
+		}
+		
+		// If no dimension has been defined, use flexible array.
+		// This is possible only for constants now.
+
+		if (TOK) {
+			if (type->index == NULL) {
+				elmt = TypeAlloc(TYPE_INT);
+				elmt->range.flexible = true;
+				elmt->range.min = 0;
+				type->index = elmt;
+			}
+		}
+
+		// Element STEP may be defined
+		if (TOK) {
+			if (NextIs(TOKEN_STEP)) {
+				ExpectExpression(NULL);
+				if (TOK) {
+					var = STACK[0];
+					if (VarIsIntConst(var)) {
+						type->step = var->n;
+					} else {
+						SyntaxError("Expected integer constant");
+					}
+				}
+			}
+		}
+
+		if (TOK) {
+			if (NextIs(TOKEN_OF)) {
+				type->element = ParseType();
+			} else {
+				type->element = TypeByte();
+			}
+		}
+
+		if (TOK) {
+			if (type->step == 0) {
+				type->step = TypeSize(type->element);
+			}
+		}
+
+	} else if (NextIs(TOKEN_ADR2)) {
+		elmt = NULL;
+		if (NextIs(TOKEN_OF)) {
+			elmt = ParseType();
+		}
+		type = TypeAdrOf(elmt);
+
 	//TODO: We may solve the integer type as default, when there was no other type involved
 	} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
 		type = TypeAlloc(TYPE_INT);
@@ -348,8 +462,6 @@ range:
 			}
 		}
 
-//		type->range.min = LEX.n;
-//		NextToken();
 		if (TOK == TOKEN_DOTDOT) {
 			NextToken();
 			ExpectExpression(NULL);
@@ -415,104 +527,8 @@ const_list:
 				if (NextIs(TOKEN_COMMA)) id_required = true;
 				NextIs(TOKEN_EOL);
 			}
-//			printf("done");
+//			Print("done");
 //		}
-
-	// Procedure
-	} else if (NextIs(TOKEN_PROC)) {
-		type = TypeAlloc(TYPE_PROC);
-		ParseArgList(SUBMODE_ARG_IN, type);
-		if (TOK) {
-			ProcTypeFinalize(type);
-		}
-	// Macro
-	} else if (NextIs(TOKEN_MACRO)) {
-
-		type = TypeAlloc(TYPE_MACRO);
-		ParseArgList(SUBMODE_ARG_IN, type);
-
-	// Struct
-	} else if (NextIs(TOKEN_STRUCT)) {
-		type = TypeAlloc(TYPE_STRUCT);
-		ParseArgList(SUBMODE_EMPTY, type);
-
-	// Array
-	} else if (NextIs(TOKEN_ARRAY)) {		
-		type = TypeAlloc(TYPE_ARRAY);
-		t = NULL;
-//		i = 0;
-
-		if (TOK == TOKEN_OPEN_P) {
-			EnterBlockWithStop(TOKEN_EQUAL);
-			while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
-				elmt = ParseIntType();
-				if (type->index == NULL) {
-					type->index = elmt;
-				} else if (t != NULL) {
-					t->right = TypeTuple(t->right, elmt);
-					t = t->right;
-				} else {
-					t = TypeTuple(type->index, elmt);
-					type->index = t;
-				}
-//				if (elmt != NULL) {
-//					if (i == MAX_DIM_COUNT) {
-//						SyntaxError("too many array indices");
-//						return NULL;
-//					}
-//					type->dim[i] = elmt;
-//					i++;
-//				}	
-				NextIs(TOKEN_COMMA);
-			};
-		}
-		
-		// If no dimension has been defined, use flexible array.
-		// This is possible only for constants now.
-
-		if (TOK) {
-			if (type->index == NULL) {
-				elmt = TypeAlloc(TYPE_INT);
-				elmt->range.flexible = true;
-				elmt->range.min = 0;
-				type->index = elmt;
-			}
-		}
-
-		if (TOK) {
-			if (NextIs(TOKEN_STEP)) {
-				ExpectExpression(NULL);
-				if (TOK) {
-					var = STACK[0];
-					if (var->mode == INSTR_CONST && var->type->variant == TYPE_INT) {
-						type->step = var->n;
-					} else {
-						SyntaxError("Expected integer constant");
-					}
-				}
-			}
-		}
-
-		if (TOK) {
-			if (NextIs(TOKEN_OF)) {
-				type->element = ParseType();
-			} else {
-				type->element = TypeByte();
-			}
-		}
-
-		if (TOK) {
-			if (type->step == 0) {
-				type->step = TypeSize(type->element);
-			}
-		}
-
-	} else if (NextIs(TOKEN_ADR2)) {
-		elmt = NULL;
-		if (NextIs(TOKEN_OF)) {
-			elmt = ParseType();
-		}
-		type = TypeAdrOf(elmt);
 
 	} else if (TOK == TOKEN_ID) {
 		var = ParseVariable();
@@ -549,32 +565,6 @@ Type * ParseType()
 }
 
 void ParseCommands();
-
-/*
-void PrintStack()
-{
-	long n;
-	Var * var;
-
-	for(n=0; n<TOP; n++) {
-		var = STACK[n];
-		if (var == NULL) {
-			printf("<NULL> ");
-		} else {
-			if (var->name == NULL) {
-				printf("%ld ", var->n);
-			} else {
-				printf((var->idx != 0)?"%s%ld ":"%s ", var->name, var->idx);
-			}
-		}
-	}
-	printf("\n");
-
-}
-
-#define MINIMAL_PRIORITY 0
-#define MAXIMAL_PRIORITY 65535
-*/
 
 /*********************************************************************
 
@@ -736,6 +726,58 @@ Purpose:
 }
 */
 
+Var * ParseArrayItem(Var * arr)
+{
+	UInt8 arg_no;
+	Var * item = NULL;
+	NextToken();
+	if (TOK == TOKEN_INT) {
+		item = VarNewInt(LEX.n);
+		NextToken();
+	} else if (TOK == TOKEN_ID) {
+		if (arr->type->variant == TYPE_ARRAY) {
+			item = VarFindAssociatedConst(arr->type->index->owner, NAME);
+		}
+		if (item != NULL) {
+			NextToken();
+		} else {
+			item = ParseSimpleVariable();
+		}
+	} else if (arg_no = ParseArgNo2()) {
+		item = VarMacroArg(arg_no-1);
+		NextToken();
+	} else if (TOK == TOKEN_OPEN_P) {
+		item = ParseArrayElement(arr);
+	} else {
+		SyntaxError("Expected constant or variable name");
+	}
+	return item;
+}
+
+Var * ParseSpecialArrays(Var * arr)
+/*
+Syntax:
+   <arr>$<idx> | <arr>#<idx>
+*/
+{
+	// Special arrays are parsed using character parsing, as that prevents $ from being used as hexadecimal integer prefix
+	Var * item, * var;
+	var = NULL;
+
+	if (NextCharIs('$')) {
+		item = ParseArrayItem(arr);
+		if (TOK) {
+			var = VarNewByteElement(arr, item);
+		}
+	} else if (NextCharIs('#')) {
+		item = ParseArrayItem(arr);
+		if (TOK) {
+			var = VarNewElement(arr, item);
+		}
+	}
+	return var;
+}
+
 Var * ParseStructElement(Var * arr)
 /*
 Purpose:
@@ -747,7 +789,9 @@ Syntax:
 	Var * idx = NULL;
 	Var * item;
 
-	if (arr->mode == INSTR_ELEMENT && arr->adr->mode == INSTR_SCOPE) {
+	// Try to find local variable in local scope of array variable.
+	
+	if (arr->mode == INSTR_ELEMENT /*&& arr->adr->mode == INSTR_SCOPE*/) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
 			item = VarFindScope(arr->adr, NAME, 0);
@@ -759,26 +803,41 @@ Syntax:
 					SyntaxError("$Variable is not an array.");
 				}
 			} else {
-				SyntaxError("$Scope does not contain member with name");
+				if (arr->adr->mode == INSTR_SCOPE) {
+					SyntaxError("$Scope does not contain member with name");
+				}
 			}
-			NextToken();
+//			NextToken();
 		}
 
-	} else if (arr->type->variant == TYPE_STRUCT) {
-		NextIs(TOKEN_DOT);
-		if (TOK == TOKEN_ID) {
-			item = VarFindScope(arr->type->owner, NAME, 0);
-			if (item != NULL) {
-				idx = VarNewElement(arr, item);
+	}
+	
+	if (idx == NULL) {
+		if (arr->type->variant == TYPE_STRUCT) {
+			NextIs(TOKEN_DOT);
+			if (TOK == TOKEN_ID) {
+				item = VarFindScope(arr->type->owner, NAME, 0);
+				if (item != NULL) {
+					idx = VarNewElement(arr, item);
+				} else {
+					SyntaxError("$Structure does not contain member with name");
+				}
+	//			NextToken();
 			} else {
-				SyntaxError("$Structure does not contain member with name");
+				SyntaxError("Expected structure member identifier after '.'");
 			}
-			NextToken();
 		} else {
-			SyntaxError("Expected structure member identifier after '.'");
+			SyntaxError("Variable has no members");
 		}
-	} else {
-		SyntaxError("Variable has no members");
+	}
+
+	if (TOK) {
+		item = ParseSpecialArrays(idx);
+		if (item != NULL) {
+			idx = item;
+		} else {
+			NextToken();
+		}
 	}
 	return idx;
 }
@@ -921,6 +980,13 @@ done:
 	if (TOK) {
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
+/*
+	if (tv == TYPE_SCOPE) {
+		// scope(idx).array
+		if (NextIs(TOKEN_DOT)) {
+		}
+	}
+*/
 	TOP = top;
 
 done_idx:
@@ -929,52 +995,6 @@ done_idx:
 	return item;
 }
 
-Var * ParseSpecialArrays(Var * arr)
-/*
-Syntax:
-   <arr>$<idx> | <arr>#<idx>
-*/
-{
-	Var * item, * var;
-	UInt8 arg_no;
-	var = NULL;
-
-	if (NextCharIs('$')) {
-		NextToken();
-		if (TOK == TOKEN_INT) {
-			item = VarNewInt(LEX.n);
-			NextToken();
-		} else if (TOK == TOKEN_ID) {
-			item = ParseVariable();
-		} else if (arg_no = ParseArgNo2()) {
-			item = VarMacroArg(arg_no-1);
-			NextToken();
-		} else {
-			SyntaxError("Expected constant or variable name");
-		}
-		if (TOK) {
-			var = VarNewByteElement(arr, item);
-		}
-	} else if (NextCharIs('#')) {
-		NextToken();
-		item = NULL;
-		if (TOK == TOKEN_INT) {
-			item = VarNewInt(LEX.n);
-			NextToken();
-		} else if (TOK == TOKEN_ID) {
-			item = ParseVariable();
-		} else if (TOK == TOKEN_OPEN_P) {
-			item = ParseArrayElement(var);
-		} else {
-			SyntaxError("Expected constant or variable name");
-		}
-		if (item != NULL) {
-			var = VarNewElement(arr, item);
-		}
-	}
-
-	return var;
-}
 
 typedef struct {
 	Var * min[5];
@@ -1099,7 +1119,6 @@ void ParseOperand()
 	Bool ref = false;
 	Bool type_match;
 	UInt8 arg_no;
-	Bool spaces;
 	Type * type;
 	UInt32 arg_cnt;
 
@@ -1163,7 +1182,7 @@ void ParseOperand()
 			if (var != NULL) {
 
 				// Out-only variables may not be in expressions
-				if (!EXP_IS_DESTINATION) {			
+				if (!EXP_IS_DESTINATION && !EXP_IS_REF) {
 					if (var->type->variant != TYPE_PROC && OutVar(var) && !InVar(var)) {
 						ErrArg(var);
 						LogicError("Variable [A] may be only written", 0);
@@ -1183,8 +1202,6 @@ void ParseOperand()
 
 			if (var == NULL) {
 				SyntaxError("~unknown variable [$]");
-				//TODO: Try to search in all scopes and list found places
-
 				ReportSimilarNames(NAME);
 				EndErrorReport();
 
@@ -1230,73 +1247,72 @@ indices:
 			item = ParseSpecialArrays(var);
 			if (item != NULL) {
 				var = item;
-				goto done;
+			} else {
+				NextToken();
 			}
-			spaces = Spaces();
-			NextToken();
-			if (!spaces) {
-				if (NextIs(TOKEN_DOT)) {
-					//TODO: Why is this?
-					if (VarIsArg(var)) {
-						var = VarNewElement(var, VarNewStr(NAME));
-						item = ParseSpecialArrays(var);
-						if (item != NULL) {
-							var = item;
-						} else {
-							NextToken();
-						}
+
+retry_indices:
+//			while(item = ParseSpecialArrays(var)) var = item;
+
+			if (NextNoSpaceIs(TOKEN_DOT)) {
+				//TODO: Why is this?
+				if (VarIsArg(var)) {
+					var = VarNewElement(var, VarNewStr(NAME));
+					item = ParseSpecialArrays(var);
+					if (item != NULL) {
+						var = item;
 					} else {
-						if (var->type->variant == TYPE_STRUCT) {
-							var = ParseStructElement(var);
-						} else {
-							if (TOK == TOKEN_ID) {
-								item = VarFindScope(var, NAME, 0);
+						NextToken();
+					}
+				} else {
+					if (var->type->variant == TYPE_STRUCT || var->mode == INSTR_ELEMENT) {
+						var = ParseStructElement(var);
+						goto retry_indices;
+					} else {
+						if (TOK == TOKEN_ID) {
+							item = VarFindScope(var, NAME, 0);
 
-								// If the element has not been found, try to match some built-in elements
+							// If the element has not been found, try to match some built-in elements
 
-								if (item == NULL) {
-									if (var->type->variant == TYPE_INT) {
-										if (StrEqual(NAME, "min")) {
-											item = VarNewInt(var->type->range.min);
-										} else if (StrEqual(NAME, "max")) {
-											item = VarNewInt(var->type->range.max);
-										}
-									} else if (var->type->variant == TYPE_ARRAY) {
-										if (StrEqual(NAME, "step")) {
-											item = VarNewInt(var->type->step);
-										}
+							if (item == NULL) {
+								if (var->type->variant == TYPE_INT) {
+									if (StrEqual(NAME, "min")) {
+										item = VarNewInt(var->type->range.min);
+									} else if (StrEqual(NAME, "max")) {
+										item = VarNewInt(var->type->range.max);
+									}
+								} else if (var->type->variant == TYPE_ARRAY) {
+									if (StrEqual(NAME, "step")) {
+										item = VarNewInt(var->type->step);
 									}
 								}
-
-								if (item != NULL) {
-									var = item;
-									NextToken();
-								} else {
-									SyntaxError("$unknown item");
-								}
-							} else {
-								SyntaxError("variable name expected after .");
 							}
+
+							if (item != NULL) {
+								var = item;
+								NextToken();
+							} else {
+								SyntaxError("$unknown item");
+							}
+						} else {
+							SyntaxError("variable name expected after .");
 						}
 					}
-
-				// Access to array may be like
-				// 
-				} else if (TOK == TOKEN_OPEN_P) {
-
-					item = ParseArrayElement(var);
-					BufPush(item);
-					return;
 				}
+
+			// Access to array may be like
+			// 
+			} else if (TOK_NO_SPACES == TOKEN_OPEN_P) {
+				item = ParseArrayElement(var);
+				var = item;
+				goto retry_indices;
 			}
 		} else {
-//			SyntaxError("expected operand");
 			return;
 		}
-done:
+
 		// Assign address
 		if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
-//			NextToken();
 			//TODO: Check type of the adress
 			//      Create temporary variable and generate letadr
 			BufPush(var);				
@@ -1647,11 +1663,6 @@ void GenRel(InstrOp op, Var * left, Var * right)
 	Gen(op, G_BLOCK->f_label, left, right);
 }
 
-Var * VarFindAssociatedConst(Var * var, char * name)
-{
-	if (var == NULL) return NULL;
-	return VarFindScope(var->type->owner, name, 0);
-}
 
 void ParseRel()
 /*
@@ -1762,6 +1773,20 @@ retry:
 	}
 }
 
+void SimpleIf(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	BeginBlock(TOKEN_IF);
+	ParseAnd();
+	if (G_BLOCK->t_label != NULL) {
+		GenLabel(G_BLOCK->t_label);
+	}
+	Gen(op, result, arg1, arg2);
+	if (G_BLOCK->f_label != NULL) {
+		GenLabel(G_BLOCK->f_label);
+	}
+	EndBlock();
+}
+
 void ParseCondition()
 {
 	// if x=1 or x=2 or x=3 then "x"
@@ -1788,37 +1813,48 @@ void ParseCondition()
 	//   if not x = 1 goto f1		(false)
 	//   goto @body
 	//@f1
-
+	Var * tmp;
 	Var * body_label = NULL;
 	Token tok;
+	if (NextIs(TOKEN_EITHER)) {
+		tmp = VarNewTmp(TypeAllocInt(0,1));
+		GenLet(tmp, VarNewInt(0));
+		SimpleIf(INSTR_LET, tmp, VarNewInt(1), NULL); 
+		if (NextIs(TOKEN_OR)) {
+			SimpleIf(INSTR_XOR, tmp, tmp, VarNewInt(1));
+		}
+		GenRel(INSTR_IFEQ, tmp, VarNewInt(1));
+
+	} else {	
 retry:
-	ParseAnd();
-	// If the condition is negated (either using NOT or UNTIL), meaning of AND and OR is switched
+		ParseAnd();
+		// If the condition is negated (either using NOT or UNTIL), meaning of AND and OR is switched
 
-	tok = TOKEN_OR;
-	if (G_BLOCK->not) tok = TOKEN_AND;
+		tok = TOKEN_OR;
+		if (G_BLOCK->not) tok = TOKEN_AND;
 
-	if (NextIs(tok)) {
+		if (NextIs(tok)) {
 
-		// If the condition was more complex and generated true label,
-		// the true label would point to this jump
+			// If the condition was more complex and generated true label,
+			// the true label would point to this jump
 
-		if (G_BLOCK->t_label != NULL) {
-			GenLabel(G_BLOCK->t_label);
-			G_BLOCK->t_label = NULL;
+			if (G_BLOCK->t_label != NULL) {
+				GenLabel(G_BLOCK->t_label);
+				G_BLOCK->t_label = NULL;
+			}
+
+			if (body_label == NULL) body_label = VarNewTmpLabel();
+
+			GenGoto(body_label);
+
+			if (G_BLOCK->f_label != NULL) {
+				GenLabel(G_BLOCK->f_label);
+				G_BLOCK->f_label = NULL;
+			}
+			goto retry;
 		}
-
-		if (body_label == NULL) body_label = VarNewTmpLabel();
-
-		GenGoto(body_label);
-
-		if (G_BLOCK->f_label != NULL) {
-			GenLabel(G_BLOCK->f_label);
-			G_BLOCK->f_label = NULL;
-		}
-		goto retry;
+		GenLabel(body_label);
 	}
-	GenLabel(body_label);
 
 }
 
@@ -2342,7 +2378,9 @@ Arguments:
 
 	item_type = var->type->element;
 
-	EnterBlock();
+ 	EnterBlock();
+
+	EXP_IS_REF = true;
 
 	while(!NextIs(TOKEN_BLOCK_END)) {
 
@@ -2410,6 +2448,7 @@ Arguments:
 		}
 	}
 	var->instr = GenEnd();
+	EXP_IS_REF = false;
 	return i;
 }
 
@@ -2685,6 +2724,47 @@ void ParseProcBody(Var * proc)
 
 }
 
+void VarArrayOfStructToStructOfArrays(Var * var)
+/*
+Purpose:
+	Change the type of specified variable from array of structures to structure of arrays.
+
+	For every element in the structure, create array of the type of the element.
+	For example:
+
+	type point:struct
+	   x:0..320
+	   y:0..240
+
+	points:array(idx) of point
+
+	Is converted to:
+
+	points:
+	     x:array(idx) of 0..320
+		 y:array(idx) of 0..240
+*/
+{
+	Var * structure, * elmt, * sub;
+	Type * idx, * subtype;
+
+	idx = var->type->index;
+	structure = var->type->element->owner;
+
+	FOR_EACH_LOCAL(structure, elmt)
+		subtype = TypeArray(idx, elmt->type);
+		sub = VarAllocScope(var, INSTR_VAR, elmt->name, 0);
+		sub->type = subtype;
+
+		if (!VarIsImplemented(sub)) {
+			ErrArg(structure);
+			ErrArg(elmt);
+			SyntaxError("Platform does not support array of [B] because of structure member [A].");
+		}
+
+	NEXT_LOCAL
+}
+
 #define LOCAL_SCOPE 0
 #define GLOBAL_SCOPE 1
 
@@ -2768,6 +2848,8 @@ retry:
 			}
 		}
 
+		//?
+//		NextToken();
 		item = ParseSpecialArrays(var);
 		if (item != NULL) {
 			var = item;
@@ -2892,10 +2974,16 @@ parsed:
 					}
 				} else {
 					if (!VarIsImplemented(var)) {
-						if (*PLATFORM != 0) {
-							LogicError("Type not supported by platform", bookmark);
+						// If this is array of structure, convert the variable to structure of arrays
+						if (var->type->variant == TYPE_ARRAY && var->type->element->variant == TYPE_STRUCT) {
+							VarArrayOfStructToStructOfArrays(var);
+							//TODO: Error if subelement not supported
 						} else {
-							SyntaxError("Platform has not been specified");
+							if (*PLATFORM != 0) {
+								LogicError("Type not supported by platform", bookmark);
+							} else {
+								SyntaxError("Platform has not been specified");
+							}
 						}
 					}
 				}
@@ -3205,6 +3293,8 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	Var * inop;
 	Type * type;
 
+	op = INSTR_VOID;
+
 	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
 
 		// This is instruction
@@ -3213,7 +3303,6 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			inop = VarFindScope(CPU->SCOPE, NAME, 0);
 			if (inop == NULL) {
 				SyntaxError("Unknown instruction or macro [$]");
-				NextToken();
 			} else {
 				if (inop->type->variant == TYPE_MACRO) {
 					NextToken();
@@ -3228,7 +3317,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			}
 		}
 		NextToken();
-		op = inop->n;
+		if (inop != NULL) op = inop->n;
 	} else {
 		SyntaxError("Expected instruction or macro name");
 	}
@@ -3296,7 +3385,9 @@ next_arg:
 		while(n<3) arg[n++] = NULL;
 
 		if (TOK != TOKEN_ERROR) {
-			Gen(op, arg[0], arg[1], arg[2]);
+			if (op != INSTR_VOID) {
+				Gen(op, arg[0], arg[1], arg[2]);
+			}
 		}
 	}	
 }
@@ -3678,13 +3769,16 @@ Arguments:
 	arg = FirstArg(proc, submode);
 	if (arg != NULL) {
 		EnterBlock();
-		while(TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+		while(TOK != TOKEN_ERROR /*&& !NextIs(TOKEN_BLOCK_END)*/) {
+
+			// If we do not need to parse another argument, exit the loop and the parse block
 			if (arg == NULL) {
-				ExitBlock();
+				if (!no_next_args) ExitBlock();
 				break;
 			}
 
-			// Parse next expression, if there are no arguments remaining on the stack
+			// Parse next expression, if there are no arguments remaining on the stack and there has not been 
+			// and end of argument block yet.
 			if (!no_next_args) {
 				if (TOP == idx) {
 					if (!NextIs(TOKEN_BLOCK_END)) {
@@ -3698,8 +3792,9 @@ Arguments:
 				}
 			}
 
+			// Use value from stack or default value of an argument
 			if (TOP > idx) {
-				val = STACK[idx++];	//BufPop();
+				val = STACK[idx++];
 			} else {
 				val = arg->var;		// argument default value
 			}

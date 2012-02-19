@@ -7,6 +7,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
+
+//TODO: Detect use of uninitialized array element. (Do not report error, if there is a chance, it was initialized).
+
 #include "language.h"
 #ifdef __Darwin__
 #include "limits.h"
@@ -134,6 +137,48 @@ Type * TypeAlloc(TypeVariant variant)
 	type->base = NULL;
 	return type;
 }
+
+static IntLimit LIM_MIN = INTLIMIT_MIN;
+static IntLimit LIM_MAX = INTLIMIT_MAX;
+
+IntLimit * TypeMin(Type * type)
+{
+	if (type != NULL) {
+		if (type->variant == TYPE_INT) {
+			return &type->range.min;
+		} else if (type->variant == TYPE_SEQUENCE) {
+			switch(type->seq.op) {
+			case INSTR_ADD:
+			case INSTR_MUL:
+				return TypeMin(type->seq.init);
+			default:
+				break;
+			}
+		}
+	}
+	return &LIM_MIN;
+}
+
+IntLimit * TypeMax(Type * type)
+{
+	if (type != NULL) {
+		if (type->variant == TYPE_INT) {
+			return &type->range.max;
+		} else if (type->variant == TYPE_SEQUENCE) {
+			switch(type->seq.op) {
+			case INSTR_SUB:
+			case INSTR_DIV:
+			case INSTR_MOD:
+				return TypeMax(type->seq.init);
+			default:
+				break;
+			}
+
+		}
+	}
+	return &LIM_MAX;
+}
+
 
 /*
 
@@ -430,6 +475,8 @@ Purpose:
 	if (type->variant == TYPE_INT) {
 		if (type->range.max > master->range.max) return false;
 		if (type->range.min < master->range.min) return false;
+	} else if (type->variant == TYPE_ARRAY) {
+		return TypeIsSubsetOf(type->index, master->index) && TypeIsSubsetOf(type->element, master->element);
 	}
 	return true;
 }
@@ -839,9 +886,9 @@ void PrintVars(Var * proc)
 			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR) {
 				type = var->type;
 				if (type != NULL && type->variant == TYPE_LABEL) continue;
-				printf("%s: ", var->name);
+				PrintFmt("%s: ", var->name);
 				PrintType(var->type);
-				printf("\n");
+				Print("\n");
 			}
 		}
 	NEXT_LOCAL
@@ -890,23 +937,17 @@ Type * SeqTypeEval(InstrOp op, Type * left, Type * right)
 		switch(op) {
 		case INSTR_SUB:
 		case INSTR_ADD:
-			rt = TypeAlloc(TYPE_SEQUENCE);
-			rt->seq.compare_op = left->seq.compare_op;
-			rt->seq.op         = left->seq.op;
-			rt->seq.step       = left->seq.step;
-			rt->seq.limit      = left->seq.limit;
+			if (left->seq.init != NULL) {
+				rt = TypeAlloc(TYPE_SEQUENCE);
+				rt->seq.compare_op = left->seq.compare_op;
+				rt->seq.op         = left->seq.op;
+				rt->seq.step       = left->seq.step;
+				rt->seq.limit      = left->seq.limit;
 			
-			r_fn = InstrFn(op);
+				r_fn = InstrFn(op);
 			
-			rt->seq.init       = IntTypeEval(op, left->seq.init, right);
-
-//			if (left->seq.op == INSTR_VOID) {
-//				rt->seq.op = op;
-//				rt->seq.step = right;
-//			} else {
-//				rt->seq.op = left->seq.op;
-//				rt->seq.step = left->seq.step;
-//			}
+				rt->seq.init       = IntTypeEval(op, left->seq.init, right);
+			}
 			break;
 		}
 	}
@@ -1183,9 +1224,8 @@ Purpose:
 	return type;
 }
 
-#define MAX_INT 0x7fffffff
-//#define MIN_INT -2147483648L
-#define MIN_INT 0x80000000
+
+//$R
 
 Type * TypeRestrictRange(Type * type, IntLimit rmin, IntLimit rmax)
 {
@@ -1251,14 +1291,134 @@ Type * TypeRestrict(Type * type, Type * restriction)
 	return r;
 }
 
+Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
+{
+	Type * rt, * left, * right;
+	IntLimit min, max, init, step;
+
+	// If no restriction is defined, the type is returned unrestricted
+	if (restriction == NULL || restriction->variant == TYPE_UNDEFINED) return type;
+
+	rt = type;
+
+	// For variant type, we apply both variants as restrictions and use union of them.
+	if (restriction->variant == TYPE_VARIANT) {
+		left = TypeRestrictOp(rt, restriction->left, op);
+		right = TypeRestrictOp(rt, restriction->right, op);
+		rt = TypeUnion(left, right);
+		goto done;
+	}
+
+	// Compute minimal and maximal value defined by restriction.
+	// If the value is not known, extreme value is returned.
+	IntSet(&min, TypeMin(restriction));
+	IntSet(&max, TypeMax(restriction));
+/*
+	if (restriction->variant == TYPE_INT) {
+		IntSet(&min, TypeMin(restriction));
+		IntSet(&max, TypeMax(restriction));
+	} else if (restriction->variant == TYPE_SEQUENCE) {
+		switch(restriction->seq.op) {
+		case INSTR_SUB:
+		case INSTR_DIV:
+		case INSTR_MOD:
+			IntSet(&max, TypeMax(restriction->seq.init));
+			break;
+		case INSTR_ADD:
+		case INSTR_MUL:
+			IntSet(&min, TypeMin(restriction->seq.init));
+			break;
+		}
+	} else {
+		goto done;
+	}
+*/
+	if (type != NULL) {
+		if (type->variant == TYPE_SEQUENCE) {
+			switch(op) {
+			case INSTR_IFNE:
+//				if (TypeIsIntConst(type->seq.step) && TypeIsIntConst(type->seq.init)) {
+//					init = type->seq.init->range.min;
+//					step = type->seq.step->range.max;
+//					if (type->seq.op == INSTR_ADD) {
+//						rt = TypeAllocInt(init, max-1);
+//					}
+//				} else {
+					if (type->seq.compare_op != op) {
+						type->seq.compare_op = op;
+						type->seq.limit = TypeAllocInt(max, max);
+						type = ResolveSequence(type);			// type =
+					}
+//				}
+				break;
+			case INSTR_IFLT:
+				max--;
+				//continue to IFLE
+			case INSTR_IFLE:
+				if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init)) {
+					init = type->seq.init->range.min;
+					step = type->seq.step->range.max;			// maximal step
+					if (type->seq.op == INSTR_ADD) {
+						rt = TypeAllocInt(init, max + step);	// we may overstep maximal value by step
+					}
+				} else {
+					if (type->seq.compare_op != op) {
+						type->seq.compare_op = op;
+						type->seq.limit = TypeAllocInt(max, max);
+					}
+				}
+				break;
+			case INSTR_IFGT:
+				break;
+
+			case INSTR_IFGE:
+				break;
+
+			case INSTR_IFTYPE:
+			case INSTR_IFNTYPE:
+				break;
+			default:
+				ASSERT(false);	// unknown operator
+			}
+
+		} else if (type->variant == TYPE_INT) {
+
+			rt = NULL;
+			switch(op) {
+
+			case INSTR_IFNE:
+				rt = TypeRestrict(type, restriction);
+				break;
+
+			// For Eq, resulting type is the range of source variable
+			case INSTR_IFEQ:
+				rt = TypeRestrict(restriction, type);
+//				rt = restriction;
+				break;
+
+			case INSTR_IFLE: IntAdd(&min, IntMax(&min, &max), Int1()); IntSetMax(&max); break;	// remove anything bigger than 
+			case INSTR_IFLT: IntSet(&min, IntMax(&min, &max)); IntSetMax(&max); break;
+			case INSTR_IFGE: IntSetMin(&min); IntSub(&max, IntMin(&min, &max), Int1()); break;
+			case INSTR_IFGT: IntSetMin(&min); IntSet(&max, IntMin(&min, &max)); break;
+
+			default: ;
+			}
+
+			if (rt == NULL) {
+				rt = TypeRestrictRange(type, min, max);
+			}
+		}
+	}
+done:
+	return rt;
+}
+
 Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 {
 	Type * rt, * vt;
 	Instr * i;
 	InstrOp op;
 	Var * var2;
-	Int32 min, max;
-	Int32 init, step;
 
 	rt = type;
 
@@ -1288,98 +1448,11 @@ Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 		op = OpNot(op);
 	}
 
-	//TODO: We may use the inferred type fomn instruction
+	//TODO: We may use the inferred type from instruction
 	if (vt == NULL) vt = var2->type;
-	if (VarIsIntConst(var2)) {
-		min = max = var2->n;
-	} else if (vt != NULL && vt->variant == TYPE_INT) {
-		min = var2->type->range.min;
-		max = var2->type->range.max;
-	} else {
-		goto done;
-	}
 
-	if (type == NULL) type = var->type;
+	rt = TypeRestrictOp(type, vt, op);
 
-	if (type != NULL) {
-		if (type->variant == TYPE_SEQUENCE) {
-			switch(op) {
-			case INSTR_IFNE:
-//				if (TypeIsIntConst(type->seq.step) && TypeIsIntConst(type->seq.init)) {
-//					init = type->seq.init->range.min;
-//					step = type->seq.step->range.max;
-//					if (type->seq.op == INSTR_ADD) {
-//						rt = TypeAllocInt(init, max-1);
-//					}
-//				} else {
-					if (type->seq.compare_op != op) {
-						type->seq.compare_op = op;
-						type->seq.limit = TypeAllocInt(max, max);
-						type = ResolveSequence(type);
-					}
-//				}
-				break;
-			case INSTR_IFLT:
-				max--;
-				//continue to IFLE
-			case INSTR_IFLE:
-				if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init)) {
-					init = type->seq.init->range.min;
-					step = type->seq.step->range.max;			// maximal step
-					if (type->seq.op == INSTR_ADD) {
-						rt = TypeAllocInt(init, max + step);	// we may overstep maximal value by step
-					}
-				} else {
-					if (type->seq.compare_op != op) {
-						type->seq.compare_op = op;
-						type->seq.limit = TypeAllocInt(max, max);
-					}
-				}
-				break;
-			case INSTR_IFGE:
-				break;
-
-			case INSTR_IFTYPE:
-			case INSTR_IFNTYPE:
-				break;
-			default:
-				ASSERT(false);	// unknown operator
-			}
-
-		} else if (type->variant == TYPE_INT) {
-
-			rt = NULL;
-			switch(op) {
-
-			case INSTR_IFNE:
-				rt = TypeRestrict(type, vt);
-				break;
-
-			// For Eq, resulting type is the range of source variable
-			case INSTR_IFEQ:
-				rt = vt;
-				break;
-
-			case INSTR_IFLE: min++; max = MAX_INT; break;	// remove anything bigger than 
-			case INSTR_IFLT:		max = MAX_INT; break;
-			case INSTR_IFGE: min = MIN_INT; max--; break;
-			case INSTR_IFGT: min = MIN_INT; break;
-
-			default: ;
-			}
-
-			if (rt == NULL) {
-				rt = TypeRestrictRange(type, min, max);
-/*				if (type != NULL && type->variant == TYPE_INT) {
-					if (type->range.min > min) min = type->range.min;
-					if (type->range.max < max) max = type->range.max;
-
-					rt = TypeAllocInt(min, max);
-				}
-*/
-			}
-		}
-	}
 done:
 	return rt;
 }
@@ -1394,6 +1467,15 @@ Type * FindType(Loc * loc, Var * var, Bool report_errors);
 UInt16 g_fb_level;
 
 //#define TRACE_INFER 1
+
+Type * TypeAllocIntRange(Type * min, Type * max)
+{
+	Type * type = TUNDEFINED;
+	if (TypeIsInt(min) && TypeIsInt(max)) {
+		type = TypeAllocInt(min->range.min, max->range.max);
+	}
+	return type;
+}
 
 Bool VarIdentical(Var * left, Var * right)
 {
@@ -1425,7 +1507,7 @@ Purpose:
 	return NULL;
 }
 
-Type * FindTypeBlock(Loc * loc, Var * var, InstrBlock * blk, Instr * instr)
+Type * FindTypeBlock(Loc * loc, Var * var, Type * index_type, InstrBlock * blk, Instr * instr)
 /*
 Purpose:
 	Find type of variable var used in instruction at location loc in specified block beginning at instruction instr.
@@ -1514,7 +1596,11 @@ sub1:
 		// For array, we check, that A(x) fits B(y) so, that A = B and x contains y
 		} else if (var->mode == INSTR_ELEMENT) {
 			if (i->result->mode == INSTR_ELEMENT && var->adr == i->result->adr) {
-
+				// Now we need to find the type of result index & type of var index
+				if (TypeIsSubsetOf(index_type, i->result_index_type)) {
+					type = i->type[RESULT];
+					if (type != NULL && FlagOff(i->flags, InstrRestriction)) goto done;
+				}
 			}
 		}
 	}
@@ -1542,7 +1628,7 @@ sub1:
 #ifdef TRACE_INFER
 		g_fb_level++;
 #endif
-		type2 = FindTypeBlock(loc, var, blk->from, NULL);
+		type2 = FindTypeBlock(loc, var, index_type, blk->from, NULL);
 #ifdef TRACE_INFER
 		g_fb_level--;
 #endif
@@ -1565,7 +1651,7 @@ sub1:
 #ifdef TRACE_INFER
 		g_fb_level++;
 #endif
-		type2 = FindTypeBlock(loc, var, caller, NULL);
+		type2 = FindTypeBlock(loc, var, index_type, caller, NULL);
 #ifdef TRACE_INFER		
 		g_fb_level--;
 #endif
@@ -1599,6 +1685,8 @@ Result:
 {
 	Type * type = NULL;
 	Type * arr_type;
+	Type * index_type;
+	Type * left, * right;
 
 	if (var == NULL) return NULL;
 	if (var->mode == INSTR_CONST) {
@@ -1610,6 +1698,16 @@ Result:
 				type->flexible = false;
 			}
 		}
+	} else if (var->mode == INSTR_RANGE) {
+		left = FindType(loc, var->adr, report_errors);
+		right = FindType(loc, var->var, report_errors);
+		type = TypeAllocIntRange(left, right);
+		
+	} else if (var->mode == INSTR_TUPLE) {
+		left = FindType(loc, var->adr, report_errors);
+		right = FindType(loc, var->var, report_errors);
+		type = TypeTuple(left, right);
+
 	} else if (var->mode == INSTR_BYTE) {
 		type = TypeByte();
 	} else if (var->mode == INSTR_TYPE) {
@@ -1626,7 +1724,11 @@ Result:
 			looped = false;
 			undefined = 0;
 			MarkBlockAsUnprocessed(loc->proc->instr);
-			type = FindTypeBlock(loc, var, loc->blk, loc->i);
+			index_type = NULL;
+			if (VarIsArrayElement(var)) {
+				index_type = FindType(loc, var->var, false);
+			}
+			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
 			// Type has not been specified in previous code
 			if (type->variant == TYPE_UNDEFINED) {
@@ -1641,7 +1743,7 @@ Result:
 							// adr of array of type
 							type = arr_type->element->element;
 						} else {
-							printf("");
+							Print("");
 						}
 					}
 				}
@@ -1821,17 +1923,19 @@ Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 	Instr * next_i;
 	InstrBlock * blk;
 	Loc loc;
-	UInt32 n;
 
 	loc.proc = proc;
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		loc.blk = blk;
-		for(i = blk->first, n=1; i != NULL; i = next_i, n++) {
+		loc.n = 1;
+		for(i = blk->first; i != NULL; i = next_i) {
 			next_i = i->next;
-			if (i->op == INSTR_LINE) continue;
-			loc.i = i;
-			if (fn(&loc, data)) return true;
+			if (i->op != INSTR_LINE) {
+				loc.i = i;
+				if (fn(&loc, data)) return true;
+			}
+			loc.n++;
 		}
 	}
 	return false;
@@ -1908,28 +2012,6 @@ Bool InstrConstraints(Loc * loc, void * data)
 	return false;
 }
 
-static IntLimit LIM_MIN = INTLIMIT_MIN;
-static IntLimit LIM_MAX = INTLIMIT_MAX;
-
-IntLimit * TypeMin(Type * type)
-{
-	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			return &type->range.min;
-		}
-	}
-	return &LIM_MIN;
-}
-
-IntLimit * TypeMax(Type * type)
-{
-	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			return &type->range.max;
-		}
-	}
-	return &LIM_MAX;
-}
 
 void CheckIndex(Loc * loc, Var * var)
 // Check array indexes
@@ -1941,50 +2023,26 @@ void CheckIndex(Loc * loc, Var * var)
 
 	if (VarIsArrayElement(var)) {
 		idx = var->var;
-		// 2D array
-		if (idx->mode == INSTR_TUPLE) {
-
-		} else {
-			type = FindType(loc, var->var, true);
-			if (type != NULL) {
-				if (!TypeIsSubsetOf(type, var->adr->type->index)) {
+		type = FindType(loc, var->var, true);
+		if (type != NULL) {
+			if (!TypeIsSubsetOf(type, var->adr->type->index)) {
+				if (type->variant == TYPE_INT) {
 					ErrArg(VarNewInt(type->range.max));
 					ErrArg(VarNewInt(type->range.min));
 					ErrArg(var->adr);
 					LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
+				} else {
+					ErrArg(var->adr);
+					LogicErrorLoc("Cannot infer type of index of array [A].", loc);
 				}
-			} else {
-				// failed to compute index, what does it means?
 			}
+		} else {
+			// failed to compute index, what does it means?
 		}
 	}
 
 }
 
-Bool IntEq(IntLimit * l, IntLimit * r)
-{
-	return *l == *r;
-}
-
-Bool IntLower(IntLimit * l, IntLimit * r)
-{
-	return *l < *r;
-}
-
-Bool IntHigher(IntLimit * l, IntLimit * r)
-{
-	return *l > *r;
-}
-
-Bool IntLowerEq(IntLimit * l, IntLimit * r)
-{
-	return IntLower(l,r) || IntEq(l,r);
-}
-
-Bool IntHigherEq(IntLimit * l, IntLimit * r)
-{
-	return IntHigher(l,r) || IntEq(l,r);
-}
 
 #define MIN1 TypeMin(i->type[ARG1])
 #define MAX1 TypeMax(i->type[ARG1])
@@ -2010,11 +2068,19 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (i->op == INSTR_ADD && StrEqual(i->result->name, "y")) {
-		printf("");
+	if (loc->blk->seq_no == 8 && loc->n == 15) {
+		Print("");
 	}
 
 	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
+
+		// If the result of the instruction is array index, try to infer type of the index.
+		// The type may be later used when looking for the type of some instruction argument.
+
+		if (i->result_index_type == NULL && VarIsArrayElement(i->result)) {
+			i->result_index_type = FindType(loc, i->result->var, d->final_pass);
+			if (i->result_index_type != NULL) d->modified = true;
+		}
 
 		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
 			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
@@ -2153,6 +2219,9 @@ Bool InstrInferType(Loc * loc, void * data)
 	}
 
 	if (d->final_pass) {
+		if (loc->blk->seq_no == 8 && loc->n == 15) {
+			Print("");
+		}
 		CheckIndex(loc, i->result);
 		CheckIndex(loc, i->arg1);
 		CheckIndex(loc, i->arg2);
@@ -2175,6 +2244,7 @@ Bool InstrInitInfer(Loc * loc, void * data)
 {
 	Instr * i = loc->i;
 	i->type[0] = i->type[1] = i->type[2] = NULL;
+	i->result_index_type = NULL;
 	i->flags = 0;
 	return false;
 }
@@ -2230,6 +2300,11 @@ Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, IntLimit min_ste
 						stop_max = type->seq.init->range.max + ((max_steps - 1) * type->seq.step->range.max);
 						i->type[RESULT] = TypeAllocInt(stop_min, stop_max);
 						modified = true;
+					} else if (type->seq.op == INSTR_SUB) {
+//						stop_max = type->seq.init->range.max - ((min_steps - 1) * type->seq.step->range.min);
+						stop_min = type->seq.init->range.min - ((max_steps - 1) * type->seq.step->range.max);
+						i->type[RESULT] = TypeAllocInt(stop_min, type->seq.init->range.max);
+						modified = true;
 					}
 				}
 			}
@@ -2238,12 +2313,14 @@ Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, IntLimit min_ste
 	return modified;
 }
 
-Bool TypeInferLoops(Var * proc)
-{
+static Bool TypeInferLoops(Var * proc)
+/*
+Purpose:
+	Try to compute number of steps of every loop in the procedure.
+	If sucessfull, this information may be used to infer some more types.
+*/ {
 	InstrBlock * header;
 	Instr * i;
-//	Var * var;
-//	Type * type, * seq;
 	IntLimit min_steps, max_steps;
 
 	Bool modified = false;
@@ -2262,9 +2339,23 @@ Bool TypeInferLoops(Var * proc)
 		// This is end of loop.
 		// We may try to infer some information if we know maximal and/or minimal number of repeats
 		if (header != NULL) {
+//			Print("Loop "); PrintInt(header->seq_no); Print(".."); PrintInt(loc.blk->seq_no); PrintEOL();
 			i = LastInstr(loc.blk);
-			if (i != NULL && IS_INSTR_BRANCH(i->op)) {
-				InstrPrint(i);
+
+			// Check sequence like
+			//     ifeq ...  goto LAB
+			//     ----
+			//     goto loop
+			//     ----
+			//LAB@
+			if (i == NULL && loc.blk->callers == NULL && loc.blk->from != NULL) {
+				i = LastInstr(loc.blk->from);
+				if (i != NULL && IS_INSTR_BRANCH(i->op)) {
+					if (LoopSteps(i, &min_steps, &max_steps)) {
+					}
+				}
+			} else if (i != NULL && IS_INSTR_BRANCH(i->op)) {
+//				InstrPrint(i);
 				if (LoopSteps(i, &min_steps, &max_steps)) {
 					// we have the number of steps of this loop
 					modified = UseLoop(proc, header, loc.blk, min_steps, max_steps);
@@ -2276,7 +2367,7 @@ Bool TypeInferLoops(Var * proc)
 	return modified;
 }
 
-Bool InstrFreeIncomplete(Loc * loc, void * data)
+static Bool InstrFreeIncomplete(Loc * loc, void * data)
 {
 	UInt8 n;
 	Instr * i = loc->i;
@@ -2309,7 +2400,7 @@ Purpose:
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
 	if (Verbose(proc)) {
-		printf("======= Infer ===========\n");
+		PrintHeader(2, proc->name);
 		PrintProc(proc);
 	}
 

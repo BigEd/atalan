@@ -19,6 +19,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 //#define STDOUT stdout
 
 GLOBAL Bool VERBOSE;
+GLOBAL CompilerPhase PHASE;
 
 extern Var  ROOT_PROC;
 extern Var * INSTRSET;		// enumerator with instructions
@@ -94,10 +95,13 @@ int main(int argc, char *argv[])
 	Bool assembler = true;
 	Bool header = true;
 	int result = 0;
-	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN];
+	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN], log_filename[MAX_PATH_LEN];
 	char * s;
 	Bool header_out;
 	char * platform = NULL;
+	FILE * log_file = NULL;
+
+	PHASE = PHASE_PARSE;
 
 	PrintInit();
 
@@ -184,7 +188,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (header) {
-		printf("Atalan programming language compiler (19-Mar-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
+		Print("Atalan programming language compiler (19-Mar-2011)\nby Rudla Kudla (http:\\atalan.kutululu.org)\n\n");
 	}
 
     if (i == argc) {
@@ -205,10 +209,20 @@ int main(int argc, char *argv[])
 	strcpy(filename, argv[i]);
 	PathCutExtension(filename, "atl");
 
+
 	//==== Split dir and filename
 
 	PathSeparate(filename, PROJECT_DIR, filename);
-	printf("Building %s%s.atl...\n", PROJECT_DIR, filename);
+	PrintFmt("Building %s%s.atl...\n", PROJECT_DIR, filename);
+
+	//===== Initialize logging
+	if (Verbose(NULL)) {
+		strcpy(log_filename, PROJECT_DIR);
+		strcat(log_filename, filename);
+		strcat(log_filename, ".html");
+		log_file = fopen(log_filename, "wt");
+		PrintLog(log_file);
+	}
 
 	//===== Initialize
 
@@ -276,30 +290,32 @@ int main(int argc, char *argv[])
 	// Now do extra checks in all procedures
 	// Some of the checks are postponed to have information from all procedures
 
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Parse");
+	}
+
 	header_out = false;
 
 	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 		type = var->type;
 		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL && var->read > 0) {
 			if (Verbose(var)) {
-				if (!header_out) {
-					PrintHeader("Parsed");
-					header_out = true;
-				}
-
-				printf("---------------------------------------------\n");
-				PrintVar(var);
-				printf("\n\n");
+//				if (!header_out) {
+//					PrintHeader(1, "Parse");
+//					header_out = true;
+//				}
+				PrintHeader(2, var->name);
 				PrintProc(var);
 			}
 		}
 	}
 
 	if (Verbose(&ROOT_PROC)) {
-		if (!header_out) {
-			PrintHeader("Parsed");
-			header_out = true;
-		}
+//		if (!header_out) {
+//			PrintHeader(1, "Parse");
+//			header_out = true;
+//		}
+		PrintHeader(2, ROOT_PROC.name);
 		PrintProc(&ROOT_PROC);
 	}
 
@@ -317,14 +333,26 @@ int main(int argc, char *argv[])
 	//***** Analysis
 	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
+
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Infer Types");
+	}
+
 	ProcessUsedProc(TypeInfer);
 
 	if (ERROR_CNT > 0) goto failure;
 
 	//***** Translation
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Translate");
+	}
+
+	PHASE = PHASE_TRANSLATE;
 	ProcessUsedProc(ProcTranslate);
+	if (ERROR_CNT > 0) goto failure;
 
 	// Translate may have called some other procedures, so we must recalculate used procedures
+	PHASE = PHASE_OPTIMIZE;
 
 	FOR_EACH_VAR(var)
 		if (var->type != NULL && var->type->variant == TYPE_PROC) {
@@ -341,6 +369,9 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(GenerateBasicBlocks);		
 
 	if (OPTIMIZE > 0) {
+		if (Verbose(NULL)) {
+			PrintHeader(1, "Optimize");
+		}
 		ProcessUsedProc(OptimizeJumps);
 		ProcessUsedProc(ProcOptimize);
 		VarUse();
@@ -348,7 +379,7 @@ int main(int argc, char *argv[])
 		ProcessUsedProc(OptimizeJumps);
 
 		if (Verbose(NULL)) {
-			PrintHeader("Optimized");
+			PrintHeader(1, "Optimized");
 			PrintProc(&ROOT_PROC);
 		}
 	}
@@ -376,17 +407,17 @@ int main(int argc, char *argv[])
 
 	if (Verbose(NULL)) {
 
-		PrintHeader("Variables");
+		PrintHeader(1, "Variables");
 
 		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
 			if (var->write >= 1 || var->read >= 1) {
 				if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var)) {
-					PrintVar(var);
+					PrintVar(var); PrintEOL();
 				}
 			}
 		}
 
-		PrintHeader("Output");
+		PrintHeader(1, "Output");
 	} // verbose
 
 	EmitLabels();
@@ -422,7 +453,11 @@ int main(int argc, char *argv[])
 		EmitCloseBuffer();
 		result = system(command);
 	}
-done:	
+done:
+	if (Verbose(NULL)) {
+		PrintLog(NULL);
+		fclose(log_file);
+	}
 	PrintCleanup();
  	exit(result);
 	

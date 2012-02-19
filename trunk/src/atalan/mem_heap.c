@@ -161,9 +161,9 @@ void HeapPrint(MemHeap * heap)
 {
 	UInt32 cnt;
 	MemBlock * mbl;
-	printf("--------------\n");
+	Print("--------------\n");
 	for(cnt = heap->count, mbl = heap->block; cnt > 0; cnt--, mbl++) {
-		printf("%d-%d (%d)\n", mbl->adr, mbl->adr+mbl->size-1, mbl->size);
+		PrintFmt("%d-%d (%d)\n", mbl->adr, mbl->adr+mbl->size-1, mbl->size);
 	}
 }
 

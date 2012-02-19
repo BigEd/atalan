@@ -38,7 +38,7 @@ Purpose:
 			if (VarIsReg(var)) continue;
 
 //			if (VERBOSE) {
-//				printf("Var: "); PrintVar(var);
+//				Print("Var: "); PrintVar(var);
 //			}
 
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
@@ -290,10 +290,19 @@ Arguments:
 				}
 			}
 
+			// If the instruction stores the result to the variable, we will want to change it to store the result in the top_reg.
+			// If the register is currently ysed for some different purpose, we must spill it.
+
+			if (i->result == top_var && !VarContains(reg, top_var)) {
+				if (i->next_use != NULL) {
+					q += LetCycles(top_var, reg);		// TODO: we should use some temporary variable here
+				}
+
+				//TODO: In this case, we will need to load the register later, when it is used
+				//We should handle the situation.
 			// Will it be necessary to spill?
 			// We use the variable (array) that is stored to register
-
-			if (InstrSpill(i, top_var)) {
+			} else if (InstrSpill(i, top_var)) {
 				q += LetCycles(top_var, reg);
 			}
 
@@ -303,10 +312,11 @@ Arguments:
 			changed += VarTestReplace(&ti.arg1, top_var, reg);
 			changed += VarTestReplace(&ti.arg2, top_var, reg);
 
-			// If the instruction was changed (it used top_var),
+			// If the instruction was changed (it used top_var and it has been replaced to top_reg),
 			// test, whether we are able to compile it (some register/adress mode combinations must not be available)
 
 			if (changed > 0) {
+
 				if (ti.op == INSTR_LET && ti.result == ti.arg1) {
 					q -= i->rule->cycles;
 					continue;
@@ -408,7 +418,7 @@ void LoopMoveToPrologue(Var * proc, InstrBlock * header, InstrBlock * from, Inst
 
 	InstrMoveCode(blk, i, from, first, last);
 
-//	printf("========== move to prologue ===========\n");
+//	Print("========== move to prologue ===========\n");
 //	PrintProc(proc);
 }
 
@@ -640,13 +650,13 @@ void PrintLoopInvariants(Loop * loop)
 	for(blk = loop->header; blk != blk_exit; blk = blk->next) {
 		i = blk->first; n = 1;
 		while(i != NULL) {
-			printf("#%d/%d ", blk->seq_no, n);
+			PrintFmt("#%d/%d ", blk->seq_no, n);
 			if (FlagOn(i->flags, InstrInvariant)) {
-				printf("+");
+				Print("+");
 			} else if (FlagOn(i->flags, InstrLoopDep)) {
-				printf("-");
+				Print("-");
 			} else {
-				printf(" ");
+				Print(" ");
 			}
 			InstrPrint(i);
 			i = i->next; n++;
@@ -662,7 +672,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 	Loc loc, preheader;
 	UInt32 n;
 
-//	printf("========== Invariants ================\n");
+//	Print("========== Invariants ================\n");
 //	PrintProc(proc);
 
 	blk_exit = loop->end->next;
@@ -708,7 +718,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 		}
 	}
 
-	printf("-----\n");
+	Print("-----\n");
 	PrintLoopInvariants(loop);
 */
 
@@ -729,13 +739,13 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 			}
 		}
 //		if (change) {
-//			printf("-----\n");
+//			Print("-----\n");
 //			PrintLoopInvariants(loop);
 //		}
 	} while(change);
 
 
-//	printf("-----\n");
+//	Print("-----\n");
 //	PrintLoopInvariants(loop);
 
 	//==== Move all invariant instructions to preheader
@@ -855,6 +865,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	Bool var_modified;
 	Bool verbose;
 	Rule * rule;
+	UInt8 color;
 
 	blk_exit = end->next;
 
@@ -867,7 +878,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	for(regi = 0; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
 
 //	if (header->seq_no == 41) {
-//		printf("");
+//		Print("");
 //	}
 
 	while(top_var = FindMostUsedVar()) {
@@ -894,9 +905,9 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 
-			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
-				Print(" ");
-			}
+//			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
+//				Print(" ");
+//			}
 			q = UsageQuotient(header, end, top_var, reg, &init);
 
 			if (q < top_q) {
@@ -910,10 +921,12 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		reg = top_reg;
 		if (Verbose(proc)) {
-			printf("*** Loop %d..%d\n", header->seq_no, end->seq_no);
+			color = PrintColor(OPTIMIZE_COLOR);
+			PrintFmt("*** Loop %d..%d\n", header->seq_no, end->seq_no);
 			Print("Var: "); PrintVarVal(top_var); PrintEOL();
 			Print("Register: "); PrintVarName(top_reg); PrintEOL();
-			printf("Quotient: %d\n", top_q);
+			PrintFmt("Quotient: %d\n", top_q);
+			PrintColor(color);
 		}
 
 		//TODO: If there is Let reg = var and var is not top_var, we need to spill store
@@ -1110,7 +1123,7 @@ Purpose:
 	MarkLoops(proc);
 
 	if (Verbose(proc)) {
-		printf("========== Optimize loops ==============\n");
+		PrintHeader(3, "Optimize loops");
 		PrintProc(proc);
 	}
 
@@ -1127,7 +1140,7 @@ Purpose:
 
 		if (header != NULL) {
 //			if (Verbose(proc)) {
-//				printf("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
+//				Print("*** Loop %d..%d\n", header->seq_no, nb->seq_no);
 //			}
 			loop.header = header;
 			loop.end    = nb;

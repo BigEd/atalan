@@ -104,7 +104,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	line_cnt = 0;
 	ERR_OLD_COLOR = PrintColor(color);
 
-	PrintEOL();
+//	PrintEOL();
 	if (SRC_FILE != NULL) {
 		fprintf(STDERR, "%s(%d) %s: ", SRC_FILE->name, i, kind);
 	} else {
@@ -216,7 +216,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		}
 	}
 
-	if (line != NULL) {
+	if (line != NULL && *line != 0) {
 
 		PrintEOL();
 		PrintColor(RED+GREEN+BLUE);
@@ -297,19 +297,30 @@ void LogicError(char * text, UInt16 bookmark)
 
 void InternalError(char * text, ...)
 {
+	UInt8 old_color;
+	char buffer[256];
 	va_list argp;
-	PrintColor(RED+LIGHT);
-	fprintf(STDERR, "Internal error: ");
+	old_color = PrintColor(RED+LIGHT);
+	Print("Internal error: ");
 	va_start(argp, text);
-	vfprintf(STDERR, text, argp);
+	vsprintf(buffer, text, argp);
 	va_end(argp);
+	Print(buffer);
 	if (LINE_NO) {
-		fprintf(STDERR," (line %d)",LINE_NO);
+		Print("(line "); PrintInt(LINE_NO); Print(")");
 	}
-	fprintf(STDERR,"\n");
+	PrintEOL();
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
-	PrintColor(RED+GREEN+BLUE);
+	PrintColor(old_color);
+}
+
+void InternalErrorLoc(char * text, Loc * loc)
+{
+	UInt16 bookmark = SetBookmarkLine(loc);
+	ReportError("Internal error", text, bookmark);
+	TOK = TOKEN_ERROR;
+	ERROR_CNT++;
 }
 
 void Warning(char * text)

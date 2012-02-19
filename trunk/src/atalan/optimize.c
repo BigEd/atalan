@@ -281,25 +281,10 @@ void OptimizeCombined(Var * proc)
 
 void ProcOptimize(Var * proc)
 {
-//	if (VERBOSE) {
-//		printf("************************************** before blocks\n");
-//		PrintProc(proc);
-//	}
-
-//	if (StrEqual(proc->name, "changeDirection")) {
-//		printf("");
-//	}
-
 	if (Verbose(proc)) {
-		printf("**************************************\n");
-		PrintProc(proc);
+		PrintHeader(2, proc->name);
 	}
 	OptimizeCombined(proc);
-//	OptimizeLoops(proc);
-//	OptimizeCombined(proc);
-//	OptimizeLoops(proc);
-//	OptimizeCombined(proc);
-
 }
 
 /*

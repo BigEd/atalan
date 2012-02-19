@@ -647,9 +647,9 @@ Arguments:
 
 void PrintVarNameNoScope(Var * var)
 {
-	printf("%s", var->name);
+	Print(var->name);
 	if (var->idx > 0) {
-		printf("%ld", var->idx-1);
+		PrintInt(var->idx-1);
 	}
 }
 
@@ -664,7 +664,7 @@ void PrintVarName(Var * var)
 	} else {
 		if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
 			PrintVarName(var->scope);
-			printf(".");
+			Print(".");
 		}
 		PrintVarNameNoScope(var);
 	}
@@ -688,28 +688,28 @@ void PrintVarVal(Var * var)
 
 	if (var->mode == INSTR_DEREF) {
 //	if (FlagOn(var->submode, SUBMODE_REF)) {
-		printf("@");
+		Print("@");
 		var = var->var;
 	}
 
 	if (var->name == NULL) {
 		if (VarIsArg(var)) {
-			printf("#%ld", var->idx-1);
+			Print("#"); PrintInt(var->idx-1);
 		} else if (var->mode == INSTR_ELEMENT) {
 			PrintVarVal(var->adr);
 			if (var->adr->type->variant == TYPE_STRUCT) {
-				printf(".");
+				Print(".");
 				PrintVarNameNoScope(var->var);
 			} else {
-				printf("(");
+				Print("(");
 				index = var->var;
 				while(index->mode == INSTR_ELEMENT) {
 					PrintVarVal(index->adr);
-					printf(",");
+					Print(",");
 					index = index->var;
 				}
 				PrintVarVal(index);
-				printf(")");
+				Print(")");
 			}
 		} else if (var->mode == INSTR_BYTE) {
 			PrintVarVal(var->adr);
@@ -722,17 +722,17 @@ void PrintVarVal(Var * var)
 			PrintType(var->type);
 		} else {
 			if (var->mode == INSTR_RANGE) {
-				PrintVarVal(var->adr); printf(".."); PrintVarVal(var->var);
+				PrintVarVal(var->adr); Print(".."); PrintVarVal(var->var);
 			} else if (var->mode == INSTR_TUPLE) {
-				printf("(");
+				Print("(");
 				PrintVarVal(var->adr);
-				printf(",");
+				Print(",");
 				PrintVarVal(var->var);
-				printf(")");
+				Print(")");
 			} else {
 				switch(var->type->variant) {
-				case TYPE_INT: printf("%ld", var->n); break;
-				case TYPE_STRING: printf("'%s'", var->str); break;
+				case TYPE_INT: PrintInt(var->n); break;
+				case TYPE_STRING: Print("'"); Print(var->str); Print("'"); break;
 				default: break;
 				}
 			}
@@ -751,7 +751,7 @@ void PrintVarVal(Var * var)
 		if (var->adr != NULL) {
 			if (var->adr->mode == INSTR_TUPLE) {
 				if (!VarIsReg(var)) {
-					printf("@");
+					Print("@");
 					PrintVarVal(var->adr);
 				}
 			}
@@ -763,7 +763,7 @@ void PrintVarVal(Var * var)
 		if (type->variant == TYPE_INT && !VarIsConst(var)) {
 			if (type->range.min == 0 && type->range.max == 255) {
 			} else {
-//				printf(":%ld..%ld", type->range.min, type->range.max);
+//				Print(":%ld..%ld", type->range.min, type->range.max);
 			}
 		}
 	}
@@ -773,13 +773,16 @@ void PrintVarVal(Var * var)
 void PrintVarArgs(Var * var)
 {
 	Var * arg;
-	printf("(");
+	Int16 n = 0;
+	Print("(");
 	FOR_EACH_LOCAL(var, arg)
 		if (VarIsArg(arg)) {
-			printf(" %s", arg->name);
+			if (n > 0) Print(", "); 
+			Print(arg->name);
 		}
+		n++;
 	NEXT_LOCAL
-	printf(")");
+	Print(")");
 }
 
 void PrintVarNameUser(Var * var)
@@ -799,6 +802,7 @@ void PrintVarUser(Var * var)
 		Print("$");
 		PrintVarUser(var->var);
 	} else if (var->mode == INSTR_TYPE) {
+		PrintVarNameUser(var);
 		PrintType(var->type);
 	} else {
 		PrintVarNameUser(var);
@@ -810,11 +814,11 @@ void PrintVar(Var * var)
 	Type * type;
 
 	if (var->mode == INSTR_DEREF) {
-		printf("@");
+		Print("@");
 		var = var->var;
 	}
 //	if (FlagOn(var->submode, SUBMODE_REF)) {
-//		printf("@");
+//		Print("@");
 //	}
 
 	if (var->mode == INSTR_ELEMENT) {
@@ -827,7 +831,7 @@ void PrintVar(Var * var)
 		Print("$");
 		PrintVar(var->var);
 	} else if (var->mode == INSTR_CONST) {
-		printf("%ld", var->n);
+		PrintInt(var->n);
 		return;
 	} else if (var->mode == INSTR_TYPE) {
 		PrintType(var->type);
@@ -836,36 +840,36 @@ void PrintVar(Var * var)
 		PrintVarName(var);
 
 		if (var->adr != NULL) {
-			printf("@");
+			Print("@");
 			PrintVarVal(var->adr);
 		}
 
 		type = var->type;
 		if (type != NULL) {
 			if (type->variant == TYPE_PROC) {
-				printf(":proc");
+				Print(":proc");
 				PrintVarArgs(var);
 			} else if (type->variant == TYPE_MACRO) {
-				printf(":macro");
+				Print(":macro");
 				PrintVarArgs(var);
 			}
 		}
 
 		if (VarIsConst(var)) {
-			printf(" = %ld", var->n);
+			Print(" = "); PrintInt(var->n);
 		} else {
 			type = var->type;
 			if (type != NULL) {
 				if (type->variant == TYPE_INT) {
 					if (type->range.min == 0 && type->range.min == 255) {
 					} else {
-						printf(":%ld..%ld", type->range.min, type->range.max);
+						Print(":"); PrintInt(type->range.min); Print(".."); PrintInt(type->range.max);
 					}
 				}
 			}
 		}
 	}
-	printf("  R%ld W%ld\n", var->read, var->write);
+//	Print("  R%ld W%ld\n", var->read, var->write);
 }
 
 void InstrPrintInline(Instr * i)
@@ -875,14 +879,14 @@ void InstrPrintInline(Instr * i)
 
 	if (i->op == INSTR_LINE) {
 		PrintColor(BLUE+LIGHT);
-		printf(";%s(%d) %s", i->result->name, i->line_no, i->line);
+		PrintFmt("%s(%d) %s", i->result->name, i->line_no, i->line);
 		PrintColor(RED+GREEN+BLUE);
 	} else if (i->op == INSTR_LABEL) {
 		PrintVarVal(i->result);
 		Print("@");
 	} else {
 		inop = InstrFindCode(i->op);
-		printf("   %s", inop->name);
+		PrintFmt("   %s", inop->name);
 	
 		if (i->result != NULL) {
 			Print(" ");
@@ -910,23 +914,23 @@ void InstrPrintInline(Instr * i)
 void InstrPrint(Instr * i)
 {
 	InstrPrintInline(i);
-	printf("\n");
+	Print("\n");
 }
 
 void PrintBlockHeader(InstrBlock * blk)
 {
-	printf("#%ld/  ", blk->seq_no);
+	PrintFmt("#%ld/  ", blk->seq_no);
 	if (blk->label != NULL) {
-		printf("    ");
+		Print("    ");
 		PrintVarVal(blk->label);
-		printf("@");
+		Print("@");
 	}
-	printf("\n");
+	Print("\n");
 }
 
 void PrintInstrLine(UInt32 n)
 {
-	printf("%3ld| ", n);
+	PrintFmt("%3ld| ", n);
 }
 
 void CodePrint(InstrBlock * blk)

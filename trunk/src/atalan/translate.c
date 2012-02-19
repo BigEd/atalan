@@ -20,12 +20,13 @@ GLOBAL Bool RULE_MATCH_BREAK;
 GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
 GLOBAL Var * MACRO_ARG[MACRO_ARG_CNT];
 
+/*
 typedef enum {
 	PHASE_TRANSLATE,
 	PHASE_EMIT
 } Phase;
-
-GLOBAL Phase MATCH_MODE;		// mode used to match rules (PHASE_TRANSLATE, PHASE_EMIT)
+*/
+GLOBAL CompilerPhase MATCH_MODE;		// mode used to match rules (PHASE_TRANSLATE, PHASE_EMIT)
 
 /*
 Translation is done using rules. 
@@ -166,7 +167,7 @@ void EmptyRuleArgs()
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant);
 
-Bool RuleMatch(Rule * rule, Instr * i, Phase match_mode)
+Bool RuleMatch(Rule * rule, Instr * i, CompilerPhase match_mode)
 /*
 Purpose:
 	Return true, if the instruction matches specified rule.
@@ -202,7 +203,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 			if (VarIsStructElement(var)) {
 				// This is reference to structure
 				// We may treat it as normal variable
-//				printf("");
+//				Print("");
 			} else {
 				// 1D index
 				if (!ArgMatch(pattern->index, var->var, RULE_ELEMENT)) return false;
@@ -453,13 +454,9 @@ Purpose:
 	UInt32 n;
 	Var * a = NULL, * var, * item;
 
-//	printf("============ Registers1 ============\n");
-//	PrintProc(proc);
-
-//	if (StrEqual(proc->name, "cycle")) {
-//		printf("");
-//	}
-
+	if (Verbose(proc)) {
+		PrintHeader(2, proc->name);
+	}
 	// As first step, we translate all variables on register address to actual registers
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
@@ -471,7 +468,7 @@ Purpose:
 		}
 	}
 
-//	printf("============ Registers ============\n");
+//	Print("============ Registers ============\n");
 //	PrintProc(proc);
 
 	// We perform as many translation steps as necessary
@@ -549,6 +546,7 @@ Purpose:
 					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
 					} else {
 						GenInternal(i->op, i->result, i->arg1, i->arg2);
+						InternalError("Failed translate instruction"); InstrPrint(i);
 						untranslated = true;
 					}
 				}
@@ -563,13 +561,12 @@ next:
 		if (Verbose(proc)) {
 			// Do not print unmodified step (it would be same as previous step already printed)
 			if (modified) {
-				printf("========== Translate (step %d) ============\n", step+1);
+				PrintHeader(3, "Step %d", step+1);
 				PrintProc(proc);
 			}
 		}
 		step++;
-	} while(modified && step < MAX_RULE_UNROLL);
-
+	} while(!untranslated && modified && step < MAX_RULE_UNROLL);
 }
 
 void TranslateInit()

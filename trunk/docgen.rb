@@ -57,6 +57,12 @@ def generate_index(filename)
   return text
 end
 
+def put_text(text)
+  #::text:: is code word
+  text.gsub!(/::(.+?)::/,  '<code>\1</code>')  
+  puts text
+end
+
 def a_file(filename, in_comment)
 
   index_text = generate_index(filename)
@@ -97,7 +103,7 @@ def a_file(filename, in_comment)
         end
         mt = line.match(/\A\s*-\s*(.*)\Z/)
         puts '<li>'
-        puts mt[1]
+        put_text(mt[1])
         puts '</li>'
       elsif line =~ /\*\*+/ 
         if heading_level == 1
@@ -141,7 +147,7 @@ def a_file(filename, in_comment)
           if in_code then
             puts line
           else
-            puts line.strip
+            put_text line.strip
           end
           
         end

@@ -68,7 +68,7 @@ Purpose:
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
-//							PrintVarName(var); printf("@%d\n", adr);
+//							PrintVarName(var); Print("@%d\n", adr);
 							var->adr = VarNewInt(adr);
 						} else {
 							// failed to alloc in zero page
@@ -145,10 +145,10 @@ void AllocateVariables(Var * proc)
 	for(proc2 = VarFirst(); proc2 != NULL; proc2 = VarNext(proc2)) {
 		type = proc2->type;
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
-//			printf("%s -> %s", proc2->name, proc->name);
+//			Print("%s -> %s", proc2->name, proc->name);
 			if (proc2 != proc && !ProcCallsProc(proc, proc2) && !ProcCallsProc(proc2, proc)) {
 //				if (/*StrEqual(proc->name, "copyblock") &&*/ StrEqual(proc->name, "drawmainscreen")) {
-//					printf("***\n");
+//					Print("***\n");
 //				}
 				HeapVariablesOp(&heap, proc2, VAR_ADD);
 //				if (StrEqual(proc->name, "drawmainscreen")) {
@@ -156,9 +156,9 @@ void AllocateVariables(Var * proc)
 //				}
 
 			} else {
-//				printf("... Dependent");
+//				Print("... Dependent");
 			}
-//			printf("\n");
+//			Print("\n");
 		}
 	}
 
@@ -170,7 +170,7 @@ void AllocateVariables(Var * proc)
 		type = proc2->type;
 
 //		if (StrEqual(proc2->name, "copyblock") && StrEqual(proc->name, "drawmainscreen")) {
-//			printf("***");
+//			Print("***");
 //		}
 
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
