@@ -40,7 +40,9 @@ GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
 
 Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 /*
+	Compare two rule arguments for specificity.
 	Return true if l is more specific than r.
+	Return false, if it is less specific or we are not able to decide which of the rules is more specific.
 */
 {
 	if (l == r) return false;
@@ -72,7 +74,8 @@ Bool RuleIsMoreSpecific(Rule * l, Rule * r)
 /*
 Purpose:
 	Compare two rule filters for specificity.
-	In case we are not able to decide, which rule is more specific, we return false.
+	Return true if l is more specific than r.
+	Return false, if it is less specific or we are not able to decide which of the rules is more specific.
 */
 {
 	UInt8 i;
@@ -455,7 +458,7 @@ Purpose:
 	Var * a = NULL, * var, * item;
 
 	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
+		PrintHeader(2, VarName(proc));
 	}
 	// As first step, we translate all variables on register address to actual registers
 
@@ -567,6 +570,13 @@ next:
 		}
 		step++;
 	} while(!untranslated && modified && step < MAX_RULE_UNROLL);
+
+	if (step == 1 && !modified) {
+		if (Verbose(proc)) {
+			PrintHeader(3, "Without Change");
+			PrintProc(proc);
+		}
+	}
 }
 
 void TranslateInit()

@@ -12,6 +12,56 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 static Bool G_VERBOSE;
 
+/*
+TODO: Loop shift/reversal
+
+On most processors, it is faster to test if the value reached 0, 128 or 256 (possibly 65536 etc.)
+We may need to shift the loop index so, that it ends on this limit.
+
+This means:
+
+- we must know initialization, increment and test of loop variable
+- loop variable may not be read (except the test) or written (except the increment and initialization)
+- loop variable may be used as index, where we may decrement the base address
+
+    ldx #0                  ldx #0+diff
+	lda #0                  lda #0
+l:  sta array,x         l:  sta array-diff,x
+    inx                     inx
+	cpx #40				    ;cpx #128
+	bne l                   bpl l
+
+It would be easier on symbolic level, but there could be problem with array access.
+If the array is big, we may not have the option to do the base shift.
+I.e.  lda (adr),y
+
+Problems when replacing on logical level:
+- When using instructions like a() = 0, the loop is not yet unwinded, so we cannot test the loop.
+
+1. Detect, that the loop end can be optimized. Detect loop variable (%1), step (%2) and limit (%3)
+   We can use multiple instruction rule to detect the loop.
+
+rule loop = instr
+   add %1, %1, %2
+   cmp %1, %3:1..127
+   bne l
+
+2. Try to find the initialization of the loop variable
+
+   It must be before loop, in the form let %1, %4
+   If the %4 is constant, we may just add the difference.
+   
+3. Test, that we can replace %1 by %1-%diff in every instruction, that uses %1.
+   If the %1 is on the left side (except self referencing instructions), do not perform the optimization
+
+4. Perform replacement of loop end:
+
+   add %1, %1, %2
+   bpl l
+
+*/
+
+
 Var * FindMostUsedVar()
 /*
 Purpose:
@@ -354,7 +404,8 @@ next:
 					if (!InstrIsSelfReferencing(i)) {
 						VarSetSrcInstr(reg, &initial);
 					} else {
-						VarSetSrcInstr(reg, NULL);
+						VarSetSrcInstr(reg, &initial);
+//						VarSetSrcInstr(reg, NULL);
 					}
 				} else {
 					VarSetSrcInstr(i->result, i);
@@ -876,10 +927,6 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 	// When processing, we assign var to register
 	for(regi = 0; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
-
-//	if (header->seq_no == 41) {
-//		Print("");
-//	}
 
 	while(top_var = FindMostUsedVar()) {
 

@@ -157,6 +157,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_TYPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_SCOPE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_SRC_FILE, "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			//{ INSTR_SRC_FILE variable representing source file
+	{ INSTR_BIT, "%", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// <var> <bit_index>  access bits of specified variable
 };
 
 
@@ -647,10 +648,11 @@ Arguments:
 
 void PrintVarNameNoScope(Var * var)
 {
-	Print(var->name);
-	if (var->idx > 0) {
-		PrintInt(var->idx-1);
-	}
+	Print(VarName(var));
+//	Print(var->name);
+//	if (var->idx > 0) {
+//		PrintInt(var->idx-1);
+//	}
 }
 
 void PrintVarName(Var * var)

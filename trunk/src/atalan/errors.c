@@ -106,9 +106,9 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 //	PrintEOL();
 	if (SRC_FILE != NULL) {
-		fprintf(STDERR, "%s(%d) %s: ", SRC_FILE->name, i, kind);
+		PrintFmt("%s(%d) %s: ", SRC_FILE->name, i, kind);
 	} else {
-		fprintf(STDERR, "%s: ", kind);
+		PrintFmt("%s: ", kind);
 	}
 
 	indent = 4;
@@ -188,7 +188,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 //	fprintf(STDERR, "%s", buf);
 
-	if (name) fprintf(STDERR, " \'%s\'", NAME);
+	if (name) PrintFmt(" \'%s\'", NAME);
 //	fprintf(STDERR, "\n");
 
 	if (arg_cnt > 0) {
@@ -197,11 +197,11 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 			var = ERR_ARGS[c-1];
 			if (var->file != NULL) {
 				PrintRepeat(" ", indent);
-				fprintf(STDERR, "'%s' was declared at line %s(%d)\n", var->name, var->file->name, var->line_no);
+				PrintFmt("'%s' was declared at line %s(%d)\n", var->name, var->file->name, var->line_no);
 			}
 		}
 
-		fprintf(STDERR, "\n");
+		PrintEOL();
 	}
 
 	// Print line with error and position of the error on line

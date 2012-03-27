@@ -18,6 +18,9 @@ GLOBAL Var * LAST_VAR;
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
+GLOBAL Var * ZERO;
+GLOBAL Var * ONE;
+GLOBAL char VAR_NAME[128];
 
 /*
 We have theoretical option of supporting mltiple CPUs simultaneously (this the CPUS array).
@@ -45,6 +48,10 @@ void VarInit()
 	// Alloc rule procedure and rule arguments (rule arguments are local arguments of RULE_PROC)
 
 	CPU = &CPUS[0];
+
+	ZERO = VarNewInt(0);
+	ONE  = VarNewInt(1);
+
 }
 
 Var * VarFindOp(InstrOp op, Var * left, Var * right)
@@ -171,6 +178,13 @@ Argument:
 
 	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
 	item->type = TypeByte();
+	return item;
+}
+
+Var * VarNewBitElement(Var * arr, Var * idx)
+{
+	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
+//	item->type = TypeByte();
 	return item;
 }
 
@@ -596,6 +610,7 @@ Purpose:
 	Var * var, *type_var;
 	Type * type;
 	Var * dim1, * dim2;
+	Rule * rule;
 
 	// Generate initialized arrays, where location is not specified
 
@@ -607,7 +622,8 @@ Purpose:
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
 					if (type_var->adr != NULL) {
-						Gen(INSTR_ALIGN, NULL, type_var->adr, NULL);
+						rule = InstrRule2(INSTR_ALIGN, NULL, type_var->adr, NULL);
+						GenRule(rule, NULL, type_var->adr, NULL);
 					}
 					// Label & initializers
 					GenLabel(var);
@@ -620,13 +636,14 @@ Purpose:
 	// Generate array indexes
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_VAR || var->mode == INSTR_CONST) {
+		if (var->mode == INSTR_VAR /*|| var->mode == INSTR_CONST*/) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
 				if (VarIsUsed(var)) {
 					ArraySize(type, &dim1, &dim2);
 					if (dim2 != NULL) {
-						Gen(INSTR_ARRAY_INDEX, var, dim1, dim2);
+						rule = InstrRule2(INSTR_ARRAY_INDEX, var, dim1, dim2);
+						GenRule(rule, var, dim1, dim2);
 					}
 				}
 			}
@@ -639,7 +656,8 @@ Purpose:
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
 			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
-				Gen(INSTR_ORG, NULL, var->adr, NULL);
+				rule = InstrRule2(INSTR_ORG, NULL, var->adr, NULL);
+				GenRule(rule, NULL, var->adr, NULL);
 				GenLabel(var);
 				GenBlock(var->instr);
 			}
@@ -1164,4 +1182,19 @@ Var * VarFindAssociatedConst(Var * var, char * name)
 {
 	if (var == NULL) return NULL;
 	return VarFindScope(var->type->owner, name, 0);
+}
+
+char * VarName(Var * var)
+/*
+Purpose:
+	Return name of the specified variable.
+	Only one name at the moment may be used.
+	Next call to the function will render the name invalid.
+*/
+{
+	VAR_NAME[0] = 0;
+	if (var == NULL) return "";
+	if (var->idx == 0) return var->name;
+	sprintf(VAR_NAME, "%s%d", var->name, var->idx-1);
+	return VAR_NAME;
 }
