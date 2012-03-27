@@ -1,13 +1,69 @@
-﻿What are the benefits of type inferencing?
+﻿Atalan implements interval type inferencing. 
+It tries to infer set of possible values of the result of every operator in the
+code. So it not only deduces, that the variable should be integer, but also
+the range of the integer.  
+  
+The following examples use type assert. 
+::assert x:min..max:: makes sure the compiler at specified line 
+inferred the range of variable x to be min..max.
+ 
+;Basic type inference 
+in x:10..20
+y = x 
+assert y:10..20   ;For input variables, Atalan uses the defined type
+y = x * 2 
+assert y:20..40 
+y = y + 5 
+assert y:25..45 
+z = y - 30 
+assert z:-5..15 
+
+;Conditions are recognized
+in x:10..20 
+y = x * 2 
+assert y:20..40 
+if y > 30 
+    y = 30 
+assert y:20..30 
+if y <= 25 then y = 26 
+assert y:26..30 
+
+;Some loops are supported
+x = 10 
+while x < 100 
+    inc x 
+    assert x:11..100 
+assert x:100..100 
+x = 3 
+while x <= 23 
+    inc x 
+    assert x:4..24 
+assert x:24..24
+ 
+;Dependent varibles in loop may be computed
+y = 1 
+for x:0..7 
+   inc y 
+assert y:9..9 
+
+
+Benefits of type inferencing
 
 - You don't need to declare types of local variables, leading to shorter,
-  more readable code. Also it is easier to create a new local variable,
-  so maybe you will create some extra ones, with meaningfull names, which
-  will further imrove code readability.
+  more readable code. It is easier to introduce a new local variable,
+  so you can create some extra ones, with meaningfull names, which
+  will further improve code readability.
   
 - With exact interval type inferencing, the compiler may statically check
   array bounds errors, incorrect asignment errors etc.
-	
+
+- Inferred types may be used for optimizations.
+
+- With proper interval type inferenced, compiler can produce correct code
+  in most situations. For example when computing expression like ::(a * b) / 128::
+  where a and b are in range 0..127, compiler will correctly use 2 byte temporary
+  variable for the result of multiplication, even if the final result is only byte again.
+  
 - Types may be inferred for procedure arguments and local variables (these are two
   diferents algorithms).
 	

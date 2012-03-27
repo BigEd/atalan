@@ -526,6 +526,7 @@ Type * TypeArray(Type * index, Type * element)
 	Type * type = TypeAlloc(TYPE_ARRAY);
 	type->index = index;
 	type->element = element;
+	type->step = TypeSize(element);
 	return type;
 }
 

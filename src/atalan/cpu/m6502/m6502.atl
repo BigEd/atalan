@@ -337,6 +337,13 @@ rule let_adr %D:adr, %A:arr_of_arr(%B:byte)(%C:byte) = instr
 	adc 0	
 	let %D$1, a
 
+rule let_adr %D:adr, %A:arr_of_arr(%B:byte) = instr
+	ldy %B
+	lda %A.index_lo$y
+	sta %D$0
+	lda %A.index_hi$y
+	sta %D$1
+	 
 ;======= array(0..255) of array(0..127) of byte2
 
 type arr_of_arr2:array(0..255) of array(0..127) of byte2
@@ -2212,16 +2219,20 @@ std_format:macro d:adr = instr
 rule str_arg ,%A,%B:byte  = "   dta b(%B),%'A"
 rule var_arg ,%A:byte   = "   dta b(129),a(%A)"
 rule var_arg ,%A:card   = "   dta b(130),a(%A)"
-rule var_arg ,%A:adr    = "   dta b(130),a(%A)"
+;rule var_arg ,%A:adr    = "   dta b(130),a(%A)"
 rule var_arg ,%A:long   = "   dta b(131),a(%A)"
+rule var_arg ,%A:adr, %B:0..255 = "   dta b(128+64+1), a(%B), a(%A)"
 
 rule var_arg, %A:sbyte  = "   dta b(129+32), a(%A)"
 rule var_arg, %A:int    = "   dta b(130+32), a(%A)"
 
+rule data ,%A:string = "   dta %'A"
 rule data ,%A    = "   dta b(%A)"
 rule align ,%A    = "   .align %A"
 rule file ,%A     = "   ins '%A'"
 rule org  ,%A     = "   org %A"
+rule ptr , %A$0  = "   dta b(<%A)"
+rule ptr , %A$1  = "   dta b(>%A)"
 rule ptr , %A    = "   dta a(%A)"
 rule debug  = "   brk"  "   dta b(0)"
 rule line      = ";### %0(%1) %2"

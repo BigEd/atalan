@@ -115,6 +115,18 @@ Purpose:
 	NEXT_VAR
 
 	InstrVarUse(ROOT_PROC.instr, NULL);
+
+	FOR_EACH_VAR(proc)
+		if (proc->type != NULL && proc->type->variant == TYPE_ARRAY && proc->mode == INSTR_VAR) {
+			if (proc->read > 0 || proc->write > 0) {
+				if (proc->instr != NULL) {
+					InstrVarUse(proc->instr, NULL);
+				}
+			}
+		}
+	NEXT_VAR
+
+
 }
 
 //TODO: Replace variable management (keep array of those variables and reuse them)

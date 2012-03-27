@@ -105,14 +105,16 @@ typedef enum {
 	TOKEN_SEQUENCE,
 	TOKEN_ASSERT,
 	TOKEN_EITHER,
-	TOKEN_LAST_KEYWORD = TOKEN_EITHER,
+	TOKEN_STRING_TYPE,
+	TOKEN_LAST_KEYWORD = TOKEN_STRING_TYPE,
 
 	// two character tokens
 	TOKEN_LOWER_EQUAL,
 	TOKEN_HIGHER_EQUAL,
 	TOKEN_NOT_EQUAL,
 	TOKEN_DOTDOT,
-	TOKEN_RIGHT_ARROW
+	TOKEN_RIGHT_ARROW,
+	TOKEN_HORIZ_RULE
 
 } Token;
 
@@ -261,6 +263,7 @@ typedef enum {
 							// scope   FILE that includes (uses) this file
 							// name    filename
 							// n       parse state
+	INSTR_BIT,
 
 	INSTR_CNT
 } InstrOp;
@@ -623,8 +626,19 @@ extern Type * TUNDEFINED;
 
 #define NO_SCOPE ((Var *)1)
 
+/**********************************************
+
+ Variables
+
+***********************************************/
+
+extern Var * ZERO;
+extern Var * ONE;
+
 void VarInit();
 void InitCPU();
+
+char * VarName(Var * var);
 
 Var * VarFirst();
 #define VarNext(v) (v)->next
@@ -706,6 +720,7 @@ Var * VarNextLocal(Var * scope, Var * local);
 
 Var * VarNewElement(Var * arr, Var * idx);
 Var * VarNewByteElement(Var * arr, Var * idx);
+Var * VarNewBitElement(Var * arr, Var * idx);
 Var * VarNewDeref(Var * var);
 Var * VarNewRange(Var * min, Var * max);
 Var * VarNewTuple(Var * left, Var * right);
@@ -1031,6 +1046,7 @@ typedef enum {
 	RULE_TUPLE,
 	RULE_RANGE,
 	RULE_BYTE,
+	RULE_BIT,
 
 	RULE_DESTINATION
 

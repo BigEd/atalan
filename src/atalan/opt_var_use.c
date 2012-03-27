@@ -63,8 +63,9 @@ Purpose:
 		if (var->mode == INSTR_SCOPE) {
 			AllocateVariablesFromHeap(var, heap);
 		} else {
-			if ((var->write > 0 || var->read > 0) && !VarIsLabel(var)) {
-				if (var->adr == NULL && var->mode == INSTR_VAR) {
+			// Do not assign address to unused variables, labels and registers
+			if (var->adr == NULL && var->mode == INSTR_VAR) {
+				if ((var->write > 0 || var->read > 0) && !VarIsLabel(var) && !VarIsReg(var)) {
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {

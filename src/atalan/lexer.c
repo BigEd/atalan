@@ -38,6 +38,7 @@ typedef struct {
 	                        // For example TOKEN_THEN, TOKEN_ELSE etc. Stop token will be returned by parser after block end.
 	LineIndent indent;		// Indent of the block. For TOKEN_OUTDENT, any indent smaller than this will end the block.
 
+	LineNo     line_no;		// line, at which the block started
 } BlockStyle;
 
 
@@ -63,6 +64,27 @@ GLOBAL Token TOK_NO_SPACES;				// if the current token was not preceded by white
 GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
+
+
+void PrintLex()
+{
+	UInt16 i;
+	char * c;
+
+	for(i=0; i<=BLK_TOP; i++) {
+		switch(BLK[i].end_token) {
+		case TOKEN_EOL:  c = "LINE"; break;
+		case TOKEN_OUTDENT: c = "INDENT"; break;
+		case TOKEN_CLOSE_P: c = "("; break;
+		case TOKEN_EOF: c = "FILE"; break;
+		case TOKEN_BLOCK_END: c = "END"; break;
+		default: c = "?"; break;
+		}
+		if (i==0) c = "ROOT";
+
+		printf("%6s %4d T%dS%d\n", c, BLK[i].line_no, BLK[i].indent/256, BLK[i].indent % 256); 
+	}
+}
 
 /*******************************************************************
 
@@ -173,11 +195,12 @@ have_char:
 
 	// No character has been read, this is end of file
 	// We have to end all blocks until TOKEN_EOF block
-	// If there are some other blocks than TOKEN_OUTDENT or TOKEN_EOL, it is an error (missing closing parenthesis)
+	// If there are some other blocks then TOKEN_OUTDENT or TOKEN_EOL, it is an error (missing closing parenthesis)
 	if (LINE_LEN == 0) {
 		for(top = BLK_TOP; top > 0; top--) {
 			t = BLK[top].end_token;
 			BLK[top].end_token = TOKEN_BLOCK_END;
+			BLK[top].stop_token = TOKEN_VOID;			// !!!! Do not emit stop tokens for automatically ended tokens
 			if (t == TOKEN_EOF) break;
 			if (t == TOKEN_CLOSE_P) {
 				SyntaxError("missing closing parenthesis");
@@ -215,8 +238,8 @@ have_char:
 		if (indent <= BLK[BLK_TOP-1].indent) BLK[BLK_TOP].indent++; //BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
 	}
 
-	// End all indent blocks with indent smaller than actual
-	for(top = BLK_TOP; top > 0 && (BLK[top].end_token == TOKEN_BLOCK_END || BLK[top].end_token == TOKEN_OUTDENT) && BLK[top].indent > indent; top--) {
+	// End all indent blocks with indent smaller than actual indent
+	for(top = BLK_TOP; top > 0 && (BLK[top].end_token == TOKEN_BLOCK_END || BLK[top].end_token == TOKEN_OUTDENT || BLK[top].end_token == TOKEN_EOL) && BLK[top].indent > indent; top--) {
 		BLK[top].end_token = TOKEN_BLOCK_END;
 	}
 
@@ -287,6 +310,7 @@ void EnterBlockWithStop(Token stop_token)
 	if (end == TOKEN_OUTDENT) BLK[BLK_TOP].indent = UNDEFINED_INDENT;
 	BLK[BLK_TOP].end_token   = end;
 	BLK[BLK_TOP].stop_token  = stop;
+	BLK[BLK_TOP].line_no     = LINE_NO;
 
 	// NextToken MUST be called AFTER new block  has been created 
 	// (so it may possibly immediately exit that block, if it is empty)
@@ -324,7 +348,7 @@ static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "unless", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "param", "instr", "times", "adr", "debug", "mod", "bitnot", "bitand", "bitor", "bitxor", "struct", "use", "ref", "step", "return",
-	"scope", "sequence", "assert", "either"
+	"scope", "sequence", "assert", "either", "string"
 	
 };
 
@@ -416,14 +440,32 @@ retry:
 	// Line reading may have closed some blocks, so we go to routine start
 
 	if (LINE_POS == LINE_LEN) {
+
+		ReadLine();
+
+		// --- is special block separating indented blocks
+		// Current indented block should have been ended due to smaller indent, so we should return the end of block,
+		// then this token should be returned (but no other end of blocks!)
+
+		if (LINE[LINE_POS] == '-' && LINE[LINE_POS+1] == '-' && LINE[LINE_POS+2] == '-') {
+			LINE_POS += 3;
+			while(LINE[LINE_POS] == '-') LINE_POS++;
+			BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+			BLK[BLK_TOP].stop_token = TOKEN_HORIZ_RULE;
+			TOK = TOKEN_BLOCK_END;
+			return;
+		}
+
 		// This is end of line, all line blocks in current file should be ended
-		for(top = BLK_TOP; top > 0 && BLK[top].end_token != TOKEN_EOF; top--) {
+		for(top = BLK_TOP; top > 0 && BLK[top].end_token == TOKEN_EOL || BLK[top].end_token == TOKEN_BLOCK_END; top--) {
+//		for(top = BLK_TOP; top > 0 && BLK[top].end_token != TOKEN_EOF; top--) {
 			if (BLK[top].end_token == TOKEN_EOL) {
 				BLK[top].end_token = TOKEN_BLOCK_END;
 				BLK[top].stop_token = TOKEN_VOID;
 			}
 		}
-		ReadLine();
+
+
 		goto retry;
 	}
 
@@ -617,6 +659,8 @@ store:
 				TOK = TOKEN_SQRT;
 			} else if (c == 0xE2 && c2 == 0x86 && c3 == 0x92) {
 				TOK = TOKEN_RIGHT_ARROW;
+			} else if (c == '-' && c2 == '-' && c3 == '-') {
+				TOK = TOKEN_HORIZ_RULE;
 			}
 
 			if (TOK == 0) {

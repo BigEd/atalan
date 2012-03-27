@@ -11,9 +11,9 @@
 
 use m6502
 type  VARHEAP:000..255   
-rule prologue       =  "    opt h-" " .byte('N', 'E', 'S', $1A, $02, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" " org $8000"  "RESET:" "   sei" "   cld" "   ldx #$FF" "   txs"
-rule epilogue       =  "    rts"  
-rule code_end       =  "    .align $FFF9,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
+rule prologue       =  "   opt h-" "   .byte('N', 'E', 'S', $1A, $02, $01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00)" "   org $8000"  "RESET:" "   sei" "   cld" "   ldx #$FF" "   txs"
+rule epilogue       =  "   rts"  
+rule code_end       =  "   .align $FFF9,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
 rule line           = ";### %0(%1) %2"
 const BIN_EXTENSION = "nes"
 
@@ -50,8 +50,8 @@ ppu:scope =
 	
 ;To allow simple addressing like: ppu.adr = $23ff
 rule let ppu.ptr, %A:0..$ffff = instr
-	let ppu.data_adr, %A$0
 	let ppu.data_adr, %A$1
+	let ppu.data_adr, %A$0
 
 ;------------------------------------------IN/OUT DEFINES FOR THE SYSTEM-MODULE-----------------------------------------
 

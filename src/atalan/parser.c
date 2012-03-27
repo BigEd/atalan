@@ -21,6 +21,8 @@ Syntax:
 	~      there can not be space between previous and next syntactic token
 */
 
+// A   Array Parser
+
 #include "language.h"
 
 // How many vars in a row are processed before error
@@ -50,6 +52,7 @@ Bool    PARSING_RULE = false;
 
 void ParseExpRoot();
 
+void ParseEnumItems(Type * type, UInt16 column_count);
 void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
 void ExpectExpression(Var * result);
@@ -69,6 +72,7 @@ Var * ParseFile();
 #define STR_NO_EOL 1
 void ParseString(InstrBlock * i, UInt32 flags);
 void ParseExpressionType(Type * result_type);
+void ParseExpression(Var * result);
 
 // All rules share one common scope, so they do not mix with normal scope of program.
 
@@ -335,6 +339,37 @@ done:
 	return type;
 }
 
+void ParseEnumStruct(Type * type)
+{
+	Var * var;
+	UInt16 column_count = 0;
+
+ 	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
+
+	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+
+		if (TOK == TOKEN_ID) {
+			ParseAssign(INSTR_VAR, SUBMODE_EMPTY, type);
+			NextIs(TOKEN_COMMA);
+			NextIs(TOKEN_EOL);
+		} else {
+			SyntaxError("Expected variable name");
+		}
+	}
+
+	// Convert parsed fields to constant arrays
+	FOR_EACH_LOCAL(type->owner, var)
+		var->type = TypeArray(type, var->type);		
+//		var->type->step = TypeSize(var->type->element);
+		var->mode = INSTR_CONST;
+		column_count++;
+	NEXT_LOCAL
+
+	NextIs(TOKEN_HORIZ_RULE);
+
+	ParseEnumItems(type, column_count);
+}
+
 Type * ParseType2(InstrOp mode)
 /*
 Purpose:
@@ -356,7 +391,11 @@ next:
 		type = TypeAlloc(TYPE_INT);
 		type->range.flexible = true;
 		type->is_enum        = true;
-		if (TOK == TOKEN_INT) goto range;
+		if (NextIs(TOKEN_STRUCT)) {
+			ParseEnumStruct(type);
+		} else if (TOK == TOKEN_INT) {
+			goto range;
+		}
 		goto const_list;
 
 
@@ -377,6 +416,10 @@ next:
 	} else if (NextIs(TOKEN_STRUCT)) {
 		type = TypeAlloc(TYPE_STRUCT);
 		ParseArgList(SUBMODE_EMPTY, type);
+
+	// String
+	} else if (NextIs(TOKEN_STRING_TYPE)) {
+		type = TypeAlloc(TYPE_STRING);
 
 	// Array
 	} else if (NextIs(TOKEN_ARRAY)) {		
@@ -768,6 +811,11 @@ Syntax:
 		item = ParseArrayItem(arr);
 		if (TOK) {
 			var = VarNewByteElement(arr, item);
+		}
+	} else if (NextCharIs('$')) {
+		item = ParseArrayItem(arr);
+		if (TOK) {
+			var = VarNewBitElement(arr, item);
 		}
 	} else if (NextCharIs('#')) {
 		item = ParseArrayItem(arr);
@@ -1201,7 +1249,7 @@ void ParseOperand()
 			}
 
 			if (var == NULL) {
-				SyntaxError("~unknown variable [$]");
+				SyntaxError("~unknown name [$]");
 				ReportSimilarNames(NAME);
 				EndErrorReport();
 
@@ -1271,6 +1319,16 @@ retry_indices:
 					} else {
 						if (TOK == TOKEN_ID) {
 							item = VarFindScope(var, NAME, 0);
+							// If the item is not part of variable scope, try to find it in type
+							if (item == NULL) {
+								item = VarFindScope(var->type->owner, NAME, 0);
+								if (item != NULL) {
+									// If the found item is array, we use the variable as an index to the array
+									if (item->type->variant == TYPE_ARRAY) {
+										item = VarNewElement(item, var);
+									}
+								}
+							}
 
 							// If the element has not been found, try to match some built-in elements
 
@@ -1290,7 +1348,7 @@ retry_indices:
 
 							if (item != NULL) {
 								var = item;
-								NextToken();
+								goto indices;	//NextToken();
 							} else {
 								SyntaxError("$unknown item");
 							}
@@ -2360,23 +2418,34 @@ Var * ParseFile()
 	return item;
 }
 
-UInt32 ParseArrayConst(Var * var)
+UInt32 ParseArrayConst(Type * type, Bool nested)
 /*
 Purpose:
 	Parse array constant.
 Arguments:
-	var		Array variable for which the constant is parsed.
+	type		Type of element, that should be parsed.
 */
 {
 	UInt32 i, rep;
 	Var * item;
 	Type * item_type;
 	UInt16 bookmark;
+	UInt32 item_size;
 
-	GenBegin();
 	i = 0;
 
-	item_type = var->type->element;
+	item_type = type->element;
+
+	// In case of array of arrays simple string is understood as the whole array
+	if (nested) {
+		if (TOK == TOKEN_STRING) {
+			item = VarNewStr(NAME);
+			item_size = StrLen(NAME);
+			NextToken();
+			Gen(INSTR_DATA, NULL, item, NULL);
+			return item_size;
+		}
+	}
 
  	EnterBlock();
 
@@ -2410,8 +2479,15 @@ Arguments:
 
 		//TODO: Here can be either the type or integer constant or address
 		bookmark = SetBookmark();
-		ParseExpressionType(item_type);
-		item = STACK[0];
+		if (TOK == TOKEN_STRING) {
+			item = VarNewStr(NAME);
+			item_size = StrLen(NAME);
+			NextToken();
+		} else {
+			ParseExpressionType(item_type);
+			item = STACK[0];
+			item_size = 1;
+		}
 
 		rep = 1;
 		if (NextIs(TOKEN_TIMES)) {
@@ -2428,7 +2504,9 @@ Arguments:
 		}
 
 		if (item->mode == INSTR_CONST) {
-			if (item->type->variant != TYPE_ARRAY) {
+			if (item->type->variant == TYPE_STRING) {
+				//TODO: Convert string - possibly using translating array
+			} else if (item->type->variant != TYPE_ARRAY) {
 				if (!VarMatchType(item, item_type)) {
 					LogicError("value does not fit into array", bookmark);
 					continue;
@@ -2440,16 +2518,212 @@ Arguments:
 			// Generate reference to variable
 			if (item->type->variant == TYPE_ARRAY) {
 				Gen(INSTR_PTR, NULL, item, NULL);
-				i += TypeAdrSize();		// address has several bytes
+				item_size = TypeAdrSize();		// address has several bytes
 			} else {
 				Gen(INSTR_DATA, NULL, item, NULL);
-				i++;
 			}
+			i += item_size;
 		}
 	}
-	var->instr = GenEnd();
 	EXP_IS_REF = false;
 	return i;
+}
+
+// Array of array is generated lke this:
+//   index:array of adr of item		// implemented based on platform
+//   size:array of byte
+
+
+//Constant array is stored as array of vars.
+/*************************************************************************
+
+   Parsing Arrays
+
+**************************************************************************/
+
+//$A
+
+typedef struct ArrParserTag ArrParser;
+
+struct ArrParserTag {
+	Var * arr;
+	Type * elem_type;
+	Var * sizes, * index_lo, * index_hi;
+	UInt32 min_size, max_size;
+};
+
+void ArrParserInit(ArrParser * apar, Var * arr)
+{
+	InstrBlock * sizes_i, * index_lo_i, * index_hi_i;
+
+	apar->arr = arr;
+	apar->elem_type = arr->type->element;
+
+	if (apar->elem_type->variant == TYPE_ARRAY) {
+		sizes_i = InstrBlockAlloc();
+		index_lo_i = InstrBlockAlloc();
+		index_hi_i = InstrBlockAlloc();
+
+		apar->sizes = VarAllocScope(arr, INSTR_CONST, "size", 0);
+		apar->sizes->instr = sizes_i;
+
+		apar->index_lo = VarAllocScope(arr, INSTR_CONST, "index_lo", 0);
+		apar->index_lo->instr = index_lo_i;
+
+		apar->index_hi = VarAllocScope(arr, INSTR_CONST, "index_hi", 0);
+		apar->index_hi->instr = index_hi_i;
+	} else {
+		arr->instr = InstrBlockAlloc();
+	}
+
+	apar->min_size = 0xffffff;
+	apar->max_size = 0;
+}
+
+void ArrParserNext(ArrParser * apar, UInt32 idx)
+{
+	Var * item;
+	UInt32 size;
+
+	if (apar->elem_type->variant == TYPE_ARRAY) {
+		item = VarAllocScope(apar->arr, INSTR_CONST, "e", idx);
+		GenBegin();
+
+		size = ParseArrayConst(apar->elem_type, true);
+
+		if (size > apar->max_size) apar->max_size = size;
+		if (size < apar->min_size) apar->min_size = size;
+		item->instr = GenEnd();
+
+		//TODO: Make min according to array min
+		item->type = TypeArray(TypeAllocInt(0, size), apar->elem_type);
+
+		InstrInsertRule(apar->sizes->instr, NULL, INSTR_DATA, NULL, VarNewInt(size), NULL);
+		InstrInsertRule(apar->index_lo->instr, NULL, INSTR_PTR, NULL, VarNewByteElement(item, ZERO), NULL);
+		InstrInsertRule(apar->index_hi->instr, NULL, INSTR_PTR, NULL, VarNewByteElement(item, ONE), NULL);
+	} else {
+		ParseExpressionType(apar->elem_type);
+		if (TOK) {
+			InstrInsertRule(apar->arr->instr, NULL, INSTR_DATA, NULL, STACK[0], NULL);
+		}
+	}
+}
+
+void ArrParserFinish(ArrParser * apar, UInt32 idx)
+{
+	Type * idx_type;
+
+	if (apar->elem_type->variant == TYPE_ARRAY) {
+		idx_type = TypeAllocInt(0, idx);
+		apar->sizes->type = TypeArray(idx_type, TypeAllocInt(apar->min_size, apar->max_size));
+
+		//TODO: Depending on address space
+		apar->index_lo->type = TypeArray(idx_type, TypeByte());
+		apar->index_hi->type = apar->index_lo->type;
+	}
+}
+
+UInt32 ParseArrayC(Var * var)
+{
+	UInt32 size;
+	Type * elem_type;
+	UInt32 idx;
+	ArrParser apar;
+
+	elem_type = var->type->element;
+
+	if (elem_type->variant == TYPE_ARRAY) {
+
+		ArrParserInit(&apar, var);
+
+		EnterBlock();
+		idx = 1;
+		while(!NextIs(TOKEN_BLOCK_END)) {
+
+			// Skip any EOLs (we may use them to separate subarrays?)
+			if (NextIs(TOKEN_EOL)) continue;
+
+			ArrParserNext(&apar, idx);
+
+			idx++;
+		}
+
+		ArrParserFinish(&apar, idx);
+
+
+	} else {
+		GenBegin();
+		size = ParseArrayConst(var->type, false);
+		var->instr = GenEnd();
+	}
+	return size;
+}
+
+void ParseEnumItems(Type * type, UInt16 column_count)
+{
+	Int32 last_n = -1;
+	Bool id_required;
+	Var * var;
+	Var * local, * first_local;
+	UInt16 i, row;
+	ArrParser * apar;
+
+	first_local = VarFirstLocal(type->owner);
+	
+	// Initialize array parsers
+	apar = (ArrParser*)MemAllocEmpty(sizeof(ArrParser) * column_count);
+	local = first_local;
+	for(i=0; i< column_count; i++) {
+		ArrParserInit(&apar[i], local);
+		local = VarNextLocal(type->owner, local);
+	}
+	row = 1;
+	EnterBlock();
+	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+		while(NextIs(TOKEN_EOL));
+
+		// Parse item identifier
+		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
+			var = VarAlloc(INSTR_CONST, NAME, 0);
+			NextToken();
+			if (NextIs(TOKEN_EQUAL)) {
+				// Parse const expression
+				if (TOK == TOKEN_INT) {
+					last_n = LEX.n;
+					NextToken();
+				} else {
+					SyntaxError("expected integer value");
+				}
+			} else {
+				last_n++;
+			}
+			var->n = last_n;
+			var->value_nonempty = true;
+
+			TypeAddConst(type, var);
+
+			local = first_local;
+			for(i=0; TOK && i< column_count; i++) {
+				ArrParserNext(&apar[i], row);
+				local = VarNextLocal(type->owner, local);
+				NextIs(TOKEN_COMMA);
+//				ParseArrayElementConst(local);
+			}
+
+		} else {
+			if (id_required) {
+				SyntaxError("expected constant identifier");
+			} else {
+				ExitBlock();
+				break;
+			}
+		}
+		id_required = false;
+		// One code may be ended either by comma or by new line
+		if (NextIs(TOKEN_COMMA)) id_required = true;
+		NextIs(TOKEN_EOL);
+		row++;
+	}
 }
 
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
@@ -3070,7 +3344,7 @@ parsed:
 				if (typev == TYPE_ARRAY && var->mode == INSTR_CONST) {
 					ASSERT(type->index->variant == TYPE_INT);
 					flexible = type->index->range.flexible;
-					i = ParseArrayConst(var);
+					i = ParseArrayC(var);
 					if (flexible) {
 						type->index->range.max = i-1;
 					}
@@ -3435,6 +3709,16 @@ parse_byte_item:
 			ParseRuleArg2(idx);
 			arg->index = idx;
 			return;
+		} else if (NextCharIs(TOKEN_PERCENT)) {
+			NextToken();
+			arr = NewRuleArg();
+			MemMove(arr, arg, sizeof(RuleArg));
+			arg->variant = RULE_BIT;
+			arg->arr = arr;
+			idx = NewRuleArg();
+			ParseRuleArg2(idx);
+			arg->index = idx;
+			return;
 		} else {
 			NextToken();
 		}
@@ -3640,6 +3924,24 @@ void ParseRule()
 	
 }
 
+Var * VarSize(Var * var)
+{
+	Var * size = NULL, * arr;
+
+	if (var->mode == INSTR_ELEMENT) {
+		arr = var->adr;
+		size = VarFindScope(arr, "size", 0);
+		if (size != NULL) {
+			size = VarNewElement(size, var->var);
+		}
+	} else {
+		if (var->type->variant == TYPE_ARRAY) {
+			size = VarNewInt(var->type->index->range.max - var->type->index->range.min + 1);
+		}
+	}
+	return size;
+}
+
 void ParseString(InstrBlock * call, UInt32 flags)
 /*
 Purpose:
@@ -3658,7 +3960,7 @@ Purpose:
 	5. End of argument list
 */
 
-	Var * var, * var2;
+	Var * var, * var2, * size_var, * size_tmp;
 	Bool no_eol;
 	UInt16 n;
 	InstrBlock * args;
@@ -3693,15 +3995,28 @@ Purpose:
 
 					var = STACK[n];
 
-					// If the parsed value is element, we need to store it to temporary variable first.
-					// Otherwise the code to access the element would get generated into list of arguments.
+					if (var->type->variant == TYPE_ARRAY) {
+						var2 = VarAllocScopeTmp(NULL, INSTR_VAR, TypeAdrOf(var->type));
+						size_var = VarSize(var);
+						Gen(INSTR_LET_ADR, var2, var, NULL);
+						if (size_var->mode == INSTR_ELEMENT) {
+							size_tmp = VarAllocScopeTmp(NULL, INSTR_VAR, size_var->adr->type->element);
+							GenLet(size_tmp, size_var);
+							size_var = size_tmp;
+						}
 
-					if (var->mode == INSTR_ELEMENT) {
-						var2 = VarAllocScopeTmp(NULL, INSTR_VAR, var->adr->type->element);
-						GenLet(var2, var);
-						var = var2;
+						InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var2, size_var);
+					} else {
+						// If the parsed value is element, we need to store it to temporary variable first.
+						// Otherwise the code to access the element would get generated into list of arguments.
+
+						if (var->mode == INSTR_ELEMENT) {
+							var2 = VarAllocScopeTmp(NULL, INSTR_VAR, var->adr->type->element);
+							GenLet(var2, var);
+							var = var2;
+						}
+						InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
 					}
-					InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
 				}
 			}
 		}

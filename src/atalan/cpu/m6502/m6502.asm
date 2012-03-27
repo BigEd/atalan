@@ -60,6 +60,11 @@ _TL1 = $70	;four byte register ($70-$73) defined under name _TEMPL1 in mc6502.at
 ;  |0| | | | | | | |		String of length 0..127
 ;  |1|0|0| | | | | |    Pointer to unsigned integer of length 1..31 bytes
 ;  |1|0|1| | | | | |    Pointer to signed integer of length 1..31 bytes
+;  |1|1|0| | | | | |    Set parameter to 0..31
+;  |1|1|1| | | | |1|    Set parameter to byte value stored at given adress
+;  |1|1|1| | | |1| |    Print buffer of 'param' length pointed by variable at address
+;  |1|1|1| | | |1|1|    Print buffer of 'param' length at address
+
 
 ;         ---- ptr to unsigned integer ---- (7-bit set)
 ; 129     one byte integer reference
@@ -111,7 +116,7 @@ system__print .proc
 command
 		jsr _read_byte
 		sta ?size
-		tay				; to set the flags
+		tay				  ; to set the flags  (TODO: Use asl?)
 		beq done		;command 0 means end of sequence
 		bpl str			;1..127 constant string
 
@@ -123,11 +128,41 @@ command
 
     ;Read address of the variable
 
-		jsr _read_byte
-		sta ?varptr		
-		jsr _read_byte
-		sta ?varptr+1
+		jsr _read_adr
 
+		;Is this array printing instruction?
+		bit ?size
+		bvc number
+		
+		;Read the size and get address of variable
+		ldy #0
+		lda (?varptr),y
+		sta ?size
+		
+		jsr _read_adr		; this is adress of pointer variable that stores the address		
+		ldy #0
+		lda (?varptr),y
+		tax
+		iny
+		lda (?varptr),y
+		stx ?varptr
+		sta ?varptr+1
+								
+		;Print the specified number of bytes
+buf
+buf_char
+		ldy #0
+		lda (?varptr),y
+		jsr _std_putchr
+		inc ?varptr
+		bne _skip_buf
+		inc ?varptr+1
+_skip_buf
+		dec ?size
+		bne buf_char
+		beq	command
+					
+number
 		.IF _SYS_PRINT_SIGNED = 1 
 		;signed number has bit 5 set
 		lda #0
@@ -175,7 +210,14 @@ str
 done		
 		jmp (?argptr)	
 		rts
-		
+
+_read_adr
+		jsr _read_byte
+		sta ?varptr		
+		jsr _read_byte
+		sta ?varptr+1
+		rts
+						
 _read_byte
 		ldy #0
 		lda (?argptr),y
