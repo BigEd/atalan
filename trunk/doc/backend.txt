@@ -101,14 +101,16 @@ All three rule parameters must then match.
 
 ::::::::::::::::::::::::
 variable          If variable is specified, instruction must reference this variable in the argument.
-                  It is used mainly for register variables.
-value             Concrete value (rule add _a, _a, 1)
-const %A          Constant. Range (or type) of the constant may be specified.              
+                  It is used mainly for CPU registers, but other variables may be used too.
+value             Concrete value (rule add x, x, 1 = "inx")
+const %A:type     Constant. Range (or type) of the constant may be specified.              
 %A:type           Value or variable of specified type
-%A:type(idx)      Access to array element at index %B. Idx may be variable, value etc.
-%A:type(idx,idx)  Access to 2d array
+%A:type(%B)       Access to array element at index %B. Idx may be variable, value etc.
+%A:type(%B,%C)    Access to 2d array
 @%A               Reference to variable pointed to by %A (may include index)
-%A$%B             Access to B-th byte of variable %A     
+%A$%B             Access to B-th byte of variable %A
+%A-%B             Difference between %A and %B. Usable in indexes: %A(%B-const %C)
+%A..%B            Range. Usefull with indexes %A(%B..%C)     
 ::::::::::::::::::::::::
 
 Macro variable %Z has special meaning. It is used as local variable in macro evaluation.

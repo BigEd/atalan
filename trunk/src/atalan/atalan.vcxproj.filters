@@ -74,6 +74,12 @@
     <ClCompile Include="bigint.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="opt_loop_shift.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parse_type.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">

@@ -1,102 +1,29 @@
 ﻿;ATALAN Language system definition file
-;This file is always loaded as fisrt file by compiler.
+;This file is always loaded as first file by the compiler.
 
 ;system scope is used to define variables used by Atalan system. 
 
 system:scope
 
-;======================
-;Processor instructions
-;======================
-;
-;Instructions are defined using INSTRS codelist.
-;Instructions used by compiler are defined here, it is essential to preserve their order.
-;It is possible to define custom instructions by adding constants to this codelist.
-
-type instrs:enum
-  NULL = 0
-	nop = 1
-	let
-	
-	goto
-	ifeq
-	ifne
-	iflt
-	ifge
-	ifgt
-	ifle
-	ifoverflow
-	ifnoverflow
-  iftype
-  ifntype
-  
-	prologue	;generated at the beggining of the program
-	epilogue	;generated at the end of programm
-	emit  		;emit string to output
-	vardef 	
-	label  
-	add
-	sub
-	mul
-	div
-	sqrt
-	and
-	or
-
-	alloc
-	proc			;procedure entry
-	return		;procedure exit
-	endproc		;mark end of procedure
-	call			;call procedure
-
-	var_arg
-	str_arg
-	data
-
-	file
-	align
-	org
-	hi
-	lo
-	ptr
-	arrindex		;generate index for 2d array
-	let_adr
-	rotl
-	rotr
-	debug
-	mod
-	xor
-	not
-	assert_begin
-	assert
-	assert_end
-	line
-	include					;include assembler file
-	mula
-	mula16
-		
-	compiler
-	code_end
-	data_end
-	decl
-		
 ;==========
 ;Interrupts
 ;==========
 
-;All procedures based on type Interrupt are considered to be implementation
+;All procedures based on type interrupt are considered to be implementation
 ;of some interrupt.
-;As such, they will not share local variables with other, normal procedures.
+;As such, they will not share local variables with other, normal procedures or
+;other types of interrupt.
+;Actual interrupt types are defined by respective platforms.
 
-type interrupt:proc
+interrupt:type = proc
 
 ;============
 ;Boolean type
 ;============
 
-type bool: enum 
-	false = 0
-	true = 1
+bool:type = enum 
+	false: 0
+	true:  1
 
 ;=================
 ;Predefined macros
@@ -104,15 +31,23 @@ type bool: enum
 
 inc:macro x =
 	x = x + 1
-	
+
 dec:macro x =
 	x = x - 1
 
 swap:macro x, y =
-  t = x
-  x = y
-  y = t
+	t = x
+	x = y
+	y = t
 
 abs:macro x -> y =
-  y = x
-  if x < 0 then y = -x
+	y = x
+	if x < 0 then y = -x
+
+
+;Support for array initialization 
+;a() = 0
+;a(10..20) = 13
+
+rule %A:array of %B(%C..%D) = %E:%B = macro
+   for i:%C..%D %A#i = %E

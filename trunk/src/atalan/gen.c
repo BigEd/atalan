@@ -24,6 +24,9 @@ GLOBAL UInt16       IBLOCK_STACK_SIZE;
 
 GLOBAL Var   ROOT_PROC;
 
+RuleSet GEN_RULES;
+
+
 void GenSetDestination(InstrBlock * blk, Instr * i)
 /*
 Purpose:
@@ -58,6 +61,15 @@ Purpose:
 	BLK = IBLOCK_STACK[IBLOCK_STACK_SIZE];
 	INSTR = NULL;
 	return blk;
+}
+
+void GenRegisterRule(Rule * rule)
+/*
+Purpose:
+	Register generator rule.
+*/
+{
+	RuleSetAddRule(&GEN_RULES, rule);
 }
 
 void GenBlock(InstrBlock * blk)
@@ -134,8 +146,16 @@ Purpose:
 	Generate instruction into current code block.
 */
 {
+	Rule * rule;
 	GenLine();
-	GenInternal(op, result, arg1, arg2);
+
+	rule = RuleSetFindRule(&GEN_RULES, op, result, arg1, arg2);
+	if (rule == NULL) {
+		GenInternal(op, result, arg1, arg2);
+	} else {
+		GenMatchedRule(rule);
+	}
+
 }
 
 void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2)
@@ -218,18 +238,21 @@ Purpose:
 
 	Var * arg, * arr, * l, * r;
 	UInt16 n;
+	InstrOp op;
 
 	if (var == NULL) return NULL;
 
+	op = var->mode;
+
 	// If this is element reference and either array or index is macro argument,
 	// create new array element referencing actual array and index.
-		
-	if (var->mode == INSTR_DEREF) {
+	
+	if (op == INSTR_DEREF) {
 		arg = GenArg(macro, var->var, args, locals);
 		if (arg != var->var) {
 			var = VarNewDeref(arg);
 		}
-	} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+	} else if (op == INSTR_ELEMENT || op == INSTR_BYTE || op == INSTR_BIT) {
 
 		arr = GenArg(macro, var->adr, args, locals);
 
@@ -239,24 +262,30 @@ Purpose:
 			arg = GenArg(macro, var->var, args, locals);	// index
 
 			if (arr != var->adr || arg != var->var) {
-				if (var->mode == INSTR_ELEMENT) {
+				if (op == INSTR_ELEMENT) {
 					var = VarNewElement(arr, arg);
-				} else {
+				} else if (op == INSTR_BYTE) {
 					var = VarNewByteElement(arr, arg);
+				} else {
+					var = VarNewBitElement(arr, arg);
 				}
 			}
 		}
-	} else if (var->mode == INSTR_TUPLE) {
+	} else if (op == INSTR_TUPLE || op == INSTR_SUB || op == INSTR_ADD) {
 		l = GenArg(macro, var->adr, args, locals);
 		r = GenArg(macro, var->var, args, locals);
-		if (l != var->adr || r != var->var) {
-			var = VarNewOp(var->mode, l, r);
+
+		if (l != var->adr || r != var->var) {			
+			var = InstrEvalConst(op, l, r);
+			if (var == NULL) {
+				var = VarNewOp(op, l, r);
+			}
 		}
 
-	} else if (var->mode == INSTR_VAR && VarIsArg(var)) {
+	} else if (op == INSTR_VAR && VarIsArg(var)) {
 
 		// Optimization for instruction rule
-		if (var->scope == RULE_PROC) {
+		if (VarIsRuleArg(var)) {
 			return args[var->idx-1];
 		}
 
@@ -276,7 +305,7 @@ Purpose:
 		if (VarIsLocal(var, macro) || VarIsLabel(var)) {
 			arg = VarSetFind(locals, var);
 			if (arg == NULL) {
-				arg = VarAllocScopeTmp(NULL, var->mode, var->type);
+				arg = VarAllocScopeTmp(NULL, op, var->type);
 				VarSetAdd(locals, var, arg);
 			}
 			return arg;
@@ -364,12 +393,18 @@ Argument:
 
 			if (local_result) {
 				if (op == INSTR_LET) {
-					MACRO_ARG[25] = arg1;
+					args[25] = arg1;
 				} else {
 					SyntaxError("failed to evaluate constant");
 				}
 			} else {
-				GenInternal(op, result, arg1, arg2);
+				if (PHASE == PHASE_TRANSLATE) {
+					if (!InstrTranslate3(op, result, arg1, arg2, 0)) {
+						SyntaxError("Translation for instruction not found");
+					}
+				} else {
+					GenInternal(op, result, arg1, arg2);
+				}
 			}
 
 		}
@@ -402,5 +437,7 @@ void GenerateInit()
 	IBLOCK_STACK_SIZE = 0;
 
 	CURRENT_LINE_NO = 0;
+
+	RuleSetInit(&GEN_RULES);
 
 }

@@ -16,13 +16,12 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <sys/stat.h> 
 
 #define STDERR stderr
-//#define STDOUT stdout
 
 GLOBAL Bool VERBOSE;
 GLOBAL CompilerPhase PHASE;
 
 extern Var  ROOT_PROC;
-extern Var * INSTRSET;		// enumerator with instructions
+//extern Var * INSTRSET;		// enumerator with instructions
 extern InstrBlock * BLK;
 Var * INTERRUPT;
 Var * SYSTEM_SCOPE;
@@ -242,7 +241,7 @@ int main(int argc, char *argv[])
 	// It must always be included.
 	// Some of the definitions in system.atl are directly used by compiler.
 
-	INSTRSET = NULL;
+//	INSTRSET = NULL;
 	if (!Parse("system", false, false)) goto failure;
 	
 	SYSTEM_SCOPE = VarFindScope(&ROOT_PROC, "system", 0);
@@ -344,6 +343,8 @@ int main(int argc, char *argv[])
 
 	if (ERROR_CNT > 0) goto failure;
 
+	ProcessUsedProc(OptimizeLoopShift);
+
 	//***** Translation
 	if (Verbose(NULL)) {
 		PrintHeader(1, "Translate");
@@ -388,6 +389,9 @@ int main(int argc, char *argv[])
 		VarUse();
 		ProcessUsedProc(DeadCodeElimination);
 		ProcessUsedProc(OptimizeJumps);
+
+//		OptimizeLive(&ROOT_PROC);
+//		OptimizeVarMerge(&ROOT_PROC);
 
 		if (Verbose(NULL)) {
 			PrintHeader(1, "Optimized");

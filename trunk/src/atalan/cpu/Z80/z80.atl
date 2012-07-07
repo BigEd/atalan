@@ -1,35 +1,38 @@
 type
-   byte:0..255
-   card:0..65535
-   int:-32768..32767
-   sbyte:-128..127
-   byte1:byte() or sbyte()
-
-cpu:scope =
-  a:byte
-  b:byte
-  c:byte
-  d:byte
-  e:byte
-  h:byte
-  l:byte
-  bc@(b,c)
-  de@(d,e)
-  hl@(h,l)
-  ix:card
-  iy:card
+	byte:0..255
+	card:0..65535
+	int:-32768..32767
+	sbyte:-128..127
+	byte1:byte() or sbyte()
 
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
-rule alloc %A:long                               = "   .ds 3"
-rule alloc %A:adr                                = "   .ds 2"
 rule alloc %A:-128..127                          = "   .ds 1"
 
+CPU:scope =
+	a,b,c,d,e,h,l:0..255
+	bc@(b,c)
+	de@(d,e)
+	hl@(h,l)
+	ix,iy:0..65535
+		
+	type memory:array(0..$ffff) of 0..255
 
-rule let %A:byte, %B:byte =
-	let _a, %B
-	let %A, _a
+  
+
+
+rule let %A:byte, %B:byte = instr
+	let a, %B
+	let %A, a
 	
-rule let _a, %A:byte1  = "   ld a, %A"
-rule let %A:byte1, _a  = "   ld %A, a"
+rule let a, %A:byte1  = "   ld a, %A"
+rule let %A:byte1, a  = "   ld %A, a"
+
+;compiler rule defines the command line used to compile generated asm source
+; %A  defines name of the source code file (including the path) without extension
+; %B  extension of resulting binary as defined by platform
+; %/  defines path to directory with currently parsed file
+
+rule compiler %A,%B = "["]%/pasmo["] --tzxbas ["]%A.asm["] ["]%A.%B["]"
+
  

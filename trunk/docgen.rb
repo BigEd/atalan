@@ -1,4 +1,5 @@
 # Famulus Doc Generator
+# encoding: utf-8
 
 $proj_folder = "P:/Atalan/"
 

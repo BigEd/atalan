@@ -38,9 +38,9 @@ typedef signed char Int8;
 
 extern void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
-#define MemEmptyVar(adr)  memset(&(adr), 0, sizeof(adr))
+#define MemEmptyVar(var)  memset(&(var), 0, sizeof(var))
 #define MemFree(adr) free(adr)
-
+#define MemEmpty(adr, size) memset(adr, 0, size)
 #define MemMove(dest, src, size) memmove(dest, src, size)
 
 // String management
