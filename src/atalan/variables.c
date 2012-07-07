@@ -12,15 +12,16 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 
 GLOBAL Var * VARS;		// global variables
-
-// Last allocated variable.
-GLOBAL Var * LAST_VAR;
+GLOBAL Var * LAST_VAR;  // Last allocated variable.
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
 GLOBAL Var * ZERO;
 GLOBAL Var * ONE;
+GLOBAL Var * INT;		// generic integer type variable (this is scope for all integer constants)
 GLOBAL char VAR_NAME[128];
+
+GLOBAL Var INT_VAR;
 
 /*
 We have theoretical option of supporting mltiple CPUs simultaneously (this the CPUS array).
@@ -49,8 +50,39 @@ void VarInit()
 
 	CPU = &CPUS[0];
 
+	MemEmpty(&INT_VAR, sizeof(Var));
+	INT = &INT_VAR;
+
+//	INT = VarAllocScope(NO_SCOPE, INSTR_VAR, NULL, 0);
 	ZERO = VarNewInt(0);
 	ONE  = VarNewInt(1);
+
+
+}
+
+void VarSetScope(Var * var, Var * scope)
+{
+	Var * sub;
+
+	if (var->scope != NULL) {
+		InternalError("Variable already has the scope set");
+	}
+
+	var->scope = scope;
+
+	if (scope == NULL) return;
+
+	//==== Append as last variable in scope
+
+	if (scope->subscope == NULL) {
+		scope->subscope = var;
+	} else {
+		// We append the variable as last variable in the scope.
+		for(sub = scope->subscope; sub->next_in_scope != NULL;) 
+			sub = sub->next_in_scope;
+		sub->next_in_scope = var;
+	}
+
 
 }
 
@@ -184,7 +216,6 @@ Argument:
 Var * VarNewBitElement(Var * arr, Var * idx)
 {
 	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
-//	item->type = TypeByte();
 	return item;
 }
 
@@ -210,9 +241,8 @@ void EnterLocalScope()
 {
 	Var * var;
 	SCOPE_IDX++;
-	var = VarAlloc(INSTR_SCOPE, SCOPE_NAME, SCOPE_IDX);
+	var = VarAllocScope(SCOPE, INSTR_SCOPE, SCOPE_NAME, SCOPE_IDX);
 	var->type = TypeScope();
-	var->scope = SCOPE;
 	SCOPE = var;
 }
 
@@ -265,17 +295,14 @@ Bool VarIsOut(Var * var)
 }
 */
 
-Var * VarFindInt(Var * scope, UInt32 n)
-{
-	Var * var;
+/****************************************************************************
 
-	FOR_EACH_VAR(var)
-		if (var->scope == scope && var->mode == INSTR_CONST && var->n == n) return var;
-	NEXT_VAR
-	return NULL;
-}
+   Integer constant support
 
-Var * VarNewInt(long n)
+*****************************************************************************/
+//$I
+
+Var * VarNewInt(Int32 n)
 /*
 Purpose:
 	Alloc new integer constant variable.
@@ -283,13 +310,16 @@ Purpose:
 {
 	Var * var;
 
-	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
-	NEXT_VAR
+	// Try to find the integer constant in the scope
+	for(var = INT->subscope; var != NULL; var = var->next_in_scope) {
+		if (var->mode == INSTR_CONST && var->value_nonempty && var->n == n) return var;
+	}
 
-	//TODO: Integer constants may be in special 'const' scope
-	var = VarAlloc(INSTR_CONST, NULL, 0);
-	var->scope = NULL;
+//	FOR_EACH_VAR(var)
+//		if (var->mode == INSTR_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
+//	NEXT_VAR
+
+	var = VarAllocScope(INT, INSTR_CONST, NULL, 0);
 	var->type = &TINT;
 	var->value_nonempty = true;
 	var->n = n;
@@ -353,7 +383,6 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
-
 Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx)
 {
 	Var * var;
@@ -362,13 +391,14 @@ Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx)
 
 	var = MemAllocStruct(Var);
 
-	var->mode = mode;
+	var->mode  = mode;
 	var->name  = StrAlloc(name);
 	var->idx   = idx;
-	var->scope = scope;
-	var->adr  = NULL;
+	var->adr   = NULL;
 	var->next  = NULL;
 	var->type  = TUNDEFINED;		// freshly allocated variable has undefined type (but not NULL!)
+
+	VarSetScope(var, scope);
 
 	if (VARS == NULL) {
 		VARS = var;
@@ -396,13 +426,14 @@ Purpose:
 	return var;
 }
 
+
 Var * VarClone(Var * scope, Var * var)
 {
 	Var * copy;
 
 	copy = MemAllocStruct(Var);
 	MemMove(copy, var, sizeof(Var));
-	var->scope = scope;
+	VarSetScope(var, scope);
 	return copy;
 }
 
@@ -442,7 +473,7 @@ Purpose:
 	PrintFmt("===== %s =======\n", scope->name);
 	for (var = VARS; var != NULL; var = var->next) {
 		if (var->scope == scope) {
-			PrintVar(var);
+			PrintVar(var); PrintEOL();
 		}
 	}
 }
@@ -530,18 +561,35 @@ Bool VarIsIntConst(Var * var)
 	return var != NULL && var->mode == INSTR_CONST && var->type->variant == TYPE_INT;
 }
 
+
+IntLimit * VarIntConst(Var * var)
+{
+	if (var == NULL) return NULL;
+	if (var->type->variant == TYPE_INT) {
+		if (var->mode == INSTR_CONST) return &var->n;
+		if (var->type->range.min == var->type->range.max) return &var->type->range.min;
+	}
+	return NULL;
+}
+
+
 Bool VarIsN(Var * var, Int32 n)
 {
 	return VarIsIntConst(var) && var->n == n;
 }
 
-Var * VarNewType(TypeVariant variant)
+Var * VarNewType(Type * type)
 {
 	Var * var;
-//	Type * type;
-	var = VarAlloc(INSTR_TYPE, NULL, 0);
-	var->type = TypeAlloc(variant);
+	var = VarAlloc(INSTR_VAR, NULL, 0);
+	var->type = TypeType(NULL);
+	var->type_value = type;
 	return var;
+}
+
+Bool VarIsType(Var * var)
+{
+	return var != NULL && (var->mode == INSTR_TYPE || var->type->variant == TYPE_TYPE);
 }
 
 Bool VarIsUsed(Var * var)
@@ -570,14 +618,6 @@ Purpose:
 				if (VarIsUsed(var)) {
 					
 					size = TypeSize(type);
-/*
-					size = 1;	// size of basic element (byte by default)
-					for(d=0; d<MAX_DIM_COUNT; d++) {			
-						dim = type->dim[d];
-						if (dim == NULL) break;
-						size *= dim->range.max - dim->range.min + 1;
-					}
-*/
 
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -885,7 +925,7 @@ Purpose:
 	return var;
 }
 
-void InstrReplaceVar(InstrBlock * block, Var * from, Var * to)
+void InstrBlockReplaceVar(InstrBlock * block, Var * from, Var * to)
 /*
 Purpose:
 	Replace use of variable 'from' with variable 'to' in specified block.
@@ -914,7 +954,7 @@ Purpose:
 	InstrBlock * blk;
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		InstrReplaceVar(blk, from, to);
+		InstrBlockReplaceVar(blk, from, to);
 	}
 }
 
@@ -1155,11 +1195,6 @@ Bool VarIsOutArg(Var * var)
 Bool VarIsArg(Var * var)
 {
 	return FlagOn(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT);
-}
-
-Bool VarIsRuleArg(Var * var)
-{
-	return var->scope == RULE_PROC;
 }
 
 Bool VarIsEqual(Var * left, Var * right)

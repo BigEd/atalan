@@ -67,7 +67,7 @@ void EmitChar(char c)
 		G_PREV_OP = 0;
 	}
 
-	if (c == '-') {
+	if (c == '-' || c == '+') {
 		G_PREV_OP = c;
 	} else {
 		EmitByte(c);

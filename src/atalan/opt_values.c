@@ -183,37 +183,48 @@ Purpose:
 	if (res == NULL) return;
 
 	FOR_EACH_VAR(var)
-		i = var->src_i;
-		if (i != NULL) {
-			// If source instruction is assignment, set the result to source of assignment argument
-			// This makes sure, that we can utilize common values in cases like
-			// let _a, 10
-			// let p, _a
-			// let _a, 20
-			// let q, _a
-			// add r, p, q
+		if (var->mode != INSTR_CONST) {
+//			if (var->name != NULL && StrEqual(var->name, "a")) {
+//				i = NULL;
+//			}
 
-			if (i->op == INSTR_LET) {
-				if (i->arg1 == res) {
-					i->result->src_i = i->arg1->src_i;
+			i = var->src_i;
+			if (i != NULL) {
+				// If source instruction is assignment, set the result to source of assignment argument
+				// This makes sure, that we can utilize common values in cases like
+				// let _a, 10
+				// let p, _a
+				// let _a, 20
+				// let q, _a
+				// add r, p, q
 
-					// When the new source instruction uses the changed variable, it cannot be used.
-					// For example:
-					//  9|    let y, a
-					// 10|    let a, @_arr$y
-					// 11|    let w$0, a
-					// 12|    add y, y, 1         <= we must reset dependency of w$0 on instr 10, as y is changing so the value of @_arr$y has changed
-					// 13|    let a, @_arr$y
-					// 14|    let w$1, a
-					// 17|    let a, y$0
-					if (InstrUsesVar(i->result->src_i, res)) {
-						i->result->src_i = NULL;
+				if (i->op == INSTR_LET) {
+					if (i->arg1 == res) {
+						i->result->src_i = i->arg1->src_i;
+
+						// When the new source instruction uses the changed variable, it cannot be used.
+						// For example:
+						//  9|    let y, a
+						// 10|    let a, @_arr$y
+						// 11|    let w$0, a
+						// 12|    add y, y, 1         <= we must reset dependency of w$0 on instr 10, as y is changing so the value of @_arr$y has changed
+						// 13|    let a, @_arr$y
+						// 14|    let w$1, a
+						// 17|    let a, y$0
+					
+						if (InstrUsesVar(i->result->src_i, res)) {
+							i->result->src_i = NULL;
+						}
+					} else {
+						if (InstrUsesVar(i, res)) {
+							var->src_i = NULL;
+						}
 					}
-				}
-			} else {
-				//TODO: Only reset the instruction, if there is no source
-				if (i->arg1 == res || i->arg2 == res) {
-					var->src_i = NULL;
+				} else {
+					//TODO: Only reset the instruction, if there is no source
+					if (i->arg1 == res || i->arg2 == res) {
+						var->src_i = NULL;
+					}
 				}
 			}
 		}
@@ -380,12 +391,12 @@ void PrintExp(Exp * exp)
 		} else {
 			// Unary instruction
 			if (exp->arg[1] == NULL) {
-				PrintFmt(" %s ", OpName(exp->op));
+				PrintFmt(" %s ", OpSymbol(exp->op));
 				PrintExp(exp->arg[0]);
 			} else {
 				Print("(");
 				PrintExp(exp->arg[0]);
-				PrintFmt(" %s ", OpName(exp->op));
+				PrintFmt(" %s ", OpSymbol(exp->op));
 				PrintExp(exp->arg[1]);
 				Print(")");
 			}
@@ -553,14 +564,29 @@ void VarResetProcessed()
 {
 }
 
+void ProcValuesUseLocal(Var * proc)
+{
+	Var * var;
+
+	FOR_EACH_LOCAL(proc, var)
+		if (!VarIsInArg(var)) {
+			ResetValue(var);
+			ResetVarDep(var);
+			ResetVarDepRoot(var);
+		}
+	NEXT_LOCAL
+}
+
 void ProcValuesUse(Var * proc)
 {
 	Instr * i;
 	InstrBlock * blk;
-	Var * var;
 
 	if (proc->type->variant == TYPE_ADR) {
-		ProcValuesUse(proc->type->element->owner);
+		// We know, that the reference to procedure address may not be variable with actual instructions,
+		// so we use just local variables.
+		// TODO: This may not be sufficient, as we do not know, what local variables may be called by the procedure.
+		ProcValuesUseLocal(proc->type->element->owner);
 	} else {
 		if (FlagOff(proc->flags, VarProcessed)) {
 			SetFlagOn(proc->flags, VarProcessed);
@@ -569,14 +595,7 @@ void ProcValuesUse(Var * proc)
 			// we just clear it's output variables
 
 			if (proc->instr == NULL) {
-				FOR_EACH_LOCAL(proc, var)
-					if (!VarIsInArg(var)) {
-	//				if (var->mode != INSTR_ARG || FlagOn(var->submode, SUBMODE_ARG_OUT)) {
-						ResetValue(var);
-						ResetVarDep(var);
-						ResetVarDepRoot(var);
-					}
-				NEXT_LOCAL
+				ProcValuesUseLocal(proc);
 			} else {
 				for(blk = proc->instr; blk != NULL; blk = blk->next) {
 					for(i = blk->first; i != NULL; i = i->next) {
@@ -693,30 +712,55 @@ void VarSetSrcInstr(Var * var, Instr * i)
 	}
 }
 
+void VarSetSrcInstr2(Var * var, Instr * i)
+{
+	while(i != NULL && i->op == INSTR_LET && i->arg1->src_i != NULL) {
+		i = i->arg1->src_i;
+	}
+	VarSetSrcInstr(var, i);
+}
 
-Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2, char * message, UInt32 n)
+
+void TransformInstrRule(Loc * loc, Rule * rule, Var * result, Var * arg1, Var * arg2, char * message)
 {
 	Instr * i;
-	Rule * rule;
 	UInt8 old_color;
 
+	i = loc->i;
+	if (Verbose(loc->proc)) {
+		old_color = PrintColor(GREEN+LIGHT);
+		PrintFmt("%ld#%ld %s:", loc->blk->seq_no, loc->n, message); InstrPrintInline(i);
+	}
+	i->op = rule->op;
+	i->result = result;
+	i->arg1 = arg1;
+	i->arg2 = arg2;
+	i->rule = rule;
+	if (Verbose(loc->proc)) {
+		Print(" => "); InstrPrint(i);
+		PrintColor(old_color);
+	}
+}
+
+Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2, char * message)
+{
+	Rule * rule;
 	rule = InstrRule2(op, result, arg1, arg2);
 	if (rule != NULL) {
-		i = loc->i;
-		if (Verbose(loc->proc)) {
-			old_color = PrintColor(GREEN+LIGHT);
-			PrintFmt("%ld#%ld %s:", loc->blk->seq_no, n, message); InstrPrintInline(i);
-		}
-		i->op = op;
-		i->result = result;
-		i->arg1 = arg1;
-		i->arg2 = arg2;
-		i->rule = rule;
-		if (Verbose(loc->proc)) {
-			Print(" => "); InstrPrint(i);
-			PrintColor(old_color);
-		}
+		TransformInstrRule(loc, rule, result, arg1, arg2, message);
+		return true;
+	}
+	return false;
+}
 
+Bool TransformInstrIfCheaper(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2, char * message)
+{
+	Rule * rule;
+	rule = InstrRule2(op, result, arg1, arg2);
+	// We transform the instruction only it the alternative instruction exists and the new instruction if faster.
+	// We also perform the transformation, if the speed is same (we suppose the instruction may be shorter)
+	if (rule != NULL && rule->cycles <= loc->i->rule->cycles) {
+		TransformInstrRule(loc, rule, result, arg1, arg2, message);
 		return true;
 	}
 	return false;
@@ -737,7 +781,7 @@ Bool OptimizeValues(Var * proc)
 {
 	Bool modified, m2, m3;
 	Instr * i, * src_i;
-	UInt32 n;
+//	UInt32 n;
 	Var * r, * result, * arg1, * arg2, * r2;
 	InstrBlock * blk;
 	InstrOp op, src_op;
@@ -763,18 +807,18 @@ Bool OptimizeValues(Var * proc)
 		loc.blk = blk;
 
 		ResetValues();
-		n = 0;
+		loc.n = 0;
 		for(i = blk->first; i != NULL; i = i->next) {
 retry:
 			loc.i = i;
-			n++;
+			loc.n++;
+
 			// Instruction may be NULL here, if we have deleted the last instruction in the block.
 			if (i == NULL) break;
 			// Line instructions are not processed.
 			if (i->op == INSTR_LINE) continue;
 
 			if (i->op == INSTR_CALL) {
-//				GOG2++;
 				ProcValuesUse(i->result);
 				continue;
 			}
@@ -822,7 +866,7 @@ retry:
 	delete_instr:
 							if (Verbose(proc)) {
 								color = PrintColor(OPTIMIZE_COLOR);
-								PrintFmt("%ld#%ld Removing:", blk->seq_no, n); InstrPrint(i);
+								PrintFmt("%ld#%ld Removing:", blk->seq_no, loc.n); InstrPrint(i);
 								PrintColor(color);
 							}
 							i = InstrDelete(blk, i);
@@ -848,7 +892,7 @@ retry:
 						...
 						add a,a,1
 						::::::::
-						The variable a will be usually register and increment instruction 
+						The variable ::a:: will be usually register and increment instruction 
 						is shorter (and therefore faster) than assignment in such case.
 						Simmilar variant is done for 'sub'.
 						*/
@@ -859,15 +903,13 @@ retry:
 								op = INSTR_SUB;
 								diff = -diff;
 							}
-							//TODO: When we know the price of an instruction, use the resulting instruction search to search for the instruction
-							if (diff == 1) {
-								r2 = VarNewInt(diff);
-								if (TransformInstr(&loc, op, result, result, r2, "Converting to inc/dec", n)) {
-									arg1 = result;
-									arg2 = r2;
-									opt_increment = true;
-									modified = true;
-								}
+
+							r2 = VarNewInt(diff);
+							if (TransformInstrIfCheaper(&loc, op, result, result, r2, "Converting to inc/dec")) {
+								arg1 = result;
+								arg2 = r2;
+								opt_increment = true;
+								modified = true;
 							}
 						}
 
@@ -882,65 +924,63 @@ retry:
 					op = i->op;
 
 					m3 = false;		// mark when we are at the next step
-//					do {
-						m2 = false;
+					m2 = false;
 
-						if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
-							src_i = arg1->src_i;
-							src_op = src_i->op;
+					if (arg1 != NULL && arg1->src_i != NULL && FlagOff(arg1->submode, SUBMODE_IN)) {
+						src_i = arg1->src_i;
+						src_op = src_i->op;
 
-							// Try to replace LO b,n LET a,b  => LO a,n LO a,n
+						// Try to replace LO b,n LET a,b  => LO a,n LO a,n
 
-							if (src_op == INSTR_LO || src_op == INSTR_HI || src_op == INSTR_LET_ADR) {
-								if (op == INSTR_LET) {
-									op = src_op;
+						if (src_op == INSTR_LO || src_op == INSTR_HI || src_op == INSTR_LET_ADR) {
+							if (op == INSTR_LET) {
+								op = src_op;
+								arg1 = src_i->arg1;
+								m2 = true;
+							}
+						} else if (src_op == INSTR_LET) {
+							// If instruction uses register, do not replace with instruction that does not use it
+							if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && (m3 || !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
+								// Do not replace simple variable with array access
+								if (!(arg1->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
 									arg1 = src_i->arg1;
 									m2 = true;
 								}
-							} else if (src_op == INSTR_LET) {
-								// If instruction uses register, do not replace with instruction that does not use it
-								if (FlagOff(src_i->arg1->submode, SUBMODE_IN) && (m3 || !(FlagOn(arg1->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
-									// Do not replace simple variable with array access
-									if (!(arg1->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
-										arg1 = src_i->arg1;
+							}
+						}
+					}
+
+					arg2 = i->arg2;
+					if (arg2 != NULL && !InVar(arg2) && arg2->src_i != NULL ) {					
+						src_i = arg2->src_i;
+						src_op = src_i->op;
+
+						if (src_op == INSTR_LET) {
+							// Do not replace register source with non-register
+							if (!InVar(src_i->arg1) && (m3 || !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
+								// Do not replace simple variable with array access
+								if (arg2->read == 1 || !(arg2->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
+									if (src_i->arg1->mode != INSTR_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
+										arg2 = src_i->arg1;
 										m2 = true;
 									}
 								}
 							}
 						}
+					}
 
-						arg2 = i->arg2;
-						if (arg2 != NULL && !InVar(arg2) && arg2->src_i != NULL ) {					
-							src_i = arg2->src_i;
-							src_op = src_i->op;
+					// let x,x is always removed
+					if (op == INSTR_LET && result == arg1) {
+						goto delete_instr;
+					}
 
-							if (src_op == INSTR_LET) {
-								// Do not replace register source with non-register
-								if (!InVar(src_i->arg1) && (m3 || !(FlagOn(arg2->submode, SUBMODE_REG) && FlagOff(src_i->arg1->submode, SUBMODE_REG))) ) {
-									// Do not replace simple variable with array access
-									if (arg2->read == 1 || !(arg2->mode == INSTR_VAR && src_i->arg1->mode == INSTR_ELEMENT)) {
-										if (src_i->arg1->mode != INSTR_ELEMENT || !CodeModifiesVar(src_i->next, i, src_i->arg1)) {
-											arg2 = src_i->arg1;
-											m2 = true;
-										}
-									}
-								}
-							}
+					if (m2) {
+						if (TransformInstr(&loc, op, result, arg1, arg2, "Arg replace")) {
+							modified = true;
+							break;
 						}
-
-						// let x,x is always removed
-						if (op == INSTR_LET && result == arg1) {
-							goto delete_instr;
-						}
-
-						if (m2) {
-							if (TransformInstr(&loc, op, result, arg1, arg2, "Arg replace", n)) {
-								modified = true;
-								break;
-							}
-						}
-						m3 = true;
-//					} while(m2);
+					}
+					m3 = true;
 
 					//==== Try to evaluate constant instructions
 					// We first try to traverse the chain of assignments to it's root.
@@ -957,7 +997,7 @@ retry:
 						if (VarIsAlias(i->result, r)) {
 							goto delete_instr;
 						} else {
-							if (TransformInstr(&loc, INSTR_LET, i->result, r, NULL, "Const evaluation", n)) {
+							if (TransformInstr(&loc, INSTR_LET, i->result, r, NULL, "Const evaluation")) {
 								modified = true;
 							}
 						}
@@ -988,7 +1028,7 @@ retry:
 							r = CPU->REG[regi];
 							if (!VarIsEqual(r, i->arg1)) {
 								if (VarIsOffset(r, i->arg1, &diff) && diff == 0) {
-									if (TransformInstr(&loc, i->op, i->result, r, i->arg2, "Register reuse", n)) {
+									if (TransformInstr(&loc, i->op, i->result, r, i->arg2, "Register reuse")) {
 										modified = true;
 										break;
 									}
@@ -997,7 +1037,7 @@ retry:
 						}
 					}
 
-					VarSetSrcInstr(result, i);
+					VarSetSrcInstr2(result, i);
 					// Create dependency tree
 					Dependency(i);
 
@@ -1012,7 +1052,7 @@ retry:
 					}
 					if (VarIsIntConst(arg1)) {
 						sprintf(buf, "%d", arg1->n);
-						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarNewInt(StrLen(buf)), "Arg to const", n)) {
+						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarNewInt(StrLen(buf)), "Arg to const")) {
 							modified = true;
 						}
 					}
@@ -1166,10 +1206,8 @@ next:
 						// (and possibly new instruction - we may change let to let_adr etc.)
 
 						memcpy(&ni, i2, sizeof(Instr));
-						ni.op = op;
-						q = VarTestReplace(&ni.result, arg1, result);
-						q += VarTestReplace(&ni.arg1, arg1, result);
-						q += VarTestReplace(&ni.arg2, arg1, result);
+						if (ni.op == INSTR_LET || ni.op == INSTR_LET_ADR || ni.op == INSTR_HI || ni.op == INSTR_LO) ni.op = op;						
+						q = InstrTestReplaceVar(&ni, arg1, result);
 						if (q != 0 && InstrRule(&ni) == NULL) break;
 
 						// We successfully found source instruction, this means we can replace arg1 with result
@@ -1187,10 +1225,13 @@ next:
 
 							for (;i2 != i; i2 = i2->next) {
 								if (i2->op == INSTR_LINE) continue;
-								q = VarReplace(&i2->result, arg1, result);
-								q += VarReplace(&i2->arg1, arg1, result);
-								q += VarReplace(&i2->arg2, arg1, result);
-								if (q > 0) i2->rule = InstrRule(i2);
+								q = InstrReplaceVar(i2, arg1, result);
+								if (q > 0) {
+									i2->rule = InstrRule(i2);
+									if (i2->rule == NULL) {
+										InternalError("Instruction in merge is not valid");
+									}
+								}
 							}
 							i = InstrDelete(blk, i);
 							goto next;

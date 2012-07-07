@@ -91,9 +91,11 @@
     <ClCompile Include="opt_blocks.c" />
     <ClCompile Include="opt_live.c" />
     <ClCompile Include="opt_loops.c" />
+    <ClCompile Include="opt_loop_shift.c" />
     <ClCompile Include="opt_values.c" />
     <ClCompile Include="opt_var_use.c" />
     <ClCompile Include="parser.c" />
+    <ClCompile Include="parse_type.c" />
     <ClCompile Include="translate.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="type_proc.c" />

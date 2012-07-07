@@ -21,3 +21,5 @@ Bool IntLower(BigInt * l, BigInt * r);
 Bool IntHigher(BigInt * l, BigInt * r);
 Bool IntLowerEq(BigInt * l, BigInt * r);
 Bool IntHigherEq(BigInt * l, BigInt * r);
+
+Bool IntIsN(BigInt * l, Int32 N);

@@ -11,32 +11,28 @@ Translate compiler instructions to processor instructions by applying rewriting 
 
 #include "language.h"
 
-#define MAX_RULE_UNROLL 20
-
-GLOBAL Var * RULE_PROC;
-
+GLOBAL Var * RULE_PROC;						// This procedure is used to represent macro used when translating rule
 GLOBAL Bool RULE_MATCH_BREAK;
 
-GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];
+GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];		// Set of variables representing macro arguments
 GLOBAL Var * MACRO_ARG[MACRO_ARG_CNT];
 
-/*
-typedef enum {
-	PHASE_TRANSLATE,
-	PHASE_EMIT
-} Phase;
-*/
 GLOBAL CompilerPhase MATCH_MODE;		// mode used to match rules (PHASE_TRANSLATE, PHASE_EMIT)
+
+GLOBAL Bool VERBOSE_NOW;
 
 /*
 Translation is done using rules. 
+There are two types of rules:
+
+Instruction rules are directly translatable to processor instructions.
+Normal rules translate compiler instruction to zero or more compiler instructions.
+
 */
 
-GLOBAL Rule * RULES[INSTR_CNT];
-GLOBAL Rule * LAST_RULE[INSTR_CNT];
-
-GLOBAL Rule * EMIT_RULES[INSTR_CNT];
-GLOBAL Rule * LAST_EMIT_RULE[INSTR_CNT];
+GLOBAL RuleSet MACRO_RULES;			// Rules used to generate instructions while parsing
+GLOBAL RuleSet TRANSLATE_RULES;
+GLOBAL RuleSet INSTR_RULES;
 
 Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 /*
@@ -86,42 +82,68 @@ Purpose:
 	return false;
 }
 
+void RuleSetInit(RuleSet * ruleset)
+{
+	UInt16 op;
+	for(op=0; op<INSTR_CNT; op++) {
+		ruleset->rules[op] = NULL;
+	}
+}
+
+void RuleSetAddRule(RuleSet * ruleset, Rule * rule)
+/*
+Purpose:
+	Add the rule to the rule set.
+	The rules in the ruleset are sorted by specificity (the most specific rule is at the start of the list).
+	The rules are hashed by operation.
+*/
+{
+	InstrOp op = rule->op;
+	Rule * prev_r, * r;
+
+	if (!rule->to->first) {
+		InternalError("Empty rule");
+		return;
+	}
+
+	prev_r = NULL; r = ruleset->rules[op];
+
+	while(r != NULL && !RuleIsMoreSpecific(rule, r)) {
+		prev_r = r;
+		r = r->next;
+	}
+
+	rule->next = r;
+
+	if (prev_r == NULL) {
+		ruleset->rules[op] = rule;
+	} else {
+		prev_r->next = rule;
+	}
+
+}
+
 void RuleRegister(Rule * rule)
 /*
 Purpose:
 	Register parsed rule.
+	Rule is stored either in emit or normal rules set.
 */
 {
-	InstrOp op = rule->op;
-	Rule * r, * prev_r;
 	if (!rule->to->first) InternalError("Empty rule");
 
 	if (rule->to->first->op == INSTR_EMIT) {
-		if (LAST_EMIT_RULE[op] != NULL) LAST_EMIT_RULE[op]->next = rule;
-		if (EMIT_RULES[op] == NULL) EMIT_RULES[op] = rule;
-		LAST_EMIT_RULE[op] = rule;
+		RuleSetAddRule(&INSTR_RULES, rule);
 	} else {
-
-		prev_r = NULL; r = RULES[op];
-
-		while(r != NULL && !RuleIsMoreSpecific(rule, r)) {
-			prev_r = r;
-			r = r->next;
-		}
-
-		rule->next = r;
-
-		if (prev_r == NULL) {
-			RULES[op] = rule;
-		} else {
-			prev_r->next = rule;
-		}
-
-//		if (LAST_RULE[op] != NULL) LAST_RULE[op]->next = rule;
-//		if (RULES[op] == NULL) RULES[op] = rule;
-//		LAST_RULE[op] = rule;
+		RuleSetAddRule(&TRANSLATE_RULES, rule);
 	}
 }
+
+/***********************************************
+
+  Rules garbage collector
+
+************************************************/
 
 void RuleArgMarkNonGarbage(RuleArg * rule)
 {
@@ -146,18 +168,36 @@ void RulesMarkNonGarbage(Rule * rule)
 	}
 }
 
-void RulesGarbageCollect()
+void RuleSetGarbageCollect(RuleSet * ruleset)
 {
 	UInt8 op;
 	for(op=0; op<INSTR_CNT; op++) {
-		RulesMarkNonGarbage(RULES[op]);
-		RulesMarkNonGarbage(EMIT_RULES[op]);
+		RulesMarkNonGarbage(ruleset->rules[op]);
 	}
 }
 
-Var * VarMacroArg(UInt8 i)
+void RulesGarbageCollect()
 {
-	return MACRO_ARG_VAR[i];
+	RuleSetGarbageCollect(&TRANSLATE_RULES);
+	RuleSetGarbageCollect(&INSTR_RULES);
+}
+
+Var * VarRuleArg(UInt8 n)
+/*
+Purpose:
+	Return n-th rule argument.
+*/
+{
+	return MACRO_ARG_VAR[n];
+}
+
+Bool VarIsRuleArg(Var * var)
+/*
+Purpose:
+	Test, if the variable is rule argument.
+*/
+{
+	return var->scope == RULE_PROC;
 }
 
 void EmptyRuleArgs()
@@ -227,7 +267,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
 {
 	Type * atype;
-	Var * pvar;
+	Var * pvar, * left, * right;
 	UInt8 j;
 	RuleArgVariant v = pattern->variant;
 
@@ -235,6 +275,25 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	atype = arg->type;
 	
 	switch(v) {
+
+	case RULE_ADD:
+	case RULE_SUB:
+		right = arg->var;
+
+		// If we have variable and not arithmetic operation, try to match using substraction or addition with 0
+		// %A => %A-0 or %A+0
+
+		if (arg->mode == INSTR_VAR || arg->mode == INSTR_CONST) {
+			left  = arg;
+			right = ZERO;
+		} else {
+			if (v == RULE_ADD && arg->mode != INSTR_ADD) return false;
+			if (v == RULE_SUB && arg->mode != INSTR_SUB) return false;
+			left = arg->adr;
+		}
+		if (!ArgMatch(pattern->index, right, v)) return false;
+		return ArgMatch(pattern->arr, left, v); 
+		break;
 
 	// <X>..<Y>
 	case RULE_RANGE:
@@ -304,6 +363,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		if (parent_variant != RULE_BYTE && !VarMatchesPattern(arg, pattern)) return false;
 		break;
 	
+	// @%A
 	case RULE_DEREF:
 		if (arg->mode != INSTR_DEREF) return false;
 		arg = arg->var;
@@ -313,9 +373,15 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	// %A:type
 	case RULE_ARG:
 		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
-		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || (arg->mode == INSTR_BYTE && MATCH_MODE == PHASE_EMIT) || arg->mode == INSTR_ELEMENT) return false;
-		if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-		if (!VarMatchesPattern(arg, pattern)) return false;
+		if (arg->mode == INSTR_VAR || arg->mode == INSTR_CONST || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
+			if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
+			if (!VarMatchesPattern(arg, pattern)) return false;
+		} else {
+			return false;
+		}
+//		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || (arg->mode == INSTR_BYTE && MATCH_MODE == PHASE_EMIT) || arg->mode == INSTR_ELEMENT) return false;
+//		if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
+//		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
 	case RULE_ANY:
@@ -351,6 +417,29 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	return true;
 }
 
+Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2)
+/*
+Purpose:
+	Find rule that emits code for this instruction.
+	May be used to test, whether specified instruction may be emitted or not.
+*/
+{
+	Instr i;
+	Rule * rule;
+	
+	rule = ruleset->rules[op];
+	if (op == INSTR_LINE) return rule;
+
+	i.op = op; i.result = result; i.arg1 = arg1; i.arg2 = arg2;
+	for(; rule != NULL; rule = rule->next) {
+		if (RuleMatch(rule, &i, PHASE_TRANSLATE)) break;
+	}
+	return rule;
+}
+
+
+
+
 Rule * InstrRule(Instr * instr)
 /*
 Purpose:
@@ -360,7 +449,7 @@ Purpose:
 {
 	Rule * rule;
 	
-	rule = EMIT_RULES[instr->op];
+	rule = INSTR_RULES.rules[instr->op];
 	if (instr->op == INSTR_LINE) return rule;
 
 	for(; rule != NULL; rule = rule->next) {
@@ -379,67 +468,176 @@ Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	return InstrRule(&i);
 }
 
-Rule * TranslateRule(Instr * i)
+Rule * TranslateRule(InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
+	Instr i;
 	Rule * rule;
-	for(rule = RULES[i->op]; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, i, PHASE_TRANSLATE)) {
+	i.op = op;
+	i.result = result;
+	i.arg1 = arg1;
+	i.arg2 = arg2;
+	for(rule = TRANSLATE_RULES.rules[op]; rule != NULL; rule = rule->next) {
+		if (RuleMatch(rule, &i, PHASE_TRANSLATE)) {
 			return rule;
 		}
 	}
 	return NULL;
 }
 
-Bool InstrTranslate(Instr * i, Bool * p_modified)
+void GenMatchedRule(Rule * rule)
 {
 	Var rule_proc;
+	Var * args[MACRO_ARG_CNT];	
+	rule_proc.instr = rule->to;
+	MemMove(args, MACRO_ARG, sizeof(args));
+	GenMacro(&rule_proc, args);
+}
+
+Bool InstrTranslate(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
+{
 	Rule * rule;
 
-	if (i->op == INSTR_LINE) {
-		GenInternal(INSTR_LINE, i->result, i->arg1, i->arg2);
-
-	} else if ((rule = InstrRule(i))) {
-		GenRule(rule, i->result, i->arg1, i->arg2);
+	if (mode == TEST_ONLY) {
+		if (op == INSTR_LINE) return true;
+		if (InstrRule2(op, result, arg1, arg2) != NULL) return true;
+		rule = TranslateRule(op, result, arg1, arg2);
+		return rule != NULL;
 	} else {
-		rule = TranslateRule(i);
 
-		if (rule != NULL) {
-			rule_proc.instr = rule->to;
-			GenMacro(&rule_proc, MACRO_ARG);
-			*p_modified = true;
+		if (op == INSTR_LINE) {
+			GenInternal(INSTR_LINE, result, arg1, arg2);
+		} else if ((rule = InstrRule2(op, result, arg1, arg2))) {
+			if (VERBOSE_NOW) {
+				Print("     "); EmitInstrOp(op, result, arg1, arg2);
+			}
+			GenRule(rule, result, arg1, arg2);
+		} else if ((rule = TranslateRule(op, result, arg1, arg2))) {
+			GenMatchedRule(rule);
 		} else {
 			return false;
 		}
+		return true;
 	}
-	return true;
 }
 
-void InstrSwapArgs(Instr * to, InstrOp op, Instr * from)
+Bool InstrTranslate2(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
 {
-	to->op = op;
-	to->result = from->result;
-	to->arg1 = from->arg2;
-	to->arg2 = from->arg1;
-}
-
-Bool InstrTranslate2(Instr * i, Bool * p_modified)
-{
-	Instr i2;
-
-	if (InstrTranslate(i, p_modified)) return true;
+	if (InstrTranslate(op, result, arg1, arg2, mode)) return true;
 
 	// If this is commutative instruction, try the other order of rules
-	if (FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE)) {
-		InstrSwapArgs(&i2, i->op, i);
-		if (InstrTranslate(&i2, p_modified)) return true;
+
+	if (FlagOn(INSTR_INFO[op].flags, INSTR_COMMUTATIVE)) {
+		if (InstrTranslate(op, result, arg2, arg1, mode)) return true;
 
 	// Try opposite branch if this one is not implemented
-	} else if (IS_INSTR_BRANCH(i->op)) {
-		InstrSwapArgs(&i2, OpRelSwap(i->op), i);
-		if (InstrTranslate(&i2, p_modified)) return true;
+	} else if (IS_INSTR_BRANCH(op)) {
+		if (InstrTranslate(OpRelSwap(op), result, arg2, arg1, mode)) return true;
 	}
 
 	return false;
+}
+
+void VarInitType(Var * var, Type * type)
+{
+	MemEmpty(var, sizeof(Var));
+	var->mode = INSTR_VAR;
+	var->type = type;
+}
+
+Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
+{
+	Var * a;
+	Var  tmp1,  tmp2,  tmp_r;
+	Bool has1, has2, has_r;
+
+	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
+
+	// It is not possible to translate the instruction directly.
+	// We will try to simplify the translated instruction by taking one of it's complex arguments
+	// and replcing it by simple variable.
+	// The variable will be assigned the value using LET instruction before it gets used in the instruction.
+	// We are thus replacing one instruction by set of two or more instructions.
+
+	// First we perform simple test detecting, if one of the arguments is more complex, then what we will
+	// use for replacing it (simple variable).
+
+	has_r = (result != NULL && result->mode != INSTR_VAR);
+	has1 = (arg1 != NULL && arg1->mode != INSTR_VAR);
+	has2 = (arg2 != NULL && arg2->mode != INSTR_VAR);
+
+	if (has_r) { VarInitType(&tmp_r, result->type); }
+	if (has1)  { VarInitType(&tmp1, arg1->type); }
+	if (has2)  { VarInitType(&tmp2, arg2->type); }
+
+	if (has1) {
+		// When the instruction is assignment, it may happen, that assigning the argument to temporary variable 
+		// would generate basically the same instruction as is the translated instruction.
+		// In that case, we do not try to test it again and instead consider the argument as non-extractable.
+		// Translation would otherwise end in an infinite loop.
+		if (op == INSTR_LET && !has_r && TypeIsEqual(result->type, tmp1.type)) {
+			has1 = false;
+		} else {
+			has1 = InstrTranslate3(INSTR_LET, &tmp1, arg1, NULL, TEST_ONLY);
+		}
+	}
+	
+	if (has2) {
+		if (op == INSTR_LET && !has_r && TypeIsEqual(result->type, tmp2.type)) {
+			has2 = false;
+		} else {
+			has2 = InstrTranslate3(INSTR_LET, &tmp2, arg2, NULL, TEST_ONLY);
+		}
+	}
+
+	if (has_r) {
+		if (op == INSTR_LET && arg1->mode == INSTR_VAR && TypeIsEqual(arg1->type, tmp_r.type)) {
+			has_r = false;
+		} else {
+			has_r = InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, TEST_ONLY);
+		}
+	}
+
+	if (has1 && InstrTranslate2(op, result, &tmp1, arg2, TEST_ONLY)) {
+		has2 = has_r = false;
+	} else if (has2 && InstrTranslate2(op, result, arg1, &tmp2, TEST_ONLY)) {
+		has1 = has_r = false;
+	} else if (has_r && InstrTranslate2(op, &tmp_r, arg1, arg2, TEST_ONLY)) {
+		has1 = has2 = false;
+	} else if (has1 && has2 && InstrTranslate2(op, result, &tmp1, &tmp2, TEST_ONLY)) {
+		has_r = false;
+	} else if (has_r && has1 && InstrTranslate2(op, &tmp_r, &tmp1, arg2, TEST_ONLY)) {
+		has2 = false;		
+	} else if (has_r && has2 && InstrTranslate2(op, &tmp_r, arg1, &tmp2, TEST_ONLY)) {
+		has1 = false;
+	} else if (has_r && has1 && has2 && InstrTranslate2(op, &tmp_r,&tmp1, &tmp2, TEST_ONLY)) {
+
+	} else {
+		return false;
+	}
+
+	if (mode == GENERATE) {
+		if (has1) {
+			a = VarNewTmp(arg1->type);
+			InstrTranslate3(INSTR_LET, a, arg1, NULL, GENERATE);
+			arg1 = a;
+		}
+		if (has2) {
+			a = VarNewTmp(arg2->type);
+			InstrTranslate3(INSTR_LET, a, arg2, NULL, GENERATE);
+			arg2 = a;
+		}
+		if (has_r) {
+			a = result;
+			result = VarNewTmp(result->type);
+		}
+
+		InstrTranslate2(op, result, arg1, arg2, GENERATE);
+
+		if (has_r) {
+			InstrTranslate3(INSTR_LET, a, result, NULL, GENERATE);
+		}
+	}
+	return true;
 }
 
 extern InstrBlock * BLK;
@@ -452,15 +650,18 @@ Purpose:
 {
 	Instr * i, * first_i, * next_i;
 	InstrBlock * blk;
-	Bool modified, untranslated, in_assert;
 	UInt8 step = 0;
 	UInt32 n;
-	Var * a = NULL, * var, * item;
+	Bool in_assert;
+	UInt8 color;
 
+	VERBOSE_NOW = false;
 	if (Verbose(proc)) {
+		VERBOSE_NOW = true;
 		PrintHeader(2, VarName(proc));
 	}
-	// As first step, we translate all variables on register address to actual registers
+
+	// As first step, we translate all variables stored on register addresses to actual registers
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
@@ -471,120 +672,79 @@ Purpose:
 		}
 	}
 
-//	Print("============ Registers ============\n");
-//	PrintProc(proc);
-
 	// We perform as many translation steps as necessary
 	// Some translation rules may use other translation rules, so more than one step may be necessary.
 	// Translation ends either when there has not been any modification in last step or after
 	// defined number of steps (to prevent infinite loop in case of invalid set of translation rules).
 
-	do {
-		modified = false;
-		untranslated = false;
-		in_assert = false;
+	in_assert = false;
 
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
-			n = 1;
-			// The translation is done by using procedures for code generating.
-			// We detach the instruction list from block and set the block as destination for instruction generator.
-			// In this moment, the code generating stack must be empty anyways.
+		n = 1;
+		// The translation is done by using procedures for code generating.
+		// We detach the instruction list from block and set the block as destination for instruction generator.
+		// In this moment, the code generating stack must be empty anyways.
 
-			first_i = blk->first;
-			blk->first = blk->last = NULL;
-			GenSetDestination(blk, NULL);
-			i = first_i;
+		first_i = blk->first;
+		blk->first = blk->last = NULL;
+		GenSetDestination(blk, NULL);
+		i = first_i;
 
-			while(i != NULL) {
+		while(i != NULL) {
 
-				if (ASSERTS_OFF) {
-					if (i->op == INSTR_ASSERT_BEGIN) {
-						in_assert = true;
+			if (ASSERTS_OFF) {
+				if (i->op == INSTR_ASSERT_BEGIN) {
+					in_assert = true;
+					goto next;
+				} else if (i->op == INSTR_ASSERT_END) {
+					in_assert = false;
+					goto next;
+				} else {
+					if (in_assert) goto next;
+				}
+			}
+
+			if (VERBOSE_NOW) {
+				color = PrintColor(RED+BLUE);
+				PrintInstrLine(n); InstrPrint(i);
+				PrintColor(color);
+			}
+
+			if (!InstrTranslate3(i->op, i->result, i->arg1, i->arg2, GENERATE)) {
+
+				InternalError("Failed translate instruction"); InstrPrint(i);
+
+/*
+				// Array assignment default
+				if (i->op == INSTR_LET) {
+					var = i->result;
+					item = i->arg1;
+					if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
+						GenArrayInit(var, item);
+						modified = true;
 						goto next;
-					} else if (i->op == INSTR_ASSERT_END) {
-						in_assert = false;
-						goto next;
-					} else {
-						if (in_assert) goto next;
 					}
 				}
 
-				if (!InstrTranslate2(i, &modified)) {
-
-					// Array assignment default
-					if (i->op == INSTR_LET) {
-						var = i->result;
-						item = i->arg1;
-						if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
-							GenArrayInit(var, item);
-							modified = true;
-							goto next;
-						}
-					}
-
-					// No emit rule nor rule for translating instruction found,
-					// try to simplify the instruction by first calculating the element value to temporary variable
-					// and using the variable instead.
-
-					if (VarIsArrayElement(i->arg1)) {
-						a = VarNewTmp(i->arg1->type);		//== adr->type->element
-						GenLet(a, i->arg1);
-						Gen(i->op, i->result, a, i->arg2);
-						modified = true;
-					} else if (VarIsArrayElement(i->arg2)) {
-						a = VarNewTmp(i->arg1->type);		//== adr->type->element
-						GenLet(a, i->arg2);
-						Gen(i->op, i->result, i->arg1, a);
-						modified = true;
-					} else if (VarIsArrayElement(i->result)) {
-						if (i->op != INSTR_LET || i->arg1->mode != INSTR_VAR) {
-							a = VarNewTmp(i->result->type);
-							Gen(i->op, a, i->arg1, i->arg2);
-							GenLet(i->result, a);
-							modified = true;
-						}
-
-					//==== We were not able to find translation for the instruction, emit it as it is
-					//     TODO: This is an error, as we are not going to find any translation for the instruction next time.
-					} else {
-						GenInternal(i->op, i->result, i->arg1, i->arg2);
-						InternalError("Failed translate instruction"); InstrPrint(i);
-						untranslated = true;
-					}
-				}
+*/
+			}
 next:
-				next_i = i->next;
-				InstrFree(i);
-				i = next_i;
-				n++;
-			}
-		} // block
-
-		if (Verbose(proc)) {
-			// Do not print unmodified step (it would be same as previous step already printed)
-			if (modified) {
-				PrintHeader(3, "Step %d", step+1);
-				PrintProc(proc);
-			}
+			next_i = i->next;
+			InstrFree(i);
+			i = next_i;
+			n++;
 		}
-		step++;
-	} while(!untranslated && modified && step < MAX_RULE_UNROLL);
-
-	if (step == 1 && !modified) {
-		if (Verbose(proc)) {
-			PrintHeader(3, "Without Change");
-			PrintProc(proc);
-		}
-	}
+	} // block
 }
 
 void TranslateInit()
 {
-	UInt16 op;
 	Var * var;
 	UInt8 i;
 	Type * type;
+
+	// Create RULE procedure and allocate it's arguments
 
 	type = TypeAlloc(TYPE_PROC);
 	RULE_PROC = VarAlloc(INSTR_VAR, NULL, 0);
@@ -596,11 +756,7 @@ void TranslateInit()
 		MACRO_ARG_VAR[i] = var;
 	}
 
-	for(op=0; op<INSTR_CNT; op++) {
-		RULES[op] = NULL;
-		LAST_RULE[op] = NULL;
-		EMIT_RULES[op] = NULL;
-		LAST_EMIT_RULE[op] = NULL;
-	}
-
+	RuleSetInit(&MACRO_RULES);
+	RuleSetInit(&TRANSLATE_RULES);
+	RuleSetInit(&INSTR_RULES);
 }

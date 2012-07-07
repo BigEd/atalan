@@ -320,8 +320,9 @@ typedef enum {
 	TYPE_UNDEFINED,
 	TYPE_SCOPE,
 	TYPE_SEQUENCE,	// numeric sequence
+	TYPE_TYPE,
 	TYPE_ANY,
-	TYPE_RULE_ARG	// type is specified by variable in rule argument
+	TYPE_VAR		// type is specified by variable
 } TypeVariant;
 
 /*
@@ -341,8 +342,6 @@ typedef struct {
 	Type * limit;		// limit value of step (for ADD, MUL this is top value, for SUB, DIV this is bottom value)
 } TypeSequence;
 
-typedef Int16 Relation;
-
 
 /*
 
@@ -356,16 +355,27 @@ typedef BigInt IntLimit;
 #define INTLIMIT_MIN (-2147483647 - 1)		// To prevent error in some compilers parser
 #define INTLIMIT_MAX 2147483647L
 
-
 // min + N * mul  (<max)
 typedef struct {
 	Bool flexible;		// range has been fixed by user
 	IntLimit min;
 	IntLimit max;
-//	UInt32 mul;
+	//TODO:
+	// Var * min;
+	// Var * max;
 } Range;
 
-#define MAX_DIM_COUNT 2
+/*
+ We may define constant as variable pointing to constant type. However, we need a way to define the actual value.
+ This could be either done by special 'const' type or we may make setting the value to variable possible.
+ In such case, the value must refer to type which refers back to it.
+
+typedef struct {
+	IntLimit n;
+} IntConst;
+
+*/
+
 #define MACRO_ARG_CNT 26
 
 #define TypeUsed 1
@@ -377,22 +387,23 @@ struct TypeTag {
 	Bool		 is_enum;	// INSTR_INTEGER is enum
 	Type * base;			// type, on which this type is based (may be NULL)
 	Var * owner;			// original owner of this type
-	Var * arg;				// TYPE_RULE_ARG
 	union {
+		// TYPE_INT
 		Range range;
 		// TYPE_ARRAY, TYPE_ADR
 		struct {
 			Type * index;
-//			Type * dim[MAX_DIM_COUNT];		// array dimension types (integer ranges)
 			Type * element;
 			UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size.
 		};
-		// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left)
+		// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left), TYPE_TYPE (uses only left)
 		struct {
 			Type * left;
 			Type * right;
 		};
 		TypeSequence seq;
+		// TYPE_VAR
+		Var * var;
 	};
 };
 
@@ -477,8 +488,7 @@ struct VarTag {
 					 // INSTR_ELEMENT	Array to which this variable belongs
 					 // INSTR_TUPLE      First variable of tuple
 
-	Type *  type;	 // Pointer to type variable (such variable must have INSTR_TYPE)
-					 // INSTR_ELEMENT:  Element type of array
+	Type *  type;	 // Type of variable
 
 	int     value_nonempty;
 	// TODO: Replace value_nonempty just with flag VarDefined
@@ -488,6 +498,7 @@ struct VarTag {
 		char * str;
 		Var * var;
 		ParseState * parse_state;	// INSTR_SRC_FILE
+		Type * type_value;
 	};
 
 	Var *   file;			// file in which the variable has been defined
@@ -498,6 +509,9 @@ struct VarTag {
 	UInt16	read;			// how many times some instruction reads this variable (if 0, this is unused)
 	UInt16	write;			// how many times some instruction writes this variable (if 1 this is constant)
 	Var  *  next;			// next variable in chain
+
+	Var  *  next_in_scope;  // in future, this will be replaced by 'next'
+	Var  *  subscope;
 };
 
 /*
@@ -579,10 +593,12 @@ UInt8 ConstByteSize(Int32 n);
 Type * TypeAlloc(TypeVariant variant);
 Type * TypeAllocConst(IntLimit n);
 Type * TypeAllocInt(IntLimit min, IntLimit max);
+Type * TypeAllocRange(Var * min, Var * max);
 
 Type * TypeDerive(Type * base);
 Type * TypeCopy(Type * base);
 
+Type * TypeType(Type * restriction);
 Type * TypeByte();
 Type * TypeLongInt();
 Type * TypeScope();
@@ -600,6 +616,15 @@ typedef void (*RangeTransform)(Int32 * x, Int32 tr);
 
 void TypeAddConst(Type * type, Var * var);
 Bool TypeIsSubsetOf(Type * type, Type * master);
+Bool TypeIsEqual(Type * left, Type * right);
+
+Bool TypeIsInt(Type * type);
+Bool TypeIsIntConst(Type * type);
+Bool TypeIsN(Type * type, Int32 n);
+
+IntLimit * TypeMax(Type * type);
+IntLimit * TypeMin(Type * type);
+
 
 UInt32 TypeSize(Type * type);
 UInt32 TypeAdrSize();
@@ -670,11 +695,13 @@ Var * VarFind2(char * name);
 Var * VarProcScope();
 Var * VarFindTypeVariant(Name name, VarIdx idx, TypeVariant type_variant);
 
-Var * VarFindInt(Var * scope, UInt32 n);
-Var * VarMacroArg(UInt8 i);
+Var * VarRuleArg(UInt8 i);
 
 Bool VarIsConst(Var * var);
+Bool VarIsType(Var * var);
 Bool VarIsIntConst(Var * var);
+IntLimit * VarIntConst(Var * var);
+
 Bool VarIsN(Var * var, Int32 n);
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
@@ -710,7 +737,7 @@ long VarParamCount(Var * var);
 void VarGenerateArrays();
 void VarToLabel(Var * var);
 
-Var * VarNewType(TypeVariant variant);
+Var * VarNewType(Type * type);
 
 Var * FirstArg(Var * proc, VarSubmode submode);
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode);
@@ -943,14 +970,14 @@ void InstrPrint(Instr * i);
 void InstrPrintInline(Instr * i);
 void InstrFree(Instr * i);
 
-char * OpName(InstrOp op);
+char * OpSymbol(InstrOp op);
 
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
 void PrintBlockHeader(InstrBlock * blk);
 void PrintInstrLine(UInt32 n);
 
-Var * InstrFind(char * name);
+InstrOp InstrFind(char * name);
 
 // When we generate instructions, it is always done to defined code block
 // Code blocks are managed using those procedures.
@@ -983,15 +1010,16 @@ Var * InstrEvalAlgebraic(InstrOp op, Var * arg1, Var * arg2);
 UInt16 SetBookmarkLine(Loc * loc);
 UInt16 SetBookmarkVar(Var * var);
 
-void InstrReplaceVar(InstrBlock * block, Var * from, Var * to);
+void InstrBlockReplaceVar(InstrBlock * block, Var * from, Var * to);
 void ProcReplaceVar(Var * proc, Var * from, Var * to);
 
 Bool InstrEquivalent(Instr * i, Instr * i2);
 Bool InstrIsSelfReferencing(Instr * i);
 
-// Instructions generating
+// Instruction generating
 
 void GenerateInit();
+void GenRegisterRule(Rule * rule);
 void GenSetDestination(InstrBlock * blk, Instr * i);
 void GenBegin();
 InstrBlock * GenEnd();
@@ -1017,6 +1045,7 @@ void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 typedef struct {
 	InstrOp  op;
+	char * name;
 	char * symbol;
 	TypeVariant arg_type[3];		// 0 = result, 1 = arg1, 2 = arg2
 	UInt8   flags;
@@ -1039,7 +1068,7 @@ typedef enum {
 	RULE_VARIABLE,		// (type) variable of specified type
 	RULE_CONST,			// (type) constant matching specified type
 	RULE_REGISTER,		// (var)  actual variable (typically used for register)
-	RULE_VALUE,			// (n)    actual value
+	RULE_VALUE,			// (n)    actual value										// RULE_VALUE may be implemented as RULE_VARIABLE using constant
 	RULE_DEREF,			// dereference of variable (dereferenced type is always adr)
 	RULE_ARG,			// argument (type of argument is defined, may be NULL)
 	RULE_ELEMENT,		// array element - var defines pattern for array, index defines pattern for index
@@ -1047,6 +1076,8 @@ typedef enum {
 	RULE_RANGE,
 	RULE_BYTE,
 	RULE_BIT,
+	RULE_SUB,
+	RULE_ADD,
 
 	RULE_DESTINATION
 
@@ -1079,14 +1110,39 @@ struct RuleTag {
 	UInt8 cycles;			// How many cycles the instruction uses.
 };
 
+
+/*
+Rules are stored in rule sets. We have three sets of rules:
+
+ 1. macro rules are used when parsing code
+ 2. Translate rules are used when translating instructions generated by parser to instruction rules
+ 3. Instruction rules (which represent actual processor instructions)
+
+*/
+
+typedef struct {
+	Rule * rules[INSTR_CNT];
+} RuleSet;
+
+void RuleSetInit(RuleSet * ruleset);
+void RuleSetAddRule(RuleSet * ruleset, Rule * rule);
+Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2);
+
+void GenMatchedRule(Rule * rule);
+
 void RuleRegister(Rule * rule);
 //Bool RuleMatch(Rule * rule, Instr * i);
 
+#define GENERATE 0
+#define TEST_ONLY 1
+
 void ProcTranslate(Var * proc);
+Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode);
+
 void CheckValues(Var * proc);
 void TranslateInit();
 
-Rule * TranslateRule(Instr * i);
+Rule * TranslateRule(InstrOp op, Var * result, Var * arg1, Var * arg2);
 
 // Garbage collector
 
@@ -1118,6 +1174,14 @@ Bool ParsingRule();
 
 void BufEmpty();
 void BufPush(Var * var);
+Var * BufPop();
+
+Type * ParseType2(InstrOp mode);
+Type * ParseTypeInline();
+
+void ParseExpression(Var * result);
+void ParseExpressionType(Type * result_type);
+Bool ParseArg(Var ** p_var);
 
 #define STACK_LIMIT 100
 Var *  STACK[STACK_LIMIT];
@@ -1136,6 +1200,9 @@ Bool VarUsesVar(Var * var, Var * test_var);
 Bool VarModifiesVar(Var * var, Var * test_var);
 Int16 VarTestReplace(Var ** p_var, Var * from, Var * to);
 Int16 VarReplace(Var ** p_var, Var * from, Var * to);
+
+Int16 InstrTestReplaceVar(Instr * i, Var * from, Var * to);
+Int16 InstrReplaceVar(Instr * i, Var * from, Var * to);
 
 void ResetValue(Var * res);
 void VarSetSrcInstr(Var * var, Instr * i);
@@ -1167,6 +1234,9 @@ void AllocateVariables(Var * proc);
 
 void OptimizeProcInline(Var * proc);
 
+void LoopPreheader(Var * proc, InstrBlock * header, Loc * loc);
+
+void OptimizeLoopShift(Var * proc);
 
 void InstrExecute(InstrBlock * blk);
 

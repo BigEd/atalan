@@ -36,23 +36,33 @@ If the array is big, we may not have the option to do the base shift.
 I.e.  lda (adr),y
 
 Problems when replacing on logical level:
+
 - When using instructions like a() = 0, the loop is not yet unwinded, so we cannot test the loop.
+  Solution: make rules as macros (macro rule) -> this may unwind in first step, unrolling the loops
+
+- We may symbolically change the loop som that it adds the start value dynamically (even if it is not constant)
 
 1. Detect, that the loop end can be optimized. Detect loop variable (%1), step (%2) and limit (%3)
    We can use multiple instruction rule to detect the loop.
 
-rule loop = instr
+rule
    add %1, %1, %2
    cmp %1, %3:1..127
    bne l
+   dead %1
+=
+   loop 128		  ;declaring the variable as loop with end value of 128
+   add %1,%1,%2
+   bpl l
 
-2. Try to find the initialization of the loop variable
+2. Try to find the initialization of the loop variable (%1)
 
    It must be before loop, in the form let %1, %4
    If the %4 is constant, we may just add the difference.
    
 3. Test, that we can replace %1 by %1-%diff in every instruction, that uses %1.
-   If the %1 is on the left side (except self referencing instructions), do not perform the optimization
+   If the %1 is on the left side (except self referencing instructions), do not perform the optimization.
+   Do not perform the test (and replacement) in the looping code.
 
 4. Perform replacement of loop end:
 
@@ -256,7 +266,7 @@ Arguments:
 
 	// At the begining, the quotient is 0.
 	ResetValues();
-	initial.op = INSTR_LET; initial.result = reg; initial.arg1 = top_var;
+	initial.op = INSTR_LET; initial.result = reg; initial.arg1 = top_var; initial.arg2 = NULL;
 	VarSetSrcInstr(reg, &initial);
 
 	q = 0;
@@ -358,9 +368,7 @@ Arguments:
 
 			memcpy(&ti, i, sizeof(Instr));
 			
-			changed = VarTestReplace(&ti.result, top_var, reg);
-			changed += VarTestReplace(&ti.arg1, top_var, reg);
-			changed += VarTestReplace(&ti.arg2, top_var, reg);
+			changed = InstrTestReplaceVar(&ti, top_var, reg);
 
 			// If the instruction was changed (it used top_var and it has been replaced to top_reg),
 			// test, whether we are able to compile it (some register/adress mode combinations must not be available)
@@ -424,16 +432,20 @@ done:
 	return q;
 }
 
-
 typedef struct {
 	InstrBlock * header;
 	InstrBlock * end;
 } Loop;
 
 
-void LoopPreheader(Var * proc, Loop * loop, Loc * loc)
+void LoopPreheader(Var * proc, InstrBlock * header, Loc * loc)
+/*
+Purpose:
+	Find location of instruction directly preceding the loop.
+	New block will be inserted into code, if there is not single instruction.
+*/
 {
-	loc->blk = FindLoopDominator(proc, loop->header);
+	loc->blk = FindLoopDominator(proc, header);
 	loc->i = loc->blk->last;
 
 	if (loc->i->op != INSTR_GOTO) {
@@ -801,7 +813,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 
 	//==== Move all invariant instructions to preheader
 	
-	LoopPreheader(proc, loop, &preheader);
+	LoopPreheader(proc, loop->header, &preheader);
 	for(blk = loop->header; blk != blk_exit; blk = blk->next) {
 		i = blk->first;
 		while(i != NULL) {
@@ -979,9 +991,11 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		//TODO: If there is Let reg = var and var is not top_var, we need to spill store
 
 		//=== Replace the use of registers
-	
+
+//		PrintProc(proc);
+
 		ResetValues();
-		initial.op = INSTR_LET; initial.result = top_reg; initial.arg1 = top_var;
+		initial.op = INSTR_LET; initial.result = top_reg; initial.arg1 = top_var; initial.arg2 = NULL;
 
 		var_modified = false;
 		// Generate instruction initializing the register used to replace the variable
@@ -1065,9 +1079,7 @@ del2:					if (verbose) { PrintDelete(); }
 
 					rule = InstrRule(&ti);
 					if (rule != NULL && (i->rule->cycles >= rule->cycles)) {
-						VarReplace(&i->result, top_var, top_reg);
-						VarReplace(&i->arg1, top_var, top_reg);
-						VarReplace(&i->arg2, top_var, top_reg);
+						InstrReplaceVar(i, top_var, top_reg);
 
 						if (i->arg1 != reg && VarContains(i->arg1, reg)) {
 							VarTestReplace(&i->result, i->arg1, reg);
@@ -1109,14 +1121,16 @@ del2:					if (verbose) { PrintDelete(); }
 			// There may be exit label as part of the loop
 			// We need to spill after it
 
-			if (blk_exit == NULL || blk_exit->callers != NULL || blk_exit->from != end) {
-				blk_exit = InstrBlockAlloc();
-				blk_exit->to = end->to;
-				blk_exit->next = end->to;
-				end->next = blk_exit;
-				end->to   = blk_exit;
+			if (!VarIsConst(top_var)) {
+				if (blk_exit == NULL || blk_exit->callers != NULL || blk_exit->from != end) {
+					blk_exit = InstrBlockAlloc();
+					blk_exit->to = end->to;
+					blk_exit->next = end->to;
+					end->next = blk_exit;
+					end->to   = blk_exit;
+				}
+				InstrInsertRule(blk_exit, blk_exit->first, INSTR_LET, top_var, top_reg, NULL);
 			}
-			InstrInsertRule(blk_exit, blk_exit->first, INSTR_LET, top_var, top_reg, NULL);
 //			InstrInsert(blk_exit, blk_exit->first, INSTR_LET, top_var, top_reg, NULL);
 		}
 

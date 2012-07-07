@@ -15,22 +15,33 @@ extern Var   ROOT_PROC;
 
 void VarIncRead(Var * var)
 {
+
+	InstrInfo * ii;
 	if (var != NULL) {
+		ii = &INSTR_INFO[var->mode];
+
 		var->read++;
 		if (var->write == 0) {
 			// variable should not be marked as uninitialized, if there has been label or jump or call
 			var->flags |= VarUninitialized;
 		}
-		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-			VarIncRead(var->adr);
-			VarIncRead(var->var);
-		} else if (var->mode == INSTR_DEREF) {
-			VarIncRead(var->var);
-		} else if (var->mode == INSTR_TUPLE) {
-			VarIncRead(var->adr);
-			VarIncRead(var->var);			
-		} else {
+
+//		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+//			VarIncRead(var->adr);
+//			VarIncRead(var->var);
+//		} else if (var->mode == INSTR_DEREF) {
+//			VarIncRead(var->var);
+//		} else if (var->mode == INSTR_TUPLE) {
+//			VarIncRead(var->adr);
+//			VarIncRead(var->var);			
+//		} else 
+		if (var->mode == INSTR_VAR) {
+			// Do not increment constant used as address
 			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
+		} else if (var->mode == INSTR_CONST) {
+		} else {
+			VarIncRead(var->adr);
+			VarIncRead(var->var);
 		}
 	}
 }
@@ -77,13 +88,6 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end)
 			if (InstrIsSelfReferencing(i)) {
 				result->flags |= VarLoop;
 			}
-/*
-			if (result != NULL) {
-				if (result == i->arg1 || result == i->arg2) {
-					result->flags |= VarLoop;
-				}
-			}
-*/
 		}
 	}
 }
@@ -149,7 +153,14 @@ Purpose:
 			*p_var = to;
 			n++;
 		} else {
-			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+			if (var->mode == INSTR_CONST) {
+				// const does not get replaced
+			} else if (var->mode == INSTR_VAR) {
+				if (var->adr != NULL) {
+					*p_var = var->adr;
+					n = VarTestReplace(p_var, from, to);
+				}
+			} else /*if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE)*/ {
 				v2 = var->adr;
 				v3 = var->var;
 				n2 = VarTestReplace(&v2, from, to);
@@ -168,16 +179,20 @@ Purpose:
 					n += n2 + n3;
 					*p_var = var2;
 				}
-			} if (var->mode == INSTR_VAR && var->adr != NULL) {
-				*p_var = var->adr;
-				n = VarTestReplace(p_var, from, to);
-			}
+			} /*if (var->mode == INSTR_VAR && var->adr != NULL) {
+					*p_var = var->adr;
+					n = VarTestReplace(p_var, from, to);
+			}*/
 		}
 	}
 	return n;
 }
 
 Int16 VarReplace(Var ** p_var, Var * from, Var * to)
+/*
+Purpose:
+	Replace any use of 'from' by 'to'.
+*/
 {
 	Var * var;
 	Int16 n = 0;
@@ -188,12 +203,35 @@ Int16 VarReplace(Var ** p_var, Var * from, Var * to)
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+			if (var->mode != INSTR_CONST && var->mode != INSTR_VAR) {
 				n += VarReplace(&var->adr, from, to);
 				n += VarReplace(&var->var, from, to);
 			}
+
+//			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+//				n += VarReplace(&var->adr, from, to);
+//				n += VarReplace(&var->var, from, to);
+//			}
 		}
 	}
+	return n;
+}
+
+Int16 InstrReplaceVar(Instr * i, Var * from, Var * to)
+{
+	Int16 n = 0;
+	n += VarReplace(&i->result, from, to);
+	n += VarReplace(&i->arg1, from, to);
+	n += VarReplace(&i->arg2, from, to);
+	return n;
+}
+
+Int16 InstrTestReplaceVar(Instr * i, Var * from, Var * to)
+{
+	Int16 n = 0;
+	n += VarTestReplace(&i->result, from, to);
+	n += VarTestReplace(&i->arg1, from, to);
+	n += VarTestReplace(&i->arg2, from, to);
 	return n;
 }
 

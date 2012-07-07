@@ -67,21 +67,21 @@ wait'line:macro =
 
 ;Joysticks & paddles
 
-in button'state:enum (pressed = 0, not'pressed = 1, true = 0)
+type button'state:enum (pressed : 0, not'pressed : 1, true: 0)
 in STRIG@644:array(0..3) of button'state		;Set to 1 when joystick button is not pushed, 0 if pushed
 
 type stick'state:enum (
-	left = 11
-	right = 7
-	up    = 14
-	down  = 13
+	left:  11
+	right:  7
+	up:    14
+	down:  13
 	)
 
 in STICK@632:array(0..3) of stick'state
 
 ; DMA
 
-type dma'type:byte (narrow_playfield = 1, playfield = 2, wide_playfield = 3, missiles = 4, players = 8, hires_sprites = 16, dl = 32, off = 0)
+type dma'type:byte (narrow_playfield: 1, playfield: 2, wide_playfield: 3, missiles: 4, players: 8, hires_sprites: 16, dl: 32, off: 0)
 out DMACTL@559:dma'type
 
 ;BIT(S)  PATTERN  VALUE  RESULT
@@ -99,24 +99,24 @@ out DMACTL@559:dma'type
 ;        --1----- 32     ANTIC on
 ;6,7     --------        Not used
  
-color:0..255
-	Black                    =   0
-	Rust                     =  16
-	Red'orange               =  32
-	Dark'orange              =  48
-	Red                      =  64
-	Dark'lavender            =  80
-	Cobalt'blue              =  96
-	Ultramarine'blue         = 112
-	Medium'blue              = 128
-	Dark'blue                = 144
-	Blue'grey                = 166
-	Olive'green              = 176
-	Medium'green             = 192
-	Dark'green               = 208
-	Orange'green             = 224
-	Orange                   = 240
-	White                    = 15
+type color:0..255
+	Black                    :   0
+	Rust                     :  16
+	Red'orange               :  32
+	Dark'orange              :  48
+	Red                      :  64
+	Dark'lavender            :  80
+	Cobalt'blue              :  96
+	Ultramarine'blue         : 112
+	Medium'blue              : 128
+	Dark'blue                : 144
+	Blue'grey                : 166
+	Olive'green              : 176
+	Medium'green             : 192
+	Dark'green               : 208
+	Orange'green             : 224
+	Orange                   : 240
+	White                    : 15
 	
 ;Colors
 
@@ -176,12 +176,12 @@ init'pmgbase:macro =
 	set'pmgbase pmg.memory
 
 
-out GRACTL@$d01d:0..255 (off = 0, missiles = 1, players = 2, trigger_latch = 4)
+out GRACTL@$d01d:0..255 (off: 0, missiles: 1, players: 2, trigger_latch: 4)
 
 out GTICTLS@$26f:byte
 out GTIACTL@$d01b:byte
 
-out SPRIOR@$26F, PRIOR@$D01B:0..255 (PLPF = 1, PFPL = 4, PL01PFPL23= 16, ONE'COLOR'MISSILES = 16, MULTICOLOR'PLAYERS = 32)
+out SPRIOR@$26F, PRIOR@$D01B:0..255 (PLPF: 1, PFPL: 4, PL01PFPL23: 16, ONE'COLOR'MISSILES: 16, MULTICOLOR'PLAYERS: 32)
 
 ;*******************************
 ;Sound
@@ -209,67 +209,67 @@ sound:macro
 
 ;Keyboard
 
-key:enum
-	A = 63
-	B = 21
-	C = 18
-	D = 58
-	E = 42
-	F = 56
-	G = 61
-	H = 57
-	I = 13
-	J = 1
-	K = 5
-	L = 0
-	M = 37
-	N = 35
-	O = 8
-	P = 10
-	Q = 47
-	R = 40
-	S = 62
-	T = 45
-	U = 11
-	V = 16
-	W = 46
-	X = 22
-	Y = 43
-	Z = 23
-	SPACE = 33 
-	RETURN = 12
-	ESC = 28
-	TAB = 44
-	DEL = 52
-	'0' = 50
-	'1' = 31
-	'2' = 30
-	'3' = 26
-	'4' = 24
-	'5' = 29
-	'6' = 27
-	'7' = 51
-	'8' = 53
-	'9' = 48
-	'<' = 54
-	'>' = 55
-	'-' = 14
-	'=' = 15
-	';' = 2
-	'+' = 6
-	'*' = 7
-	CAPS = 60
-	','  = 32
-	'.'  = 34
-	'/'  = 38
-	INV  = 39
-	F1   = 67
-	F2   = 68
-	F3   = 83
-	F4   = 84
-	HELP = 17
-	none = 255
-	false = 255
+type key:enum
+	A : 63
+	B : 21
+	C : 18
+	D : 58
+	E : 42
+	F : 56
+	G : 61
+	H : 57
+	I : 13
+	J : 1
+	K : 5
+	L : 0
+	M : 37
+	N : 35
+	O : 8
+	P : 10
+	Q : 47
+	R : 40
+	S : 62
+	T : 45
+	U : 11
+	V : 16
+	W : 46
+	X : 22
+	Y : 43
+	Z : 23
+	SPACE : 33 
+	RETURN : 12
+	ESC : 28
+	TAB : 44
+	DEL : 52
+	'0' : 50
+	'1' : 31
+	'2' : 30
+	'3' : 26
+	'4' : 24
+	'5' : 29
+	'6' : 27
+	'7' : 51
+	'8' : 53
+	'9' : 48
+	'<' : 54
+	'>' : 55
+	'-' : 14
+	':' : 15
+	';' : 2
+	'+' : 6
+	'*' : 7
+	CAPS : 60
+	','  : 32
+	'.'  : 34
+	'/'  : 38
+	INV  : 39
+	F1   : 67
+	F2   : 68
+	F3   : 83
+	F4   : 84
+	HELP : 17
+	none : 255
+	false : 255
 	
 in out CH@764:key  ;last pressed character
 
@@ -281,25 +281,25 @@ wait'key:proc >k:key =
 
 ;*** DISPLAY LISTS
 
-dl_command:0..255
-	BLANK1  = 0
-	END     = 1      
-	BLANK2  = $10
-	BLANK3  = $20
-	BLANK4  = $30
-	BLANK5  = $40
-	BLANK6  = $50
-	BLANK7  = $60
-	BLANK8  = $70
+type dl_command:0..255
+	BLANK1  : 0
+	END     : 1      
+	BLANK2  : $10
+	BLANK3  : $20
+	BLANK4  : $30
+	BLANK5  : $40
+	BLANK6  : $50
+	BLANK7  : $60
+	BLANK8  : $70
 
-	JMP     = $01
-	CHR0    = $02
+	JMP     : $01
+	CHR0    : $02
 		
-	HSCROLL = $10
-	VSCROLL = $20
-	LMS     = $40
-	DLI     = $80
-	NEXT    = $41		;END + LMS
+	HSCROLL : $10
+	VSCROLL : $20
+	LMS     : $40
+	DLI     : $80
+	NEXT    : $41		;END + LMS
 
 out SDLSTL@$230:adr
 	
@@ -307,7 +307,7 @@ out SDLSTL@$230:adr
 
 ;dli is type of procedure used to implement the DLI.
 
-type dli:interrupt
+dli:type = interrupt
 out NMIEN@$D40E:byte
 out VDSLST@$200:adr of dli
 
@@ -323,12 +323,12 @@ on'dli:macro x:adr of dli =
 
 ;VBI
 
-type vbi:interrupt
+vbi:type = interrupt
 rule proc %A:vbi = "%A .proc"
 rule return %A:vbi = "   jmp $e462"
 rule endproc %A:vbi = ".endp"
 
-out VVBLKD@$0224:adr of vbi
+in out VVBLKD@$0224:adr of vbi
 
 ;Macro to set up VBI.
 ;We use deferred VBI vector.

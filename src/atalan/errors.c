@@ -160,7 +160,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 				Print("\'");
 			} else if (c == '*') {
 				Print("\'");
-				Print(OpName(ERR_INSTR->op));
+				Print(OpSymbol(ERR_INSTR->op));
 				Print("\'");
 			}
 

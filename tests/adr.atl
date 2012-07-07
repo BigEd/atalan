@@ -18,7 +18,7 @@ print2:proc x:adr =
    b2 = x(1)
    "[b1],[b2]"
 
-set:proc x:adr offset:byte b:byte =
+set:proc x:adr, offset:byte, b:byte =
    x(offset) = b
   
 ;We may assign address of array to address and later use the address to access

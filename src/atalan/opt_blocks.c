@@ -248,7 +248,7 @@ Purpose:
 				// to prevent creation of empty blocks.
 				while (i != NULL && i->op == INSTR_LABEL) {
 					i2 = i;
-					InstrReplaceVar(blk, i->result, nb->label);
+					InstrBlockReplaceVar(blk, i->result, nb->label);
 					i = i->next;
 					InstrDelete(nb, i2);
 				}

@@ -53,7 +53,7 @@ Input:
 		VarMark(var->var, state);
 
 	// If this is array access variable, mark indices as live (used)
-	} if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+	} if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
 
 		if (var->adr->mode == INSTR_DEREF) {
 			VarMarkLive(var->adr);
@@ -76,12 +76,12 @@ Input:
 
 	// We will never mark output variable as dead
 
-	if (FlagOff(var->submode, SUBMODE_OUT)) {
+	if (!OutVar(var)) {
 		var->flags = (var->flags & ~VarLive) | state;
 
 		// Each element, which has this variable as an array is marked same
 		FOR_EACH_VAR(var2)
-			if (var2->mode == INSTR_ELEMENT || var2->mode == INSTR_BYTE) {
+			if (var2->mode == INSTR_ELEMENT || var2->mode == INSTR_BYTE || var2->mode == INSTR_BIT) {
 				if (var2->adr == var) {
 					var2->flags = (var2->flags & ~VarLive) | state;
 				}
@@ -126,7 +126,6 @@ Purpose:
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 				// This is the same array and the index of the variable is the same
 				if (var->adr == test_var->adr) {
-//					if (var->var == test_var->var && !InVar(var->var)) return true;
 					if (var->var->mode != INSTR_CONST || test_var->var->mode != INSTR_CONST || var->var->n == test_var->var->n) return true;
 				}
 			}
@@ -234,7 +233,7 @@ void MarkProcLive(Var * proc)
 void VarMarkNextUse(Var * var, Instr * i)
 {
 	if (var == NULL) return;
-	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_DEREF) {
+	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_DEREF || var->mode == INSTR_SUB) {
 		VarMarkNextUse(var->var, i);
 		VarMarkNextUse(var->adr, i);
 	} else {
@@ -262,6 +261,41 @@ Bool VarIsDead(Var * var)
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);
 	}
+}
+
+Bool FlagIsDead(Var * var, Instr * i)
+{
+	Instr * i2;
+
+	if (var == NULL) return true;
+
+	if (var->mode == INSTR_TUPLE) {
+		return FlagIsDead(var->adr, i) && FlagIsDead(var->var, i);
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
+		return FlagIsDead(var->adr, i);
+	} else {
+		if (OutVar(var)) return false;
+		if (FlagOff(var->flags, VarLive)) return true;
+		
+		// Flag is on, test, if it is not set in previous instruction
+		// If the flag is set by previous instruction, and that instruction sets the result of our let, we consider the flag dead.
+
+		if (i->op == INSTR_LET) {
+			i2 = i->prev;
+			while (i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
+			if (i2 != NULL) {
+				if (VarIsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
+Bool FlagsAreDead(Instr * i)
+{
+	return FlagIsDead(i->rule->flags, i);
 }
 
 Bool OptimizeLive(Var * proc)
@@ -294,13 +328,15 @@ Bool OptimizeLive(Var * proc)
 
 		FOR_EACH_VAR(var)
 
+			var->src_i = NULL;
+
 //			if (blk->seq_no == 4 && var->mode == INSTR_BYTE && var->var->n == 0 && StrEqual(var->adr->name, "s")) {
 //				Print("");
 //			}
 
-//			if (StrEqual(var->name, "z") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
-//				Print("");
-//			}
+			if (StrEqual(var->name, "a") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
+				Print("");
+			}
 
 			// Non-local variables (except registers) are always considered live
 			if (!VarIsLocal(var, proc) && !VarIsReg(var)) {
@@ -353,18 +389,23 @@ Bool OptimizeLive(Var * proc)
 			result = i->result;
 			if (result != NULL) {
 				if (op != INSTR_LABEL && op != INSTR_CALL) {
-					if (VarIsDead(result) && VarIsDead(i->rule->flags) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
+					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {
-							if (Verbose(proc)) {
-								color = PrintColor(OPTIMIZE_COLOR);
-								PrintFmt("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
-								PrintColor(color);
+
+							if (FlagsAreDead(i)) {
+								// Test flags
+
+								if (Verbose(proc)) {
+									color = PrintColor(OPTIMIZE_COLOR);
+									PrintFmt("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
+									PrintColor(color);
+								}
+								i = InstrDelete(blk, i);
+								modified = true;
+								if (i == NULL) break;		// we may have removed last instruction in the block
+								continue;
 							}
-							i = InstrDelete(blk, i);
-							modified = true;
-							if (i == NULL) break;		// we may have removed last instruction in the block
-							continue;
 						}
 					}
 				}
@@ -405,8 +446,6 @@ Bool OptimizeLive(Var * proc)
 
 				if (i->result != NULL) {
 					i->next_use[0] = i->result->src_i;
-					//TODO: VarMarkNextUse read (for indexes etc.)
-//					VarMarkNextUse(i->result, i);
 				}
 
 

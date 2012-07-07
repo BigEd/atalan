@@ -6,14 +6,28 @@ use z80
 
 ;prologue is emitted at the beginning of the generated assmbler file.
 ;Here you can define header of output binary and the starting address of an application.
-rule prologue = "   org 30000"
+rule prologue = "   org 30000" "start"
 
 ;epilogue is emitted at the end of programm 
-rule epilogue = "   rts"
+rule epilogue = ""
 
 ;code_end is instruction emitted after the end of code.
 rule code_end = "   ret" "   end start"     
 rule line      = ";### %0(%1) %2"
+
+out ula@65535:0..255
+
+rule let ula, %A:0..255 = instr
+	let a, %A
+	let ula, a
+
+rule let ula, a = "   out (254), a"
+
+rule call 16 = "   rst 16"
+
+;Prevent generating declaration for ula register. Compiler thinks ula is normal
+;variable and would try to generate the declaration.
+rule vardef ula,65535 = ""
 
 ;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
 const BIN_EXTENSION = "tzx"
@@ -21,3 +35,8 @@ const BIN_EXTENSION = "tzx"
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:29000..29999   
 
+;Print Screen Routine	
+;This routine is used by Atalan to print strings.
+ 	
+system.print_scr@:proc =
+	instr call 16

@@ -241,6 +241,7 @@ have_char:
 	// End all indent blocks with indent smaller than actual indent
 	for(top = BLK_TOP; top > 0 && (BLK[top].end_token == TOKEN_BLOCK_END || BLK[top].end_token == TOKEN_OUTDENT || BLK[top].end_token == TOKEN_EOL) && BLK[top].indent > indent; top--) {
 		BLK[top].end_token = TOKEN_BLOCK_END;
+		BLK[top].stop_token = TOKEN_VOID;		// we didn't stop on stop token, so we do not want to return it
 	}
 
 	return true;
@@ -961,9 +962,8 @@ Purpose:
 
 		// Reference to file is stored in variable of INSTR_SRC_FILE
 
-		file_var = VarAlloc(INSTR_SRC_FILE, filename, 0);
+		file_var = VarAllocScope(SRC_FILE, INSTR_SRC_FILE, filename, 0);
 		file_var->n    = 0;
-		file_var->scope = SRC_FILE;
 
 		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
 			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);

@@ -72,6 +72,11 @@ void IntDiv(BigInt * dest, BigInt * l, BigInt * r)
 	*dest = *l / *r;
 }
 
+Bool IntIsN(BigInt * l, Int32 n)
+{
+	return *l == n;
+}
+
 Bool IntEq(BigInt * l, BigInt * r)
 {
 	return *l == *r;

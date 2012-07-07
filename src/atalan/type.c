@@ -20,6 +20,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 extern char * TMP_NAME;
 
 GLOBAL Type TVOID;
+GLOBAL Type * TTYPE;
 GLOBAL Type TINT;		// used for int constants
 GLOBAL Type TSTR;
 GLOBAL Type TLBL;
@@ -46,8 +47,6 @@ struct TypeBlockTag {
 };
 
 GLOBAL TypeBlock TYPES;
-
-Bool RESOLVE_SEQUENCES = true;
 
 /*
 To make type allocation fast, we keep a list of free types.
@@ -84,6 +83,11 @@ Type * TypeAllocMem()
 	FREE_TYPE = type->base;
 	type->flags = 0;
 	return type;
+}
+
+TypeVariant TypeVar(Type * type)
+{
+	return type->variant;
 }
 
 void TypeMark(Type * type)
@@ -170,6 +174,10 @@ IntLimit * TypeMax(Type * type)
 			case INSTR_DIV:
 			case INSTR_MOD:
 				return TypeMax(type->seq.init);
+			case INSTR_ADD:
+				if (TypeIsN(type->seq.step, 1)) {
+					return TypeMax(type->seq.limit);
+				}
 			default:
 				break;
 			}
@@ -213,6 +221,22 @@ Type * TypeAllocInt(IntLimit min, IntLimit max)
 	type->range.flexible = false;
 	type->range.min = min;
 	type->range.max = max;
+	return type;
+}
+
+Type * TypeType(Type * restriction)
+/*
+Purpose:
+	Alloc type of type.
+*/
+{
+	Type * type;
+	if (restriction == NULL) {
+		type = TTYPE;
+	} else {
+		type = TypeAlloc(TYPE_TYPE);
+		type->left = restriction;
+	}
 	return type;
 }
 
@@ -460,30 +484,50 @@ Purpose:
 	*p_max = max;
 }
 
+extern Var * MACRO_ARG[MACRO_ARG_CNT];
+
 Bool TypeIsSubsetOf(Type * type, Type * master)
 /*
 Purpose:
 	Return true, if first type is subset of second type.
 */
 {
+	Var * var;
 	if (type == master) return true;
 	if (type == NULL || master == NULL) return false;
 	if (master->variant == TYPE_VARIANT) {
 		return TypeIsSubsetOf(type, master->left) || TypeIsSubsetOf(type, master->right);
-	} 
+	}
+	if (master->variant == TYPE_VAR) {
+		var = master->var;
+		if (VarIsRuleArg(master->var)) {
+			var = MACRO_ARG[master->var->idx-1];
+		}
+
+		if (master->var->type->variant == TYPE_TYPE) {
+			master = master->var->type_value;
+		} else {
+			master = master->var->type;
+		}
+
+	}
+
 	if (type->variant != master->variant) return false;
 	if (type->variant == TYPE_INT) {
-		if (type->range.max > master->range.max) return false;
-		if (type->range.min < master->range.min) return false;
+		//TODO: Make better way for undefined min..max
+		if (!master->range.flexible) {
+			if (type->range.max > master->range.max) return false;
+			if (type->range.min < master->range.min) return false;
+		}
 	} else if (type->variant == TYPE_ARRAY) {
 		return TypeIsSubsetOf(type->index, master->index) && TypeIsSubsetOf(type->element, master->element);
 	}
 	return true;
 }
 
-Bool TypeEqual(Type * left, Type * right)
+Bool TypeIsEqual(Type * left, Type * right)
 {
-	return TypeIsSubsetOf(left, right) && TypeIsSubsetOf(right, left);
+	return (left == right) || (TypeIsSubsetOf(left, right) && TypeIsSubsetOf(right, left));
 }
 
 UInt32 TypeAdrSize()
@@ -647,6 +691,10 @@ void TypeInit()
 	TUNDEFINED = TypeAllocMem();
 	TUNDEFINED->variant = TYPE_UNDEFINED;
 
+	TTYPE = TypeAllocMem();
+	TTYPE->variant = TYPE_TYPE;
+	TTYPE->left = NULL;
+
 	TINT.variant = TYPE_INT;
 	TINT.range.min = -(long)2147483648L;
 	TINT.range.max = 2147483647L;
@@ -685,6 +733,11 @@ Bool TypeIsIntConst(Type * type)
 	if (type == NULL) return false;
 	if (type->variant != TYPE_INT) return false;
 	return type->range.min == type->range.max;
+}
+
+Bool TypeIsN(Type * type, Int32 n)
+{
+	return TypeIsIntConst(type) && IntIsN(&type->range.min, n);
 }
 
 //TODO: Merge the two functions
@@ -737,6 +790,57 @@ Purpose:
 	return true;
 }
 
+Type * VarType2(Var * var)
+/*
+Purpose:
+	Return type stored in variable.
+*/
+{
+	Type * type;
+	if (VarIsRuleArg(var)) {
+		type = VarType2(MACRO_ARG[var->idx-1]);
+	} else if (var->mode == INSTR_TYPE) {
+		type = var->type;
+	} else if (VarIsType(var)) {
+		type = var->type_value;
+	} else {
+		type = var->type;
+	}
+	return type;
+}
+
+Bool TypeMatches(Type * subset, Type * master)
+{
+	Var * var;
+	UInt8 idx;
+
+	if (master->variant == TYPE_VAR) {
+		var = master->var;
+		if (VarIsRuleArg(var)) {
+			idx = var->idx-1;
+			if (MACRO_ARG[idx] == NULL) {
+				if (subset->variant == TYPE_VAR) {
+					var = subset->var;
+				} else {
+					var = VarNewType(subset);
+				}
+				MACRO_ARG[idx] = var;
+				return true;
+			} else {
+				var = MACRO_ARG[idx];
+				if (VarIsType(var)) {
+					master = var->type_value;
+				} else {
+					InternalError("Expected type var");
+				}
+			}
+		}
+	} else {
+		return TypeIsSubsetOf(subset, master);
+	}
+	return true;
+}
+
 Bool VarMatchesType(Var * var, Type * type)
 /*
 Purpose:
@@ -745,7 +849,7 @@ Purpose:
 */
 {
 	Type * vtype = var->type;
-
+	
 	if (type == vtype) return true;
 	// If pattern has no defined type, it fits
 	if (type == NULL) return true;
@@ -792,9 +896,9 @@ Purpose:
 
 		// Match first index, second index, return type
 
-		return TypeIsSubsetOf(vtype->index, type->index)
+		return TypeMatches(vtype->index, type->index)
 //			&& TypeIsSubsetOf(vtype->dim[1], type->dim[1])
-			&& TypeIsSubsetOf(vtype->element, type->element);
+			&& TypeMatches(vtype->element, type->element);
 		
 	case TYPE_ADR:
 		return vtype != NULL && vtype->variant == TYPE_ADR;
@@ -813,9 +917,15 @@ Purpose:
 		if (vtype != NULL) {
 			if (vtype->variant != TYPE_STRUCT) return false;
 		}
-		default:
+
+	case TYPE_VAR:
+		return VarMatchesType(var, VarType2(type->var));
+		break;
+
+	default:
 		break;
 	}
+
 
 	return true;
 }
@@ -2069,7 +2179,7 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 8 && loc->n == 15) {
+	if (loc->blk->seq_no == 11 && loc->n == 1) {
 		Print("");
 	}
 
@@ -2100,7 +2210,7 @@ Bool InstrInferType(Loc * loc, void * data)
 
 		// For comparisons, we may check whether the condition is not always true or always false
 		if (IS_INSTR_BRANCH(i->op)) {
-			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
+			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL && !InVar(i->arg1) && !InVar(i->arg2)) {
 				taken = false;
 				not_taken = false;
 				not = false;
@@ -2133,7 +2243,7 @@ Bool InstrInferType(Loc * loc, void * data)
 					not = true;
 				case INSTR_IFTYPE:
 					if (TypeIsComplete(i->type[ARG1]) && TypeIsComplete(i->type[ARG2])) {
-						if (TypeEqual(i->type[ARG1], i->type[ARG2])) {
+						if (TypeIsEqual(i->type[ARG1], i->type[ARG2])) {
 							taken = true;
 						} else {
 							not_taken = true;
