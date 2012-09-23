@@ -4,7 +4,7 @@
 
 use "m6502"
 
-const BIN_EXTENSION = "xex"
+BIN_EXTENSION: "xex"
 type VARHEAP:0..255  
 
 ;6502 Simulator uses memory mapped IO ports at address $E000.

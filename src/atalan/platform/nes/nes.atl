@@ -15,7 +15,7 @@ rule prologue       =  "   opt h-" "   .byte('N', 'E', 'S', $1A, $02, $01,$00,$0
 rule epilogue       =  "   rts"  
 rule code_end       =  "   .align $FFF9,$00" "NMI:" "    rti" "   org $FFFA" "   .dw NMI" "   .dw RESET" "   .dw 0"
 rule line           = ";### %0(%1) %2"
-const BIN_EXTENSION = "nes"
+BIN_EXTENSION: "nes"
 
 ;Define variable used by assembler routines.
 _TEMPB1:adr

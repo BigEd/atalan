@@ -256,7 +256,7 @@ Purpose:
 
 		arr = GenArg(macro, var->adr, args, locals);
 
-		if (arr != var->adr && var->var->mode == INSTR_CONST && var->var->type->variant == TYPE_STRING) {
+		if (arr != var->adr && var->var->mode == INSTR_TEXT) {
 			var = VarField(arr, var->var->str);
 		} else {
 			arg = GenArg(macro, var->var, args, locals);	// index

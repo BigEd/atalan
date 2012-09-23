@@ -94,13 +94,6 @@ Input:
 // 1 live
 // 2 undecided
 
-void MarkBlockAsUnprocessed(InstrBlock * block)
-{
-	InstrBlock * nb;
-	for(nb = block; nb != NULL; nb = nb->next) {
-		nb->processed = false;
-	}
-}
 
 Bool VarInTuple(Var * var, Var * find_var)
 {

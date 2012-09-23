@@ -606,7 +606,7 @@ Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
 	Bool out_of_loop;
 
 	if (var == NULL) return true;
-	if (var->mode == INSTR_CONST) return true;
+	if (VarIsConst(var)) return true;
 	if (InVar(var)) return false;
 
 	// For array access, array adr is constant (except referenced array), important is index change
@@ -663,7 +663,7 @@ Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
 {
 
 	if (var == NULL) return false;
-	if (var->mode == INSTR_CONST) return false;
+	if (VarIsConst(var)) return false;
 	if (InVar(var)) return true;
 
 	// For array access, array adr is constant (except referenced array), important is index change

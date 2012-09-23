@@ -34,6 +34,8 @@ UInt8 OPTIMIZE;
 Bool  ASSERTS_OFF;			// do not generate asserts into output code
 char VERBOSE_PROC[128];		// name of procedure which should generate verbose output
 
+int Assemble(char * filename);
+
 Bool Verbose(Var * proc)
 /*
 Purpose:
@@ -94,7 +96,7 @@ int main(int argc, char *argv[])
 	Bool assembler = true;
 	Bool header = true;
 	int result = 0;
-	char filename[MAX_PATH_LEN], command[MAX_PATH_LEN], path[MAX_PATH_LEN], log_filename[MAX_PATH_LEN];
+	char filename[MAX_PATH_LEN], log_filename[MAX_PATH_LEN];
 	char * s;
 	Bool header_out;
 	char * platform = NULL;
@@ -139,7 +141,6 @@ int main(int argc, char *argv[])
 	OPTIMIZE = 255;
 	ASSERTS_OFF = false;
 	*VERBOSE_PROC = 0;
-//	StrCopy(VERBOSE_PROC, "print2");
 
 	//
     // Parse arguments.
@@ -194,7 +195,7 @@ int main(int argc, char *argv[])
         fprintf(STDERR, "Usage:\n"
 	"%s [options] file\n"
 	"  -v Verbose output\n"
-	"  -I <SYSTEM_DIR> define include path (default: current catalog)\n"
+	"  -i <SYSTEM_DIR> define include path (default: current catalog)\n"
 	"  -a Only generate assembler source code, but do not call assembler\n"
 	"  -p <name>  Platform to use\n"
 	"  -o <num>   Optimization level (0..9) 0 = no optimization\n"
@@ -212,7 +213,7 @@ int main(int argc, char *argv[])
 	//==== Split dir and filename
 
 	PathSeparate(filename, PROJECT_DIR, filename);
-	PrintFmt("Building %s%s.atl...\n", PROJECT_DIR, filename);
+	PrintFmt("Building %s%s.atl...\n\n", PROJECT_DIR, filename);
 
 	//===== Initialize logging
 	if (Verbose(NULL)) {
@@ -301,10 +302,6 @@ int main(int argc, char *argv[])
 		type = var->type;
 		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL && var->read > 0) {
 			if (Verbose(var)) {
-//				if (!header_out) {
-//					PrintHeader(1, "Parse");
-//					header_out = true;
-//				}
 				PrintHeader(2, var->name);
 				PrintProc(var);
 			}
@@ -312,10 +309,6 @@ int main(int argc, char *argv[])
 	}
 
 	if (Verbose(&ROOT_PROC)) {
-//		if (!header_out) {
-//			PrintHeader(1, "Parse");
-//			header_out = true;
-//		}
 		PrintHeader(2, ROOT_PROC.name);
 		PrintProc(&ROOT_PROC);
 	}
@@ -416,34 +409,9 @@ int main(int argc, char *argv[])
 
 	if (TOK == TOKEN_ERROR) goto failure;
 
-	EmitOpen(filename);
+	//===== Emit code to resulting file
 
-	VarUse();
-
-	if (Verbose(NULL)) {
-
-		PrintHeader(1, "Variables");
-
-		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-			if (var->write >= 1 || var->read >= 1) {
-				if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var)) {
-					PrintVar(var); PrintEOL();
-				}
-			}
-		}
-
-		PrintHeader(1, "Output");
-	} // verbose
-
-	EmitLabels();
-
-	//TODO: ProcessUsedProc
-	if (!EmitProc(&ROOT_PROC)) goto failure;
-	EmitProcedures();
-	EmitAsmIncludes();	
-	EmitInstrOp(INSTR_CODE_END, NULL, NULL, NULL);
-	VarEmitAlloc();
-	EmitClose();
+	Emit(filename);
 
 	//==== Call the assembler
 	//     The command to call is defined using rule for INSTR_COMPILER.
@@ -451,23 +419,9 @@ int main(int argc, char *argv[])
 
 	result = 0;
 	if (assembler) {	
-		PathMerge(path, PROJECT_DIR, filename);
-		var = VarFind("BIN_EXTENSION", 0);
-		EmitOpenBuffer(command);
-
-// On Windows, system command requires extra set of parentheses around whole command to correctly support
-// quoted exe.
-
-#ifdef __Windows__	
-		EmitChar('\"');
-#endif
-		EmitInstrOp(INSTR_COMPILER, VarNewStr(path), VarNewStr(var->str), NULL);
-#ifdef __Windows__	
-		EmitChar('\"');
-#endif
-		EmitCloseBuffer();
-		result = system(command);
+		result = Assemble(filename);
 	}
+
 done:
 	if (Verbose(NULL)) {
 		PrintLog(NULL);
@@ -479,4 +433,42 @@ done:
 failure:	
 	result = 2;
   	goto done;
+}
+
+int Assemble(char * filename)
+{
+	char command[MAX_PATH_LEN], path[MAX_PATH_LEN];
+
+	int result = 0;
+
+	Var * var, * ext;
+
+	PathMerge(path, PROJECT_DIR, filename);
+	var = VarFind("BIN_EXTENSION", 0);
+	if (VarIsConst(var)) {
+		if (var->type->variant == TYPE_VAR) {
+			ext = var->type->typevar;
+		} else {
+			ext = VarNewStr(var->str);
+		}
+	} else {
+		SyntaxError("BIN_EXTENSION should be constant");
+	}
+
+	EmitOpenBuffer(command);
+
+// On Windows, system command requires extra set of parentheses around whole command to correctly support
+// quoted exe.
+
+#ifdef __Windows__	
+	EmitChar('\"');
+#endif
+	EmitInstrOp(INSTR_COMPILER, VarNewStr(path), ext, NULL);
+#ifdef __Windows__	
+	EmitChar('\"');
+#endif
+	EmitCloseBuffer();
+	result = system(command);
+
+	return result;
 }

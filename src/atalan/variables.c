@@ -10,18 +10,24 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+// I  Integer constant functions
+
+GLOBAL Var * UNUSED_VARS;		    // scope in which are all the free variables
+GLOBAL VarBlock * VAR_BLOCKS;       // list of all variable blocks
+GLOBAL VarBlock * LAST_VAR_BLOCK;   // list of all variable blocks
 
 GLOBAL Var * VARS;		// global variables
 GLOBAL Var * LAST_VAR;  // Last allocated variable.
+
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
-GLOBAL Var * ZERO;
-GLOBAL Var * ONE;
-GLOBAL Var * INT;		// generic integer type variable (this is scope for all integer constants)
+
+
 GLOBAL char VAR_NAME[128];
 
-GLOBAL Var INT_VAR;
+void IntConstInit();
+
 
 /*
 We have theoretical option of supporting mltiple CPUs simultaneously (this the CPUS array).
@@ -36,6 +42,44 @@ char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
+
+VarBlock * VarBlockAlloc()
+{
+	Var * var, * next;
+	UInt16 i;
+	VarBlock * varblk;
+	varblk = MemAllocStruct(VarBlock);
+
+	// Initialize all variables in the block as unused and put them in the list of unused variables.
+
+	UNUSED_VARS = &varblk->vars[0];
+	var = UNUSED_VARS;
+
+	for(i=1; i < VAR_BLOCK_CAPACITY; i++) {
+		next = var+1;
+		var->mode = INSTR_NULL;
+		var->next_in_scope = next;
+		var = next;
+	}
+	// now initialize the last variable in the block
+	var->mode = INSTR_NULL;
+
+	return varblk;
+}
+
+Var * VarAllocUnused()
+{
+	Var * var;
+	if (UNUSED_VARS == NULL) {
+		LAST_VAR_BLOCK->next = VarBlockAlloc();
+		LAST_VAR_BLOCK = LAST_VAR_BLOCK->next;
+	}
+	var = UNUSED_VARS;
+	UNUSED_VARS = var->next_in_scope;
+	var->next_in_scope = NULL;
+	return var;
+}
+
 void VarInit()
 {
 
@@ -46,16 +90,13 @@ void VarInit()
 	TMP_LBL_IDX = 0;
 	SCOPE_IDX = 0;
 
+	VAR_BLOCKS = LAST_VAR_BLOCK = VarBlockAlloc();
+
 	// Alloc rule procedure and rule arguments (rule arguments are local arguments of RULE_PROC)
 
 	CPU = &CPUS[0];
 
-	MemEmpty(&INT_VAR, sizeof(Var));
-	INT = &INT_VAR;
-
-//	INT = VarAllocScope(NO_SCOPE, INSTR_VAR, NULL, 0);
-	ZERO = VarNewInt(0);
-	ONE  = VarNewInt(1);
+	IntConstInit();
 
 
 }
@@ -103,10 +144,7 @@ Argument:
 
 Var * VarNewRange(Var * min, Var * max)
 {
-	Var * var = VarAlloc(INSTR_RANGE, NULL, 0);
-
-	var->adr = min;
-	var->var = max;
+	Var * var = VarNewOp(INSTR_RANGE, min, max);
 
 	return var;
 }
@@ -146,6 +184,14 @@ Var * VarNewDeref(Var * adr)
 		var->type = adr->type->element;
 	}
 	return var;
+}
+
+Var * VarNewVariant(Var * left, Var * right)
+{
+	if (left == NULL) return right;
+	if (right == NULL) return left;
+	if (right == left) return left;
+	return VarNewOp(INSTR_VARIANT, left, right);
 }
 
 Var * VarNewOp(InstrOp op, Var * arr, Var * idx)
@@ -283,48 +329,6 @@ Bool VarIsArrayElement(Var * var)
 	return adr->type != NULL && adr->type->variant == TYPE_ARRAY;
 //	return var != NULL && var->mode == INSTR_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
 }
-/*
-Bool VarIsOut(Var * var)
-{
-	if (var == NULL) return false;
-	if (FlagOn(var->submode, SUBMODE_OUT)) return true;
-	if (var->mode == INSTR_ELEMENT) {
-		return VarIsOut(var->adr);
-	}
-	return false;
-}
-*/
-
-/****************************************************************************
-
-   Integer constant support
-
-*****************************************************************************/
-//$I
-
-Var * VarNewInt(Int32 n)
-/*
-Purpose:
-	Alloc new integer constant variable.
-*/
-{
-	Var * var;
-
-	// Try to find the integer constant in the scope
-	for(var = INT->subscope; var != NULL; var = var->next_in_scope) {
-		if (var->mode == INSTR_CONST && var->value_nonempty && var->n == n) return var;
-	}
-
-//	FOR_EACH_VAR(var)
-//		if (var->mode == INSTR_CONST && var->name == NULL && var->type == &TINT && var->n == n) return var;
-//	NEXT_VAR
-
-	var = VarAllocScope(INT, INSTR_CONST, NULL, 0);
-	var->type = &TINT;
-	var->value_nonempty = true;
-	var->n = n;
-	return var;
-}
 
 void VarLetStr(Var * var, char * str)
 {
@@ -336,7 +340,7 @@ void VarLetStr(Var * var, char * str)
 Var * VarNewStr(char * str)
 {
 	Var * var;
-	var = VarAlloc(INSTR_CONST, NULL, 0);
+	var = VarAlloc(INSTR_TEXT, NULL, 0);
 	VarLetStr(var, str);
 	return var;
 }
@@ -389,7 +393,7 @@ Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx)
 	if (scope == NULL) scope = SCOPE;
 	if (scope == NO_SCOPE) scope = NULL;
 
-	var = MemAllocStruct(Var);
+	var = VarAllocUnused();
 
 	var->mode  = mode;
 	var->name  = StrAlloc(name);
@@ -431,7 +435,7 @@ Var * VarClone(Var * scope, Var * var)
 {
 	Var * copy;
 
-	copy = MemAllocStruct(Var);
+	copy = VarAllocUnused();
 	MemMove(copy, var, sizeof(Var));
 	VarSetScope(var, scope);
 	return copy;
@@ -550,10 +554,18 @@ Bool VarIsLabel(Var * var)
 	return var->type->variant == TYPE_LABEL;
 }
 
+Bool TypeIsConst(Type * type)
+{
+	if (type->variant == TYPE_VAR) {
+		return VarIsConst(type->typevar);
+	}
+	return false;
+}
+
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
-	return var->mode == INSTR_CONST;
+	return var->mode == INSTR_CONST || var->mode == INSTR_TEXT || TypeIsConst(var->type);
 }
 
 Bool VarIsIntConst(Var * var)
@@ -631,7 +643,7 @@ Purpose:
 						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
 						EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
 					} else {
-						cnst = VarNewInt(size);
+						cnst = VarInt(size);
 						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
 						EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
 					}
@@ -815,7 +827,7 @@ void ProcUse(Var * proc, UInt8 flag)
 Purpose:
 	Mark all used procedures starting with specified root procedure.
 Arguments:
-	flag		VarProcInterrupt  This procedure is used from interrupt routine
+	flag		VarUsedInInterupt  This procedure is used from interrupt routine
 				VarProcAddress	  Address of this procedure is used
 */
 {
@@ -838,7 +850,7 @@ Arguments:
 	SetFlagOn(proc->flags, flag | VarProcessed);
 
 	if (ProcIsInterrupt(proc)) {
-		flag |= VarProcInterrupt;
+		flag |= VarUsedInInterupt;
 	}
 
 	// Mark all defined labels (those defined with label instruction)
@@ -870,13 +882,6 @@ Arguments:
 					if (VarType(i->arg2) == TYPE_PROC) {
 						ProcUse(i->arg2, flag | VarProcAddress);
 					}
-/*
-					if (i->result != NULL) {
-						if (!VarIsLocal(i->result, proc)) {
-							SetFlagOn(proc->submode, SUBMODE_OUT);
-						}
-					}
-*/
 					label = i->result;
 					if (label != NULL && label->type->variant == TYPE_LABEL) {
 						if (FlagOff(label->flags, VarLabelDefined)) {
@@ -1133,13 +1138,13 @@ Purpose:
 
 	if (vtype == TYPE_INT) {
 		if (StrEqual(fld_name, "min")) {
-			fld = VarNewInt(type->range.min);
+			fld = VarInt(type->range.min);
 		} else if (StrEqual(fld_name, "max")) {
-			fld = VarNewInt(type->range.max);
+			fld = VarInt(type->range.max);
 		}
 	} else if (vtype == TYPE_ARRAY) {
 		if (StrEqual(fld_name, "step")) {
-			fld = VarNewInt(type->step);
+			fld = VarInt(type->step);
 		}
 	}
 
@@ -1160,7 +1165,7 @@ Var * VarEvalConst(Var * var)
 				a = var->adr->n;
 				idx = var->var->n;
 				a = (a >> (idx * 8)) & 0xff;
-				r = VarNewInt(a);
+				r = VarInt(a);
 			}
 		}
 	}

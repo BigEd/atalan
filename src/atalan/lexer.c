@@ -444,19 +444,6 @@ retry:
 
 		ReadLine();
 
-		// --- is special block separating indented blocks
-		// Current indented block should have been ended due to smaller indent, so we should return the end of block,
-		// then this token should be returned (but no other end of blocks!)
-
-		if (LINE[LINE_POS] == '-' && LINE[LINE_POS+1] == '-' && LINE[LINE_POS+2] == '-') {
-			LINE_POS += 3;
-			while(LINE[LINE_POS] == '-') LINE_POS++;
-			BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
-			BLK[BLK_TOP].stop_token = TOKEN_HORIZ_RULE;
-			TOK = TOKEN_BLOCK_END;
-			return;
-		}
-
 		// This is end of line, all line blocks in current file should be ended
 		for(top = BLK_TOP; top > 0 && BLK[top].end_token == TOKEN_EOL || BLK[top].end_token == TOKEN_BLOCK_END; top--) {
 //		for(top = BLK_TOP; top > 0 && BLK[top].end_token != TOKEN_EOF; top--) {
@@ -487,10 +474,27 @@ retry:
 	TOKEN_POS = LINE_POS;
 	LINE_POS++;
 
+	// --- is special block separating indented blocks
+	// Current indented block should have been ended due to smaller indent, so we should return the end of block,
+	// then this token should be returned (but no other end of blocks!)
+/*
+	if (LINE[LINE_POS] == '-' && LINE[LINE_POS+1] == '-' && LINE[LINE_POS+2] == '-') {
+		LINE_POS += 3;
+		while(LINE[LINE_POS] == '-') LINE_POS++;
+//		BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+//		BLK[BLK_TOP].stop_token = TOKEN_HORIZ_RULE;
+//		TOK = TOKEN_BLOCK_END;
+		return;
+	}
+*/
 	*NAME = 0;
 
+	if (c == '-' && LINE[LINE_POS] == '-' && LINE[LINE_POS+1] == '-') {
+		LINE_POS += 2;
+		while(LINE[LINE_POS] == '-') LINE_POS++;
+		TOK = TOKEN_HORIZ_RULE;
 	// Identifier
-	if (isalpha(c) || c == '_' || c == '\'') {
+	} else if (isalpha(c) || c == '_' || c == '\'') {
 		n = 0;
 		// Identifier may be closed in ''
 		c2 = 0; if (c == '\'') {

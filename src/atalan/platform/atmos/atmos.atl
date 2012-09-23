@@ -18,7 +18,7 @@ rule code_end = "_CODE_END equ *-1"
 rule line      = ";### %0(%1) %2"
 
 ;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
-const BIN_EXTENSION = "tap"
+BIN_EXTENSION: "tap"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:128..255   

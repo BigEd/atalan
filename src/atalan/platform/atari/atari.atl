@@ -8,7 +8,7 @@ use "m6502"
 _stdbuf@$600
 _putchr_proc_adr@$653  ;+$654 
 
-const BIN_EXTENSION = "xex"
+BIN_EXTENSION: "xex"
 type VARHEAP:128..255() or 1536..1791  
 
 in out timer@20:byte
@@ -67,7 +67,7 @@ wait'line:macro =
 
 ;Joysticks & paddles
 
-type button'state:enum (pressed : 0, not'pressed : 1, true: 0)
+type button'state:enum (pressed : 0, not'pressed : 1, true: pressed)
 in STRIG@644:array(0..3) of button'state		;Set to 1 when joystick button is not pushed, 0 if pushed
 
 type stick'state:enum (
@@ -269,7 +269,7 @@ type key:enum
 	F4   : 84
 	HELP : 17
 	none : 255
-	false : 255
+	false : none
 	
 in out CH@764:key  ;last pressed character
 
@@ -278,6 +278,10 @@ wait'key:proc >k:key =
 	until CH <> none
 	k = CH
 	CH = none
+
+
+;Screen char is type representing the character as displayed on atari screen.
+display_char:type = 0..255
 
 ;*** DISPLAY LISTS
 

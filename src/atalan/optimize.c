@@ -38,7 +38,7 @@ void VarIncRead(Var * var)
 		if (var->mode == INSTR_VAR) {
 			// Do not increment constant used as address
 			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
-		} else if (var->mode == INSTR_CONST) {
+		} else if (var->mode == INSTR_CONST || var->mode == INSTR_TEXT) {
 		} else {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);
@@ -101,7 +101,6 @@ Purpose:
 {
 	Var * proc;
 	Var * var;
-
 	VarResetUse();
 
 	FOR_EACH_VAR(proc)
@@ -170,7 +169,7 @@ Purpose:
 				// TODO: Use VarNewElement.
 
 				if (n2 > 0 || n3 > 0) {
-					var2 = MemAllocStruct(Var);
+					var2 = VarAllocUnused();
 					memcpy(var2, var, sizeof(Var));
 					var2->adr = v2;
 					var2->var = v3;

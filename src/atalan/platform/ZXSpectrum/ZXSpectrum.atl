@@ -30,7 +30,7 @@ rule call 16 = "   rst 16"
 rule vardef ula,65535 = ""
 
 ;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
-const BIN_EXTENSION = "tzx"
+BIN_EXTENSION: "tzx"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:29000..29999   

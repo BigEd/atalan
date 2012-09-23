@@ -54,13 +54,13 @@ void EndErrorReport()
 	PrintDestination(ERR_OLD_DESTINATION);
 }
 
-static void ReportError(char * kind, char * text, UInt16 bookmark)
+static void ReportError(char * kind, char * text, Bookmark bookmark)
 /*
 	text	Text of error message
 			If the first character is >, indent will be visualized and column will not be shown
 */
 {
-	UInt16 i, token_pos, indent, line_cnt;
+	UInt16 i, token_pos, indent, line_cnt, indent_len, end_pos;
 	char c, * t;
 	char * line;
 	char buf[2048];
@@ -73,7 +73,13 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 	Bool no_rep = false;
 	UInt8 color;
 	Bool will_continue = false;
+	Bool to_here = false;
 	UInt16 len;
+
+	if (*text == '^') {
+		to_here = true;
+		text++;
+	}
 
 	if (*text == '$') {
 		name = true;
@@ -99,8 +105,8 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 	ERR_OLD_DESTINATION = PrintDestination(STDERR);
 
-	color = RED+LIGHT;
-	if (*kind == 'W') color = RED+GREEN+LIGHT;
+	color = COLOR_ERROR;
+	if (*kind == 'W') color = COLOR_WARNING;
 	line_cnt = 0;
 	ERR_OLD_COLOR = PrintColor(color);
 
@@ -216,10 +222,11 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 		}
 	}
 
+	indent_len = 0;
 	if (line != NULL && *line != 0) {
 
 		PrintEOL();
-		PrintColor(RED+GREEN+BLUE);
+		PrintColor(COLOR_LINE_POS);
 
 		while(*line == SPC || *line == TAB) {
 			if (show_indent) {
@@ -227,6 +234,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 				if (*line == TAB) Print("->|");
 			}
 			line++;
+			indent_len++;
 			if (token_pos > 0) token_pos--;
 		}
 
@@ -249,9 +257,19 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 					PrintChar(c);
 					i++;
 				}
-				Print("^\n");
+				Print("^");
+				i++;
+				if (to_here) {
+					for(end_pos = TOKEN_POS-indent_len-1; end_pos>0 && line[end_pos]==' ';) end_pos--;
+
+					while(i<=end_pos) {
+						Print("^");
+						i++;
+					}
+				}
 			}
 		}
+		PrintEOL();
 		PrintColor(color);
 	}
 
@@ -259,7 +277,7 @@ static void ReportError(char * kind, char * text, UInt16 bookmark)
 
 }
 
-void SyntaxErrorBmk(char * text, UInt16 bookmark)
+void SyntaxErrorBmk(char * text, Bookmark bookmark)
 {
 	ReportError("Syntax error", text, bookmark);
 	TOK = TOKEN_ERROR;
@@ -271,7 +289,7 @@ void SyntaxError(char * text)
 	SyntaxErrorBmk(text, 0);
 }
 
-void LogicWarning(char * text, UInt16 bookmark)
+void LogicWarning(char * text, Bookmark bookmark)
 {
 	ReportError("Warning", text, bookmark);
 	LOGIC_ERROR_CNT++;
@@ -279,17 +297,17 @@ void LogicWarning(char * text, UInt16 bookmark)
 
 void LogicWarningLoc(char * text, Loc * loc)
 {
-	UInt16 bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLine(loc);
 	LogicWarning(text, bookmark);
 }
 
 void LogicErrorLoc(char * text, Loc * loc)
 {
-	UInt16 bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLine(loc);
 	LogicError(text, bookmark);
 }
 
-void LogicError(char * text, UInt16 bookmark)
+void LogicError(char * text, Bookmark bookmark)
 {
 	ReportError("Logic error", text, bookmark);
 	ERROR_CNT++;
@@ -300,7 +318,7 @@ void InternalError(char * text, ...)
 	UInt8 old_color;
 	char buffer[256];
 	va_list argp;
-	old_color = PrintColor(RED+LIGHT);
+	old_color = PrintColor(COLOR_ERROR);
 	Print("Internal error: ");
 	va_start(argp, text);
 	vsprintf(buffer, text, argp);
@@ -317,7 +335,7 @@ void InternalError(char * text, ...)
 
 void InternalErrorLoc(char * text, Loc * loc)
 {
-	UInt16 bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLine(loc);
 	ReportError("Internal error", text, bookmark);
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
@@ -328,7 +346,7 @@ void Warning(char * text)
 	fprintf(STDERR, "Warning: %s\n", text);
 }
 
-UInt16 SetBookmark()
+Bookmark SetBookmark()
 {
 	BOOKMARK_LINE_NO = LINE_NO;
 	BOOKMARK_LINE_POS = TOKEN_POS;
@@ -344,7 +362,7 @@ InstrBlock * PrevBlk(InstrBlock * first, InstrBlock * blk)
 	return b;
 }
 
-UInt16 SetBookmarkLine(Loc * loc)
+Bookmark SetBookmarkLine(Loc * loc)
 {
 	Instr * i;
 	InstrBlock * blk = loc->blk;
@@ -373,7 +391,7 @@ UInt16 SetBookmarkLine(Loc * loc)
 	return 1;
 }
 
-UInt16 SetBookmarkVar(Var * var)
+Bookmark SetBookmarkVar(Var * var)
 {
 	LINE_NO = var->line_no;
 	BOOKMARK_LINE_NO = var->line_no;

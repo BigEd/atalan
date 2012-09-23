@@ -28,7 +28,7 @@ Purpose:
 	if (t->mode == INSTR_ELEMENT) {
 		scope = VarGen(t->adr);
 		var = VarAllocScope(scope, INSTR_VAR, t->var->str, 0);
-	} else if (t->mode == INSTR_CONST) {
+	} else if (VarIsConst(t)) {
 		var = t;
 	} if (VarIsRuleArg(t)) {
 		var = MACRO_ARG[t->idx-1];
@@ -43,7 +43,7 @@ Type * TypeGen(Type * t)
 	if (t == NULL) return t;
 	type = t;
 	if (t->variant == TYPE_VAR) {
-		var = t->var;
+		var = t->typevar;
 		if (var->mode == INSTR_ELEMENT) {
 			if (VarIsRuleArg(var->adr)) {
 				idx = MACRO_ARG[var->adr->idx-1];
@@ -113,8 +113,8 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_RETURN,      "return", "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_ENDPROC,     "endproc", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_CALL,        "call", "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// generate str
+	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// generate str
 
 	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_FILE,        "file", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
@@ -157,7 +157,9 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_TYPE,        "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_SCOPE,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_SRC_FILE,    "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			//{ INSTR_SRC_FILE variable representing source file
-	{ INSTR_BIT,         "", "%", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },				// <var> <bit_index>  access bits of specified variable
+	{ INSTR_BIT,         "", "%", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <var> <bit_index>  access bits of specified variable
+	{ INSTR_TEXT,        "text", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Text constant
+	{ INSTR_VARIANT,     "variant", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		// one of the two values (set)
 };
 
 
@@ -442,48 +444,48 @@ Result:
 		switch(op) {
 			case INSTR_SQRT:
 				if (*n1 >= 0) {
-					r = VarNewInt((UInt32)sqrt(*n1));
+					r = VarInt((UInt32)sqrt(*n1));
 				} else {
 					// Error: square root of negative number
 				}
 				break;
 			case INSTR_LO:
-				r = VarNewInt(*n1 & 0xff);
+				r = VarInt(*n1 & 0xff);
 				break;
 			case INSTR_HI:
-				r = VarNewInt((*n1 >> 8) & 0xff);
+				r = VarInt((*n1 >> 8) & 0xff);
 				break;
 			case INSTR_DIV:
 				if (*n2 != 0) {
-					r = VarNewInt(*n1 / *n2);
+					r = VarInt(*n1 / *n2);
 				} else {
 					SyntaxError("division by zero");
 				}
 				break;
 			case INSTR_MOD:
 				if (*n2 != 0) {
-					r = VarNewInt(*n1 % *n2);
+					r = VarInt(*n1 % *n2);
 				} else {
 					SyntaxError("division by zero");
 				}
 				break;
 			case INSTR_MUL:
-				r = VarNewInt(*n1 * *n2);
+				r = VarInt(*n1 * *n2);
 				break;
 			case INSTR_ADD:
-				r = VarNewInt(*n1 + *n2);
+				r = VarInt(*n1 + *n2);
 				break;
 			case INSTR_SUB:
-				r = VarNewInt(*n1 - *n2);
+				r = VarInt(*n1 - *n2);
 				break;
 			case INSTR_AND:
-				r = VarNewInt(*n1 & *n2);
+				r = VarInt(*n1 & *n2);
 				break;
 			case INSTR_OR:
-				r = VarNewInt(*n1 | *n2);
+				r = VarInt(*n1 | *n2);
 				break;
 			case INSTR_XOR:
-				r = VarNewInt(*n1 ^ *n2);
+				r = VarInt(*n1 ^ *n2);
 				break;
 			default: break;
 		}
@@ -594,12 +596,12 @@ Arguments:
 			max1 = range->var;
 		} else {
 			min1 = arr->var;
-			max1 = VarNewInt(arr->adr->type->index->range.max);
+			max1 = VarInt(arr->adr->type->index->range.max);
 		}
 		dst_arr = arr->adr;
 	} else {
-		min1 = VarNewInt(type->index->range.min);
-		max1 = VarNewInt(type->index->range.max);
+		min1 = VarInt(type->index->range.min);
+		max1 = VarInt(type->index->range.max);
 		dst_arr = arr;
 	}
 
@@ -607,8 +609,8 @@ Arguments:
 	
 	// This is copy instruction (source is array)
 	if (src_type->variant == TYPE_ARRAY) {		
-		src_min = VarNewInt(src_type->index->range.min);
-		src_max = VarNewInt(src_type->index->range.max + 1);
+		src_min = VarInt(src_type->index->range.min);
+		src_max = VarInt(src_type->index->range.max + 1);
 		src_idx = VarNewTmp(src_type->index);
 		init = VarNewElement(init, src_idx);
 		label_done = VarNewTmpLabel();
@@ -623,7 +625,7 @@ Arguments:
 		} else {
 			stop_n++;
 		}
-		stop = VarNewInt(stop_n);
+		stop = VarInt(stop_n);
 	} else {
 		stop = max1;
 	}
@@ -639,10 +641,10 @@ Arguments:
 	GenLabel(label);
 	GenLet(VarNewElement(dst_arr, idx), init);
 	if (src_idx != NULL) {
-		Gen(INSTR_ADD, src_idx, src_idx, VarNewInt(1));
+		Gen(INSTR_ADD, src_idx, src_idx, VarInt(1));
 		Gen(INSTR_IFEQ, label_done, src_idx, src_max);
 	}
-	Gen(INSTR_ADD, idx, idx, VarNewInt(1));
+	Gen(INSTR_ADD, idx, idx, VarInt(1));
 	Gen(INSTR_IFNE, label, idx, stop);
 	if (src_idx != NULL) {
 		GenLabel(label_done);
@@ -750,11 +752,9 @@ void PrintVarVal(Var * var)
 				PrintVarVal(var->var);
 				Print(")");
 			} else if (var->mode == INSTR_CONST) {
-				switch(var->type->variant) {
-				case TYPE_INT: PrintInt(var->n); break;
-				case TYPE_STRING: Print("'"); Print(var->str); Print("'"); break;
-				default: break;
-				}
+				PrintInt(var->n);
+			} else if (var->mode == INSTR_TEXT) {
+				Print("'"); Print(var->str); Print("'");
 			} else {
 				Print("(");
 				PrintVarVal(var->adr);
@@ -1013,4 +1013,13 @@ Purpose:
 {
 	if (i == NULL || i->result == NULL) return false;
 	return VarModifiesVar(i->result, i->arg1) || VarModifiesVar(i->result, i->arg2);
+}
+
+
+void ForEachBlock(InstrBlock * blk, ProcessBlockFn process_fn, void * info)
+{
+	while(blk != NULL) {
+		process_fn(blk, info);
+		blk = blk->next;
+	}
 }

@@ -84,6 +84,8 @@
     <ClCompile Include="gen.c" />
     <ClCompile Include="instr.c" />
     <ClCompile Include="bigint.c" />
+    <ClCompile Include="opt_global.c" />
+    <ClCompile Include="var_int.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="mem_heap.c" />

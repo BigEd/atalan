@@ -28,7 +28,7 @@ Purpose:
 		if (var->mode == INSTR_ELEMENT) {
 			var_idx = var->var;
 			if (VarIsEqual(var_idx, idx)) {
-				idx = VarNewOp(INSTR_SUB, idx, VarNewInt(shift));
+				idx = VarNewOp(INSTR_SUB, idx, VarInt(shift));
 				*p_var = VarNewElement(var->adr, idx);
 				return true;
 			} else if (var_idx->mode == INSTR_SUB) {
@@ -86,7 +86,7 @@ Var * VarAddNMod(Var * left, IntLimit right, IntLimit modulo)
 {
 	Var * var = NULL;
 	if (VarIsIntConst(left)) {
-		var = VarNewInt((left->n + right) % modulo);
+		var = VarInt((left->n + right) % modulo);
 	}
 	return var;
 }

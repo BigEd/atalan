@@ -5,6 +5,8 @@ Assign addresses to variables
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
+This module is responsible for assigning physical addresses to variables.
+
 */
 
 #include "language.h"
@@ -48,16 +50,248 @@ done:
 	return calls;
 }
 
-void AllocateVariablesFromHeap(Var * scope, MemHeap * heap)
+typedef Bool (*VarFilter)(Var * var);
+
+void ProcAddLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
 /*
 Purpose:
-	Allocate procedure local variables using specified heap.
+	Return all local variables from procedure.
+	Variables from subscopes are added (for example 'for' variables).
+	Variables from other procedured are not added.
 */
 {
 	Var * var;
-	UInt32 size, adr;
 
-	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
+	FOR_EACH_LOCAL(proc, var)
+		if (var->mode == INSTR_SCOPE) {
+			if (var != CPU->SCOPE) {
+				ProcAddLocalVars(var, set, filter_fn);
+			}
+		} else {
+			// Unused variables and labels are not part of resule
+			if ((var->write > 0 || var->read > 0)) {
+				if (var->mode == INSTR_VAR) {
+					if (filter_fn(var)) {
+						VarSetAdd(set, var, NULL);
+					}
+				}
+			}
+		}
+	NEXT_LOCAL
+}
+
+void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
+{
+	VarSetEmpty(set);
+	ProcAddLocalVars(proc, set, filter_fn);
+}
+
+typedef UInt8 * LiveSet;
+
+typedef struct
+{
+	VarSet vars;
+	UInt8 * collisions;			// 2D array of collisions of local_variables
+	LiveSet last_block;
+} VarAllocInfo;
+
+
+LiveSet MergeLiveSets(InstrBlock * blk, UInt16 count, LiveSet last_block)
+{
+	UInt16 i;
+	LiveSet src_live;
+	LiveSet live = (LiveSet)MemAllocEmpty(count);
+
+	// For the last block, begin with of last block info
+	if (blk->to == NULL && blk->cond_to == NULL) {
+		MemMove(live, last_block, count);
+	// For non-last block, use union of to and cond_to block results
+	} else {
+		if (blk->to != NULL) {
+			MemMove(live, blk->to->analysis_data, count);
+		}
+		if (blk->cond_to != NULL) {
+			src_live = (LiveSet)blk->cond_to->analysis_data;
+			for(i=0; i<count; i++) {
+				live[i] = live[i] | src_live[i];
+			}
+		}
+	}
+	return live;
+}
+
+void MarkVarCollision(VarAllocInfo * info, LiveSet live, UInt16 idx)
+{
+	UInt16 count, i;
+	count = VarSetCount(&info->vars);
+	for(i=0; i<count; i++) {
+		if (live[i] == 1) {
+			info->collisions[idx*count+i] = 1;
+			info->collisions[i*count+idx] = 1;
+		}
+	}
+
+}
+
+void VarAllocVar(VarAllocInfo * info, Var * var, LiveSet live, UInt8 mark)
+{
+	UInt16 idx;
+	if (var->mode == INSTR_VAR) {
+		idx = var->set_index;
+		if (idx >=0 && idx<= VarSetCount(&info->vars) && VarSetItem(&info->vars, idx)->key == var) {
+			live[idx] = mark;
+			if (mark == 1) {
+				MarkVarCollision(info, live, idx);
+			}
+		}
+	}
+}
+
+void VarAllocBlock(InstrBlock * blk, void * pinfo)
+{
+	Instr * i;
+	VarAllocInfo * info = (VarAllocInfo *)pinfo;
+	UInt16 count = VarSetCount(&info->vars);
+	LiveSet live = MergeLiveSets(blk, count, info->last_block);
+	InstrInfo * ii;
+
+	// Traverse block backwards and mark variables as live/dead
+
+	for(i = blk->last; i != NULL; i = i->prev) {
+		ii = &INSTR_INFO[i->op];
+
+		if (ii->arg_type[0] != TYPE_VOID) {
+			VarAllocVar(info, i->result, live, 0);
+			// mark variable as dead
+		}
+
+		if (ii->arg_type[1] != TYPE_VOID) {
+			VarAllocVar(info, i->arg1, live, 1);
+		}
+
+		if (ii->arg_type[2] != TYPE_VOID) {
+			VarAllocVar(info, i->arg2, live, 1);
+		}
+	}
+	blk->analysis_data = live;
+
+}
+
+Bool FilterVar(Var * var)
+{
+	return !VarIsLabel(var) && var->type->variant != TYPE_PROC && var->type->variant != TYPE_MACRO && !VarIsReg(var);
+}
+
+void PrintCollisions(VarAllocInfo * info)
+{
+	UInt16 i, j, count;
+
+	count = VarSetCount(&info->vars);
+
+	for(i = 0; i < count; i++) {
+		for(j = 0; j < count; j++) {
+			Print(info->collisions[i*count+j]==0?".":"X");
+		}
+		PrintEOL();
+	}
+
+}
+
+void BlockFreeLiveSet(InstrBlock * blk, void * pinfo)
+{
+	MemFree(blk->analysis_data);
+	blk->analysis_data = NULL;
+}
+
+void AllocateVariablesFromHeap(Var * proc, MemHeap * heap)
+/*
+Purpose:
+	Allocate procedure local variables using specified heap.
+	Try to reuse non-conflicting variables.
+	Two variables are in conflict, if they are used in the same time.
+*/
+{
+	Var * var, * var2;
+	UInt32 size, adr;
+	UInt16 i, j, count;
+	VarAllocInfo info;
+
+	// Get all local variables defined for the procedure.
+	// As we are going to assign addresses to them, labels, procedures, macros and registers are excluded.
+
+	VarSetInit(&info.vars);
+	ProcLocalVars(proc, &info.vars, &FilterVar);
+	count = VarSetCount(&info.vars);
+
+	// Graph of variable collisions is represented as 2D array.
+	// If item collision[a,b] is set to 1, it means the variables a and b are colliding (i.e. they are live at the same moment)
+	info.collisions = (UInt8 *)MemAllocEmpty(count * count);
+
+	// For first live set, mark all output variables as live.
+	info.last_block = (LiveSet)MemAllocEmpty(count);
+	for(i=0; i<count; i++) {
+		var = VarSetItem(&info.vars, i)->key;
+		if (VarIsOutArg(var)) {
+			VarAllocVar(&info, var, info.last_block, 1);
+		}
+	}
+
+//	VarSetPrint(&info.vars);
+
+	OptimizeDataFlowBack(proc, &VarAllocBlock, &info);
+
+//	PrintCollisions(&info);
+
+	for(i = 0; i < count; i++) {
+		var = VarSetItem(&info.vars, i)->key;
+
+		// Do not assign address to variable that already has address
+		if (var->adr == NULL) {
+			size = TypeSize(var->type);		
+			if (size > 0) {
+
+				// Try to find another variable with address which does not collide with this variable
+				for(j = 0; j < count; j++) {
+					if (i != j && info.collisions[i*count+j] == 0) {
+						var2 = VarSetItem(&info.vars, j)->key;
+						if (VarIsIntConst(var2->adr)) {
+							if (TypeSize(var2->type) == size) {
+								// We have found the variable, whose address we can use
+
+								// Mark variable to which we assign address of other variable to be conflicting with same variables as the other
+								MarkVarCollision(&info, &info.collisions[j*count], i);
+								MarkVarCollision(&info, &info.collisions[i*count], j);
+//								PrintVarName(var); Print("@"); PrintVarName(var2); PrintEOL();
+//								PrintCollisions(&info);
+
+								var->adr = var2;
+								goto next;
+							}
+						}
+					}
+
+				}
+
+				if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
+//							PrintVarName(var); Print("@%d\n", adr);
+					var->adr = VarInt(adr);
+				} else {
+					// failed to alloc memory
+				}
+			}
+		}
+next: ;
+	}
+
+	// Cleanup
+
+	MemFree(info.collisions);
+	MemFree(info.last_block);
+	VarSetCleanup(&info.vars);
+	ForEachBlock(proc->instr, &BlockFreeLiveSet, NULL);
+
+/*
+	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
 
 		// Scope can contain variables in subscope, we need to allocate them too
 		if (var->mode == INSTR_SCOPE) {
@@ -70,7 +304,7 @@ Purpose:
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
 //							PrintVarName(var); Print("@%d\n", adr);
-							var->adr = VarNewInt(adr);
+							var->adr = VarInt(adr);
 						} else {
 							// failed to alloc in zero page
 						}
@@ -79,6 +313,7 @@ Purpose:
 			}
 		}
 	}
+*/
 }
 
 #define VAR_ADD 0
@@ -175,7 +410,7 @@ void AllocateVariables(Var * proc)
 //		}
 
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
-			if (proc2 != proc && (FlagOn(proc2->flags, VarProcInterrupt) || ProcCallsProc(proc, proc2) || ProcCallsProc(proc2, proc))) {
+			if (proc2 != proc && (FlagOn(proc2->flags, VarUsedInInterupt) || ProcCallsProc(proc, proc2) || ProcCallsProc(proc2, proc))) {
 //				if (StrEqual(proc->name, "drawmainscreen")) {
 //					HeapPrint(&heap);
 //				}

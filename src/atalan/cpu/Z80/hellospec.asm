@@ -7,27 +7,67 @@ start
 	xor a
 	ld (tv_flag),a
 
-	ld b, 50
+	ld hl, print_char2
+	call print
+	db 5,"Hello",1," ",5,"World",0
+	
+	ld a, 'Z'
+	call print_char
+	ret
 
-another
+;Print characters based on format string stored after the call instruction.
 
-	push bc
+;Uses a,d,hl
 
-	ld hl,hello
-again	ld a,(hl)
+;Destination address is in BC
+print_mem: PROC
+	ld hl, store_char
+	ENDP
+
+;IN: HL  address of print char procedure 
+print:  PROC
+
+	local token,chars,exit
+
+	pop bc
+	
+token:	
+	ld a, (bc)
+	inc bc
 	cp 0
-	jr z, exit
+	jr z,exit
+	ld d,a
+	;print D characters from BC address
+chars:			
+	ld a,(bc)		;load command
+	inc bc
+	call print_char  ;print_char
+	dec d
+	jr nz,chars
+	jr token
+	
+exit:
+	push bc
+	ret 
+	
+print_char:
+	jp (hl)
+	ENDP
+
+store_char: PROC
+	ld (de),a
+	inc de
+	ENDP
+		
+;Print one character on screen	
+print_char2 PROC
 	push hl
 	rst 10h
 	pop hl
-	inc hl
-	jr again
-
-exit
-	pop bc
-	djnz another
 	ret
 
-hello	db "Hello, world.", 0Dh, 0
+	ENDP
+
+;hello	db "Hello, world.", 0Dh, 0
 
 	end start
