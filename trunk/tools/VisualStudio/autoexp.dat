@@ -6,15 +6,17 @@
 VarTag{
 	preview(
 	  #(
-			#if   ($e.mode == 60)  ( #( ($e.adr), "(", ($e.var), ")" ))
-			#elif ($e.mode == 61) ( #( ($e.adr), "$", ($e.var) ))
-			#elif ($e.mode == 62) ( #( ($e.adr), "..", ($e.var) ))
-			#elif ($e.mode == 63) ( #( ($e.adr), ",", ($e.var) ))
-			#elif ($e.mode == 64) ( #( "@", ($e.var) ))
+			#if   ($e.mode == 61) ( #( ($e.adr), "#", ($e.var) ))
+			#elif ($e.mode == 20) ( #( "(", ($e.adr), "-", ($e.var), ")" ))
+			#elif ($e.mode == 62) ( #( ($e.adr), "$", ($e.var) ))
+			#elif ($e.mode == 63) ( #( ($e.adr), "..", ($e.var) ))
+			#elif ($e.mode == 64) ( #( "(", ($e.adr), ",", ($e.var), ")" ))
+			#elif ($e.mode == 65) ( #( "@", ($e.var) ))
+			#elif ($e.mode == 72) ( #( ($e.adr), "|", ($e.var) ))
 			#else (#(	  
 		  	#if ($e.name != 0) ([$e.name,sb]),
 		  	#if ($e.idx != 0) ( $e.idx -1 ),
-		  	#if ($e.mode == 59) ( #( " ", $e.n))
+		  	#if ($e.mode == 60) ( #( $e.n))
 		  ))
 	  )
 	)
@@ -34,4 +36,28 @@ InstrTag{
 		)
 	)
 }
+
+TypeTag{
+	preview(
+	  #(
+			#if   ($e.variant == 0)  ( "void" )
+			#elif ($e.variant == 1) ( #( $e.range.min, "..", $e.range.max ))
+			#elif ($e.variant == 2) ( #( "struct" ))
+			#elif ($e.variant == 3) ( #( "proc" ))
+			#elif ($e.variant == 4) ( #( "macro" ))
+			#elif ($e.variant == 5) ( #( "string" ))
+			#elif ($e.variant == 6) ( #( "array(", $e.index, ") of ", $e.element ))
+			#elif ($e.variant == 7) ( #( "label" ))
+			#elif ($e.variant == 8) ( #( "adr" ))
+			#elif ($e.variant == 9) ( #( "variant" ))
+			#elif ($e.variant == 10) ( #( $e.left, ", ", $e.right ))
+			#elif ($e.variant == 11) ( #( "undefined" ))
+			#elif ($e.variant == 12) ( #( "scope" ))
+			#elif ($e.variant == 13) ( #( "sequence ", $e.seq.init, "<", $e.seq.limit ))
+			#else (#(	  
+		  ))
+	  )
+	)
+}
+
 ;----- Atalan end

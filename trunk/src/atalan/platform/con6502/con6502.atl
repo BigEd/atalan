@@ -4,8 +4,6 @@
 
 use m6502
 
-_stdbuf@$300
-
 ;Console application stores load address as first two bytes of file
 rule prologue = "   opt f+ h-" "_CODE_START equ $400" "   org [a(_CODE_START)],_CODE_START"
 
@@ -18,7 +16,7 @@ rule code_end = "_CODE_END equ *-1"
 rule line      = ";### %0(%1) %2"
 
 ;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
-const BIN_EXTENSION = "c65"
+BIN_EXTENSION: "c65"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:128..255   

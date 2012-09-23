@@ -1,1 +1,1 @@
-﻿pasmo --tzxbas hellospec.asm hellospec.tzx
+pasmo --tzxbas hellospec.asm hellospec.tzx

@@ -30,7 +30,6 @@ Normal rules translate compiler instruction to zero or more compiler instruction
 
 */
 
-GLOBAL RuleSet MACRO_RULES;			// Rules used to generate instructions while parsing
 GLOBAL RuleSet TRANSLATE_RULES;
 GLOBAL RuleSet INSTR_RULES;
 
@@ -337,6 +336,14 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	case RULE_VALUE:
 		if (!VarIsConst(arg)) return false;
 		pvar = pattern->var;
+		if (pvar->mode == INSTR_TEXT) {
+			if (!StrEqual(pvar->str, arg->str)) return false;
+		} else {
+			if (pvar->value_nonempty) {
+				if (pvar->n != arg->n) return false;
+			}
+		}
+/*
 		if (pvar->value_nonempty) {
 			switch (pvar->type->variant) {
 			case TYPE_INT: 
@@ -350,6 +357,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		} else {
 			// TODO: Test, that arg const matches the specified type
 		}
+*/
 		break;
 
 	// Exact variable.
@@ -373,7 +381,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	// %A:type
 	case RULE_ARG:
 		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
-		if (arg->mode == INSTR_VAR || arg->mode == INSTR_CONST || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
+		if (arg->mode == INSTR_VAR || VarIsConst(arg) || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
 			if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
 			if (!VarMatchesPattern(arg, pattern)) return false;
 		} else {
@@ -554,7 +562,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 	// It is not possible to translate the instruction directly.
 	// We will try to simplify the translated instruction by taking one of it's complex arguments
-	// and replcing it by simple variable.
+	// and replacing it by simple variable.
 	// The variable will be assigned the value using LET instruction before it gets used in the instruction.
 	// We are thus replacing one instruction by set of two or more instructions.
 
@@ -651,10 +659,11 @@ Purpose:
 	Instr * i, * first_i, * next_i;
 	InstrBlock * blk;
 	UInt8 step = 0;
-	UInt32 n;
 	Bool in_assert;
 	UInt8 color;
+	Loc loc;
 
+	loc.proc = proc;
 	VERBOSE_NOW = false;
 	if (Verbose(proc)) {
 		VERBOSE_NOW = true;
@@ -681,7 +690,8 @@ Purpose:
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
-		n = 1;
+		loc.blk = blk;
+		loc.n = 1;
 		// The translation is done by using procedures for code generating.
 		// We detach the instruction list from block and set the block as destination for instruction generator.
 		// In this moment, the code generating stack must be empty anyways.
@@ -693,6 +703,7 @@ Purpose:
 
 		while(i != NULL) {
 
+			loc.i = i;
 			if (ASSERTS_OFF) {
 				if (i->op == INSTR_ASSERT_BEGIN) {
 					in_assert = true;
@@ -707,34 +718,29 @@ Purpose:
 
 			if (VERBOSE_NOW) {
 				color = PrintColor(RED+BLUE);
-				PrintInstrLine(n); InstrPrint(i);
+				PrintInstrLine(loc.n); InstrPrint(i);
 				PrintColor(color);
 			}
 
 			if (!InstrTranslate3(i->op, i->result, i->arg1, i->arg2, GENERATE)) {
-
-				InternalError("Failed translate instruction"); InstrPrint(i);
-
-/*
-				// Array assignment default
-				if (i->op == INSTR_LET) {
-					var = i->result;
-					item = i->arg1;
-					if (var->type->variant == TYPE_ARRAY || var->mode == INSTR_ELEMENT && var->var->mode == INSTR_RANGE || (var->mode == INSTR_ELEMENT && item->type->variant == TYPE_ARRAY) ) {
-						GenArrayInit(var, item);
-						modified = true;
-						goto next;
-					}
-				}
-
-*/
+				InternalErrorLoc("Unsupported instruction", &loc); 
+				InstrPrint(i);
 			}
 next:
 			next_i = i->next;
+//			InstrFree(i);
+			i = next_i;
+			loc.n++;
+		}
+
+		// Free the instructions
+		i = first_i;
+		while (i!=NULL) {
+			next_i = i->next;
 			InstrFree(i);
 			i = next_i;
-			n++;
 		}
+	
 	} // block
 }
 
@@ -756,7 +762,6 @@ void TranslateInit()
 		MACRO_ARG_VAR[i] = var;
 	}
 
-	RuleSetInit(&MACRO_RULES);
 	RuleSetInit(&TRANSLATE_RULES);
 	RuleSetInit(&INSTR_RULES);
 }

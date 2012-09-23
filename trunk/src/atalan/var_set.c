@@ -90,9 +90,24 @@ Purpose:
 		tuple = &set->arr[set->count];
 		tuple->key = key;
 		tuple->var = var;
+		key->set_index = set->count;
 		set->count++;
 	} else {
 		set->arr[i].var = var;
 	}
 }
 
+VarTuple * VarSetItem(VarSet * set, UInt16 index)
+{
+	return &set->arr[index];
+}
+
+void VarSetPrint(VarSet * set)
+{
+	VarTuple * tuple;
+	UInt16 cnt, i;
+	for(cnt = set->count, tuple = set->arr, i = 0; cnt>0; cnt--, tuple++, i++) {
+		PrintVar(tuple->key);
+		PrintEOL();
+	}
+}

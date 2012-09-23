@@ -46,6 +46,8 @@ struct TypeBlockTag {
 	Type        types[TYPE_BLOCK_CAPACITY];
 };
 
+void VarRange(Var * var, BigInt ** p_min, BigInt ** p_max);
+
 GLOBAL TypeBlock TYPES;
 
 /*
@@ -478,13 +480,61 @@ Purpose:
 */
 {
 	Var * min, * max;
-	min = VarNewInt(type->range.min);
-	max = VarNewInt(type->range.max);
+	min = VarInt(type->range.min);
+	max = VarInt(type->range.max);
 	*p_min = min;
 	*p_max = max;
 }
 
 extern Var * MACRO_ARG[MACRO_ARG_CNT];
+
+Bool TypeIsSubsetOfVar(Type * type, Var * var)
+{
+	BigInt * min, * max;
+
+	if (VarIsRuleArg(var)) {
+		var = MACRO_ARG[var->idx-1];
+	}
+
+	if (var->mode == INSTR_VAR) {
+		if (var->type->variant == TYPE_TYPE) {
+			return TypeIsSubsetOf(type, var->type_value);
+		} else {
+			return TypeIsSubsetOf(type, var->type);
+		}
+	} else if (var->mode == INSTR_RANGE) {
+		if (type->variant == TYPE_INT) {
+			VarRange(var, &min, &max);
+			if (IntHigher(&type->range.max,  max)) return false;
+			if (IntLower(&type->range.min, min)) return false;
+		}
+	}
+	return true;
+}
+
+Bool VarIsSubsetOfType(Var * var, Type * type)
+{
+	BigInt * min, * max;
+
+	if (VarIsRuleArg(var)) {
+		var = MACRO_ARG[var->idx-1];
+	}
+
+	if (var->mode == INSTR_RANGE || var->mode == INSTR_CONST) {
+		if (type->variant == TYPE_INT) {
+			VarRange(var, &min, &max);
+			if (IntHigher(max, &type->range.max)) return false;
+			if (IntLower(min, &type->range.min)) return false;
+		}
+	} else if (var->mode == INSTR_VAR) {
+		if (var->type->variant == TYPE_TYPE) {
+			return TypeIsSubsetOf(var->type_value, type);
+		} else {
+			return TypeIsSubsetOf(var->type, type);
+		}		
+	}
+	return true;
+}
 
 Bool TypeIsSubsetOf(Type * type, Type * master)
 /*
@@ -492,27 +542,24 @@ Purpose:
 	Return true, if first type is subset of second type.
 */
 {
-	Var * var;
+
 	if (type == master) return true;
 	if (type == NULL || master == NULL) return false;
+
 	if (master->variant == TYPE_VARIANT) {
 		return TypeIsSubsetOf(type, master->left) || TypeIsSubsetOf(type, master->right);
 	}
+
 	if (master->variant == TYPE_VAR) {
-		var = master->var;
-		if (VarIsRuleArg(master->var)) {
-			var = MACRO_ARG[master->var->idx-1];
-		}
+		return TypeIsSubsetOfVar(type, master->typevar);
+	}
 
-		if (master->var->type->variant == TYPE_TYPE) {
-			master = master->var->type_value;
-		} else {
-			master = master->var->type;
-		}
-
+	if (type->variant == TYPE_VAR) {
+		return VarIsSubsetOfType(type->typevar, master);
 	}
 
 	if (type->variant != master->variant) return false;
+
 	if (type->variant == TYPE_INT) {
 		//TODO: Make better way for undefined min..max
 		if (!master->range.flexible) {
@@ -521,6 +568,7 @@ Purpose:
 		}
 	} else if (type->variant == TYPE_ARRAY) {
 		return TypeIsSubsetOf(type->index, master->index) && TypeIsSubsetOf(type->element, master->element);
+
 	}
 	return true;
 }
@@ -672,7 +720,7 @@ Purpose:
 	while(item != NULL) {
 		if (item->mode == INSTR_VAR) {
 			if (item->adr == NULL) {
-				item->adr = VarNewInt(offset);
+				item->adr = VarInt(offset);
 				offset += TypeSize(item->type);
 			}
 		}
@@ -815,12 +863,12 @@ Bool TypeMatches(Type * subset, Type * master)
 	UInt8 idx;
 
 	if (master->variant == TYPE_VAR) {
-		var = master->var;
+		var = master->typevar;
 		if (VarIsRuleArg(var)) {
 			idx = var->idx-1;
 			if (MACRO_ARG[idx] == NULL) {
 				if (subset->variant == TYPE_VAR) {
-					var = subset->var;
+					var = subset->typevar;
 				} else {
 					var = VarNewType(subset);
 				}
@@ -848,11 +896,25 @@ Purpose:
 	This is pattern matcher, so type will not match, if it's byte count does not match.
 */
 {
+	BigInt * min, * max;
 	Type * vtype = var->type;
 	
 	if (type == vtype) return true;
 	// If pattern has no defined type, it fits
 	if (type == NULL) return true;
+
+	if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+		VarRange(var, &min, &max);
+		if (type->variant == TYPE_INT) {
+			if (IntLower(min, &type->range.min)) return false;
+			if (IntHigher(max, &type->range.max)) return false;
+			return true;
+		}
+	} else if (var->mode == INSTR_VARIANT) {
+		return VarMatchesType(var->adr, type) && VarMatchesType(var->var, type);
+	} else if (vtype->variant == TYPE_VAR) {
+		return VarMatchesType(vtype->typevar, type);
+	}
 
 //	if (vtype->variant == TYPE_UNDEFINED) return true;		// anything matches undefined type
 
@@ -878,6 +940,7 @@ Purpose:
 				// Specified variable is element, but the type is not array
 				if (type->variant != TYPE_ARRAY) return false;
 			} else {
+
 				if (vtype->variant != TYPE_INT) return false;
 				if (type->range.max < vtype->range.max) return false;
 				if (type->range.min > vtype->range.min) return false;
@@ -919,7 +982,7 @@ Purpose:
 		}
 
 	case TYPE_VAR:
-		return VarMatchesType(var, VarType2(type->var));
+		return VarMatchesType(var, VarType2(type->typevar));
 		break;
 
 	default:
@@ -1173,6 +1236,19 @@ Purpose:
 	return NULL;
 }
 
+Type * TypeUnionRange(Type * left, BigInt * min, BigInt * max)
+/*
+Purpose:
+	Return either int type (as range) or 
+*/
+{
+	Type * result = NULL;
+	if (left->variant == TYPE_INT) {
+
+	}
+	return result;
+}
+
 Type * TypeUnion(Type * left, Type * right)
 /*
 Purpose:
@@ -1276,6 +1352,185 @@ Purpose:
 		type->right = right;
 	}
 	return type;
+}
+
+void VarRange(Var * var, BigInt ** p_min, BigInt ** p_max)
+{
+	*p_min = *p_max = NULL;
+	if (var != NULL) {
+		*p_min = *p_max = VarIntConst(var);
+		if (*p_min == NULL) {
+			if (var->mode == INSTR_RANGE) {
+				*p_min = VarIntConst(var->adr);
+				*p_max = VarIntConst(var->var);
+			}
+		}
+	}
+}
+
+
+Var * VarUnionRange(Var * left, Var * right)
+/*
+Purpose:
+	Create union of two variables, if the result will be one range (or const) variable.
+	In some cases, left or right may be returned.
+	If this is not possible (INSTR_VARIANT union would be necessary), return NULL.
+*/
+{
+	BigInt * l_min, * l_max;
+	BigInt * r_min, * r_max;
+	BigInt * min, * max;
+	BigInt diff1, diff2;
+	Var * result;
+
+	if (left == right) return left;
+	if (left == NULL) return right;
+	if (right == NULL) return left;
+
+	result = NULL;
+
+	l_min = NULL; l_max = NULL;
+	r_min = NULL; r_max = NULL;
+
+	VarRange(left, &l_min, &l_max);
+	VarRange(right, &r_min, &r_max);
+
+	if (l_min != NULL && l_max != NULL && r_min != NULL && r_max != NULL) {
+
+		IntSub(&diff1, r_min, l_max);
+		IntSub(&diff2, l_min, r_max);
+
+		// If the right min is higher than left max, there is a gap and we cannot create single range
+		if (IntHigher(&diff1, Int1()) || IntHigher(&diff2, Int1())) {
+			// this is two intervals with no intersection
+		} else {
+			min = IntMin(l_min, r_min);
+			max = IntMax(l_max, r_max);
+			result = VarNewRange(VarN(min), VarN(max));
+		}
+	}
+	return result;
+}
+
+Var * VarUnion2(Var * left, Var * right, Var ** p_merged)
+/*
+Purpose:
+	Find union of specified variable and some item of the variable.
+	If such union does not exist (there is no intersection between an existing variable item and the new item or
+	exactly same item exists), null is returned.
+*/
+{
+	Var * un = NULL;
+	Var * un2;
+
+	if (left == NULL) {
+//		*p_merged = right;
+		return right;
+	}
+	if (left == right) {
+		return left;
+	}
+
+	if (left->mode == INSTR_VARIANT) {
+		un = VarUnion2(left->adr, right, p_merged);
+		if (un == left->adr) un = left; 	//TODO: Test the other half here
+//		if (un == right) return right;
+		if (un != NULL && un != left) {
+			un = VarNewOp(INSTR_VARIANT, un, left->var);
+		} else {
+			un2 = VarUnion2(left->var, right, p_merged);
+			if (un2 == left->var) return left;
+			if (un2 == right) return right;
+			if (un2 != NULL) {
+				un = VarNewOp(INSTR_VARIANT, left->adr, un2);
+			}
+		}
+	} else if (left->mode == INSTR_CONST || left->mode == INSTR_RANGE) {
+		un = VarUnionRange(left, right);
+		if (un != NULL && un != left) {
+			*p_merged = un;
+		}
+	}
+	return un;
+}
+
+Var * VarFindUnionRange(Var * var, Var * item)
+/*
+Purpose:
+	Find union of specified variable and some item of the variable.
+	If such union does not exist (there is no intersection between an existing variable item and the new item or
+	exactly same item exists), null is returned.
+*/
+{
+	Var * un = NULL;
+
+	if (var == NULL) return NULL;
+	if (item == NULL) return NULL;
+	if (var == item) return NULL;
+
+	if (var->mode == INSTR_VARIANT) {
+		un = VarFindUnionRange(var->adr, item);
+		if (un == NULL) un = VarFindUnionRange(var->var, item);
+	} else if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+		un = VarUnionRange(var, item);
+	}
+	return un;
+}
+
+Var * VarRemoveContainedItems(Var * var, Var * item)
+/*
+Purpose:
+	Remove all parts of list (variant) that are fully enclosed in the specified item.
+	Does not remove the item itself.
+*/
+{
+	Var * nv1, *nv2;
+	if (item == NULL || var == item) return var;
+	if (var->mode == INSTR_VARIANT) {
+		nv1 = VarRemoveContainedItems(var->adr, item);
+		nv2 = VarRemoveContainedItems(var->var, item);
+		if (nv1 == NULL) return nv2;
+		if (nv2 == NULL) return nv1;
+		if (nv1 != var->adr || nv2 != var->var) {
+			return VarNewOp(INSTR_VARIANT, nv1, nv2);
+		}
+	} else if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+		nv1 = VarUnionRange(var, item);
+		if (nv1 == item) return NULL;
+	}
+	return var;
+}
+
+Var * VarUnion(Var * left, Var * right)
+{
+	Var * result, * rl, * rr;
+
+	if (left == NULL) return right;
+	if (right == NULL) return left;
+	if (left == right) return left;
+
+	result = NULL;
+
+	if (right->mode == INSTR_CONST || right->mode == INSTR_RANGE) {
+		rr = right;
+		do {
+			left = VarRemoveContainedItems(left, rr);
+			rl = rr;
+			rr = VarFindUnionRange(left, rr);
+		} while(rr != NULL);
+
+		right = rl;
+		if (left == NULL) return right;
+
+	} else if (right->mode == INSTR_VARIANT) {
+		result = VarUnion(right, left);
+	}
+
+	if (result == NULL) {
+		result = VarNewVariant(left, right);
+	}
+
+	return result;
 }
 
 Type * TypeExpandRange(Type * type, IntLimit min, IntLimit max)
@@ -1909,7 +2164,7 @@ Purpose:
 	var = *p_var;
 	if (var != NULL && var->mode != INSTR_CONST && !InVar(var)) {
 		if (type != NULL && type->variant == TYPE_INT && type->range.min == type->range.max) {
-			*p_var = VarNewInt(type->range.min);
+			*p_var = VarInt(type->range.min);
 		}
 	}
 }
@@ -1924,7 +2179,7 @@ Purpose:
 	Type * type;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR) {
+		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_LABEL) continue;
 			if (var->read == 0) {
@@ -2138,8 +2393,8 @@ void CheckIndex(Loc * loc, Var * var)
 		if (type != NULL) {
 			if (!TypeIsSubsetOf(type, var->adr->type->index)) {
 				if (type->variant == TYPE_INT) {
-					ErrArg(VarNewInt(type->range.max));
-					ErrArg(VarNewInt(type->range.min));
+					ErrArg(VarInt(type->range.max));
+					ErrArg(VarInt(type->range.min));
 					ErrArg(var->adr);
 					LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
 				} else {
@@ -2300,10 +2555,10 @@ Bool InstrInferType(Loc * loc, void * data)
 						if (d->final_pass) {
 							if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
 								ErrArg(result);
-								ErrArg(VarNewInt(ti->range.max));
-								ErrArg(VarNewInt(ti->range.min));
-								ErrArg(VarNewInt(tr->range.max));
-								ErrArg(VarNewInt(tr->range.min));
+								ErrArg(VarInt(ti->range.max));
+								ErrArg(VarInt(ti->range.min));
+								ErrArg(VarInt(tr->range.max));
+								ErrArg(VarInt(tr->range.min));
 								if (TypeIsIntConst(tr)) {
 									LogicWarningLoc("The value [A] does not fit into variable", loc);
 								} else {

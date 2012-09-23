@@ -183,7 +183,7 @@ Purpose:
 	if (res == NULL) return;
 
 	FOR_EACH_VAR(var)
-		if (var->mode != INSTR_CONST) {
+		if (!VarIsConst(var)) {
 //			if (var->name != NULL && StrEqual(var->name, "a")) {
 //				i = NULL;
 //			}
@@ -654,7 +654,7 @@ Purpose:
 			NEXT_LOCAL
 		} else {
 			if ((t->range.min == 0 && t->range.max == 1) || (t->range.min == -1 && t->range.max == 0)) {
-				zero = VarNewInt(0);
+				zero = VarInt(0);
 			}
 		}
 	}
@@ -904,7 +904,7 @@ retry:
 								diff = -diff;
 							}
 
-							r2 = VarNewInt(diff);
+							r2 = VarInt(diff);
 							if (TransformInstrIfCheaper(&loc, op, result, result, r2, "Converting to inc/dec")) {
 								arg1 = result;
 								arg2 = r2;
@@ -1052,7 +1052,7 @@ retry:
 					}
 					if (VarIsIntConst(arg1)) {
 						sprintf(buf, "%d", arg1->n);
-						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarNewInt(StrLen(buf)), "Arg to const")) {
+						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarInt(StrLen(buf)), "Arg to const")) {
 							modified = true;
 						}
 					}

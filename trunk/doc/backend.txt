@@ -16,7 +16,7 @@ Compilation is done in four phases:
 Parsing
 =======
 
-Parser parses code and producxes program written using compiler instructions.
+Parser parses code and produces program written using compiler instructions.
 Compiler instructions are three address instructions, like
 
 ::::::::::::::::::::::::

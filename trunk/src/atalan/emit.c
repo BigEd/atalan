@@ -231,18 +231,21 @@ void EmitVar(Var * var, UInt8 format)
 				EmitStr("__");
 			}
 			EmitVarName(var);
-		} else {
-			switch(var->type->variant) {
-			case TYPE_INT: EmitInt(var->n);	break;
-			case TYPE_STRING: 
-				if (format == 1) {
-					EmitStrConst(var->str); 
-				} else {
-					EmitStr(var->str);
-				}
-				break;
-			default: break;
+		} else if (var->mode == INSTR_TEXT) {
+			if (format == 1) {
+				EmitStrConst(var->str); 
+			} else {
+				EmitStr(var->str);
 			}
+		} else {
+			ASSERT(var->mode == INSTR_CONST);
+			EmitInt(var->n);
+//			switch(var->type->variant) {
+//			case TYPE_INT: EmitInt(var->n);	break;
+//			case TYPE_STRING: 
+//				break;
+//			default: break;
+//			}
 		}
 	}
 }
@@ -274,7 +277,7 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {					// TODO: elem.size
+					if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {
 						s += 8;
 						if (var->type->variant == TYPE_ARRAY) {
 							n = TypeSize(var->type->element);
@@ -283,7 +286,7 @@ void EmitInstr2(Instr * instr, char * str)
 						}
 						EmitInt(n);
 						continue;
-					} if (StrEqualPrefix(s, "step", 4)) {					// TODO: step
+					} if (StrEqualPrefix(s, "step", 4)) {
 						s += 4;
 						n = 1;
 						if (var->type->variant == TYPE_ARRAY) {
@@ -480,7 +483,7 @@ Purpose:
 				ov = var->adr;
 			} else {
 				n = var->n;
-				ov = VarNewInt(n);
+				ov = VarInt(n);
 			}
 			instr.arg1 = ov;
 			EmitInstr(&instr);
@@ -544,3 +547,39 @@ Purpose:
 		}
 	}
 }
+
+void Emit(char * filename)
+{
+	Var * var;
+
+	EmitOpen(filename);
+
+	VarUse();
+
+	if (Verbose(NULL)) {
+
+		PrintHeader(1, "Variables");
+
+		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+			if (var->write >= 1 || var->read >= 1) {
+				if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var)) {
+					PrintVar(var); PrintEOL();
+				}
+			}
+		}
+
+		PrintHeader(1, "Output");
+	} // verbose
+
+	EmitLabels();
+
+	//TODO: ProcessUsedProc
+//	if (!EmitProc(&ROOT_PROC)) goto failure;
+	EmitProc(&ROOT_PROC);
+	EmitProcedures();
+	EmitAsmIncludes();	
+	EmitInstrOp(INSTR_CODE_END, NULL, NULL, NULL);
+	VarEmitAlloc();
+	EmitClose();
+}
+

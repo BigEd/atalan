@@ -500,10 +500,6 @@ void DeadCodeElimination(Var * proc)
 	}
 }
 
-void InstrInsertBeforeBlock(InstrBlock * blk, InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
-}
-
 /*
 
 =================================

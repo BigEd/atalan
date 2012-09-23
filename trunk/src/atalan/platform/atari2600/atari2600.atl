@@ -20,7 +20,7 @@ rule code_end = "   org $FFFC" "   dta a(Start), a(Start)"
 rule line      = ";### %0(%1) %2"
 
 ;BIN_EXTENSION defines extension of the resulting binary file produced by compiler.
-const BIN_EXTENSION = "bin"
+BIN_EXTENSION: "bin"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:128..255   
