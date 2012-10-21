@@ -1009,8 +1009,11 @@ void PrintType(Type * type)
 {
 	if (type == NULL) { Print("NULL"); return; }
 	switch(type->variant) {
-	case TYPE_INT:		
-		PrintInt(type->range.min); Print(".."); PrintInt(type->range.max);
+	case TYPE_INT:
+		PrintInt(type->range.min);
+		if (!IntEq(&type->range.min, &type->range.max)) {
+			Print(".."); PrintInt(type->range.max);
+		}
 		break;
 	case TYPE_SEQUENCE:
 		Print("seq "); PrintType(type->seq.init); Print(" + "); PrintType(type->seq.step);
@@ -1033,7 +1036,7 @@ void PrintType(Type * type)
 		break;
 
 	case TYPE_VARIANT:
-		PrintType(type->left); Print(" or "); PrintType(type->right);
+		PrintType(type->left); Print(" | "); PrintType(type->right);
 		break;
 
 	case TYPE_TUPLE:
@@ -1042,6 +1045,10 @@ void PrintType(Type * type)
 
 	case TYPE_MACRO:
 		Print("proc");
+		break;
+
+	case TYPE_VAR:
+		Print("var "); PrintVar(type->typevar);
 		break;
 		default:
 		break;
@@ -2196,6 +2203,18 @@ Purpose:
 	NEXT_LOCAL
 }
 
+typedef struct {
+	Bool modified;
+	Bool modified_blocks;
+	Bool final_pass;
+} InferData;
+
+/***********************************************************************************
+
+  Constraint derived types
+
+***********************************************************************************/
+
 Bool DistributeRestrictionBlk(Loc * loc, Var * var, Type * restriction, InstrBlock * blk, Instr * instr)
 /*
 Purpose:
@@ -2283,36 +2302,6 @@ Bool PropagateConstraint(Loc * loc, Var * var, Type * restriction, InstrBlock * 
 	return DistributeRestrictionBlk(loc, var, restriction, blk, instr);
 }
 
-Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
-{
-	Instr * i;
-	Instr * next_i;
-	InstrBlock * blk;
-	Loc loc;
-
-	loc.proc = proc;
-
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
-		loc.blk = blk;
-		loc.n = 1;
-		for(i = blk->first; i != NULL; i = next_i) {
-			next_i = i->next;
-			if (i->op != INSTR_LINE) {
-				loc.i = i;
-				if (fn(&loc, data)) return true;
-			}
-			loc.n++;
-		}
-	}
-	return false;
-}
-
-typedef struct {
-	Bool modified;
-	Bool modified_blocks;
-	Bool final_pass;
-} InferData;
-
 void VarConstraints(Loc * loc, Var * var, InferData * d)
 {
 	Var * idx;
@@ -2334,6 +2323,9 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 }
 
 Bool InstrConstraints(Loc * loc, void * data)
+/*
+Deduce type of instruction arguments based on type of result, other argument and the type of operation.
+*/
 {
 	Var * result;
 	InstrOp op;
@@ -2378,7 +2370,6 @@ Bool InstrConstraints(Loc * loc, void * data)
 	return false;
 }
 
-
 void CheckIndex(Loc * loc, Var * var)
 // Check array indexes
 // Array may have one or two indexes
@@ -2409,7 +2400,6 @@ void CheckIndex(Loc * loc, Var * var)
 
 }
 
-
 #define MIN1 TypeMin(i->type[ARG1])
 #define MAX1 TypeMax(i->type[ARG1])
 #define MIN2 TypeMin(i->type[ARG2])
@@ -2434,9 +2424,9 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 11 && loc->n == 1) {
-		Print("");
-	}
+//	if (loc->blk->seq_no == 15 && loc->n == 2) {
+//		Print("");
+//	}
 
 	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
 
@@ -2585,9 +2575,9 @@ Bool InstrInferType(Loc * loc, void * data)
 	}
 
 	if (d->final_pass) {
-		if (loc->blk->seq_no == 8 && loc->n == 15) {
-			Print("");
-		}
+//		if (loc->blk->seq_no == 8 && loc->n == 15) {
+//			Print("");
+//		}
 		CheckIndex(loc, i->result);
 		CheckIndex(loc, i->arg1);
 		CheckIndex(loc, i->arg2);
@@ -2746,37 +2736,34 @@ static Bool InstrFreeIncomplete(Loc * loc, void * data)
 	return false;
 }
 
-void TypeInfer(Var * proc)
+Var * FindNamedDestVar(Loc * loc, Var * var)
 /*
 Purpose:
-	Try to infer types for all variables used in given procedure.
+	Find non temporary variable, into which the specified variableis assigned.
+	The variable is search for reporting purposes (therefore it must have name).
 */
 {
 
 	Instr * i;
-	Type * tr, * tl;
-	Var * var;
-	Loc loc;
-	UInt16 steps;
-	InferData data;
-	UInt32 n;
-
-	Bool assert_begin;
-
-	ProcInstrEnum(proc, &InstrInitInfer, NULL);
-
-	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
-		PrintProc(proc);
+	for(i = loc->i; i != NULL; i = i->next) {
+		if (i->op == INSTR_LET && i->arg1 == var) {
+			var = i->result;
+			if (!VarIsTmp(var)) return var;
+		}
 	}
+	return NULL;
+}
 
-	// 1. For every instruction in the code try to infer the type of it's result
-	// 2. Repeat this until no new result type was inferred
+void TypeDeduce(Var * proc)
+{
+	InferData data;
+	UInt16 steps;
 
 	data.final_pass = false;
 retry:
 	do {
-
+		// 1. For every instruction in the code try to infer the type of it's result
+		// 2. Repeat this until no new result type was inferred
 		steps = 0;
 		do {
 			data.modified = false;
@@ -2785,7 +2772,6 @@ retry:
 			if (data.modified_blocks) {
 				GenerateBasicBlocks(proc);
 				DeadCodeElimination(proc);
-//				PrintProc(proc);
 			}
 			steps++;
 		} while (data.modified);
@@ -2799,19 +2785,86 @@ retry:
 
 	} while (steps > 1);
 
-	// We may deduce some information based on loops
-
 	if (TypeInferLoops(proc)) {
 		// Some of the types may be incomplete sequences, we need to clear these types so they will be evaluated again
 		ProcInstrEnum(proc, &InstrFreeIncomplete, NULL);
 		goto retry;
 	}
 
+}
+
+Bool InstrUseDeclaredTypes(Loc * loc, void * data)
+{
+	Instr * i;
+	InferData * d = (InferData *)data;
+
+	i = loc->i;
+
+	if (i->result != NULL && i->type[0] == NULL) {
+		if (i->arg1 != NULL && i->type[1] == NULL) {
+			if (FlagOn(i->arg1->submode, SUBMODE_USER_DEFINED)) {
+				i->type[1] = i->arg1->type;
+				d->modified = true;
+			}
+		}
+
+		if (i->arg2 != NULL && i->type[2] == NULL) {
+			if (FlagOn(i->arg2->submode, SUBMODE_USER_DEFINED)) {
+				i->type[2] = i->arg2->type;
+				d->modified = true;
+			}
+		}
+
+		if ((i->arg1 != NULL && i->type[1] == NULL) || (i->arg2 != NULL && i->type[2] == NULL)) {
+			if (FlagOn(i->result->submode, SUBMODE_USER_DEFINED)) {
+				i->type[0] = i->result->type;
+				d->modified = true;
+			}
+		}
+	}
+	return false;
+}
+
+void TypeInfer(Var * proc)
+/*
+Purpose:
+	Try to infer types for all variables used in given procedure.
+*/
+{
+
+	Instr * i;
+	Type * tr, * tl;
+	Var * var, * dest_var, * dest_proc;
+	Loc loc;
+	InferData data;
+	UInt32 n;
+
+	Bool assert_begin;
+
+	ProcInstrEnum(proc, &InstrInitInfer, NULL);
+
+	if (Verbose(proc)) {
+		PrintHeader(2, proc->name);
+		PrintProc(proc);
+	}
+
+	TypeDeduce(proc);
+
+	data.modified = false;
+	ProcInstrEnum(proc, &InstrUseDeclaredTypes, &data);
+
+	if (data.modified) {
+		TypeDeduce(proc);
+	}
+	
+	// We may deduce some information based on loops
+
 	// Perform final pass, which will print error messages.
 	data.final_pass = true;
 	ProcInstrEnum(proc, &InstrInferType, &data);
 	ProcInstrEnum(proc, &InstrConstraints, &data);
 
+	PrintProcFlags(proc, PrintInferredTypes);
 
 	// Extend the type of variables to handle
 	// - Check variables, whose types can not be inferred here
@@ -2831,16 +2884,25 @@ retry:
 					if (tr != NULL && tr->variant != TYPE_UNDEFINED && FlagOff(i->flags, InstrRestriction)) {
 						var->type = TypeExpand(var->type, i->type[RESULT]);
 					} else {
-//						if (var->type->variant == TYPE_UNDEFINED) {
 
-							// For temporary variable, there is no reason to define 
-							if (VarIsTmp(var)) {
-								LogicErrorLoc("Cannot infer type of result of operator [*].", &loc);
-							} else {
+						// For temporary variable, there is no reason to define 
+						if (VarIsTmp(var)) {
+							dest_var = FindNamedDestVar(&loc, var);
+							if (dest_var != NULL) {
+								ErrArg(dest_var);
 								ErrArg(var);
-								LogicErrorLoc("Cannot infer type of variable [A].\nPlease define the type or use assert to give the compiler some more information.", &loc);
+								if (VarIsArg(dest_var)) {
+									dest_proc = dest_var->scope;
+									ErrArg(dest_proc);
+									LogicErrorLoc("Cannot infer type of expression passed to argument [-C] of procedure [A].", &loc);
+								}
+							} else {
+								LogicErrorLoc("Cannot infer type of result of operator [*].", &loc);
 							}
-//						}
+						} else {
+							ErrArg(var);
+							LogicErrorLoc("Cannot infer type of variable [A].\nPlease define the type or use assert to give the compiler some more information.", &loc);
+						}
 					}
 				} else if (tr == NULL) {
 					tl = i->type[ARG1];

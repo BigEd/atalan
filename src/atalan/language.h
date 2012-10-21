@@ -31,6 +31,8 @@ extern CompilerPhase PHASE;
 typedef UInt16 LineNo;   
 typedef UInt16 LinePos;  // 0 based position of character on line
 
+#define UNDEFINED_LINE_POS 65535
+
 typedef enum {
 	TOKEN_VOID = -2,
 	TOKEN_EOF  = -1,
@@ -299,6 +301,8 @@ void Warning(char * text);
 void EndErrorReport();
 
 void InitErrors();
+
+void PlatformError(char * text);
 
 /*********************************************************
 
@@ -1036,8 +1040,11 @@ void InstrFree(Instr * i);
 
 char * OpSymbol(InstrOp op);
 
+#define PrintInferredTypes 1
+
 void PrintVarVal(Var * var);
 void PrintProc(Var * proc);
+void PrintProcFlags(Var * proc, UInt32 flags);
 void PrintBlockHeader(InstrBlock * blk);
 void PrintInstrLine(UInt32 n);
 
@@ -1054,7 +1061,7 @@ UInt32 InstrBlockInstrCount(InstrBlock * blk);
 
 void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * first, Instr * last);
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
-void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
+Instr * InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void InstrAttach(InstrBlock * blk, Instr * before, Instr * first, Instr * last);
 void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2);
 
@@ -1062,11 +1069,10 @@ InstrBlock * LastBlock(InstrBlock * block);
 
 typedef void (*ProcessBlockFn)(InstrBlock * block, void * info);
 void ForEachBlock(InstrBlock * blk, ProcessBlockFn process_fn, void * info);
+Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data);
 
 extern Var * SCOPE;		// currently parsed variable (procedure, macro)
 //extern Var * REGSET;	// enumerator with register sets
-
-void CodePrint(InstrBlock * blk);
 
 void InstrVarUse(InstrBlock * code, InstrBlock * end);
 void VarUse();
@@ -1101,7 +1107,9 @@ void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
 void GenMacro(Var * macro, Var ** args);
 void GenLastResult(Var * var, Var * item);
+
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
+void GenLetPos(Var * result, Var * arg1);
 
 #define RESULT 0
 #define ARG1   1
@@ -1135,6 +1143,7 @@ typedef enum {
 	RULE_CONST,			// (type) constant matching specified type
 	RULE_REGISTER,		// (var)  actual variable (typically used for register)
 	RULE_VALUE,			// (n)    actual value										// RULE_VALUE may be implemented as RULE_VARIABLE using constant
+	RULE_VARIANT,		// (var) one of specified variants (variants are specified as TUPLE variable)
 	RULE_DEREF,			// dereference of variable (dereferenced type is always adr)
 	RULE_ARG,			// argument (type of argument is defined, may be NULL)
 	RULE_ELEMENT,		// array element - var defines pattern for array, index defines pattern for index

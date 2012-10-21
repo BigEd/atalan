@@ -17,7 +17,7 @@
 
  It is possible to specify arguments for error messages using ErrArg method.
  Last error argument has name A, the one before it B etc.
- Up to 26 arguments may be used.
+ Up to 26 arguments may be used and referenced in an error message.
 
  For example:
 
@@ -60,7 +60,7 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 			If the first character is >, indent will be visualized and column will not be shown
 */
 {
-	UInt16 i, token_pos, indent, line_cnt, indent_len, end_pos;
+	UInt16 i, token_pos, indent, line_cnt, indent_len, end_pos, token_len;
 	char c, * t;
 	char * line;
 	char buf[2048];
@@ -103,14 +103,32 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
+	// Line text
+	line = NULL;
+	if (bookmark == 0) {
+		line = LINE;
+	} else {
+		if (BOOKMARK_LINE_NO == LINE_NO) {
+			line = LINE;
+		} else if (BOOKMARK_LINE_NO == LINE_NO-1) {
+			line = PREV_LINE;
+		}
+	}
+
+	token_len = 0;
+	if (to_here) {
+		for(end_pos = TOKEN_POS-1; end_pos>0 && line[end_pos]==' ';) end_pos--;
+		token_len = end_pos - token_pos + 1;
+	}
+
 	ERR_OLD_DESTINATION = PrintDestination(STDERR);
 
+	// Choose error color based on kind
 	color = COLOR_ERROR;
 	if (*kind == 'W') color = COLOR_WARNING;
 	line_cnt = 0;
 	ERR_OLD_COLOR = PrintColor(color);
 
-//	PrintEOL();
 	if (SRC_FILE != NULL) {
 		PrintFmt("%s(%d) %s: ", SRC_FILE->name, i, kind);
 	} else {
@@ -211,16 +229,6 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 	}
 
 	// Print line with error and position of the error on line
-	line = NULL;
-	if (bookmark == 0) {
-		line = LINE;
-	} else {
-		if (BOOKMARK_LINE_NO == LINE_NO) {
-			line = LINE;
-		} else if (BOOKMARK_LINE_NO == LINE_NO-1) {
-			line = PREV_LINE;
-		}
-	}
 
 	indent_len = 0;
 	if (line != NULL && *line != 0) {
@@ -259,13 +267,9 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 				}
 				Print("^");
 				i++;
-				if (to_here) {
-					for(end_pos = TOKEN_POS-indent_len-1; end_pos>0 && line[end_pos]==' ';) end_pos--;
-
-					while(i<=end_pos) {
-						Print("^");
-						i++;
-					}
+				while(token_len>1) {
+					Print("^");
+					token_len--;
 				}
 			}
 		}

@@ -51,6 +51,11 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 	if (l->variant == RULE_VALUE) {
 		if (r->variant != RULE_VALUE) return true;
 	}
+
+	if (l->variant == RULE_VARIANT) {
+		if (r->variant != RULE_VARIANT) return true;
+	}
+
 	if (r->variant == RULE_VALUE) return false;
 
 	if (l->variant == RULE_CONST) {
@@ -263,6 +268,22 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	return VarMatchesType(var, type);
 }
 
+Bool VarIsOneOf(Var * var, Var * variants)
+{
+	Var * o;
+
+	o = variants;
+	if (variants->mode != INSTR_TUPLE) {
+		if (variants->adr != NULL) o = variants->adr;
+	}
+
+	while(o->mode == INSTR_TUPLE) {
+		if (VarIsEqual(var, o->adr)) return true;
+		o = o->var;
+	}
+	return VarIsEqual(var, o);
+}
+
 static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
 {
 	Type * atype;
@@ -363,6 +384,10 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	// Exact variable.
 	case RULE_REGISTER:
 		if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
+		break;
+
+	case RULE_VARIANT:
+		if (!VarIsOneOf(arg, pattern->var)) return false;
 		break;
 
 	case RULE_VARIABLE:

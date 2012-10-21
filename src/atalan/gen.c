@@ -180,10 +180,9 @@ void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	i->line_pos = OP_LINE_POS;
 }
 
-void GenLet(Var * result, Var * arg1)
+void GenLetPos(Var * result, Var * arg1)
 {
 	Type * rtype, * atype;
-
 
 	rtype = result->type;
 	atype = arg1->type;
@@ -192,10 +191,16 @@ void GenLet(Var * result, Var * arg1)
 	//       Error should be reported when assigning address of incorrect type
 
 	if (rtype != NULL && atype != NULL && rtype->variant == TYPE_ADR && atype->variant != TYPE_ADR) {
-		Gen(INSTR_LET_ADR, result, arg1, NULL);
+		GenPos(INSTR_LET_ADR, result, arg1, NULL);
 	} else {
-		Gen(INSTR_LET, result, arg1, NULL);
+		GenPos(INSTR_LET, result, arg1, NULL);
 	}
+}
+
+void GenLet(Var * result, Var * arg1)
+{
+	OP_LINE_POS = 0;
+	GenLetPos(result, arg1);
 }
 
 void GenGoto(Var * label)

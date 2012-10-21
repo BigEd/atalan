@@ -82,7 +82,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_VOID,        "nop", "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_LET,         "let", "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 
-	{ INSTR_GOTO,        "goto", "", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_GOTO,        "goto", "", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_IFEQ,        "ifeq", "=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_IFNE,        "ifne", "<>", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_IFLT,        "iflt", "<=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
@@ -97,7 +97,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_PROLOGUE,    "prologue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_EPILOGUE,    "epilogue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_EMIT,        "emit", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_VARDEF,      "vardef", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_VARDEF,      "vardef", "", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_LABEL,       "label", "label", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
 	{ INSTR_ADD,         "add", "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
@@ -108,22 +108,22 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_AND,         "and", "bitand", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
 	{ INSTR_OR,          "or", "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE, NULL },
 
-	{ INSTR_ALLOC,       "alloc", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_PROC,        "proc", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ALLOC,       "alloc", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_PROC,        "proc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_RETURN,      "return", "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_ENDPROC,     "endproc", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_ENDPROC,     "endproc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_CALL,        "call", "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// generate str
+	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_INT}, 0, NULL },			// generate str (second argumend is string length -> to be removed)
 
-	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_FILE,        "file", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_FILE,        "file", "", {TYPE_VOID, TYPE_STRING, TYPE_VOID}, 0, NULL },
 	{ INSTR_ALIGN,       "align", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_ORG,         "org", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// set the destination address of compilation
+	{ INSTR_ORG,         "org", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },				// set the destination address of compilation
 	{ INSTR_HI,          "hi", "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_LO,          "lo", "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_PTR,         "ptr", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// generate index for array
+	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		// generate index for array
 	{ INSTR_LET_ADR,     "let_adr", "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
 	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
@@ -137,11 +137,11 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_ASSERT_END,  "assert_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
 	{ INSTR_LINE,        "line", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// reference line in the source code
-	{ INSTR_INCLUDE,     "include", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_INCLUDE,     "include", "", {TYPE_VOID, TYPE_STRING, TYPE_VOID}, 0, NULL },
 	{ INSTR_MULA,        "mula", "", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },				// templates for 8 - bit multiply 
 	{ INSTR_MULA16,      "mula16", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },           // templates for 8 - bit multiply 
 
-	{ INSTR_COMPILER,    "compiler", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_COMPILER,    "compiler", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_CODE_END,    "code_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of BLK segment and start of data segment
 	{ INSTR_DATA_END,    "data_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of data segment and start of variables segment
 	{ INSTR_DECL,        "decl",     "decl", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &InstrDecl },			// declare variable
@@ -375,7 +375,7 @@ Purpose:
 	return next;
 }
 
-void InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2)
+Instr * InstrInsert(InstrBlock * blk, Instr * before, InstrOp op, Var * result, Var * arg1, Var * arg2)
 /*
 Purpose:
 	Insert instruction before specified instruction in specified block.
@@ -387,8 +387,11 @@ Purpose:
 	i->result = result;
 	i->arg1 = arg1;
 	i->arg2 = arg2;
+	i->line_pos = 0;
 
 	InstrAttach(blk, before, i, i);
+
+	return i;
 }
 
 InstrOp OpNot(InstrOp op)
@@ -956,16 +959,60 @@ void PrintInstrLine(UInt32 n)
 	PrintFmt("%3ld| ", n);
 }
 
-void CodePrint(InstrBlock * blk)
+void PrintInferType(Type * type)
+{
+	UInt8 old_color;
+	old_color = PrintColor(BLUE);
+	if (type == NULL) {
+		Print("???");
+	} else {
+		PrintType(type);
+	}
+	PrintColor(old_color);
+}
+
+void CodePrint(InstrBlock * blk, UInt32 flags)
 {
 	Instr * i;
 	UInt32 n;
+	InstrInfo * ii;
+
 	while (blk != NULL) {
 		n = 1;
 		PrintBlockHeader(blk);
 		for(i = blk->first; i != NULL; i = i->next, n++) {
+			ii = &INSTR_INFO[i->op];
+
 			PrintInstrLine(n);
 			InstrPrintInline(i);
+			
+			if (FlagOn(flags, PrintInferredTypes) && i->op != INSTR_LINE) {
+				Print("  ");
+				if (IS_INSTR_BRANCH(i->op)) {
+					Print("if ");
+				} else if (i->op == INSTR_CALL) {
+					Print("call ");
+				} else {
+					if (ii->arg_type[0] != TYPE_VOID && ii->arg_type[0] != TYPE_LABEL && ii->arg_type[0] != TYPE_PROC) {
+						PrintInferType(i->type[0]);
+						Print(" = ");
+					}
+				}
+				if (ii->arg_type[1] != TYPE_VOID) {
+					PrintInferType(i->type[1]);
+				}
+				if (ii->arg_type[2] != TYPE_VOID) {
+					Print(" "); Print(ii->symbol); Print(" ");
+					PrintInferType(i->type[2]);
+				}
+				if (IS_INSTR_BRANCH(i->op)) {
+					Print(" goto ");
+				}
+				if (ii->arg_type[0] == TYPE_LABEL || ii->arg_type[0] == TYPE_PROC) {
+					PrintVar(i->result);
+				}
+
+			}
 			PrintEOL();
 		}
 
@@ -975,8 +1022,14 @@ void CodePrint(InstrBlock * blk)
 
 void PrintProc(Var * proc)
 {
-	CodePrint(proc->instr);
+	PrintProcFlags(proc, 0);
 }
+
+void PrintProcFlags(Var * proc, UInt32 flags)
+{
+	CodePrint(proc->instr, flags);
+}
+
 
 //$I
 void InstrInit()
@@ -1022,4 +1075,28 @@ void ForEachBlock(InstrBlock * blk, ProcessBlockFn process_fn, void * info)
 		process_fn(blk, info);
 		blk = blk->next;
 	}
+}
+
+Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
+{
+	Instr * i;
+	Instr * next_i;
+	InstrBlock * blk;
+	Loc loc;
+
+	loc.proc = proc;
+
+	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		loc.blk = blk;
+		loc.n = 1;
+		for(i = blk->first; i != NULL; i = next_i) {
+			next_i = i->next;
+			if (i->op != INSTR_LINE) {
+				loc.i = i;
+				if (fn(&loc, data)) return true;
+			}
+			loc.n++;
+		}
+	}
+	return false;
 }
