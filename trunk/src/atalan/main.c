@@ -50,6 +50,15 @@ Purpose:
 	return VERBOSE;
 }
 
+void PlatformError(char * text)
+{
+	if (*PLATFORM == 0) {
+		SyntaxError("No target platform defined");
+	} else {
+		SyntaxError(text);
+	}
+}
+
 void ProcessUsedProc(void (*process)(Var * proc))
 {
 	Var * var;
@@ -463,7 +472,7 @@ int Assemble(char * filename)
 #ifdef __Windows__	
 	EmitChar('\"');
 #endif
-	EmitInstrOp(INSTR_COMPILER, VarNewStr(path), ext, NULL);
+	EmitInstrOp(INSTR_COMPILER, NULL, VarNewStr(path), ext);
 #ifdef __Windows__	
 	EmitChar('\"');
 #endif

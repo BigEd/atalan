@@ -1,7 +1,7 @@
 ﻿Atalan implements interval type inferencing. 
 It tries to infer set of possible values of the result of every operator in the
 code. So it not only deduces, that the variable should be integer, but also
-the range of the integer.  
+the set of possible values.  
   
 The following examples use type assert. 
 ::assert x:min..max:: makes sure the compiler at specified line 
@@ -131,3 +131,23 @@ Type should have flag, spcifying whether it is a restriction or requirement.
 - Array element index argument is an restriction
 - Restriction is specified for a variable
   
+
+
+Type inferencer steps
+=====================
+
+1. Try to deduce types based on code (i.e. as there was no type information at all)
+   The only restriction to this rule are types of input registers, as there is no
+   hope those could be deduced.
+   
+2. At places, where we were not able to deduce types of source variables, use the
+   type decladed explicitly by programmer.
+   
+3. Run the deduction, so the explicitly defined types may be used to deduce more
+   type information.
+   
+4. Use restriction information.
+
+
+
+    

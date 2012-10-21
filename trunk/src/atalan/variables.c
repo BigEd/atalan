@@ -805,6 +805,8 @@ Purpose:
 			return 1;
 		} else if (var->mode == INSTR_CONST) {
 			return ConstByteSize(var->n);
+		} else if (var->mode == INSTR_TEXT) {
+			return StrLen(var->str);
 		}
 		return TypeSize(type);
 	}

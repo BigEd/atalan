@@ -1,9 +1,15 @@
+;Implementation of Z80 CPU module for Atalan programming language
+;(c) 2012 Rudla Kudla
+;Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+;This module generated code, that can be compiled with Pasmo assembler.
+ 
 type
 	byte:0..255
 	card:0..65535
 	int:-32768..32767
 	sbyte:-128..127
-	byte1:byte() or sbyte()
+	byte1:byte or sbyte
 
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
@@ -15,18 +21,70 @@ CPU:scope =
 	de@(d,e)
 	hl@(h,l)
 	ix,iy:0..65535
-		
+
+	s,z,hc,v,n,cr:0..1				;hc = half carry, cr = carry
+	
+	szhvn@(s,z,hc,v,n)
+	szhvnc@(s,z,hc,v,n,cr)
+	
 	type memory:array(0..$ffff) of 0..255
 
-  
+	r@(a,b,c,d,e,h,l)
 
 
-rule let %A:byte, %B:byte = instr
+rule let %A:byte,  %B:byte = instr
 	let a, %B
 	let %A, a
 	
-rule let a, %A:byte1  = "   ld a, %A"
-rule let %A:byte1, a  = "   ld %A, a"
+;Printing.
+
+;Character printing routines to be defined by platform.
+
+system.printchar:proc chr@cpu.a
+
+;Following routines are defined in z80.asm
+
+system.print_out:proc @cpu.a @cpu.hl
+
+system.print_scr:macro = instr
+	call system.print_out
+
+rule nop #4 = "   nop"
+
+;LD byte
+rule let %A@r, %B:byte1 #7 = "   ld %A, %B"
+rule let %A@r, %B@r     #4 = "   ld %A, %B"
+
+rule let %A:byte1, a    #13 = "   ld (%A), a"
+rule let a, %A:byte1    #13 = "   ld a, (%A)"
+
+;INC
+rule add %A@r, %A, 1 @szhvn   #4 = "   inc %A"
+
+;ADD
+rule add a, a, %A@r @szhvnc   #4 = "   add %A"
+
+;DEC
+rule sub %A@r, %A, 1 @szhvn   #4 = "   dec %A"
+
+;SUB
+rule sub a, a, %A@r @szhvnc   #4 = "   sub %A"
+
+
+
+rule proc %A:proc     = "%A: PROC"
+rule endproc %A:proc  = "   ENDP"
+
+rule call %A:proc() #17 = "   call %A"  
+rule return #10 = "   ret"
+
+rule str_arg %A:string,%B:byte  = "   db %A.size,'%A'"
+
+rule data %A:string = "   db %'A"
+rule data %A    = "   db %A"
+
+rule line      = ";### %0(%1) %2"
+rule include %A = "   INCLUDE '%A'"
 
 ;compiler rule defines the command line used to compile generated asm source
 ; %A  defines name of the source code file (including the path) without extension

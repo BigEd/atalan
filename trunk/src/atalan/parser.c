@@ -30,6 +30,7 @@ Syntax:
 
 Var *  STACK[STACK_LIMIT];
 UInt16 TOP;
+UInt16 VAR_LINE_POS;		// Position of top variable on stack. This is used when 
 
 GLOBAL Bool  USE_PARSE;
 
@@ -979,6 +980,8 @@ void ParseOperand()
 				EndErrorReport();
 
 				return;
+			} else {
+				OP_LINE_POS = TOKEN_POS + 1;
 			}
 
 			// For type variable, there can not be any index etc.
@@ -3541,8 +3544,14 @@ void ParseSimpleRuleArg(RuleArg * arg)
 		arg->var = ParseVariable();
 
 	} else if (arg->arg_no = ParseArgNo2()) {
-		arg->variant = RULE_ARG;
-		ParseRuleArgArray(arg);
+		if (NextCharIs(TOKEN_ADR)) {
+			NextToken();
+			arg->variant = RULE_VARIANT;
+			arg->var = ParseVariable();
+		} else {
+			arg->variant = RULE_ARG;
+			ParseRuleArgArray(arg);
+		}
 
 	} else if (NextIs(TOKEN_CONST)) {
 		arg->variant = RULE_CONST;
@@ -3633,7 +3642,7 @@ next:
 	}
 }
 
-void ParseRuleAdr(RuleArg * arg)
+void ParseRuleDeref(RuleArg * arg)
 {
 	RuleArg * idx, * idx2;
 	if (NextIs(TOKEN_ADR)) {
@@ -3663,7 +3672,7 @@ void ParseRuleAdr(RuleArg * arg)
 
 void ParseRuleArg2(RuleArg * arg)
 {
-	ParseRuleAdr(arg);
+	ParseRuleDeref(arg);
 }
 
 Bool ParsingRule()
@@ -3744,7 +3753,9 @@ void ParseRule()
 		EXP_EXTRA_SCOPE = CPU->SCOPE;
 
 		for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
-			ParseRuleArg2(&rule->arg[i]);
+			if (INSTR_INFO[op].arg_type[i] != TYPE_VOID) {
+				ParseRuleArg2(&rule->arg[i]);
+			}
 			EXP_IS_DESTINATION = false;
 
 			// Flags defined as @flags
@@ -4024,7 +4035,7 @@ Arguments:
 					if (VarIsReg(arg)) {
 						//TODO: If var is already tmp, we do not need to create new temporary here
 						tmp = VarNewTmp(arg->type);
-						GenLet(tmp, val);
+						GenLetPos(tmp, val);
 						val = tmp;
 						reg_args[reg_arg_cnt] = arg;
 						reg_vals[reg_arg_cnt] = val;
@@ -4323,7 +4334,7 @@ void ParseCommands()
 				}
 				ParseString(GenEnd(), 0); 
 			} else {
-				SyntaxError("Print is not supported by the platform");
+				PlatformError("Print is not supported by the platform");
 			}
 			break;
 

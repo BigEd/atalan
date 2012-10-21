@@ -226,7 +226,7 @@ void EmitVar(Var * var, UInt8 format)
 			} else if (var->mode == INSTR_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
 				EmitStr("__");
-			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name != NULL && !VarIsLabel(var)) {
+			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
 				EmitVarName(var->scope);
 				EmitStr("__");
 			}
@@ -277,7 +277,12 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {
+					if (StrEqualPrefix(s, "size", 4)) {
+						n = VarByteSize(var);
+						EmitInt(n);
+						s+= 4;
+						continue;
+					} else if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {
 						s += 8;
 						if (var->type->variant == TYPE_ARRAY) {
 							n = TypeSize(var->type->element);
@@ -540,7 +545,7 @@ Purpose:
 
 				if (f != NULL) {
 					fclose(f);
-					i.result = VarNewStr(FILENAME);
+					i.arg1 = VarNewStr(FILENAME);
 					EmitInstr(&i);
 				}
 			}
