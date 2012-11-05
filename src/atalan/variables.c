@@ -818,7 +818,8 @@ Bool ProcIsInterrupt(Var * proc)
 	Type * base;
 	base = proc->type;
 	if (base != NULL) {
-		while(base->base != NULL) base = base->base;
+		while(
+			base->base != NULL) base = base->base;
 		if (base->owner == INTERRUPT) return true;
 	}
 	return false;

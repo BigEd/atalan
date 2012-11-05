@@ -154,6 +154,8 @@ Purpose:
 		} else {
 			if (var->mode == INSTR_CONST) {
 				// const does not get replaced
+			} else if (var->mode == INSTR_TEXT) {
+
 			} else if (var->mode == INSTR_VAR) {
 				if (var->adr != NULL) {
 					*p_var = var->adr;

@@ -389,7 +389,39 @@ Type * ParseType3()
 	}
 	return type;
 }
+/*
+Type * ParseIntRange(Type * type)
+{
+	Var * min, * max;
+	Bookmark bookmark;
 
+	bookmark = SetBookmark();
+	ParseExpressionType(TypeType(NULL));
+	if (TOK && TOP != 0) {
+		min = BufPop();
+		max = NULL;
+		if (NextIs(TOKEN_DOTDOT)) {
+			ExpectExpression(NULL);
+			if (TOK) {
+				max = BufPop();
+				type = TypeDerive(type);
+			}
+		}
+
+		if (VarIsIntConst(min) && VarIsIntConst(max)) {
+			type = TypeAllocRange(min, max);
+
+			if (type->range.min > type->range.max) {
+				SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
+			}
+
+		} else {
+			SyntaxErrorBmk("expected type constant expression", bookmark);
+		}
+	}
+	return type;
+}
+*/
 Type * ParseType2(InstrOp mode)
 /*
 Purpose:
@@ -434,7 +466,10 @@ next:
 				// This is directly type
 				if (type != NULL) {
 					// For integer type, constants may be defined
-					if (type->variant == TYPE_INT) goto const_list;
+					if (type->variant == TYPE_INT) {
+//						type = ParseIntRange(type);
+						goto const_list;
+					}
 					goto done;
 				}
 				max = var;		
@@ -539,20 +574,27 @@ Syntax: "+" full_type | "(" full_type ")" | normal_type |  identifier | int ".."
 			}
 		} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
 			type = TypeAlloc(TYPE_INT);
-			ParseConstExpression(NULL);
-			if (NextIs(TOKEN_DOTDOT)) {
-				ExpectExpression(NULL);
-				if (TOK) {
-					var = BufPop();
-					if (var->mode == INSTR_CONST) {
-						type->range.max = var->n;
+			var = ParseConstExpression(NULL);
+			if (TOK) {
+				if (var->mode == INSTR_CONST) {
+					type->range.min = var->n;
+					if (NextIs(TOKEN_DOTDOT)) {
+						ExpectExpression(NULL);
+						if (TOK) {
+							var = BufPop();
+							if (var->mode == INSTR_CONST) {
+								type->range.max = var->n;
+							} else {
+								SyntaxError("expected constant expression");
+							}
+						}
 					} else {
-						SyntaxError("expected constant expression");
+						type->range.max = type->range.min;
+		//				type->range.min = 0;
 					}
+				} else {
+					SyntaxError("expected constant expression");
 				}
-			} else {
-				type->range.max = type->range.min;
-//				type->range.min = 0;
 			}
 		}
 	}

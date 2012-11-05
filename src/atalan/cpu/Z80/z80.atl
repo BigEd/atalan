@@ -2,7 +2,10 @@
 ;(c) 2012 Rudla Kudla
 ;Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
-;This module generated code, that can be compiled with Pasmo assembler.
+;This module generates code, that can be compiled with Pasmo assembler.
+
+
+platform:scope
  
 type
 	byte:0..255
@@ -10,10 +13,12 @@ type
 	int:-32768..32767
 	sbyte:-128..127
 	byte1:byte or sbyte
-
-rule alloc %A:byte                               = "   .ds 1"
-rule alloc %A:card                               = "   .ds 2"
-rule alloc %A:-128..127                          = "   .ds 1"
+	byte2:card or int
+	
+rule alloc %A:byte1                          = "   DS 1"
+rule alloc %A:card                           = "   DS 2"
+;rule alloc %A:-128..127                          = "   DS 1"
+rule alloc %A:array(0..65535) of byte1, %B        = "   DS %B"
 
 CPU:scope =
 	a,b,c,d,e,h,l:0..255
@@ -23,7 +28,8 @@ CPU:scope =
 	ix,iy:0..65535
 
 	s,z,hc,v,n,cr:0..1				;hc = half carry, cr = carry
-	
+
+	hnc@(hc,n,cr)	
 	szhvn@(s,z,hc,v,n)
 	szhvnc@(s,z,hc,v,n,cr)
 	
@@ -31,11 +37,164 @@ CPU:scope =
 
 	r@(a,b,c,d,e,h,l)
 
+	in out void:0..255  ;This is special variable used to implement cp instructions.
+	
+	ld: macro o, p = instr let o, p
+	cp: macro o = instr sub void, a, o
 
-rule let %A:byte,  %B:byte = instr
+	mul8:proc m1@h m2@e @de @b -> res@hl 
+	
+	
+rule %A:byte1 = %B:byte1 = instr
 	let a, %B
 	let %A, a
-	
+
+;ADD
+
+rule %A:byte = %B:byte + 1 = instr
+	ld a, %A
+	add a, a, 1
+	ld %B, a
+
+rule %A:byte = %B:byte + %C:byte = instr
+	let a, %C
+	let b, a
+	let a, %B
+	add	a, a, b
+	let %A, a
+
+rule %A:byte = %B:byte - const %C:byte = instr
+	let a, %B
+	sub	a, a, %C
+	let %A, a
+
+rule %A:byte = %B:byte - %C:byte = instr
+	let a, %C
+	let b, a
+	let a, %B
+	sub	a, a, b
+	let %A, a
+
+
+;Multiplication
+
+rule %A:byte = %B:0..127 * 2 = instr
+	ld a, %B
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..63 * 4 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..31 * 8 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..15 * 16 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..7 * 32 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..3 * 64 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+
+rule %A:byte = %B:0..1 * 128 = instr
+	ld a, %B
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	mul a, a, 2
+	ld %A, a
+	 
+rule %A:byte = %B:byte * %C:byte = instr
+	ld a, %B
+	ld h, a
+	ld a, %C
+	ld e, a
+	call cpu.mul8
+	ld a, l
+	ld %A, a
+
+;Bit operations
+
+rule %A:byte = %B:byte and const %C:byte = instr
+	let a, %B
+	and	a, a, %C
+	let %A, a
+
+rule %A:byte = %B:byte and %C:byte = instr
+	let a, %C
+	let b, a
+	let a, %B
+	and	a, a, b
+	let %A, a
+
+rule %A:byte = %B:byte or const %C:byte = instr
+	let a, %B
+	or	a, a, %C
+	let %A, a
+
+rule %A:byte = %B:byte or %C:byte = instr
+	let a, %C
+	let b, a
+	let a, %B
+	or	a, a, b
+	let %A, a
+
+rule %A:byte = %B:byte bitxor const %C:byte = instr
+	let a, %B
+	xor	a, a, %C
+	let %A, a
+
+rule %A:byte = %B:byte bitxor %C:byte = instr
+	let a, %C
+	let b, a
+	let a, %B
+	xor	a, a, b
+	let %A, a
+
+
+;Jumps
+
+rule if %A:byte = const %B:byte goto %C = instr
+	ld a, %A
+	cp %B
+	if z = 1 goto %C
+
+rule if %A:byte <> const %B:byte goto %C = instr
+	ld a, %A
+	cp %B
+	if z = 0 goto %C
+
+
 ;Printing.
 
 ;Character printing routines to be defined by platform.
@@ -43,6 +202,7 @@ rule let %A:byte,  %B:byte = instr
 system.printchar:proc chr@cpu.a
 
 ;Following routines are defined in z80.asm
+
 
 system.print_out:proc @cpu.a @cpu.hl
 
@@ -52,45 +212,84 @@ system.print_scr:macro = instr
 rule nop #4 = "   nop"
 
 ;LD byte
-rule let %A@r, %B:byte1 #7 = "   ld %A, %B"
-rule let %A@r, %B@r     #4 = "   ld %A, %B"
+rule %A@r = const %B:byte1 #7 = "   ld %A, %B"
+rule %A@r = %B@r           #4 = "   ld %A, %B"
 
-rule let %A:byte1, a    #13 = "   ld (%A), a"
-rule let a, %A:byte1    #13 = "   ld a, (%A)"
+rule let %A:byte1, a        #13 = "   ld (%A), a"
+rule let a, const %B:byte1  #7  = "   ld a, %B"			;We must define this explicitly for A, to prevent using rule on next line
+rule let a, %B:byte1        #13 = "   ld a, (%B)"
 
-;INC
-rule add %A@r, %A, 1 @szhvn   #4 = "   inc %A"
+;ADD, INC
+rule %A@r = %A + 1          @szhvn  #4 = "   inc %A"
+rule a = a + const %A:byte1 @szhvnc #7 = "   add a, %A"    
+rule a = a + %A@r           @szhvnc #4 = "   add a, %A"
 
-;ADD
-rule add a, a, %A@r @szhvnc   #4 = "   add %A"
+;SUB, DEC
+rule %A@r = %A - 1          @szhvn  #4 = "   dec %A"
+rule a = a - const %A:byte1 @szhvnc #7 = "   sub %A"    
+rule a = a - %A@r           @szhvnc #4 = "   sub %A"
 
-;DEC
-rule sub %A@r, %A, 1 @szhvn   #4 = "   dec %A"
+;CP
+rule void = a - const %A:byte1 @szhvnc #7 = "   cp %A"    
+rule void = a - %A@r           @szhvnc #4 = "   cp %A"
 
-;SUB
-rule sub a, a, %A@r @szhvnc   #4 = "   sub %A"
+;AND
+rule a = a and const %A:byte1 @szhvnc #7 = "   and %A"    
+rule a = a and %A@r           @szhvnc #4 = "   and %A"
 
+;OR
+rule a = a or const %A:byte1 @szhvnc #7 = "   or %A"    
+rule a = a or %A@r           @szhvnc #4 = "   or %A"
 
+;XOR
+rule a = a bitxor const %A:byte1 @szhvnc #7 = "   xor %A"    
+rule a = a bitxor %A@r           @szhvnc #4 = "   xor %A"
 
-rule proc %A:proc     = "%A: PROC"
+;SHIFT
+
+;rule a = a * 2 @hnc #8  = "   rlca"
+rule %A@r = %A * 2 @szhvnc #8  = "   sla %r"
+rule @hl = @hl * 2 @szhvnc #12 = "   sla (hl)"
+  
+rule %A@r = %A / 2 @szhvnc #8  = "   sra %r" 
+rule @hl = @hl / 2 @szhvnc #12 = "   sra (hl)"
+
+;Condtional jumps
+
+rule if z = 1 goto %A #12   = "   jr z, %A"
+rule if z = 0 goto %A #12   = "   jr nz, %A"
+rule if s = 1 goto %A #12   = "   jr s, %A"
+rule if s = 0 goto %A #12   = "   jr ns, %A"
+rule if cr = 1 goto %A #12   = "   jr c, %A"
+rule if cr = 0 goto %A #12   = "   jr nc, %A"
+
+rule goto %A   #10 = "   jp %A"
+rule label %A      = "%A:"
+
+rule proc %A:proc     = "%A  PROC"
 rule endproc %A:proc  = "   ENDP"
 
 rule call %A:proc() #17 = "   call %A"  
 rule return #10 = "   ret"
 
-rule str_arg %A:string,%B:byte  = "   db %A.size,'%A'"
+rule str_arg %A:string  = "   DB %A.size,'%A'"				; TODO: Use var_arg %A:const string
+rule var_arg %A:byte    = "   DB 129" "   DW %A"
 
-rule data %A:string = "   db %'A"
-rule data %A    = "   db %A"
+rule data %A:string = "   DB %'A"
+rule data %A    = "   DB %A"
+
+rule vardef %A,%B   = "%A EQU %B"
 
 rule line      = ";### %0(%1) %2"
 rule include %A = "   INCLUDE '%A'"
 
-;compiler rule defines the command line used to compile generated asm source
-; %A  defines name of the source code file (including the path) without extension
-; %B  extension of resulting binary as defined by platform
-; %/  defines path to directory with currently parsed file
+;Support for ASSERT "expected" command.
 
-rule compiler %A,%B = "["]%/pasmo["] --tzxbas ["]%A.asm["] ["]%A.%B["]"
+;system.print_assert:macro = instr call system.assert_print_asm
 
- 
+system.assert:macro = instr call system.print_out
+
+rule assert_begin = ";assert begin"
+rule assert_end   = ";assert end"
+
+rule assert       = "   halt"

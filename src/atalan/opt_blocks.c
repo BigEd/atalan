@@ -548,10 +548,11 @@ Bool OptimizeMergeBranchCode(Var * proc)
 		// Test, that last instruction in all branches is same.
 		// Last instruction in some of the branches is goto, which will be skipped.
 		// If any of the instructions is different, optimization will not be performed.
+		// - If the last instruction is data instruction, it will not be moved (this may happen for example when there is parameter list).
 
 		prev_blk = blk->from;
 		i = LastInstr(prev_blk);
-		if (i != NULL && !IS_INSTR_BRANCH(i->op)) {
+		if (i != NULL && !IS_INSTR_BRANCH(i->op) && !FlagOn(INSTR_INFO[i->op].flags, INSTR_NON_CODE)) {
 			// Test other callers
 			if (blk->callers == NULL) {
 				i = NULL;

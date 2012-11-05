@@ -25,6 +25,7 @@ rule alloc %A:card                               = "   .ds 2"
 rule alloc %A:long                               = "   .ds 3"
 rule alloc %A:-128..127                          = "   .ds 1"
 rule alloc %A:int                                = "   .ds 2"
+;rule alloc %A:-8388607..8388607                  = "   .ds 3"
 
 ;=============================================
 ; CPU definition
@@ -50,7 +51,10 @@ CPU:scope =
 	xy@(x,y)
 
 	type memory:array(0..$ffff) of 0..255
-
+	s8:type = -128..127
+	s16:type = -32768..32767
+	s24:type = -8388607..8388607  
+	
 	;Definition of the more common 6502 instructions as macros, so the code is more readable 
 	lda:macro o = instr let a, o
 	ldx:macro o = instr let x, o
@@ -108,9 +112,9 @@ rule alloc %A:adr = "   .ds 2"
 ;We do not assign an address to the buffer, so platform may set the address 
 ;of the buffer using _stdbuf@<adr>. If it will not, compiler will assign the address. 
 
-_stdbuf:array(0..15) of byte
+system.buf:array(0..15) of byte
 _arr:adr
-_putchr_proc_adr:adr of proc			;address of print procedure
+system.putchr_proc_adr:adr of proc			;address of print procedure
 
 ;TODO: Temporary variables should be allocated dynamically
 _TEMPW1@$32:CARD
@@ -192,7 +196,13 @@ rule let %A:int, %B:sbyte = instr
 	label _positive
 	let %A$0, a
 	let %A$1, x
-		
+
+rule %A:s16 = %B:s24 = instr
+	lda %B$0
+	sta %A$0
+	lda %B$1
+	sta %A$1
+		  	
 ;======= Array of addresses
 
 rule let %A:byte1, %B:adr(%C:byte) = instr
@@ -429,7 +439,7 @@ rule let_adr %D:adr, %A:_byte1arr2D(%B:byte,%C:byte) = instr
 	adc 0	
 	let %D$1, a
 
-;===========
+;=========== Init
 
 ;Convert 2-byte const to 1-byte
 rule let %A:byte, const %B:card = instr
@@ -523,7 +533,7 @@ rule let %A:long,const %B:long = instr
   let a,%Z 
   let %A$1,a
   div %Z,%B,$FFFF   ; highest byte
-	and %Z, %Z, $FF  
+  and %Z, %Z, $FF  
   let a,%Z
   let %A$2,a
 
@@ -809,6 +819,20 @@ rule sub %A:byte1, %B:byte1, %C:byte1 = instr
   sec
   sbc %C
   let %A,a
+	
+;s24 = s16 - s16
+
+rule %A:s24 = %B:s16 - %C:s16 = instr
+	lda %B$0
+	sec
+	sbc %C$0
+	sta %A$0
+	lda %B$1
+	sbc %C$1
+	sta %A$1
+	lda %B$2
+	sbc %C$2
+	sta %A$2
 
 rule sub %A:int, %B:byte, %C:byte = instr
 	sec
@@ -2228,7 +2252,8 @@ rule return %A:proc() #6 = "   rts"
 rule endproc %A:proc  = ".endp"
 rule call %A:proc()  #6 = "   jsr %A"
 rule call %A:adr  #14     = "   jsr *+6" "   jmp *+6" "   jmp (%A)"
-rule call %A #6 = "jsr %A"
+
+;rule call %A #6 = "   jsr %A"
 ;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
 rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
@@ -2236,17 +2261,17 @@ rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%
 system.printchar:proc chr@cpu.a
 
 ;system.out will send the data following the call to specified output routine. 
-system.print:proc printchar_proc@(cpu.a,cpu.x):adr @_stdbuf @_putchr_proc_adr @cpu.y
+system.print:proc printchar_proc@(cpu.a,cpu.x):adr @system.buf @system.putchr_proc_adr @cpu.y
 
-_std_print_out:proc @_stdbuf @_putchr_proc_adr @cpu.a @cpu.x @cpu.y
-_std_print_adr:proc a@_arr:adr @_arr @_stdbuf @_putchr_proc_adr @cpu.a @cpu.x @cpu.y
+system.print_out:proc @system.buf @system.putchr_proc_adr @cpu.a @cpu.x @cpu.y
+system.print_adr:proc a@_arr:adr @_arr @system.buf @system.putchr_proc_adr @cpu.a @cpu.x @cpu.y
 
-std_print:macro = instr
-	call _std_print_out
+system.print_scr:macro = instr
+	call system.print_out
 
 std_format:macro d:adr = instr
 	let_adr _arr, d
-	call _std_print_adr
+	call std_print_adr
 
 ;rule print     = instr
 ;	call std_print
@@ -2254,18 +2279,18 @@ std_format:macro d:adr = instr
 ;rule format    = instr
 ;	call _std_print_adr
 
-rule str_arg ,%A,%B:byte  = "   dta b(%B),%'A"
-rule var_arg ,%A:byte   = "   dta b(129),a(%A)"
-rule var_arg ,%A:card   = "   dta b(130),a(%A)"
+rule str_arg %A:string  = "   dta b(%A.size),%'A"
+rule var_arg %A:byte   = "   dta b(129),a(%A)"
+rule var_arg %A:card   = "   dta b(130),a(%A)"
 ;rule var_arg ,%A:adr    = "   dta b(130),a(%A)"
-rule var_arg ,%A:long   = "   dta b(131),a(%A)"
-rule var_arg ,%A:adr, %B:0..255 = "   dta b(128+64+1), a(%B), a(%A)"
+rule var_arg %A:long   = "   dta b(131),a(%A)"
+rule var_arg %A:adr, %B:0..255 = "   dta b(128+64+1), a(%B), a(%A)"
 
-rule var_arg, %A:sbyte  = "   dta b(129+32), a(%A)"
-rule var_arg, %A:int    = "   dta b(130+32), a(%A)"
+rule var_arg %A:sbyte  = "   dta b(129+32), a(%A)"
+rule var_arg %A:int    = "   dta b(130+32), a(%A)"
 
-rule data ,%A:string = "   dta %'A"
-rule data ,%A    = "   dta b(%A)"
+rule data %A:string = "   dta %'A"
+rule data %A    = "   dta b(%A)"
 rule align ,%A    = "   .align %A"
 rule file ,%A     = "   ins '%A'"
 rule org  ,%A     = "   org %A"

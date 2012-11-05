@@ -113,17 +113,17 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_RETURN,      "return", "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_ENDPROC,     "endproc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_CALL,        "call", "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_INT}, 0, NULL },			// generate str (second argumend is string length -> to be removed)
+	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_NON_CODE, NULL },
+	{ INSTR_STR_ARG,     "str_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },			// generate str (second argumend is string length -> to be removed)
 
-	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_FILE,        "file", "", {TYPE_VOID, TYPE_STRING, TYPE_VOID}, 0, NULL },
+	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
+	{ INSTR_FILE,        "file", "", {TYPE_VOID, TYPE_STRING, TYPE_VOID}, INSTR_NON_CODE, NULL },
 	{ INSTR_ALIGN,       "align", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_ORG,         "org", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },				// set the destination address of compilation
 	{ INSTR_HI,          "hi", "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_LO,          "lo", "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_PTR,         "ptr", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		// generate index for array
+	{ INSTR_PTR,         "ptr", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
+	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_NON_CODE, NULL },		// generate index for array
 	{ INSTR_LET_ADR,     "let_adr", "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
 	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left

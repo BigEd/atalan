@@ -4,11 +4,11 @@
 
 use z80
 
-
 rule prologue = "   org 30000" "start"
 rule epilogue = "   ret"
 rule code_end = "   end start"      
 rule line      = ";### %0(%1) %2"
+
 
 out ula@65535:0..255
 
@@ -18,6 +18,38 @@ rule let ula, %A:0..255 = instr
 
 rule let ula, a = "   out (254), a"
 
+
+color: type = 0..7
+	black: 0
+	blue:  1
+	red: 2
+	magenta: 3
+	green: 4
+	cyan: 5
+	yellow: 6
+	white: 7
+
+border:macro c:color =
+	ula = c
+
+ATTR_P@23695:0..255	
+MASK_P@23696:0..255
+
+attr_flag: type = enum off:0 on:1 
+
+ink: macro c:color = 
+	ATTR_P = (ATTR_P bitand %11111000) bitor c 
+	MASK_P = (MASK_P bitand %11111000)
+		
+paper:macro c:color =
+	ATTR_P = (ATTR_P bitand %11000111) bitor (c * 3) 
+	MASK_P = (MASK_P bitand %11000111)
+	
+
+;bright:macro c:attr_switch =
+
+;blink:macro c:attr_switch =
+ 			
 ;rst16:proc
 
 ;Call to procedure rst16 will emit rst instruction. 
@@ -33,9 +65,9 @@ BIN_EXTENSION: "tzx"
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
 type VARHEAP:29000..29999   
 
-;Print Screen Routine	
-;This routine is used by Atalan to print strings.
- 	
-;system.print_scr:proc =
-;	instr call rst16
+;compiler rule defines the command line used to compile generated asm source
+; %A  defines name of the source code file (including the path) without extension
+; %B  extension of resulting binary as defined by platform
+; %/  defines path to directory with currently parsed file
 
+rule compiler %A,%B = "["]%/pasmo["] --tzxbas ["]%A.asm["] ["]%A.%B["]"

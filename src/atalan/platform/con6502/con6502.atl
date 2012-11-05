@@ -30,7 +30,7 @@ system.assert_print_asm:proc @cpu.x @cpu.a @cpu.y
 
 system.print_assert:macro = instr call system.assert_print_asm
 
-system.assert:macro = instr call _std_print_out
+system.assert:macro = instr call system.print_out
 
 rule assert_begin = ";assert begin"
 rule assert_end   = ";assert end"

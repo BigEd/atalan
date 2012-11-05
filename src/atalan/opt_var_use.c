@@ -68,7 +68,7 @@ Purpose:
 				ProcAddLocalVars(var, set, filter_fn);
 			}
 		} else {
-			// Unused variables and labels are not part of resule
+			// Unused variables and labels are not part of result
 			if ((var->write > 0 || var->read > 0)) {
 				if (var->mode == INSTR_VAR) {
 					if (filter_fn(var)) {
@@ -134,16 +134,58 @@ void MarkVarCollision(VarAllocInfo * info, LiveSet live, UInt16 idx)
 }
 
 void VarAllocVar(VarAllocInfo * info, Var * var, LiveSet live, UInt8 mark)
+/*
+Purpose:
+	Mark variable in live set as either live (used) or dead (assigned).
+*/
 {
 	UInt16 idx;
+	if (var == NULL) return;
 	if (var->mode == INSTR_VAR) {
 		idx = var->set_index;
-		if (idx >=0 && idx<= VarSetCount(&info->vars) && VarSetItem(&info->vars, idx)->key == var) {
+		if (idx >= 0 && idx < VarSetCount(&info->vars) && VarSetItem(&info->vars, idx)->key == var) {
 			live[idx] = mark;
 			if (mark == 1) {
 				MarkVarCollision(info, live, idx);
 			}
 		}
+		if (var->adr != NULL) {
+			VarAllocVar(info, var->adr, live, mark);
+		}
+	}
+}
+
+void VarAllocProc(VarAllocInfo * info, Var * proc, LiveSet live)
+/*
+Purpose:
+	Mark all variables in specified live set as either used or even assigned in the procedure.
+	We are basically not interested in the order of the variable use, as for the purpose of the
+	variable assignment analysis, the procedure call is single instruction.
+*/
+{
+	Var * var;
+	if (proc->instr == NULL) {
+
+		// Local instructions used by procedure (not in or out arguments)
+		FOR_EACH_LOCAL(proc, var)
+			if (FlagOff(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
+				VarAllocVar(info, var, live, 1);
+			}
+		NEXT_LOCAL
+
+		FOR_EACH_OUT_ARG(proc, var)
+			VarAllocVar(info, var, live, 0);
+		NEXT_LOCAL
+
+		// Procedure may use same variable both for input and output (for example using aliasing)
+		// a:proc >x@_a <y@_a
+		// In such case, marking variable as live has precedence.
+
+		FOR_EACH_IN_ARG(proc, var)
+			VarAllocVar(info, var, live, 1);
+		NEXT_LOCAL
+
+	} else {
 	}
 }
 
@@ -160,17 +202,23 @@ void VarAllocBlock(InstrBlock * blk, void * pinfo)
 	for(i = blk->last; i != NULL; i = i->prev) {
 		ii = &INSTR_INFO[i->op];
 
-		if (ii->arg_type[0] != TYPE_VOID) {
-			VarAllocVar(info, i->result, live, 0);
-			// mark variable as dead
-		}
+		if (i->op == INSTR_CALL) {
+			// mark all variables used by the procedure as live
+			VarAllocProc(info, i->result, live);
+		} else {
 
-		if (ii->arg_type[1] != TYPE_VOID) {
-			VarAllocVar(info, i->arg1, live, 1);
-		}
+			if (ii->arg_type[0] != TYPE_VOID) {
+				VarAllocVar(info, i->result, live, 0);
+				// mark variable as dead
+			}
 
-		if (ii->arg_type[2] != TYPE_VOID) {
-			VarAllocVar(info, i->arg2, live, 1);
+			if (ii->arg_type[1] != TYPE_VOID) {
+				VarAllocVar(info, i->arg1, live, 1);
+			}
+
+			if (ii->arg_type[2] != TYPE_VOID) {
+				VarAllocVar(info, i->arg2, live, 1);
+			}
 		}
 	}
 	blk->analysis_data = live;
@@ -254,7 +302,7 @@ Purpose:
 				for(j = 0; j < count; j++) {
 					if (i != j && info.collisions[i*count+j] == 0) {
 						var2 = VarSetItem(&info.vars, j)->key;
-						if (VarIsIntConst(var2->adr)) {
+						if (VarIsIntConst(var2->adr) && !OutVar(var2) && !InVar(var2)) {
 							if (TypeSize(var2->type) == size) {
 								// We have found the variable, whose address we can use
 

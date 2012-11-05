@@ -3,11 +3,6 @@ TODO
 ****
 
 
-assert a:10..1000
-
-
-
-
 *********************************************************
 
 Optimized Flags Code for 6502
@@ -53,109 +48,15 @@ I can’t see why this couldn’t be adapted to other (CISC, RMW-capable) CPUs a
 
 *********************************************************
 
-
-Flags and other information is part of rule, not instruction.
-Instruction must have reference to rule (pointer to rule).
-This may replace op, but that would slow down the code.
-
-
-rule &a @&z &n &v &c = &a + %A @ &c
-
-
-@ is interesting, as we already use it to denote 'trashed' variables in argument
-list and this is simmilar.
-
-rule &a + %A -> &a  
-
-- parse ranges in for loops in reverse order (this will allow releasing it later)
-
-
 Array access to reference (adr of array(x))
 
 - parse adr(x) as element where adr is adr of array, not directly array
 - translation rules for those arrays
 
-
-
-
-x Use MODE_TUPLE for 2D array index (currently MODE_ELEMENT is used)
-
 TETRIS: Use random'tile routine with mod
 
 
 proc :type   (type must be structure type, or proc type or macro type)
-
-
-=====
-Flags
-=====
-
-Compiler should know about flags (i.e. one bit registers).
-Setting the flags is side-effect - side effect instruction is not emitted,
-but is taken into account when optimizing etc.
-
-Side effect instruction belongs to instruction it is following.
-(TODO: Theoretically, there may be situation, when side effect precedes the actual operation).
-
-1. When removing instruction, all it's side effects must be removed too
-2. When moving instruction, all side efeects must follow it. 
-
-C
-Z
-N
-
-- modifying the flag according to instruction
-
-  - Z is usually
-	   
-		sub z, var, 0
-
-Z and N generally just reflect state of last operation.
-
-Carry is special in that it's value extends the value of result.
-So we may be even interested in operation on Carry.
-
-For example:
-
-add result, x:1..10, y:1..10  is guaranteed to set the carry to 0.
-
-
-We need to declare for an instruction:
-
-  - it sets the flag
-	- if uses the flag as an input
-	
-Alternative approach:
-
-Special support for flags.
-Flags are common concept in microprocessors and they are all very common.
-So maybe we may bilt-in the support for flags.
-
-Fo example, we may support distinct versions of add & adc (add with carry).
-
-Z
-N
-C
-
-We may also deduct about flags if we know their meaning.
-
-For example:
-
-let _a, x   may mark the z flag as 0, if it known, range of variable does not allow for 0
-
-
-
-=======
-Options
-=======
-
-Options are compile-time constants.
-It is possible to specify them from command line or when importing module.
-Module declares an option together with it's type and default value.
-It can then use the option when compiling.
-Options are defined for assebler use too.
-
-option stereo:bool = false
 
 ================
 Type inferencing
