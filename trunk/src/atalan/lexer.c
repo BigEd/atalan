@@ -1015,12 +1015,17 @@ Purpose:
 	Finish using current file for parsing and continue with previous file.
 */
 {
+	Token tok;
 	if (LEX.f != NULL) {
 		fclose(LEX.f);
 		LEX.f = 0;
 	}
+	tok = TOK;
 	ParseStateGoto(SRC_FILE->parse_state);
 	SRC_FILE = SRC_FILE->scope;
+	if (tok == TOKEN_ERROR) {
+		TOK = tok;
+	}
 }
 
 void LexerInit()

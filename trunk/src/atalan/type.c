@@ -1075,6 +1075,86 @@ void PrintVars(Var * proc)
 	NEXT_LOCAL
 }
 
+UInt32 IntBitSize(BigInt * num)
+/*
+Purpose:
+	Return number of bits necessary to encode specified number.
+*/
+{
+	UInt32 cnt = 0;
+	BigInt n;
+	IntSet(&n, num);
+	while(!IntIsN(&n, 0)) {
+		IntDivN(&n, 2);
+		cnt++;
+	}
+	return cnt;
+}
+
+Bool TypeBitMask(Type * type, UInt32 * p_bit_size)
+{
+	UInt32 max_bits;
+	BigInt * max;
+
+	max = TypeMax(type);
+	if (max != NULL) {
+		max_bits = IntBitSize(max);
+		*p_bit_size = max_bits;
+		return true;
+	}
+	return false;
+}
+
+Type * TypeAllocInt2(BigInt * min, BigInt * max)
+{
+	IntLimit minl = *min;
+	IntLimit maxl = * max;
+	return TypeAllocInt(minl, maxl);
+}
+
+Type * TypeAllocBits(UInt32 bit_count)
+{
+	Type * rt;
+	BigInt n;
+
+	IntInit(&n, 0);
+
+	while(bit_count > 0) {
+		IntMulN(&n, 2);
+		IntAddN(&n, 1);
+		bit_count--;
+	}
+
+	rt = TypeAllocInt2(Int0(), &n);
+
+	return rt;
+}
+
+Type * BitType(InstrOp op, Type * left, Type * right)
+{
+	Type * rt = NULL;
+	UInt32 left_bits, right_bits, bits;
+
+	if (TypeBitMask(left, &left_bits) && TypeBitMask(right, &right_bits)) {
+		bits = left_bits; 
+		switch(op) {
+		case INSTR_XOR:
+			if (right_bits > left_bits) bits = right_bits;
+			break;
+		case INSTR_OR:
+			if (right_bits > left_bits) bits = right_bits;
+			break;
+		case INSTR_AND:
+			if (right_bits < left_bits) bits = right_bits;
+			break;
+		}
+
+		rt = TypeAllocBits(bits);
+	}
+
+	return rt;
+}
+
 Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 {
 	RangeTransform r_fn;
@@ -1088,21 +1168,31 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 	case INSTR_HI:
 		rt = TypeByte();		//TypeAllocInt(0, 255);
 		break;
-
+	
 	default:
 		if (right != NULL && right->variant == TYPE_INT) {
-			r_fn = InstrFn(op);
-			if (r_fn != NULL) {
-				rt = TypeAllocInt(left->range.min, left->range.max);
-				min = right->range.min;
-				max = right->range.max;
-				if (op == INSTR_DIV || op == INSTR_MOD || op == INSTR_SUB) {
-					t = min;
-					min = max;
-					max = t;
+
+			switch(op) {
+			case INSTR_XOR:
+			case INSTR_AND:
+			case INSTR_OR:
+				rt = BitType(op, left, right);
+				break;
+			default:
+
+				r_fn = InstrFn(op);
+				if (r_fn != NULL) {
+					rt = TypeAllocInt(left->range.min, left->range.max);
+					min = right->range.min;
+					max = right->range.max;
+					if (op == INSTR_DIV || op == INSTR_MOD || op == INSTR_SUB) {
+						t = min;
+						min = max;
+						max = t;
+					}
+					r_fn(&rt->range.min, min);
+					r_fn(&rt->range.max, max);
 				}
-				r_fn(&rt->range.min, min);
-				r_fn(&rt->range.max, max);
 			}
 		}
 	}

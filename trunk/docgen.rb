@@ -321,3 +321,15 @@ txt_file "news.txt"
 
 $stdout = File.new($proj_folder + 'www/projects.html', 'w')
 txt_file "projects.txt"
+
+$stdout = File.new($proj_folder + 'www/m6502.html', 'w')
+o_file("src/atalan/cpu/m6502/m6502.txt", true)
+
+$stdout = File.new($proj_folder + 'www/Z80.html', 'w')
+o_file("src/atalan/cpu/Z80/Z80.txt", true)
+
+$stdout = File.new($proj_folder + 'www/zxspectrum.html', 'w')
+o_file("src/atalan/platform/ZXSpectrum/ZXSpectrum.txt", true)
+
+$stdout = File.new($proj_folder + 'www/conZ80.html', 'w')
+o_file("src/atalan/platform/conZ80/conZ80.txt", true)

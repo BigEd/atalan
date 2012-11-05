@@ -1106,6 +1106,7 @@ void GenLabel(Var * var);
 void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
 void GenMacro(Var * macro, Var ** args);
+void GenMacroParse(Var * macro, Var ** args);
 void GenLastResult(Var * var, Var * item);
 
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
@@ -1116,6 +1117,7 @@ void GenLetPos(Var * result, Var * arg1);
 #define ARG2   2
 
 #define INSTR_COMMUTATIVE 1
+#define INSTR_NON_CODE    2		// non-executable instruction generating data
 
 typedef struct {
 	InstrOp  op;
@@ -1153,6 +1155,11 @@ typedef enum {
 	RULE_BIT,
 	RULE_SUB,
 	RULE_ADD,
+	RULE_MUL,
+	RULE_DIV,
+	RULE_AND,
+	RULE_OR,
+	RULE_XOR,
 
 	RULE_DESTINATION
 
@@ -1165,7 +1172,6 @@ struct RuleArgTag {
 	   Var * var;
 	   Type * type;
 	   RuleArg * arr;
-	   UInt8   type_arg_no;		// number of macro argument defining a type
 	};
 	RuleArg  * index;		        // pointer to index for array (NULL if there is no index)
 							        // Rule arg is allocated in this case
@@ -1210,6 +1216,7 @@ void RuleRegister(Rule * rule);
 
 #define GENERATE 0
 #define TEST_ONLY 1
+#define BIGGER_RESULT 2
 
 void ProcTranslate(Var * proc);
 Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode);

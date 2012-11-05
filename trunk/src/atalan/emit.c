@@ -202,6 +202,8 @@ Purpose:
 
 void EmitVar(Var * var, UInt8 format)
 {
+	Bool non_keyword = true;
+
 	if (var != NULL) {
 		if (var->mode == INSTR_SRC_FILE) {
 			EmitStr(var->name);
@@ -229,8 +231,18 @@ void EmitVar(Var * var, UInt8 format)
 			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
 				EmitVarName(var->scope);
 				EmitStr("__");
+			} else {
+				non_keyword = true;
+				// For variables (excluding registers), emit extra underscore at the beginning to prevent name clash with assembler built-in keywords and register names
+				if (!VarIsReg(var)) {
+					EmitStr("_");
+				}
 			}
 			EmitVarName(var);
+//			if (non_keyword) {
+//				EmitStr("$A");
+//			}
+
 		} else if (var->mode == INSTR_TEXT) {
 			if (format == 1) {
 				EmitStrConst(var->str); 

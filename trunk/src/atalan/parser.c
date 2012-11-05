@@ -3354,6 +3354,35 @@ Var * ParseInstrArg()
 
 }
 
+Var * ParseInstrLabel()
+{
+	Var * scope;
+	Var * label = NULL;
+	UInt8 arg_no;
+
+	if (TOK == TOKEN_ID) {
+		scope = ParseScope();
+		if (TOK) {
+			if (scope != NULL) {
+				label = VarFindScope(scope, NAME, 0);
+			} else {
+				label = VarFind2(NAME);
+			}
+
+			if (label == NULL) {
+				label = VarNewLabel(NAME);
+			}
+			NextToken();
+		}
+	} else if (arg_no = ParseArgNo()) {
+		label = VarRuleArg(arg_no-1);
+//		NextIs(TOKEN_COMMA);
+	} else {
+		SyntaxError("expected label identifier");
+	}
+	return label;
+}
+
 void ParseRuleArg2(RuleArg * arg);
 
 void ParseInstr()
@@ -3362,9 +3391,10 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 */
 {
 	Var * arg[3];
-	UInt8 n, arg_no;
+	UInt8 n;
+//	UInt8 arg_no;
 	InstrOp op;
-	Var * label, * scope;
+//	Var * label, * scope;
 	char inc_path[MAX_PATH_LEN];
 	Var * inop;
 	Type * type;
@@ -3375,112 +3405,137 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	EXP_INSTR = true;
 	had_comma = false;
 
-	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
-
-		// This is instruction
-		op = InstrFind(NAME);
-		if (op == INSTR_NULL) {
-			inop = VarFindScope(CPU->SCOPE, NAME, 0);
-			if (inop == NULL) {
-				SyntaxError("Unknown instruction or macro [$]");
+	if (NextIs(TOKEN_IF)) {
+		arg[1] = ParseInstrArg();
+		op = RelInstrFromToken();
+		if (op != TOKEN_VOID) {
+			NextToken();
+			arg[2] = ParseInstrArg();
+			if (NextIs(TOKEN_GOTO)) {
+				arg[0] = ParseInstrLabel();
 			} else {
-				if (inop->type->variant == TYPE_MACRO) {
-					NextToken();
-					EXP_EXTRA_SCOPE = CPU->SCOPE;
-					ParseMacro(inop);
-					EXP_EXTRA_SCOPE = NULL;
-					return;
-				} else {
-					ErrArg(inop);
-					SyntaxError("[A] must be instruction or macro");
-				}
+				SyntaxError("Expected goto");
 			}
+		} else {
+			SyntaxError("Expected relational operator");
 		}
-		NextToken();
-//		if (inop != NULL) op = inop->n;
 	} else {
-		SyntaxError("Expected instruction or macro name");
-	}
+		if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
 
-	arg[0] = arg[1] = arg[2] = NULL;
-
-	if (TOK != TOKEN_ERROR) {
-
-		n = 0;
-	// Include has special handling
-	// We need to make the file relative to current file dir and check the existence of the file
-
-		if (op == INSTR_DECL) {
-			arg[1] = ParseInstrArg();
-			NextIs(TOKEN_COLON);
-			type = ParseTypeInline();
-			arg[1]->type = type;
-			n=3;
-		} else if (op == INSTR_INCLUDE) {
-
-			if (TOK == TOKEN_STRING) {
-				PathMerge(inc_path, FILE_DIR, NAME);
-				arg[n++] = VarNewStr(inc_path);
-				NextToken();
-			} else {
-				SyntaxError("expected name of include file");
-			}
-
-		// Branching instruction has label as first argument
-		// 
-		} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
-			if (TOK == TOKEN_ID) {
-				scope = ParseScope();
-				if (TOK) {
-					if (scope != NULL) {
-						label = VarFindScope(scope, NAME, 0);
+			// This is instruction
+			op = InstrFind(NAME);
+			if (op == INSTR_NULL) {
+				inop = VarFindScope(CPU->SCOPE, NAME, 0);
+				if (inop == NULL) {
+					SyntaxError("Unknown instruction or macro [$]");
+				} else {
+					if (inop->type->variant == TYPE_MACRO) {
+						NextToken();
+						EXP_EXTRA_SCOPE = CPU->SCOPE;
+						ParseMacro(inop);
+						EXP_EXTRA_SCOPE = NULL;
+						return;
 					} else {
-						label = VarFind2(NAME);
+						ErrArg(inop);
+						SyntaxError("[A] must be instruction or macro");
 					}
-
-					if (label == NULL) {
-						label = VarNewLabel(NAME);
-					}
-					NextToken();
-					arg[0] = label;
-					n++;
-					goto next_arg;	//NextIs(TOKEN_COMMA);
 				}
-			} else if (arg_no = ParseArgNo()) {
-				arg[0] = VarRuleArg(arg_no-1);
-				NextIs(TOKEN_COMMA);
-				n++;
-			} else {
-				SyntaxError("expected label identifier");
 			}
+			NextToken();
+	//		if (inop != NULL) op = inop->n;
+		} else {
+			SyntaxError("Expected instruction or macro name or IF");
 		}
 
-		EXP_IS_DESTINATION = true;
-		while(n<3 && TOK != TOKEN_ERROR) {
-			// For first argument, we always try to parse, as currently some rules are written with the comma at the start
-			if (n!=0 && INSTR_INFO[op].arg_type[n] == TYPE_VOID) {
-				n++;
-			} else {
-				had_comma = false;
-				arg[n++] = ParseInstrArg();
-				EXP_IS_DESTINATION = false;
-next_arg:
-				if (!NextIs(TOKEN_COMMA)) break;
-				had_comma = true;
-			}
-		}
-		EXP_IS_DESTINATION = false;
+		arg[0] = arg[1] = arg[2] = NULL;
 
 		if (TOK != TOKEN_ERROR) {
-			if (op != INSTR_VOID) {
-				Gen(op, arg[0], arg[1], arg[2]);
+
+			n = 0;
+		// Include has special handling
+		// We need to make the file relative to current file dir and check the existence of the file
+
+			if (op == INSTR_DECL) {
+				arg[1] = ParseInstrArg();
+				NextIs(TOKEN_COLON);
+				type = ParseTypeInline();
+				arg[1]->type = type;
+				n=3;
+			} else if (op == INSTR_INCLUDE) {
+
+				if (TOK == TOKEN_STRING) {
+					PathMerge(inc_path, FILE_DIR, NAME);
+					arg[n++] = VarNewStr(inc_path);
+					NextToken();
+				} else {
+					SyntaxError("expected name of include file");
+				}
+
+			// Branching instruction has label as first argument
+			// 
+			} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
+
+				arg[0] = ParseInstrLabel();
+				if (TOK) {
+					n++;
+					goto next_arg;
+				}
+/*
+				if (TOK == TOKEN_ID) {
+					scope = ParseScope();
+					if (TOK) {
+						if (scope != NULL) {
+							label = VarFindScope(scope, NAME, 0);
+						} else {
+							label = VarFind2(NAME);
+						}
+
+						if (label == NULL) {
+							label = VarNewLabel(NAME);
+						}
+						NextToken();
+						arg[0] = label;
+						n++;
+						goto next_arg;	//NextIs(TOKEN_COMMA);
+					}
+				} else if (arg_no = ParseArgNo()) {
+					arg[0] = VarRuleArg(arg_no-1);
+					NextIs(TOKEN_COMMA);
+					n++;
+				} else {
+					SyntaxError("expected label identifier");
+				}
+*/
+			}
+
+			EXP_IS_DESTINATION = true;
+			while(n<3 && TOK != TOKEN_ERROR) {
+				// For first argument, we always try to parse, as currently some rules are written with the comma at the start
+				if (n!=0 && INSTR_INFO[op].arg_type[n] == TYPE_VOID) {
+					n++;
+				} else {
+					had_comma = false;
+					arg[n++] = ParseInstrArg();
+					EXP_IS_DESTINATION = false;
+next_arg:
+					if (!NextIs(TOKEN_COMMA)) break;
+					had_comma = true;
+				}
+			}
+			EXP_IS_DESTINATION = false;
+
+			if (had_comma || NextIs(TOKEN_COMMA)) {
+				SyntaxError("instruction does not take more arguments");
 			}
 		}
-
-		if (had_comma || NextIs(TOKEN_COMMA)) {
-			SyntaxError("instruction does not take more arguments");
-		}
 	}	
+
+	if (TOK != TOKEN_ERROR) {
+		if (op != INSTR_VOID) {
+			Gen(op, arg[0], arg[1], arg[2]);
+		}
+	}
+
 	EXP_INSTR = false;
 }
 
@@ -3572,10 +3627,23 @@ void ParseSimpleRuleArg(RuleArg * arg)
 	ParseRuleType(arg);
 }
 
+void ParseRuleUnary(RuleArg * arg)
+{
+	if (NextIs(TOKEN_ADR)) {
+		arg->variant = RULE_DEREF;
+		arg->arr = NewRuleArg();
+		ParseSimpleRuleArg(arg->arr);
+//		arg->arg_no  = ParseArgNo2();
+//		ParseRuleArgArray(arg);
+	} else {
+		ParseSimpleRuleArg(arg);
+	}
+}
+
 void ParseRuleElement(RuleArg * arg)
 {
 	RuleArg * idx, * idx2, * arr;
-	ParseSimpleRuleArg(arg);
+	ParseRuleUnary(arg);
 retry:
 //	if (NextIs(TOKEN_HASH)) {
 //		ParseRuleBinary(arg, RULE_ELEMENT);
@@ -3611,9 +3679,23 @@ retry:
 	}
 }
 
-void ParseRuleArith(RuleArg * arg)
+
+void ParseRuleMulDiv(RuleArg * arg)
 {
 	ParseRuleElement(arg);
+retry:
+	if (NextIs(TOKEN_MUL)) {
+		ParseRuleBinary(arg, RULE_MUL);
+		goto retry;
+	} else if (NextIs(TOKEN_DIV)) {
+		ParseRuleBinary(arg, RULE_DIV);
+		goto retry;
+	}
+}
+
+void ParseRuleAdd(RuleArg * arg)
+{
+	ParseRuleMulDiv(arg);
 retry:
 	if (NextIs(TOKEN_MINUS)) {
 		ParseRuleBinary(arg, RULE_SUB);
@@ -3622,6 +3704,34 @@ retry:
 		ParseRuleBinary(arg, RULE_ADD);
 		goto retry;
 	}
+}
+
+void ParseRuleAnd(RuleArg * arg)
+{
+	ParseRuleAdd(arg);
+retry:
+	if (NextIs(TOKEN_AND)) {
+		ParseRuleBinary(arg, RULE_AND);
+		goto retry;
+	}
+}
+
+void ParseRuleOr(RuleArg * arg)
+{
+	ParseRuleAnd(arg);
+retry:
+	if (NextIs(TOKEN_OR)) {
+		ParseRuleBinary(arg, RULE_OR);
+		goto retry;
+	} else if (NextIs(TOKEN_BITXOR)) {
+		ParseRuleBinary(arg, RULE_XOR);
+		goto retry;
+	}
+}
+
+void ParseRuleArith(RuleArg * arg)
+{
+	ParseRuleOr(arg);
 }
 
 void ParseRuleRange(RuleArg * arg)
@@ -3645,13 +3755,13 @@ next:
 void ParseRuleDeref(RuleArg * arg)
 {
 	RuleArg * idx, * idx2;
-	if (NextIs(TOKEN_ADR)) {
-		arg->variant = RULE_DEREF;
-		arg->arg_no  = ParseArgNo2();
-		ParseRuleArgArray(arg);
-
+//	if (NextIs(TOKEN_ADR)) {
+//		arg->variant = RULE_DEREF;
+//		arg->arg_no  = ParseArgNo2();
+//		ParseRuleArgArray(arg);
+//	}
 	// Tuples
-	} else if (TOK == TOKEN_OPEN_P) {
+	if (TOK == TOKEN_OPEN_P) {
 		NextToken();
 		idx = NewRuleArg();
 		ParseRuleArg2(idx);
@@ -3702,6 +3812,17 @@ Purpose:
 	return op;
 }
 
+void FlattenRule(Rule * rule, InstrOp op)
+{
+	RuleArg * arg;
+	rule->op = op;
+	memcpy(&rule->arg[2], rule->arg[1].index, sizeof(RuleArg));
+	free(rule->arg[1].index);
+	arg = rule->arg[1].arr;
+	memcpy(&rule->arg[1], arg, sizeof(RuleArg));
+	free(arg);
+}
+
 void ParseRule()
 /*
 <instr> "=" "instr" <instr>+  | "emit"+
@@ -3715,8 +3836,7 @@ void ParseRule()
 	char *s, *d, c;
 	Bool macro_rule = false;
 
-//	op = ParseInstrOp();
-	if (TOK == TOKEN_ERROR) return;
+//	if (TOK == TOKEN_ERROR) return;
 
 	rule = MemAllocStruct(Rule);
 	rule->line_no = LINE_NO;
@@ -3733,15 +3853,61 @@ void ParseRule()
 
 	if (op == INSTR_NULL) {
 		//TODO: In future, we will parse the rule in a more general way
+		EXP_IS_DESTINATION = true;
+		EXP_EXTRA_SCOPE = CPU->SCOPE;
 		ParseRuleArg2(&rule->arg[0]);
+		EXP_IS_DESTINATION = false;
+
 		if (TOK) {
-			if (NextIs(TOKEN_EQUAL)) {
+
+			if (NextIs(TOKEN_IF)) {
+				ParseRuleArg2(&rule->arg[1]);
+
+				op = RelInstrFromToken();
+				if (op != TOKEN_VOID) {
+					NextToken();
+					ParseRuleArg2(&rule->arg[2]);
+					if (NextIs(TOKEN_GOTO)) {
+						ParseRuleArg2(&rule->arg[0]);		// must be label!	
+						rule->op = op;
+					} else {
+						SyntaxError("Expected goto");
+					}
+				} else {
+					SyntaxError("Expected relational operator");
+				}
+			} else if (NextIs(TOKEN_EQUAL)) {
 				rule->op = INSTR_LET;
 				ParseRuleArg2(&rule->arg[1]);
+	
+				// Rule at the top level is Plus
+				if (rule->arg[1].variant == RULE_ADD) {
+					FlattenRule(rule, INSTR_ADD);
+				} else if (rule->arg[1].variant == RULE_SUB) {
+					FlattenRule(rule, INSTR_SUB);
+				} else if (rule->arg[1].variant == RULE_MUL) {
+					FlattenRule(rule, INSTR_MUL);
+				} else if (rule->arg[1].variant == RULE_DIV) {
+					FlattenRule(rule, INSTR_DIV);
+				} else if (rule->arg[1].variant == RULE_AND) {
+					FlattenRule(rule, INSTR_AND);
+				} else if (rule->arg[1].variant == RULE_OR) {
+					FlattenRule(rule, INSTR_OR);
+				} else if (rule->arg[1].variant == RULE_XOR) {
+					FlattenRule(rule, INSTR_XOR);
+				}
+
 			} else {
-				SyntaxError("Expected comma");
+				SyntaxError("Expected equal");
 			}
 		}
+
+		// Flags defined as @flags
+		if (NextIs(TOKEN_ADR)) {
+			rule->flags = ParseVariable();
+		}
+
+		EXP_EXTRA_SCOPE = NULL;
 	} else {
 
 		NextToken();
@@ -3764,7 +3930,9 @@ void ParseRule()
 				break;
 			}
 
-			NextIs(TOKEN_COMMA);
+			if (i != 2) {
+				NextIs(TOKEN_COMMA);
+			}
 		}
 	}
 
@@ -3821,6 +3989,8 @@ void ParseRule()
 				SyntaxError("Expected instruction or string");
 			}
 		}
+	} else {
+		SyntaxError("Expected =.");
 	}
 
 	if (TOK != TOKEN_ERROR) {
@@ -4153,7 +4323,6 @@ Syntax:
 
 void ParseUseFile()
 {
-
 	if (TOK != TOKEN_ID && TOK != TOKEN_STRING) {
 		SyntaxError("Expected module name");
 		return;
@@ -4181,7 +4350,7 @@ void AssertVar(Var * var)
 	char buf[100];
 
 	if (var == NULL) return;
-	if (var->mode == INSTR_VAR && !VarIsReg(var) && var->name != NULL) {
+	if (var->mode == INSTR_VAR && !VarIsReg(var) && var->name != NULL && !VarIsTmp(var)) {
 		buf[0] = ' ';
 		StrCopy(buf+1, var->name);
 		StrCopy(buf + 1+ StrLen(var->name), " = ");
@@ -4328,7 +4497,7 @@ void ParseCommands()
 			if (MACRO_PRINT != NULL) {
 				GenBegin();
 				if (MACRO_PRINT->type->variant == TYPE_MACRO) {
-					GenMacro(MACRO_PRINT, NULL);
+					GenMacroParse(MACRO_PRINT, NULL);
 				} else {
 					Gen(INSTR_CALL, MACRO_PRINT, NULL, NULL);
 				}

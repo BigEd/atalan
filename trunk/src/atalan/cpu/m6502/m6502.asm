@@ -85,7 +85,7 @@ _std_print_adr .proc
 		bcc system__print
 		.endp
 		
-_std_print_out .proc
+system__print_out .proc
 		lda #<_out_putchr
 		ldx #>_out_putchr
 		clc											;TODO: No Jump, if we are directly before the _std_print
@@ -97,8 +97,8 @@ _std_print_out .proc
  .ENDIF
 
 system__print .proc
-		sta _putchr_proc_adr 
-		stx _putchr_proc_adr+1
+		sta system__putchr_proc_adr 
+		stx system__putchr_proc_adr+1
 		
 		;... continue to _std_print
 ;.endp
@@ -229,7 +229,7 @@ skip
 .endp
 
 _std_putchr .proc
-		jmp (_putchr_proc_adr)
+		jmp (system__putchr_proc_adr)
 		rts
 .endp
 
@@ -305,7 +305,7 @@ hex     dta c"0123456789ABCDEF"
 ;	?size	on output, returns size of resulting bcd number
 ;   ?varptr	on output, containg pointer to converted BCD
 ;Uses:
-;	_stdbuf
+;	system__buf
 ;	?aux
 ;	?aux2
 
@@ -317,7 +317,7 @@ hex     dta c"0123456789ABCDEF"
 		
 		;Zero the destination buffer
 		lda #0
-zero	sta _stdbuf-1,y
+zero	sta system__buf-1,y
 		dey
 		bne zero
 		
@@ -340,9 +340,9 @@ shift_byte
 		ldx #0
 		ldy ?size
 bcd_mul2
-		lda _stdbuf,x
-		adc	_stdbuf,x			;buf2(x) = buf2(x) * 2 + carry
-		sta _stdbuf,x
+		lda system__buf,x
+		adc	system__buf,x			;buf2(x) = buf2(x) * 2 + carry
+		sta system__buf,x
 		inx
 		dey								;TODO: cpx ?size
 		bne bcd_mul2
@@ -361,18 +361,18 @@ loop	rol ?aux2		;divide by two, if result is 0, end
 		asl
 		ldx #0
 carry1
-		lda _stdbuf,x
+		lda system__buf,x
 		adc #0
-		sta _stdbuf,x
+		sta system__buf,x
 		inx
 		bcs carry1
 		.ENDIF
 					
 		cld		
 		
-		lda #<_stdbuf
+		lda #<system__buf
 		sta ?varptr	
-		lda #>_stdbuf
+		lda #>system__buf
 		sta ?varptr+1	
 		rts
 

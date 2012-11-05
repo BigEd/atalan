@@ -113,3 +113,18 @@ BigInt * IntMax(BigInt * l, BigInt * r)
 {
 	return IntLower(l, r)?r:l;
 }
+
+void IntMulN(BigInt * dest, Int32 N)
+{
+	*dest = *dest * N;
+}
+
+void IntDivN(BigInt * dest, Int32 N)
+{
+	*dest = *dest / N;
+}
+
+void IntAddN(BigInt * dest, Int32 N)
+{
+	*dest = *dest + N;
+}

@@ -23,3 +23,7 @@ Bool IntLowerEq(BigInt * l, BigInt * r);
 Bool IntHigherEq(BigInt * l, BigInt * r);
 
 Bool IntIsN(BigInt * l, Int32 N);
+
+void IntMulN(BigInt * dest, Int32 N);
+void IntDivN(BigInt * dest, Int32 N);
+void IntAddN(BigInt * dest, Int32 N);

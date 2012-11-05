@@ -328,6 +328,17 @@ generating it.
 
 extern Var * MACRO_ARG[MACRO_ARG_CNT];
 
+void GenMacroParse(Var * macro, Var ** args)
+/*
+Purpose:
+	Expand macro when parsing.
+	This will generate line instruction if necessary.
+*/
+{
+	GenLine();
+	GenMacro(macro, args);
+}
+
 void GenMacro(Var * macro, Var ** args)
 /*
 Purpose:

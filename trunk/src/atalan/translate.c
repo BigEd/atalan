@@ -134,12 +134,15 @@ Purpose:
 	Rule is stored either in emit or normal rules set.
 */
 {
-	if (!rule->to->first) InternalError("Empty rule");
-
-	if (rule->to->first->op == INSTR_EMIT) {
-		RuleSetAddRule(&INSTR_RULES, rule);
+	if (rule->to == NULL || rule->to->first == NULL) {
+		SyntaxError("Empty rule");
 	} else {
-		RuleSetAddRule(&TRANSLATE_RULES, rule);
+
+		if (rule->to->first->op == INSTR_EMIT) {
+			RuleSetAddRule(&INSTR_RULES, rule);
+		} else {
+			RuleSetAddRule(&TRANSLATE_RULES, rule);
+		}
 	}
 }
 
@@ -530,7 +533,7 @@ Bool InstrTranslate(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode
 {
 	Rule * rule;
 
-	if (mode == TEST_ONLY) {
+	if (FlagOn(mode, TEST_ONLY)) {
 		if (op == INSTR_LINE) return true;
 		if (InstrRule2(op, result, arg1, arg2) != NULL) return true;
 		rule = TranslateRule(op, result, arg1, arg2);
@@ -577,11 +580,34 @@ void VarInitType(Var * var, Type * type)
 	var->type = type;
 }
 
+Type * TypeBiggerType(InstrOp op, Type * type)
+/*
+Purpose:
+	Find bigger type supported by compiler.
+*/
+{
+	Rule * rule;
+	Type * result_type;	
+	Type * found_type = NULL;
+	rule = TRANSLATE_RULES.rules[op];
+
+	for(; rule != NULL; rule = rule->next) {
+		if (rule->arg[0].variant == RULE_ARG) {
+			result_type = rule->arg[0].type;
+			if (TypeIsSubsetOf(type, result_type) && !TypeIsSubsetOf(result_type, type)) {
+				if (found_type == NULL || TypeIsSubsetOf(result_type, found_type)) found_type = result_type;
+			}
+		}
+	}
+	return found_type;
+}
+
 Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
 {
 	Var * a;
 	Var  tmp1,  tmp2,  tmp_r;
 	Bool has1, has2, has_r;
+	Type * result_type;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
 
@@ -602,6 +628,8 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	if (has1)  { VarInitType(&tmp1, arg1->type); }
 	if (has2)  { VarInitType(&tmp2, arg2->type); }
 
+	result_type = result->type;
+
 	if (has1) {
 		// When the instruction is assignment, it may happen, that assigning the argument to temporary variable 
 		// would generate basically the same instruction as is the translated instruction.
@@ -610,7 +638,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		if (op == INSTR_LET && !has_r && TypeIsEqual(result->type, tmp1.type)) {
 			has1 = false;
 		} else {
-			has1 = InstrTranslate3(INSTR_LET, &tmp1, arg1, NULL, TEST_ONLY);
+			has1 = InstrTranslate3(INSTR_LET, &tmp1, arg1, NULL, mode | TEST_ONLY);
 		}
 	}
 	
@@ -618,7 +646,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		if (op == INSTR_LET && !has_r && TypeIsEqual(result->type, tmp2.type)) {
 			has2 = false;
 		} else {
-			has2 = InstrTranslate3(INSTR_LET, &tmp2, arg2, NULL, TEST_ONLY);
+			has2 = InstrTranslate3(INSTR_LET, &tmp2, arg2, NULL, mode | TEST_ONLY);
 		}
 	}
 
@@ -626,28 +654,47 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		if (op == INSTR_LET && arg1->mode == INSTR_VAR && TypeIsEqual(arg1->type, tmp_r.type)) {
 			has_r = false;
 		} else {
-			has_r = InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, TEST_ONLY);
+			has_r = InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, mode | TEST_ONLY);
 		}
 	}
 
-	if (has1 && InstrTranslate2(op, result, &tmp1, arg2, TEST_ONLY)) {
+	if (has1 && InstrTranslate2(op, result, &tmp1, arg2, mode | TEST_ONLY)) {
 		has2 = has_r = false;
-	} else if (has2 && InstrTranslate2(op, result, arg1, &tmp2, TEST_ONLY)) {
+	} else if (has2 && InstrTranslate2(op, result, arg1, &tmp2, mode | TEST_ONLY)) {
 		has1 = has_r = false;
-	} else if (has_r && InstrTranslate2(op, &tmp_r, arg1, arg2, TEST_ONLY)) {
+	} else if (has_r && InstrTranslate2(op, &tmp_r, arg1, arg2, mode | TEST_ONLY)) {
 		has1 = has2 = false;
-	} else if (has1 && has2 && InstrTranslate2(op, result, &tmp1, &tmp2, TEST_ONLY)) {
+	} else if (has1 && has2 && InstrTranslate2(op, result, &tmp1, &tmp2, mode | TEST_ONLY)) {
 		has_r = false;
-	} else if (has_r && has1 && InstrTranslate2(op, &tmp_r, &tmp1, arg2, TEST_ONLY)) {
+	} else if (has_r && has1 && InstrTranslate2(op, &tmp_r, &tmp1, arg2, mode | TEST_ONLY)) {
 		has2 = false;		
-	} else if (has_r && has2 && InstrTranslate2(op, &tmp_r, arg1, &tmp2, TEST_ONLY)) {
+	} else if (has_r && has2 && InstrTranslate2(op, &tmp_r, arg1, &tmp2, mode | TEST_ONLY)) {
 		has1 = false;
-	} else if (has_r && has1 && has2 && InstrTranslate2(op, &tmp_r,&tmp1, &tmp2, TEST_ONLY)) {
+	} else if (has_r && has1 && has2 && InstrTranslate2(op, &tmp_r,&tmp1, &tmp2, mode | TEST_ONLY)) {
 
 	} else {
+
+		// No translation of the instruction was found.
+		// Try, if it is possible to use instruction returning result with bigger range and then cast that
+		// bigger result to smaller variable.
+
+		if (FlagOff(mode, BIGGER_RESULT)) {
+			if (result->mode == INSTR_VAR && result->type->variant == TYPE_INT) {
+				result_type = result->type; 
+				while((result_type = TypeBiggerType(op, result_type)) != NULL) {			
+					VarInitType(&tmp_r, result_type);
+					if (InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, mode | TEST_ONLY)) {
+						if (InstrTranslate3(op, &tmp_r, arg1, arg2, mode | BIGGER_RESULT | TEST_ONLY)) {
+							has_r = true;
+							goto found_translation;
+						}
+					}
+				}
+			}
+		}
 		return false;
 	}
-
+found_translation:
 	if (mode == GENERATE) {
 		if (has1) {
 			a = VarNewTmp(arg1->type);
@@ -661,7 +708,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		}
 		if (has_r) {
 			a = result;
-			result = VarNewTmp(result->type);
+			result = VarNewTmp(result_type);
 		}
 
 		InstrTranslate2(op, result, arg1, arg2, GENERATE);

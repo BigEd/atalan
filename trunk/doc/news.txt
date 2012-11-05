@@ -1,6 +1,13 @@
 ﻿****
 News
 ****
+===========
+31-Oct-2012
+===========
+
+- NEW: Updated web page a little
+- NEW: Prelimitary support for Z80 CPU and ZX Spectrum platform
+- NEW: New conZ80 tool and platform support
 
 ===========
 19-Mar-2011
