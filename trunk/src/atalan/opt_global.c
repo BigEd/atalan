@@ -43,7 +43,7 @@ Purpose:
 		change = false;
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 			if (!blk->processed) {
-				if ((blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed)) {
+				if ((blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed || blk->cond_to == blk)) {
 					block_fn(blk, info);
 					blk->processed = true;
 					change = true;

@@ -110,7 +110,7 @@ LiveSet MergeLiveSets(InstrBlock * blk, UInt16 count, LiveSet last_block)
 		if (blk->to != NULL) {
 			MemMove(live, blk->to->analysis_data, count);
 		}
-		if (blk->cond_to != NULL) {
+		if (blk->cond_to != NULL && blk->cond_to != blk) {
 			src_live = (LiveSet)blk->cond_to->analysis_data;
 			for(i=0; i<count; i++) {
 				live[i] = live[i] | src_live[i];
@@ -137,6 +137,7 @@ void VarAllocVar(VarAllocInfo * info, Var * var, LiveSet live, UInt8 mark)
 /*
 Purpose:
 	Mark variable in live set as either live (used) or dead (assigned).
+	If variable is not in the live set, do nothing.
 */
 {
 	UInt16 idx;
@@ -145,9 +146,9 @@ Purpose:
 		idx = var->set_index;
 		if (idx >= 0 && idx < VarSetCount(&info->vars) && VarSetItem(&info->vars, idx)->key == var) {
 			live[idx] = mark;
-			if (mark == 1) {
+//			if (mark == 1) {
 				MarkVarCollision(info, live, idx);
-			}
+//			}
 		}
 		if (var->adr != NULL) {
 			VarAllocVar(info, var->adr, live, mark);
