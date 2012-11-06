@@ -231,11 +231,25 @@ retry:
 //	}
 	return false;
 }
-
+/*
 UInt16 LetCycles(Var * result, Var * arg1)
 {
 	Rule * rule = InstrRule2(INSTR_LET, result, arg1, NULL);
-	return rule->cycles;
+	if (rule != NULL) {
+		return rule->cycles;
+	}
+}
+*/
+Bool LetCycles(Var * result, Var * arg1, UInt16 * p_q)
+{
+	Rule * rule = InstrRule2(INSTR_LET, result, arg1, NULL);
+	if (rule != NULL) {
+		*p_q = rule->cycles;
+		return true;
+	} else {
+		*p_q = 0;
+	}
+	return false;
 }
 
 Int32 UsageQuotient(InstrBlock * header, InstrBlock * end, Var * top_var, Var * reg, Bool * p_init)
@@ -253,6 +267,7 @@ Arguments:
 */{
 	Var * prev_var;
 	Int32 q;
+	UInt16 cycles;
 	UInt16 changed;
 	InstrBlock * blk, * blk_exit;
 	Instr * i, ti;
@@ -324,8 +339,8 @@ Arguments:
 			// we need to load the value to register first.
 			if (InstrReadsVar(i, top_var)) {
 				if (!VarContains(reg, top_var)) {
-					if (!(i->op == INSTR_LET && i->result == reg && i->arg1 == top_var)) {
-						q += LetCycles(reg, top_var);
+					if (!(i->op == INSTR_LET && i->result == reg && i->arg1 == top_var) && LetCycles(reg, top_var, &cycles)) {
+						q += cycles;
 					}
 					reg_use = 0;
 					// We may not had to add the load, but we still can not remove this instruction, so do not
@@ -344,8 +359,8 @@ Arguments:
 				// we need to save the register and load some other.
 
 				if (InstrUsesVar(i, reg) && !VarContains(reg, top_var)) {
-					if (prev_var != NULL) {
-						q += LetCycles(reg, top_var);
+					if (prev_var != NULL && LetCycles(reg, top_var, &cycles)) {
+						q += cycles;
 					}
 				}
 			}
@@ -354,16 +369,16 @@ Arguments:
 			// If the register is currently ysed for some different purpose, we must spill it.
 
 			if (i->result == top_var && !VarContains(reg, top_var)) {
-				if (i->next_use != NULL) {
-					q += LetCycles(top_var, reg);		// TODO: we should use some temporary variable here
+				if (i->next_use[0] != NULL && LetCycles(top_var, reg, &cycles)) {
+					q += cycles;		// TODO: we should use some temporary variable here
 				}
 
 				//TODO: In this case, we will need to load the register later, when it is used
 				//We should handle the situation.
 			// Will it be necessary to spill?
 			// We use the variable (array) that is stored to register
-			} else if (InstrSpill(i, top_var)) {
-				q += LetCycles(top_var, reg);
+			} else if (InstrSpill(i, top_var) && LetCycles(top_var, reg, &cycles)) {
+				q += cycles;
 			}
 
 			memcpy(&ti, i, sizeof(Instr));
@@ -426,7 +441,9 @@ next:
 	// We must load it before first use.
 
 	if (!*p_init) {
-		q += LetCycles(reg, top_var);
+		if (LetCycles(reg, top_var, &cycles)) {
+			q += cycles;
+		}
 	}
 done:
 	return q;

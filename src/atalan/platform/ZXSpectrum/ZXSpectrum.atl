@@ -32,8 +32,8 @@ color: type = 0..7
 border:macro c:color =
 	ula = c
 
-ATTR_P@23695:0..255	
-MASK_P@23696:0..255
+in out ATTR_P@23695:0..255	
+in out MASK_P@23696:0..255
 
 attr_flag: type = enum off:0 on:1 
 

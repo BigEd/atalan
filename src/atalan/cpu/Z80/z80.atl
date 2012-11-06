@@ -204,7 +204,7 @@ system.printchar:proc chr@cpu.a
 ;Following routines are defined in z80.asm
 
 
-system.print_out:proc @cpu.a @cpu.hl
+system.print_out:proc @cpu.a @cpu.hl @cpu.b @cpu.de @cpu.c
 
 system.print_scr:macro = instr
 	call system.print_out
