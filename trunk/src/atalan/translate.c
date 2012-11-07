@@ -33,6 +33,12 @@ Normal rules translate compiler instruction to zero or more compiler instruction
 GLOBAL RuleSet TRANSLATE_RULES;
 GLOBAL RuleSet INSTR_RULES;
 
+Bool RuleArgIsRegister(RuleArg * l)
+{
+	if (l->variant == RULE_REGISTER || l->variant == RULE_VARIANT) return true;
+	return false;
+}
+
 Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 /*
 	Compare two rule arguments for specificity.
@@ -44,17 +50,17 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 	if (l == NULL) return false;
 	if (r == NULL) return true;
 
-	if (l->variant == RULE_REGISTER) {
-		if (r->variant != RULE_REGISTER) return true;
+	if (RuleArgIsRegister(l)) {
+		if (!RuleArgIsRegister(r)) return true;
 	}
 
 	if (l->variant == RULE_VALUE) {
 		if (r->variant != RULE_VALUE) return true;
 	}
 
-	if (l->variant == RULE_VARIANT) {
-		if (r->variant != RULE_VARIANT) return true;
-	}
+//	if (l->variant == RULE_VARIANT) {
+//		if (r->variant != RULE_VARIANT) return true;
+//	}
 
 	if (r->variant == RULE_VALUE) return false;
 
@@ -489,7 +495,9 @@ Purpose:
 	if (instr->op == INSTR_LINE) return rule;
 
 	for(; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, instr, PHASE_EMIT)) break;
+		if (RuleMatch(rule, instr, PHASE_EMIT)) {		
+			break;
+		}
 	}
 	return rule;
 }
