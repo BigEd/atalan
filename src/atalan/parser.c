@@ -3785,6 +3785,25 @@ void ParseRuleArg2(RuleArg * arg)
 	ParseRuleDeref(arg);
 }
 
+void ParseRuleArg(Rule * rule, RuleArg * arg)
+{
+	ParseRuleArg2(arg);
+}
+
+void ResolveRuleArg(Rule * rule, RuleArg * arg)
+{
+	UInt8 i;
+	if (arg->variant == RULE_ARG) {
+		for(i=0; i<3; i++) {
+			if (&rule->arg[i] != arg && rule->arg[i].arg_no == arg->arg_no) {
+				arg->variant = rule->arg[i].variant;
+				arg->var = rule->arg[i].var;
+				return;
+			}
+		}
+	}
+}
+
 Bool ParsingRule()
 {
 	return PARSING_RULE;
@@ -3855,20 +3874,20 @@ void ParseRule()
 		//TODO: In future, we will parse the rule in a more general way
 		EXP_IS_DESTINATION = true;
 		EXP_EXTRA_SCOPE = CPU->SCOPE;
-		ParseRuleArg2(&rule->arg[0]);
+		ParseRuleArg(rule, &rule->arg[0]);
 		EXP_IS_DESTINATION = false;
 
 		if (TOK) {
 
 			if (NextIs(TOKEN_IF)) {
-				ParseRuleArg2(&rule->arg[1]);
+				ParseRuleArg(rule, &rule->arg[1]);
 
 				op = RelInstrFromToken();
 				if (op != TOKEN_VOID) {
 					NextToken();
-					ParseRuleArg2(&rule->arg[2]);
+					ParseRuleArg(rule, &rule->arg[2]);
 					if (NextIs(TOKEN_GOTO)) {
-						ParseRuleArg2(&rule->arg[0]);		// must be label!	
+						ParseRuleArg(rule, &rule->arg[0]);		// must be label!	
 						rule->op = op;
 					} else {
 						SyntaxError("Expected goto");
@@ -3878,7 +3897,7 @@ void ParseRule()
 				}
 			} else if (NextIs(TOKEN_EQUAL)) {
 				rule->op = INSTR_LET;
-				ParseRuleArg2(&rule->arg[1]);
+				ParseRuleArg(rule, &rule->arg[1]);
 	
 				// Rule at the top level is Plus
 				if (rule->arg[1].variant == RULE_ADD) {
@@ -3920,7 +3939,7 @@ void ParseRule()
 
 		for(i=0; i<3 && TOK != TOKEN_EQUAL && TOK != TOKEN_ERROR; i++) {
 			if (INSTR_INFO[op].arg_type[i] != TYPE_VOID) {
-				ParseRuleArg2(&rule->arg[i]);
+				ParseRuleArg(rule, &rule->arg[i]);
 			}
 			EXP_IS_DESTINATION = false;
 
@@ -3934,6 +3953,10 @@ void ParseRule()
 				NextIs(TOKEN_COMMA);
 			}
 		}
+	}
+
+	for(i=0; i<3; i++) {
+		ResolveRuleArg(rule, &rule->arg[i]);
 	}
 
 	// Number of cycles may be defined after hash '#3'
