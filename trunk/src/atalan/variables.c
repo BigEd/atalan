@@ -1028,19 +1028,31 @@ Purpose:
 			return true;
 		} else {
 
-			if (test_var->mode == INSTR_TUPLE) {
-				return VarUsesVar(var, test_var->adr) || VarUsesVar(var, test_var->var);
-			} else {
+			InstrInfo * ii = &INSTR_INFO[var->mode];
 
-				if (var->mode == INSTR_DEREF) {
-					return VarUsesVar(var->var, test_var);
-				} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
-					return VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
-				} else if (var->adr != NULL) {
+//			if (test_var->mode == INSTR_TUPLE) {
+//				return VarUsesVar(var, test_var->adr) || VarUsesVar(var, test_var->var);
+//			} else {
+
+			if (var->mode == INSTR_DEREF) {
+				return VarUsesVar(var->var, test_var);
+			} else if (var->mode == INSTR_VAR) {
+				if (var->adr != NULL) {
 					if (var->adr->mode != INSTR_CONST) {
 						return VarUsesVar(var->adr, test_var);
 					}
 				}
+			} else {
+				if (ii->arg_type[1] == TYPE_ANY) {
+					if (VarUsesVar(var->adr, test_var)) return true;
+				}
+
+				if (ii->arg_type[2] == TYPE_ANY) {
+					if (VarUsesVar(var->var, test_var)) return true;
+				}
+
+//				} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
+//					return VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
 			}
 		}
 		if (test_var->mode == INSTR_VAR && test_var->adr != NULL) {

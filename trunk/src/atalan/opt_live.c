@@ -41,16 +41,13 @@ Input:
 */
 {
 	Var * var2;
+	InstrInfo * ii;
+
 	if (var == NULL) return;
 
 	// Dereferencing reads the variable (even if it is used for writing at that address later)
 	if (var->mode == INSTR_DEREF) {
 		VarMarkLive(var->var);
-
-	// Tuple just marks both variables in the same manner same
-	} else if (var->mode == INSTR_TUPLE) {
-		VarMark(var->adr, state);
-		VarMark(var->var, state);
 
 	// If this is array access variable, mark indices as live (used)
 	} if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
@@ -66,8 +63,19 @@ Input:
 		if (var->var->mode != INSTR_CONST) state = VarLive;
 
 	} else {
+
+		ii = &INSTR_INFO[var->mode];
+
+		if (ii->arg_type[1] == TYPE_ANY) {
+			VarMark(var->adr, state);
+		}
+
+		if (ii->arg_type[2] == TYPE_ANY) {
+			VarMark(var->var, state);
+		}
+
 		// If variable is alias for some other variable, mark the other variable too
-		if (var->adr != NULL) {
+		if (var->mode == INSTR_VAR && var->adr != NULL) {
 			if (var->adr->mode == INSTR_VAR || var->adr->mode == INSTR_TUPLE) {
 				VarMark(var->adr, state);
 			}
@@ -96,6 +104,10 @@ Input:
 
 
 Bool VarInTuple(Var * var, Var * find_var)
+/*
+Purpose:
+	Try to find the value in the tuple.
+*/
 {
 	if (var == NULL) return false;
 	if (var == find_var) return true;
@@ -225,27 +237,45 @@ void MarkProcLive(Var * proc)
 
 void VarMarkNextUse(Var * var, Instr * i)
 {
+	InstrInfo * ii;
 	if (var == NULL) return;
+	ii = &INSTR_INFO[var->mode];
+
+	if (var->mode == INSTR_VAR) {
+		var->src_i = i;
+	} else {
+		if (ii->arg_type[1] == TYPE_ANY) VarMarkNextUse(var->adr, i);
+		if (ii->arg_type[2] == TYPE_ANY) VarMarkNextUse(var->var, i);
+	}
+/*
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_DEREF || var->mode == INSTR_SUB) {
 		VarMarkNextUse(var->var, i);
 		VarMarkNextUse(var->adr, i);
 	} else {
 		var->src_i = i;
 	}
+*/
 }
 
 Bool VarDereferences(Var * var)
 {
+	InstrInfo * ii;
 	if (var != NULL) {
+		ii = &INSTR_INFO[var->mode];
 		if (var->mode == INSTR_DEREF) return true;
-		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
+		if (ii->arg_type[1] == TYPE_ANY) if (VarDereferences(var->adr)) return true;
+		if (ii->arg_type[2] == TYPE_ANY) if (VarDereferences(var->var)) return true;
+//		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
 	}
 	return false;
 }
 
 Bool VarIsDead(Var * var)
 {
+	InstrInfo * ii;
 	if (var == NULL) return true;
+
+	ii = &INSTR_INFO[var->mode];
 
 	if (var->mode == INSTR_TUPLE) {
 		return VarIsDead(var->adr) && VarIsDead(var->var);
