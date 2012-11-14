@@ -38,6 +38,7 @@ CPU:scope =
 	x,y:0..255
 	c,z,v,n:0..1	
 	ac@(a,c)
+	ca@(c,a)
 	azn@(a,z,n)
 	aczn@(a,c,z,n)
 	xzn@(x,z,n)
@@ -66,7 +67,7 @@ CPU:scope =
 	clc:macro = instr let c, 0
 	sec:macro = instr let c, 1	
 
-	adc:macro o = instr add as, ac, o 
+	adc:macro o = instr add ca, a+c, o 
 	sbc:macro o = instr sub as, ac, o 
 	inx:macro = instr add x, x, 1
 	iny:macro = instr add y, y, 1
@@ -626,7 +627,7 @@ rule add %A:byte, %B:card, %C:byte = instr
   adc %C
   sta %A
   
-rule add as, ac, %A:byte1arr(%B:byte - const %D) = instr
+rule add ca, a+c, %A:byte1arr(%B:byte - const %D) = instr
 	ldx %B
 	clc
 	adc %A$(x-%D)
@@ -2175,12 +2176,12 @@ rule sub %A$const %B, %A$%B, 1  @zn #5 = "   dec %A-%A.index.min+%B"
 rule sub %A$x, %A$x, 1          @zn #7 = "   dec %A-%A.index.min,x"
 
 ;ADC
-rule add as, ac, const %A:byte1  #2 = "   adc #%A"
-rule add as, ac, %A:byte1        #3 = "   adc %A"
-rule add as, ac, %A$const %B     #3 = "   adc %A-%A.index.min+%B"
-rule add as, ac, %A$(x-const %D) #4 = "   adc %A-%A.index.min-%D,x"
-rule add as, ac, %A$(y-const %D) #4 = "   adc %A-%A.index.min-%D,y"
-rule add as, ac, @%A$y           #5 = "   adc (%A),y"
+rule add ca, a+c, const %A:byte1  #2 = "   adc #%A"
+rule add ca, a+c, %A:byte1        #3 = "   adc %A"
+rule add ca, a+c, %A$const %B     #3 = "   adc %A-%A.index.min+%B"
+rule add ca, a+c, %A$(x-const %D) #4 = "   adc %A-%A.index.min-%D,x"
+rule add ca, a+c, %A$(y-const %D) #4 = "   adc %A-%A.index.min-%D,y"
+rule add ca, a+c, @%A$y           #5 = "   adc (%A),y"
 ;rule add as,a,%A$(x-const %D)  #4 = "   adc %A-%A.index.min-%D,x"
 ;rule add as,a,%A$(y-const %D)  #4 = "   adc %A-%A.index.min-%D,y"
 

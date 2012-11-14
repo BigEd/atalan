@@ -24,6 +24,8 @@ void OptimizeDataFlow(Var * proc, ProcessBlockFn block_fn, void * info, void * f
 {
 }
 
+#define Processed(blk, foll) (blk->foll == NULL || blk->foll->processed || blk->foll == blk)
+
 void OptimizeDataFlowBack(Var * proc, ProcessBlockFn block_fn, void * info)
 /*
 Purpose:
@@ -43,7 +45,8 @@ Purpose:
 		change = false;
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 			if (!blk->processed) {
-				if ((blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed || blk->cond_to == blk)) {
+				// Process block, if all it's followers have been processed (or if it has none).
+				if (Processed(blk, to) && Processed(blk, cond_to)) {	//(blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed || blk->cond_to == blk)) {
 					block_fn(blk, info);
 					blk->processed = true;
 					change = true;
