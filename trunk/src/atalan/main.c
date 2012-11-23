@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
 
 	PHASE = PHASE_TRANSLATE;
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_CONST && var->type->variant == TYPE_ARRAY && var->instr != NULL) {
+		if (var->mode == INSTR_INT && var->type->variant == TYPE_ARRAY && var->instr != NULL) {
 			ProcTranslate(var);
 		}
 	NEXT_VAR

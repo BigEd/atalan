@@ -103,14 +103,14 @@ Purpose:
 
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 				if (FlagOn(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG)) continue;
-				if (var->var->mode != INSTR_CONST) continue;
+				if (var->var->mode != INSTR_INT) continue;
 //				continue;
 				// If array index is loop dependent, do not attempt to replace it with register
 //				if (FlagOn(var->var->flags, VarLoopDependent)) continue;
 			}
 
 			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG) 
-//			 && var->mode != INSTR_CONST 
+//			 && var->mode != INSTR_INT 
 			 && var->mode != INSTR_DEREF
 			 && var->type != NULL && var->type->variant != TYPE_PROC
 			 && !VarIsLabel(var) 
@@ -396,7 +396,7 @@ Arguments:
 				} 
 				rule = InstrRule(&ti);
 				if (rule == NULL) {
-					if (top_var->mode != INSTR_CONST) {
+					if (top_var->mode != INSTR_INT) {
 						q = 1;		// do not use this register, as invalid code would get generated
 						goto done;
 					} else {
@@ -507,7 +507,7 @@ Bool VarIsLoopDependent(Var * var, VarSet * liveset)
 	if (var == NULL) return false;
 	if (VarSetFind(liveset, var)) return false;
 	if (FlagOn(var->flags, VarLoop|VarLoopDependent)) return true;
-	if (var->mode != INSTR_CONST) {
+	if (var->mode != INSTR_INT) {
 		if (VarIsLoopDependent(var->adr, liveset)) return true;
 		if (VarIsLoopDependent(var->adr, liveset)) return true;
 	}

@@ -295,6 +295,8 @@ Purpose:
 			if (exp != NULL) {
 				if (ExpUsesValue(exp, res)) {
 					ExpFree(&var->dep);
+				} else if (var->mode == INSTR_DEREF && VarUsesVar(var->var, res)) {
+					ExpFree(&var->dep);
 				}
 			}
 //		}
@@ -347,7 +349,7 @@ Purpose:
 		} else if (VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) {
 			//TODO: Support for 2d arrays
 			//      In assembler phase is not required (we do not have instructions for 2d indexed arrays).
-			if (arg->var->mode != INSTR_CONST) {
+			if (arg->var->mode != INSTR_INT) {
 				src_dep = ExpAlloc(arg->mode);
 				ExpArg(src_dep, 0, arg->adr);
 				ExpArg(src_dep, 1, arg->var);
@@ -418,7 +420,7 @@ Purpose:
 	arg = i->arg1;
 
 	if (op == INSTR_LET) {
-		if ((VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) && arg->var->mode != INSTR_CONST) {
+		if ((VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) && arg->var->mode != INSTR_INT) {
 			exp = ExpAlloc(arg->mode);
 			ExpArg(exp, 0, arg->adr);
 			ExpArg(exp, 1, arg->var);
@@ -446,14 +448,21 @@ done:
 }
 
 void SetDependency(Var * var, Exp * exp)
-{
+{	
 	if (var == NULL) return;
+
+	// If we are setting value of some expression to tuple, separate elements of that tuple are reset.
+	// Whole tuple however receives the dependency on the expression.
+
 	if (var->mode == INSTR_TUPLE) {
-		SetDependency(var->adr, exp);
-		SetDependency(var->var, exp);
-	} else {
-		var->dep = exp;
+		ResetVarDep(var->adr);
+		ResetVarDep(var->var);
+//		SetDependency(var->adr, exp);
+//		SetDependency(var->var, exp);
+//	} else {
 	}
+		var->dep = exp;
+//	}
 
 	if (var->mode == INSTR_VAR && var->adr != NULL && (var->adr->mode == INSTR_TUPLE || var->adr->mode == INSTR_VAR)) {
 		SetDependency(var->adr, exp);
@@ -472,7 +481,7 @@ void Dependency(Instr * i)
 	// If we set a value to result and arg1 is NULL, set the dependency to source value too (they are both same)
 	// This may happen, when some self-reference expression is calculated.
 
-	if (i->op == INSTR_LET && i->arg1->dep == NULL && i->arg1->mode != INSTR_CONST) {
+	if (i->op == INSTR_LET && i->arg1->dep == NULL && i->arg1->mode != INSTR_INT) {
 		exp = ExpAlloc(INSTR_VAR);
 		exp->var = i->result;
 		SetDependency(i->arg1, exp);
@@ -511,7 +520,7 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 
 			if (v1->mode == v2->mode) {
 				if (v1->type->variant == v2->type->variant) {
-					if (v1->mode == INSTR_CONST) {
+					if (v1->mode == INSTR_INT) {
 						eq = (v1->n == v2->n);
 						goto done;
 					}
@@ -699,7 +708,7 @@ UInt32 GOG = 0;
 void VarSetSrcInstr(Var * var, Instr * i)
 {
 	if (var == NULL) return;
-	if (var->mode == INSTR_CONST) return;
+	if (var->mode == INSTR_INT) return;
 
 	var->src_i = i;
 	if (var->mode == INSTR_TUPLE) {
@@ -860,7 +869,7 @@ retry:
 						// Array references, that have non-const index may not be removed, as
 						// we can not be sure, that the index variable has not changed since last
 						// use.
-						if ((result->mode == INSTR_ELEMENT || result->mode == INSTR_BYTE) && result->var->mode != INSTR_CONST) {
+						if ((result->mode == INSTR_ELEMENT || result->mode == INSTR_BYTE) && result->var->mode != INSTR_INT) {
 						
 						} else {
 	delete_instr:
@@ -894,7 +903,7 @@ retry:
 						::::::::
 						The variable ::a:: will be usually register and increment instruction 
 						is shorter (and therefore faster) than assignment in such case.
-						Simmilar variant is done for 'sub'.
+						Similar variant is done for 'sub'.
 						*/
 
 						if (i->op == INSTR_LET && VarIsOffset(result, arg1, &diff)) {
@@ -1022,7 +1031,7 @@ retry:
 					in case R is register and var is not register.
 					*/
 
-					if (!VarIsReg(i->arg1) && FlagOff(i->arg1->submode, SUBMODE_IN)) {
+					if (!VarIsReg(i->arg1) && !InVar(i->arg1)) {
 						// If some register contains the value we need to set
 						for(regi = 0; regi < CPU->REG_CNT; regi++) {
 							r = CPU->REG[regi];

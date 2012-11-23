@@ -8,8 +8,10 @@ use z80
 
 rule prologue = "   org $100" "start"
 rule epilogue = "   DB $ED, $FE"
-rule code_end = "   end start"      
+rule code_end = ""      
 rule line      = ";### %0(%1) %2"
+
+; "   end start"
 
 out platform.ports@0:array(0..65535) of 0..255
 

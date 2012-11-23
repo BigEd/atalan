@@ -5,6 +5,8 @@ void IntInit(BigInt * dest, Int32 n);
 void IntSetMin(BigInt * dest);
 void IntSetMax(BigInt * dest);
 
+Int32 IntN(BigInt * n);
+
 BigInt * IntMin(BigInt * l, BigInt * r);
 BigInt * IntMax(BigInt * l, BigInt * r);
 

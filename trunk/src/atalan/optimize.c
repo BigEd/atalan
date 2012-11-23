@@ -37,8 +37,8 @@ void VarIncRead(Var * var)
 //		} else 
 		if (var->mode == INSTR_VAR) {
 			// Do not increment constant used as address
-			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
-		} else if (var->mode == INSTR_CONST || var->mode == INSTR_TEXT) {
+			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
+		} else if (var->mode == INSTR_INT || var->mode == INSTR_TEXT) {
 		} else {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);
@@ -59,7 +59,7 @@ void VarIncWrite(Var * var)
 			VarIncWrite(var->adr);
 			VarIncWrite(var->var);
 		} else {
-			if (var->adr != NULL && var->adr->mode != INSTR_CONST) VarIncRead(var->adr);
+			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
 		}
 	}
 }
@@ -148,11 +148,11 @@ Purpose:
 
 	var = *p_var;
 	if (var != NULL) {
-		if (var == from || (var->mode == INSTR_CONST && from->mode == INSTR_CONST && var->n == from->n)) {
+		if (var == from || (var->mode == INSTR_INT && from->mode == INSTR_INT && var->n == from->n)) {
 			*p_var = to;
 			n++;
 		} else {
-			if (var->mode == INSTR_CONST) {
+			if (var->mode == INSTR_INT) {
 				// const does not get replaced
 			} else if (var->mode == INSTR_TEXT) {
 
@@ -204,7 +204,7 @@ Purpose:
 		n++;
 	} else {
 		if (var != NULL) {
-			if (var->mode != INSTR_CONST && var->mode != INSTR_VAR) {
+			if (var->mode != INSTR_INT && var->mode != INSTR_VAR) {
 				n += VarReplace(&var->adr, from, to);
 				n += VarReplace(&var->var, from, to);
 			}
@@ -248,13 +248,13 @@ Bool InstrUsesVar(Instr * i, Var * var)
 Bool VarReadsVar(Var * var, Var * read_var)
 {
 	if (var == NULL) return false;
-	if (var->mode == INSTR_VAR || var->mode == INSTR_CONST || var->mode == INSTR_TUPLE) return false;
+	if (var->mode == INSTR_VAR || var->mode == INSTR_INT || var->mode == INSTR_TUPLE) return false;
 
 	return VarUsesVar(var->adr, read_var) || VarUsesVar(var->var, read_var);
 }
 Bool SameVar(Var * l, Var * r)
 {
-	return l != NULL && r != NULL && (l == r || (l->mode == INSTR_CONST && r->mode == INSTR_CONST && l->n == r->n));
+	return l != NULL && r != NULL && (l == r || (l->mode == INSTR_INT && r->mode == INSTR_INT && l->n == r->n));
 }
 
 Bool InstrReadsVar(Instr * i, Var * var)

@@ -117,6 +117,14 @@ void EmitInt(long n)
 	EmitStr(buf);
 }
 
+void EmitBigInt(BigInt * n)
+{
+	Int32 i;
+	i = IntN(n);
+	EmitInt(i);
+}
+
+
 void EmitStrConst(char * str)
 /*
 Purpose:
@@ -223,9 +231,9 @@ void EmitVar(Var * var, UInt8 format)
 		} else if (var->name != NULL) {
 			// *** Module parameters (4)
 			// When parameter name is emmited, it is prefixed with PARAM_ prefix
-			if (var->mode == INSTR_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+			if (var->mode == INSTR_INT && FlagOn(var->submode, SUBMODE_PARAM)) {
 				EmitStr("PARAM_");
-			} else if (var->mode == INSTR_CONST && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
+			} else if (var->mode == INSTR_INT && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
 				EmitStr("__");
 			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
@@ -250,7 +258,7 @@ void EmitVar(Var * var, UInt8 format)
 				EmitStr(var->str);
 			}
 		} else {
-			ASSERT(var->mode == INSTR_CONST);
+			ASSERT(var->mode == INSTR_INT);
 			EmitInt(var->n);
 //			switch(var->type->variant) {
 //			case TYPE_INT: EmitInt(var->n);	break;
@@ -270,6 +278,7 @@ void EmitInstr2(Instr * instr, char * str)
 	UInt8 format = 0;
 	char * s, c;
 	UInt32 n;
+	BigInt bn;
 	s = str;
 
 	if (instr->op == INSTR_LINE) {
@@ -289,7 +298,12 @@ void EmitInstr2(Instr * instr, char * str)
 				// Variable properties
 				if (*s == '.') {
 					s++;
-					if (StrEqualPrefix(s, "size", 4)) {
+					if (StrEqualPrefix(s, "count", 5)) {
+						VarCount(var, &bn);
+						EmitBigInt(&bn);
+						s+= 5;
+						continue;
+					} else if (StrEqualPrefix(s, "size", 4)) {
 						n = VarByteSize(var);
 						EmitInt(n);
 						s+= 4;
@@ -480,22 +494,22 @@ Purpose:
 //			Print("");
 //		}
 
-		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_CONST) continue;
+		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
 		if (VarIsReg(var)) continue;
 
 		adr = var->adr;
 		if (
 			   (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
-			|| (var->mode == INSTR_CONST && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
+			|| (var->mode == INSTR_INT && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
 		) {
 
-			if (adr != NULL && adr->mode == INSTR_CONST && adr->n >= DATA_SEGMENT) continue;
+			if (adr != NULL && adr->mode == INSTR_INT && adr->n >= DATA_SEGMENT) continue;
 
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
 			instr.arg2 = NULL;
 
-			if (var->mode != INSTR_CONST) {
+			if (var->mode != INSTR_INT) {
 				//n = var->adr; 
 				ov = var->adr;
 			} else {
@@ -597,6 +611,7 @@ void Emit(char * filename)
 	EmitAsmIncludes();	
 	EmitInstrOp(INSTR_CODE_END, NULL, NULL, NULL);
 	VarEmitAlloc();
+	EmitInstrOp(INSTR_SRC_END, NULL, NULL, NULL);
 	EmitClose();
 }
 

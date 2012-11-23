@@ -892,7 +892,7 @@ Syntax:
 								
 						// Parse till comma or closing brace
 						if (!SkipOnly) {
-							param = VarAllocScope(SRC_FILE, INSTR_CONST, opt_name, 0);
+							param = VarAllocScope(SRC_FILE, INSTR_INT, opt_name, 0);
 							if (TOK == TOKEN_INT) {
 								param->type    = &TINT;
 								param->n       = LEX.n;

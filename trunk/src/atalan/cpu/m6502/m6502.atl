@@ -17,9 +17,8 @@ type
 
 ;rule alloc %A:0..255  = ".ds 1"
 
-rule alloc %A:struct(), %B                         = "   .ds %B"
-rule alloc %A:array(card) of byte1, %B            = "   .ds %B"
-rule alloc %A:array(byte,byte) of byte1, %B, %C   = "   .ds %B*%C"
+rule alloc %A:struct()                         	 = "   .ds %A.size"
+rule alloc %A:array(%B:card) of byte1            = "   .ds %B.count"
 rule alloc %A:byte                               = "   .ds 1"
 rule alloc %A:card                               = "   .ds 2"
 rule alloc %A:long                               = "   .ds 3"
@@ -36,7 +35,7 @@ rule alloc %A:int                                = "   .ds 2"
 CPU:scope =
 	a:0..255
 	x,y:0..255
-	c,z,v,n:0..1	
+	c,z,v,n,d:0..1	
 	ac@(a,c)
 	ca@(c,a)
 	azn@(a,z,n)
@@ -45,7 +44,7 @@ CPU:scope =
 	yzn@(y,z,n)
 	as@(a,c,z,n,v)	; this is set of flags used for result of adc, sbc
 	cznv@(c,z,n,v)
-	czn@(c,z,n)
+	czn@(c,z,n)	
 	in void:0..255  ;This is special variable used to implement touch instructions.
 	zn@(z,n)
 	znv@(z,n,v)
@@ -66,6 +65,9 @@ CPU:scope =
 
 	clc:macro = instr let c, 0
 	sec:macro = instr let c, 1	
+
+	cld:macro = instr let d, 0
+	sed:macro = instr let d, 1	
 
 	adc:macro o = instr add ca, a+c, o 
 	sbc:macro o = instr sub as, ac, o 
@@ -327,8 +329,8 @@ rule let %D:card, %A:arr_2b(%B:byte-const %C) = instr
 
 type arr_of_arr:array(byte) of array(byte) of byte1
 
-rule alloc %A:array(byte) of array(byte) of byte1, %B, %C = "   .ds %B*%C"
-rule arrindex %A:array(byte) of array(byte) of byte1,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C)" "%A_hi:  :%B dta h(%A + #*%C)"
+rule alloc %A:array(%B:byte) of array(%C:byte) of byte1 = "   .ds %B.count*%C.count"
+rule arrindex %A:array(%B:byte) of array(%C:byte) of byte1    = "%A_lo:  :%B.count dta l(%A + #*%C.count)" "%A_hi:  :%B.count dta h(%A + #*%C.count)"
 
 rule let %A:arr_of_arr(%B:byte)(%C:byte), %D:byte1 = instr
 	ldy %B
@@ -361,8 +363,8 @@ rule let_adr %D:adr, %A:arr_of_arr(%B:byte) = instr
 
 type arr_of_arr2:array(0..255) of array(0..127) of byte2
 
-rule alloc %A:array(0..255) of array(0..127) of byte2, %B, %C = "   .ds %B*%C*2"
-rule arrindex %A:array(0..255) of array(0..127) of byte2,%B,%C    = "%A_lo:  :%B dta l(%A + #*%C*2)" "%A_hi:  :%B dta h(%A + #*%C*2)"
+rule alloc %A:array(%B:0..255) of array(%C:0..127) of byte2 = "   .ds %B.count*%C.count*2"
+rule arrindex %A:array(%B:0..255) of array(%C:0..127) of byte2    = "%A_lo:  :%B.count dta l(%A + #*%C.count*2)" "%A_hi:  :%B.count dta h(%A + #*%C.count*2)"
 
 rule let %A:arr_of_arr2(%B:0..255)(%C:0..127), %D:byte2 = instr
 	ldy %B
@@ -409,6 +411,10 @@ rule let %D:byte2, %A:arr_of_arr2(%B:0..255)(%C:0..127)  = instr
 	
 ;2D Array (2x byte index, byte value)
 ;We use indexing using Y register.
+
+rule alloc %A:array(%B:byte,%C:byte) of byte1   = "   .ds %C.count*%B.count"
+
+rule arrindex %A:array(%B:byte,%C:byte) of byte1    = "%A_lo:  :%C.count dta l(%A + #*%B.count)" "%A_hi:  :%C.count dta h(%A + #*%B.count)"
 
 rule let %A:_byte1arr2D(%B:byte, %C:byte), %D:byte = instr
 	ldy %C
@@ -2176,12 +2182,12 @@ rule sub %A$const %B, %A$%B, 1  @zn #5 = "   dec %A-%A.index.min+%B"
 rule sub %A$x, %A$x, 1          @zn #7 = "   dec %A-%A.index.min,x"
 
 ;ADC
-rule add ca, a+c, const %A:byte1  #2 = "   adc #%A"
-rule add ca, a+c, %A:byte1        #3 = "   adc %A"
-rule add ca, a+c, %A$const %B     #3 = "   adc %A-%A.index.min+%B"
-rule add ca, a+c, %A$(x-const %D) #4 = "   adc %A-%A.index.min-%D,x"
-rule add ca, a+c, %A$(y-const %D) #4 = "   adc %A-%A.index.min-%D,y"
-rule add ca, a+c, @%A$y           #5 = "   adc (%A),y"
+rule add ca, a+c, const %A:byte1  @znv #2 = "   adc #%A"
+rule add ca, a+c, %A:byte1        @znv #3 = "   adc %A"
+rule add ca, a+c, %A$const %B     @znv #3 = "   adc %A-%A.index.min+%B"
+rule add ca, a+c, %A$(x-const %D) @znv #4 = "   adc %A-%A.index.min-%D,x"
+rule add ca, a+c, %A$(y-const %D) @znv #4 = "   adc %A-%A.index.min-%D,y"
+rule add ca, a+c, @%A$y           @znv #5 = "   adc (%A),y"
 ;rule add as,a,%A$(x-const %D)  #4 = "   adc %A-%A.index.min-%D,x"
 ;rule add as,a,%A$(y-const %D)  #4 = "   adc %A-%A.index.min-%D,y"
 
@@ -2254,9 +2260,6 @@ rule endproc %A:proc  = ".endp"
 rule call %A:proc()  #6 = "   jsr %A"
 rule call %A:adr  #14     = "   jsr *+6" "   jmp *+6" "   jmp (%A)"
 
-;rule call %A #6 = "   jsr %A"
-;rule arrindex %A:array(byte,byte)(%E..%F), %B, %C  = "%A_lo:  :%C dta l(%A + %E + #*%B)" "%A_hi:  :%C dta h(%A + %E + #*%B)" 
-rule arrindex %A:array(byte,byte) of byte,%B,%C    = "%A_lo:  :%C dta l(%A + #*%B)" "%A_hi:  :%C dta h(%A + #*%B)"
 
 ;This is definition of procedure, that can be used to output character
 system.printchar:proc chr@cpu.a
@@ -2302,6 +2305,8 @@ rule debug  = "   brk"  "   dta b(0)"
 rule line      = ";### %0(%1) %2"
 
 rule include %A = "   icl '%A'"
+
+rule src_end    = ";end"
 
 ;compiler rule defines the command line used to compile generated asm source
 ; %A  defines name of the source code file (including the path) without extension
