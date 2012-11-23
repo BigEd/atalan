@@ -129,7 +129,7 @@ void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
 		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
-			if (arg1->mode == INSTR_CONST) {
+			if (arg1->mode == INSTR_INT) {
 				var = arg1; arg1 = arg2; arg2 = var;
 
 				op = OpRelSwap(op);

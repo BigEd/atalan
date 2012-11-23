@@ -382,7 +382,7 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 			if (vadr->mode == INSTR_TUPLE) {
 				HeapVarOp(heap, vadr, op);
 			} else {
-				if (vadr->mode == INSTR_CONST && vadr->type->variant == TYPE_INT) {
+				if (vadr->mode == INSTR_INT && vadr->type->variant == TYPE_INT) {
 					adr  = vadr->n;
 					if (op == VAR_REMOVE) {
 						HeapRemoveBlock(heap, adr, size);

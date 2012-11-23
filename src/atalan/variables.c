@@ -10,8 +10,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-// I  Integer constant functions
-
 GLOBAL Var * UNUSED_VARS;		    // scope in which are all the free variables
 GLOBAL VarBlock * VAR_BLOCKS;       // list of all variable blocks
 GLOBAL VarBlock * LAST_VAR_BLOCK;   // list of all variable blocks
@@ -565,12 +563,12 @@ Bool TypeIsConst(Type * type)
 Bool VarIsConst(Var * var)
 {
 	if (var == NULL) return false;
-	return var->mode == INSTR_CONST || var->mode == INSTR_TEXT || TypeIsConst(var->type);
+	return var->mode == INSTR_INT || var->mode == INSTR_CONST || var->mode == INSTR_TEXT || TypeIsConst(var->type);
 }
 
 Bool VarIsIntConst(Var * var)
 {
-	return var != NULL && var->mode == INSTR_CONST && var->type->variant == TYPE_INT;
+	return var != NULL && var->mode == INSTR_INT && var->type->variant == TYPE_INT;
 }
 
 
@@ -578,7 +576,7 @@ IntLimit * VarIntConst(Var * var)
 {
 	if (var == NULL) return NULL;
 	if (var->type->variant == TYPE_INT) {
-		if (var->mode == INSTR_CONST) return &var->n;
+		if (var->mode == INSTR_INT) return &var->n;
 		if (var->type->range.min == var->type->range.max) return &var->type->range.min;
 	}
 	return NULL;
@@ -661,7 +659,7 @@ Purpose:
 {
 	Var * var, *type_var;
 	Type * type;
-	Var * dim1, * dim2;
+//	Var * dim1, * dim2;
 	Rule * rule;
 
 	// Generate initialized arrays, where location is not specified
@@ -669,7 +667,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr == NULL) {		
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_INT) && var->instr != NULL && var->adr == NULL) {		
 				if (VarIsUsed(var)) {
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -688,15 +686,18 @@ Purpose:
 	// Generate array indexes
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_VAR /*|| var->mode == INSTR_CONST*/) {
+		if (var->mode == INSTR_VAR /*|| var->mode == INSTR_INT*/) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
 				if (VarIsUsed(var)) {
-					ArraySize(type, &dim1, &dim2);
-					if (dim2 != NULL) {
-						rule = InstrRule2(INSTR_ARRAY_INDEX, var, dim1, dim2);
-						GenRule(rule, var, dim1, dim2);
-					}
+//					ArraySize(type, &dim1, &dim2);
+//					if (dim2 != NULL) {
+						// If there is an index rule for the array, generate the index
+						rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
+						if (rule != NULL) {
+							GenRule(rule, NULL, var, NULL);
+						}
+//					}
 				}
 			}
 		}
@@ -707,7 +708,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_INT) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				rule = InstrRule2(INSTR_ORG, NULL, var->adr, NULL);
 				GenRule(rule, NULL, var->adr, NULL);
 				GenLabel(var);
@@ -790,6 +791,31 @@ Purpose:
 	return false;
 }
 
+void VarCount(Var * var, BigInt * cnt)
+{
+	BigInt * min, * max;
+	Type * type;
+
+	if (var == NULL) return;
+
+	if (var->mode == INSTR_INT) {
+		IntInit(cnt, 1);
+	}
+	if (var->mode == INSTR_RANGE) {
+		VarRange(var, &min, &max);
+		IntSub(cnt, max, min);
+		IntAddN(cnt, 1);
+	}
+
+	type = var->type;
+	if (type->variant == TYPE_INT) {
+		max = TypeMax(type);
+		min = TypeMin(type);
+		IntSub(cnt, max, min);
+		IntAddN(cnt, 1);
+	}
+}
+
 UInt32 VarByteSize(Var * var)
 /*
 Purpose:
@@ -803,7 +829,7 @@ Purpose:
 			return 1;		//TODO: Compute size in a better way
 		} else if (var->mode == INSTR_BYTE) {
 			return 1;
-		} else if (var->mode == INSTR_CONST) {
+		} else if (var->mode == INSTR_INT) {
 			return ConstByteSize(var->n);
 		} else if (var->mode == INSTR_TEXT) {
 			return StrLen(var->str);
@@ -974,7 +1000,7 @@ Purpose:
 */
 {
 	if (var->mode == INSTR_VAR) return true;
-	if (var->mode == INSTR_ELEMENT && var->var->mode == INSTR_CONST) return true;		// access to constant array element
+	if (var->mode == INSTR_ELEMENT && var->var->mode == INSTR_INT) return true;		// access to constant array element
 	return false;
 }
 
@@ -982,7 +1008,7 @@ Bool VarModifiesVar(Var * var, Var * test_var)
 {
 	Bool uses = false;
 	if (var != NULL && test_var != NULL) {
-		if (var->mode == INSTR_CONST || test_var->mode == INSTR_CONST) return false;
+		if (var->mode == INSTR_INT || test_var->mode == INSTR_INT) return false;
 
 		if (var == test_var) {
 			uses = true;
@@ -1003,7 +1029,7 @@ Bool VarModifiesVar(Var * var, Var * test_var)
 //			} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
 //				uses = VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
 //			} else if (var->adr != NULL) {
-//				if (var->adr->mode != INSTR_CONST) {
+//				if (var->adr->mode != INSTR_INT) {
 //					return VarUsesVar(var->adr, test_var);
 //				}
 //			}
@@ -1022,7 +1048,7 @@ Purpose:
 	Bool uses = false;
 	if (var != NULL && test_var != NULL) {
 
-		if (test_var->mode == INSTR_CONST) return false;
+		if (test_var->mode == INSTR_INT) return false;
 
 		if (var == test_var) {
 			return true;
@@ -1038,7 +1064,7 @@ Purpose:
 				return VarUsesVar(var->var, test_var);
 			} else if (var->mode == INSTR_VAR) {
 				if (var->adr != NULL) {
-					if (var->adr->mode != INSTR_CONST) {
+					if (var->adr->mode != INSTR_INT) {
 						return VarUsesVar(var->adr, test_var);
 					}
 				}

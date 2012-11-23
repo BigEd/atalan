@@ -14,17 +14,21 @@ type
 	sbyte:-128..127
 	byte1:byte or sbyte
 	byte2:card or int
+
+rule src_end  = "   end start"
 	
 rule alloc %A:byte1                          = "   DS 1"
 rule alloc %A:card                           = "   DS 2"
-;rule alloc %A:-128..127                          = "   DS 1"
-rule alloc %A:array(0..65535) of byte1, %B        = "   DS %B"
+;rule alloc %A:-128..127                     = "   DS 1"
+rule alloc %A:array(%C:0..65535) of byte1    = "   DS %B"
+rule alloc %A:array(%B:0..255, %C:0..255) of byte1   = "   DS %A.size"
 
 CPU:scope =
 	a,b,c,d,e,h,l:0..255
-	bc@(b,c)
-	de@(d,e)
-	hl@(h,l)
+	bc@(b,c):0..65535
+	de@(d,e):0..65535
+	hl@(h,l):0..65535
+	sp:0..65535
 	ix,iy:0..65535
 
 	s,z,hc,v,n,cr:0..1				;hc = half carry, cr = carry
@@ -32,18 +36,29 @@ CPU:scope =
 	hnc@(hc,n,cr)	
 	szhvn@(s,z,hc,v,n)
 	szhvnc@(s,z,hc,v,n,cr)
-	
+	nc@(n,c)
+		
 	type memory:array(0..$ffff) of 0..255
 
 	r@(a,b,c,d,e,h,l)
-
+	rr@(hl,bc,de,sp)
+	
 	in out void:0..255  ;This is special variable used to implement cp instructions.
 	
 	ld: macro o, p = instr let o, p
 	cp: macro o = instr sub void, a, o
 
 	mul8:proc m1@h m2@e @de @b -> res@hl 
-	
+
+	b1arr2D:type = array(byte,byte) of byte1	
+
+
+;rule decl %A:array(%B:byte, %C:byte) of %D:byte1 =
+;	mul %Z, %B.count, %C.count
+;	decl %A.data: array %Z of %D
+;	decl %A.idx: const array %C of adr of array %B of %D
+	;TODO: We may recognize by constness of the array, that this is an index, that we want to generate
+	;TODO: Declare, that the %A.idx is index
 	
 rule %A:byte1 = %B:byte1 = instr
 	let a, %B
@@ -195,6 +210,33 @@ rule if %A:byte <> const %B:byte goto %C = instr
 	if z = 0 goto %C
 
 
+;2D array
+
+rule arrindex %A:array(%B:byte, %C:byte) of byte1 = "%A__idx:" "   REPT %C.count, N" "   DW %A + N * %B.count" "   ENDM"
+
+rule let_adr hl, %A:b1arr2D(%B:byte, %C:byte) = instr
+	lo  hl, %A
+	let de, %C
+	add hl, hl, de
+	add hl, hl, de		;hl = index + 2*%C
+	let a, @hl
+	add hl, hl, 1
+	let h, @hl
+	let l, a            ;hl = (hl)
+	let de, %B
+	add hl, hl, de      ;hl = hl + %C
+
+rule let %A:b1arr2D(%B:byte, %C:byte), %D:byte = instr
+	let_adr hl, %A(%B, %C)
+	ld a, %D
+	ld @hl, a 
+
+rule let %D:byte, %A:b1arr2D(%B:byte, %C:byte) = instr
+	let_adr hl, %A(%B, %C)
+	ld a, @hl 
+	ld %D, a
+
+ 	
 ;Printing.
 
 ;Character printing routines to be defined by platform.
@@ -219,15 +261,31 @@ rule let %A:byte1, a        #13 = "   ld (%A), a"
 rule let a, const %B:byte1  #7  = "   ld a, %B"			;We must define this explicitly for A, to prevent using rule on next line
 rule let a, %B:byte1        #13 = "   ld a, (%B)"
 
+rule let %A@rr, const %B:card  #10 = "   ld %A, %B"
+rule let %A@r, @hl             #7  = "   ld %A, (hl)"
+rule let @hl, %A@r             #7  = "   ld (hl), %A"
+rule let a, @bc                 #7  = "   ld a, (bc)"
+rule let a, @de                 #7  = "   ld a, (de)"
+rule let @bc, a                 #7  = "   ld (bc), a"
+rule let @de, a                 #7  = "   ld (de), a"
+
+;LD card
+rule let hl, %A:byte2           #20 = "   ld hl, (%A)"
+rule let %A:byte2, hl           #20 = "   ld (%A), hl"
+
 ;ADD, INC
 rule %A@r = %A + 1          @szhvn  #4 = "   inc %A"
 rule a = a + const %A:byte1 @szhvnc #7 = "   add a, %A"    
 rule a = a + %A@r           @szhvnc #4 = "   add a, %A"
 
+rule hl = hl + %A@rr        @nc    #11 = "   add hl, %A"
+rule %A@rr = %A + 1         	   #6  = "   inc %A"
+ 
 ;SUB, DEC
 rule %A@r = %A - 1          @szhvn  #4 = "   dec %A"
 rule a = a - const %A:byte1 @szhvnc #7 = "   sub %A"    
 rule a = a - %A@r           @szhvnc #4 = "   sub %A"
+rule %A@rr = %A - 1         	   #6  = "   dec %A"
 
 ;CP
 rule void = a - const %A:byte1 @szhvnc #7 = "   cp %A"    
@@ -282,6 +340,11 @@ rule vardef %A,%B   = "%A EQU %B"
 
 rule line      = ";### %0(%1) %2"
 rule include %A = "   INCLUDE '%A'"
+
+
+;Load array index into HL
+
+rule lo %A@rr, %B  #10 = "   ld %A, %B__idx"
 
 ;Support for ASSERT "expected" command.
 

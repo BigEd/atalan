@@ -123,7 +123,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_HI,          "hi", "hi", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_LO,          "lo", "lo", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_PTR,         "ptr", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
-	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_NON_CODE, NULL },		// generate index for array
+	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },		// generate index for array
 	{ INSTR_LET_ADR,     "let_adr", "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
 	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
@@ -144,12 +144,13 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_COMPILER,    "compiler", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_CODE_END,    "code_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of BLK segment and start of data segment
 	{ INSTR_DATA_END,    "data_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of data segment and start of variables segment
+	{ INSTR_SRC_END,     "src_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// end of BLK segment and start of data segment
 	{ INSTR_DECL,        "decl",     "decl", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &InstrDecl },			// declare variable
 
-	{ INSTR_VAR,         "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// Variable (may be argument, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, input, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, output, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, ...)
-	{ INSTR_CONST,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Constant (depending on type)
+	{ INSTR_VAR,         "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Variable (may be argument, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, input, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, output, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, ...)
+	{ INSTR_INT,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Integer constant
 	{ INSTR_ELEMENT,     "", "#", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <array> <index>     access array or structure element (left operand is array, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, right is index)
-	{ INSTR_BYTE,        "", "$", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },				// <var> <byte_index>  access byte of specified variable
+	{ INSTR_BYTE,        "", "$", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <var> <byte_index>  access byte of specified variable
 	{ INSTR_RANGE,       "", "..", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// x..y  (l = x, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, r = y) Used for slice array references
 	{ INSTR_TUPLE,       "", ",", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// { INSTR_LIST <adr, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },var>  (var may be another tuple)
 	{ INSTR_DEREF,       "", "@", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// dereference an address (var contains reference to dereferenced adr variable, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, type is type in [adr of type]. Byte if untyped adr is used.
@@ -160,6 +161,8 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_BIT,         "", "%", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <var> <bit_index>  access bits of specified variable
 	{ INSTR_TEXT,        "text", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Text constant
 	{ INSTR_VARIANT,     "variant", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		// one of the two values (set)
+	{ INSTR_CONST,       "const", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Text constant
+
 };
 
 
@@ -619,7 +622,7 @@ Arguments:
 		label_done = VarNewTmpLabel();
 	}
 
-	if (max1->mode == INSTR_CONST) {
+	if (max1->mode == INSTR_INT) {
 		stop_n = max1->n;
 	
 		nmask = ByteMask(stop_n);
@@ -754,7 +757,7 @@ void PrintVarVal(Var * var)
 				Print(",");
 				PrintVarVal(var->var);
 				Print(")");
-			} else if (var->mode == INSTR_CONST) {
+			} else if (var->mode == INSTR_INT) {
 				PrintInt(var->n);
 			} else if (var->mode == INSTR_TEXT) {
 				Print("'"); Print(var->str); Print("'");
@@ -853,7 +856,7 @@ void PrintVar(Var * var)
 		PrintVarName(var->adr);
 		Print("$");
 		PrintVar(var->var);
-	} else if (var->mode == INSTR_CONST) {
+	} else if (var->mode == INSTR_INT) {
 		PrintInt(var->n);
 		return;
 	} else if (var->mode == INSTR_TYPE) {

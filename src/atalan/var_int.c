@@ -1,7 +1,7 @@
 /*
 Integer constant support
 
-Integer constants are represented as INSTR_CONST variables.
+Integer constants are represented as INSTR_INT variables.
 They are kept in their own private scope.
 
 (c) 2010 Rudolf Kudla 
@@ -38,11 +38,11 @@ Purpose:
 	// Try to find the integer constant in the scope
 
 	for(var = INT_VAR.subscope; var != NULL; var = var->next_in_scope) {
-		if (var->mode == INSTR_CONST && var->n == n) return var;
+		if (var->mode == INSTR_INT && var->n == n) return var;
 	}
 
 	// Constant was not found, create new one
-	var = VarAllocScope(&INT_VAR, INSTR_CONST, NULL, 0);
+	var = VarAllocScope(&INT_VAR, INSTR_INT, NULL, 0);
 	var->type = &TINT;						// In future, the type of the constant should be the constant itself (self reference)
 	var->value_nonempty = true;
 	var->n = n;

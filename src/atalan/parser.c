@@ -50,6 +50,7 @@ LineNo  OP_LINE_NO;
 LinePos OP_LINE_POS;				// Position of last parsed binary operator
 
 Bool    PARSING_RULE = false;
+Bool    PARSING_PATTERN = false;
 
 // Is modified as the expression gets generated
 
@@ -339,7 +340,7 @@ Purpose:
 {
 	if (idx_type != NULL) {
 		if (!VarMatchType(idx, idx_type)) {
-			if (idx->mode == INSTR_CONST) {
+			if (idx->mode == INSTR_INT) {
 				LogicWarning("array index is out of bounds", bookmark);
 			} else {
 				LogicWarning("array index may get out of bounds", bookmark);
@@ -627,7 +628,7 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 	tv = TYPE_VOID;
 
 	// First dimension (or first element of tuple)
-	idx_type = NULL;
+	t = idx_type = NULL;
 
 	if (atype != NULL) {
 		tv = atype->variant;
@@ -639,12 +640,7 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
 		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
-		} /*else {
-			// This is default case for accessing bytes of variable
-			// It should be replaced by x$0 x$1 syntax in the future.
-			idx_type = TypeByte();
 		}
-*/
 	} //else {
 //		idx_type = NULL;
 //	}
@@ -715,22 +711,26 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 
 			// (idx1, (idx2, idx3))
 
-			idx_type = NULL;
-			if (t->variant == TYPE_TUPLE) {
-				idx_type = t = t->right;
+			if (t != NULL) {
+				idx_type = NULL;
 				if (t->variant == TYPE_TUPLE) {
-					idx_type = t->left;
+					idx_type = t = t->right;
+					if (t->variant == TYPE_TUPLE) {
+						idx_type = t->left;
+					}
 				}
 			}
 
-			if (idx_type != NULL) {
+			if (t == NULL || idx_type != NULL) {
 				TOP = top;
 				bookmark = SetBookmark();
 				ParseSubExpression(idx_type);
 				idx2 = STACK[TOP-1];
 				idx = VarNewTuple(idx, idx2);
 			} else {
-				SyntaxError("Too many indexes specified");
+				if (t != NULL) {
+					SyntaxError("Too many indexes specified");
+				}
 			}
 		}
 
@@ -887,6 +887,19 @@ void ReportSimilarNames(char * name)
 
 }
 
+Var * FindExpVar()
+{
+	Var * var = NULL;
+
+	if (EXP_EXTRA_SCOPE != NULL) {
+		var = VarFindScope(EXP_EXTRA_SCOPE, NAME, 0);
+	} 
+	if (var == NULL) {
+		var = VarFind2(NAME);
+	}
+	return var;
+}
+
 void ParseOperand()
 {
 	Var * var = NULL, * item = NULL, * proc, * arg;
@@ -912,7 +925,7 @@ void ParseOperand()
 					type = TypeAlloc(TYPE_ARRAY);
 				}
 				var = VarNewTmp(type);
-				var->mode = INSTR_CONST;
+				var->mode = INSTR_INT;
 
 				GenBegin();
 				Gen(INSTR_FILE, NULL, item, NULL);
@@ -924,7 +937,7 @@ void ParseOperand()
 			if (arg_no = ParseArgNo2()) {
 				var = VarRuleArg(arg_no-1);
 			} else {
-				var = VarFind2(NAME);
+				var = FindExpVar();
 			}
 
 			if (var != NULL) {
@@ -942,13 +955,7 @@ void ParseOperand()
 			NextToken();
 		} else if (TOK == TOKEN_ID) {
 
-			var = NULL;
-			if (EXP_EXTRA_SCOPE != NULL) {
-				var = VarFindScope(EXP_EXTRA_SCOPE, NAME, 0);
-			} 
-			if (var == NULL) {
-				var = VarFind2(NAME);
-			}
+			var = FindExpVar();
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
 			//      does not conform to requested result type
@@ -1328,7 +1335,7 @@ void ParseExpressionType(Type * result_type)
 void ParseExpression(Var * result)
 /*
 Parse expression, performing evaluation if possible.
-If result mode is INSTR_CONST, no code is to be generated.
+If result mode is INSTR_INT, no code is to be generated.
 */
 {
 	Type * type;
@@ -1415,7 +1422,7 @@ Purpose:
 				if (!VarIsConst(var)) var_count++;
 			} while(item != NULL);
 
-			arr = VarAllocScopeTmp(NULL, INSTR_CONST, NULL);
+			arr = VarAllocScopeTmp(NULL, INSTR_INT, NULL);
 			item_type = TypeByte();  //TODO: Detect correct type of array
 
 			count = 0;
@@ -1860,7 +1867,7 @@ void ParseRange(Var ** p_min, Var ** p_max)
 		if (TOP > 1) {
 			max = STACK[1];
 		} else {
-			if (min->mode == INSTR_CONST) {
+			if (min->mode == INSTR_INT) {
 				max = min;
 				min = VarInt(0);
 			} else {
@@ -1898,7 +1905,7 @@ Purpose:
 	Bool defined = true;
 	Type * type = TUNDEFINED;
 
-	if (min->mode == INSTR_CONST) {
+	if (min->mode == INSTR_INT) {
 		if (min->type->variant == TYPE_INT) {
 			nmin = min->n;
 		} else {
@@ -1916,7 +1923,7 @@ Purpose:
 	}
 
 	if (TOK != TOKEN_ERROR) {
-		if (max->mode == INSTR_CONST) {
+		if (max->mode == INSTR_INT) {
 			if (max->type->variant == TYPE_INT) {
 				if (max->n > nmax) nmax = max->n;
 			} else {
@@ -2181,18 +2188,18 @@ Syntax:
 		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
 		//    to set overflow flag.
 
-		if (max->mode == INSTR_CONST) {
+		if (max->mode == INSTR_INT) {
 			n = max->n;
 			nmask = 0xff;
 			while(n > nmask) nmask = (nmask << 8) | 0xff;
 
-			if (n == nmask && (step->mode != INSTR_CONST || step->n > 255)) {
+			if (n == nmask && (step->mode != INSTR_INT || step->n > 255)) {
 				GenInternal(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
 				goto var_done;
-			} else if (step->mode == INSTR_CONST) {
+			} else if (step->mode == INSTR_INT) {
 
 				// 2. Min,max,step are constants, in such case we may use IFNE and calculate correct stop value
-				if (min->mode == INSTR_CONST) {
+				if (min->mode == INSTR_INT) {
 					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
 					n = n & nmask;
 					idx->type->range.max = n;		// set the computed limit value as max of the index variable
@@ -2212,7 +2219,7 @@ Syntax:
 		}
 
 		// If step is 1, it is not necessary to test the overflow
-		if (step->mode != INSTR_CONST || step->n != 1) {
+		if (step->mode != INSTR_INT || step->n != 1) {
 			GenInternal(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
 		}
 no_overflow:
@@ -2354,7 +2361,7 @@ Arguments:
 
 		if (item->mode == INSTR_TEXT) {
 			//TODO: Convert string - possibly using translating array
-		} else if (item->mode == INSTR_CONST) {
+		} else if (item->mode == INSTR_INT) {
 			if (item->type->variant != TYPE_ARRAY) {
 				if (!VarMatchType(item, item_type)) {
 					LogicError("value does not fit into array", bookmark);
@@ -2423,13 +2430,13 @@ void ArrParserInit(ArrParser * apar, Var * arr)
 		index_lo_i = InstrBlockAlloc();
 		index_hi_i = InstrBlockAlloc();
 
-		apar->sizes = VarAllocScope(arr, INSTR_CONST, "size", 0);
+		apar->sizes = VarAllocScope(arr, INSTR_INT, "size", 0);
 		apar->sizes->instr = sizes_i;
 
-		apar->index_lo = VarAllocScope(arr, INSTR_CONST, "index_lo", 0);
+		apar->index_lo = VarAllocScope(arr, INSTR_INT, "index_lo", 0);
 		apar->index_lo->instr = index_lo_i;
 
-		apar->index_hi = VarAllocScope(arr, INSTR_CONST, "index_hi", 0);
+		apar->index_hi = VarAllocScope(arr, INSTR_INT, "index_hi", 0);
 		apar->index_hi->instr = index_hi_i;
 	} else {
 		arr->instr = InstrBlockAlloc();
@@ -2445,7 +2452,7 @@ void ArrParserNext(ArrParser * apar, UInt32 idx)
 	UInt32 size;
 
 	if (apar->elem_type->variant == TYPE_ARRAY) {
-		item = VarAllocScope(apar->arr, INSTR_CONST, "e", idx);
+		item = VarAllocScope(apar->arr, INSTR_INT, "e", idx);
 		GenBegin();
 
 		size = ParseArrayConst(apar->elem_type, true, NULL);
@@ -2554,7 +2561,7 @@ void ParseEnumItems(Type * type, UInt16 column_count)
 
 		// Parse item identifier
 		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-			var = VarAllocScope(NO_SCOPE, INSTR_CONST, NAME, 0);
+			var = VarAllocScope(NO_SCOPE, INSTR_INT, NAME, 0);
 			NextToken();
 			if (NextIs(TOKEN_COLON)) {
 			} else {
@@ -3156,7 +3163,7 @@ parsed:
 
 						if (idx->mode == INSTR_RANGE) {
 							min = idx->adr; max = idx->var;
-							if (min->mode == INSTR_CONST && max->mode == INSTR_CONST) {
+							if (min->mode == INSTR_INT && max->mode == INSTR_INT) {
 								var->type = TypeArray(TypeAllocInt(0, max->n - min->n), adr->adr->type->element);
 							} else {
 								SyntaxError("Address can not use variable slices");
@@ -3190,7 +3197,7 @@ parsed:
 			ErrArgClear();
 			ErrArg(var);
 
-			if (var->mode == INSTR_CONST && existed) {
+			if (VarIsConst(var) && existed) {
 				SyntaxError("Assigning value to constant [A].");
 				continue;
 			} else if (var->mode == INSTR_TYPE) {
@@ -3238,6 +3245,7 @@ parsed:
 								SyntaxError("printing into array not supported by the platform");
 							}
 						} else if (var->mode == INSTR_CONST) {
+							var->mode = INSTR_TEXT;
 							VarLetStr(var, NAME);
 							NextToken();
 						} else {
@@ -3270,7 +3278,7 @@ parsed:
 
 								if (FlagOn(submode, SUBMODE_ARG_IN) || FlagOn(submode, SUBMODE_ARG_OUT)) {		// mode == INSTR_ARG
 									var->var = item;
-								} else if (var->mode == INSTR_CONST) {
+								} else if (var->mode == INSTR_INT) {
 									var->n = item->n;
 									var->value_nonempty = item->value_nonempty;
 									// Set the type based on the constant
@@ -3318,7 +3326,7 @@ parsed:
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
-		if (var->mode == INSTR_CONST && FlagOn(var->submode, SUBMODE_PARAM)) {
+		if (var->mode == INSTR_INT && FlagOn(var->submode, SUBMODE_PARAM)) {
 			item = VarFindScope2(SRC_FILE, var->name);
 			if (item != NULL) {
 				VarLet(var, item);
@@ -3574,7 +3582,9 @@ void ParseRuleBinary(RuleArg * arg, RuleArgVariant variant)
 void ParseRuleType(RuleArg * arg)
 {
 	if (NextIs(TOKEN_COLON)) {
-		if (arg->variant == RULE_ANY) arg->variant = RULE_VARIABLE;
+		if (arg->variant == RULE_ANY) {
+			arg->variant = RULE_VARIABLE;
+		}
 		arg->type =	ParseTypeInline();
 	}
 }
@@ -3592,11 +3602,16 @@ void ParseRuleArgArray(RuleArg * arg)
 	}
 }
 
-void ParseSimpleRuleArg(RuleArg * arg)
+void ParseSimpleRuleArg(RuleArg * arg, Bool from_deref)
 {
 	if (TOK == TOKEN_ID) {
 		arg->variant = RULE_REGISTER;
 		arg->var = ParseVariable();
+
+	} else if (TOK == TOKEN_INT) {
+		arg->variant = RULE_REGISTER;
+		arg->var  = VarInt(LEX.n);
+		NextToken();
 
 	} else if (arg->arg_no = ParseArgNo2()) {
 		if (NextCharIs(TOKEN_ADR)) {
@@ -3605,17 +3620,14 @@ void ParseSimpleRuleArg(RuleArg * arg)
 			arg->var = ParseVariable();
 		} else {
 			arg->variant = RULE_ARG;
-			ParseRuleArgArray(arg);
+			if (!from_deref) {
+				ParseRuleArgArray(arg);
+			}
 		}
 
 	} else if (NextIs(TOKEN_CONST)) {
 		arg->variant = RULE_CONST;
 		arg->arg_no  = ParseArgNo();
-
-	} else if (TOK == TOKEN_INT) {
-		arg->variant = RULE_VALUE;
-		arg->var  = VarInt(LEX.n);
-		NextToken();
 
 	} else if (NextIs(TOKEN_OPEN_P)) {
 		ParseRuleRange(arg);
@@ -3632,11 +3644,12 @@ void ParseRuleUnary(RuleArg * arg)
 	if (NextIs(TOKEN_ADR)) {
 		arg->variant = RULE_DEREF;
 		arg->arr = NewRuleArg();
-		ParseSimpleRuleArg(arg->arr);
-//		arg->arg_no  = ParseArgNo2();
-//		ParseRuleArgArray(arg);
+		ParseSimpleRuleArg(arg->arr, true);
+		if (arg->arr->variant == RULE_ARG) {
+			ParseRuleArgArray(arg);
+		}
 	} else {
-		ParseSimpleRuleArg(arg);
+		ParseSimpleRuleArg(arg, false);
 	}
 }
 
@@ -3809,6 +3822,11 @@ Bool ParsingRule()
 	return PARSING_RULE;
 }
 
+Bool ParsingPattern()
+{
+	return PARSING_PATTERN;
+}
+
 InstrOp ParseInstrOp()
 /*
 Purpose:
@@ -3862,6 +3880,7 @@ void ParseRule()
 	rule->file    = SRC_FILE;
 
 	PARSING_RULE = true;
+	PARSING_PATTERN = true;
 
 	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
 		op = InstrFind(NAME);
@@ -3966,6 +3985,7 @@ void ParseRule()
 		NextToken();
 	}
 
+	PARSING_PATTERN = false;
 	EXP_IS_DESTINATION = false;
 	EXP_EXTRA_SCOPE = NULL;
 

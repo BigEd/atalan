@@ -128,3 +128,8 @@ void IntAddN(BigInt * dest, Int32 N)
 {
 	*dest = *dest + N;
 }
+
+Int32 IntN(BigInt * n)
+{
+	return *n;
+}

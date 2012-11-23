@@ -60,7 +60,7 @@ Input:
 		VarMarkLive(var->var);
 
 		// Array references with variable indexes are always live
-		if (var->var->mode != INSTR_CONST) state = VarLive;
+		if (var->var->mode != INSTR_INT) state = VarLive;
 
 	} else {
 
@@ -131,7 +131,7 @@ Purpose:
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 				// This is the same array and the index of the variable is the same
 				if (var->adr == test_var->adr) {
-					if (var->var->mode != INSTR_CONST || test_var->var->mode != INSTR_CONST || var->var->n == test_var->var->n) return true;
+					if (var->var->mode != INSTR_INT || test_var->var->mode != INSTR_INT || var->var->n == test_var->var->n) return true;
 				}
 			}
 		}
@@ -155,7 +155,7 @@ Purpose:
 	res1 = res2 = 2;
 
 	// var may be _arr(0)  -> in such case, we want to test _arr as it is to check usage like @_arr
-//	if ((var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) && var->var->mode == INSTR_CONST) {
+//	if ((var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) && var->var->mode == INSTR_INT) {
 //		var = var->adr;
 //	}
 

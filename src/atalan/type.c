@@ -303,7 +303,7 @@ void TypeLet(Type * type, Var * var)
 
 		// When setting constant N to the variable, it's range is set to N..N
 		// Variables with type like this are in fact constants.
-		if (var->mode == INSTR_CONST) {
+		if (var->mode == INSTR_INT) {
 			min = max = var->n;
 		} else {
 			min = vtype->range.min;
@@ -401,7 +401,7 @@ void TypeTransform(Type * type, Var * var, InstrOp op)
 		}
 
 		if (vtype->variant == TYPE_INT) {
-			if (var->mode == INSTR_CONST) {
+			if (var->mode == INSTR_INT) {
 				min = max = var->n;
 			} else {
 				min = vtype->range.min;
@@ -520,7 +520,7 @@ Bool VarIsSubsetOfType(Var * var, Type * type)
 		var = MACRO_ARG[var->idx-1];
 	}
 
-	if (var->mode == INSTR_RANGE || var->mode == INSTR_CONST) {
+	if (var->mode == INSTR_RANGE || var->mode == INSTR_INT) {
 		if (type->variant == TYPE_INT) {
 			VarRange(var, &min, &max);
 			if (IntHigher(max, &type->range.max)) return false;
@@ -824,7 +824,7 @@ Purpose:
 	// Integer type
 	if (type->variant == TYPE_INT) {
 		if (vtype->variant != TYPE_INT) return false;
-		if (var->mode == INSTR_CONST) {
+		if (var->mode == INSTR_INT) {
 			if (var->n < type->range.min) return false;
 			if (var->n > type->range.max) return false;
 		} else if (var->mode == INSTR_VAR || var->mode == INSTR_ELEMENT) {
@@ -861,6 +861,27 @@ Bool TypeMatches(Type * subset, Type * master)
 {
 	Var * var;
 	UInt8 idx;
+	UInt8 j;
+
+	if (master->variant == TYPE_ARG) {
+		j = master->arg_no-1;
+		if (MACRO_ARG[j] == NULL) {
+			if (TypeMatches(subset, master->arg_type)) {
+				MACRO_ARG[j] = VarAlloc(INSTR_TYPE, NULL, 0);
+				MACRO_ARG[j]->type = subset;
+				return true;
+			}
+		} else {
+			if (MACRO_ARG[j]->type == subset) return true;
+		}
+		return false;
+	}
+
+	if (subset->variant == master->variant) {
+		if (subset->variant == TYPE_TUPLE) {
+			return TypeMatches(subset->left, master->left) && TypeMatches(subset->right, master->right);
+		}
+	}
 
 	if (master->variant == TYPE_VAR) {
 		var = master->typevar;
@@ -903,7 +924,7 @@ Purpose:
 	// If pattern has no defined type, it fits
 	if (type == NULL) return true;
 
-	if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+	if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 		VarRange(var, &min, &max);
 		if (type->variant == TYPE_INT) {
 			if (IntLower(min, &type->range.min)) return false;
@@ -932,7 +953,7 @@ Purpose:
 
 		if (vtype != NULL) {
 			// If variable is constant, the check is different
-			if (var->mode == INSTR_CONST) {
+			if (var->mode == INSTR_INT) {
 				if (vtype->variant != TYPE_INT) return false;
 				if (var->n < type->range.min) return false;
 				if (var->n > type->range.max) return false;
@@ -960,7 +981,6 @@ Purpose:
 		// Match first index, second index, return type
 
 		return TypeMatches(vtype->index, type->index)
-//			&& TypeIsSubsetOf(vtype->dim[1], type->dim[1])
 			&& TypeMatches(vtype->element, type->element);
 		
 	case TYPE_ADR:
@@ -1542,7 +1562,7 @@ Purpose:
 				un = VarNewOp(INSTR_VARIANT, left->adr, un2);
 			}
 		}
-	} else if (left->mode == INSTR_CONST || left->mode == INSTR_RANGE) {
+	} else if (left->mode == INSTR_INT || left->mode == INSTR_RANGE) {
 		un = VarUnionRange(left, right);
 		if (un != NULL && un != left) {
 			*p_merged = un;
@@ -1568,7 +1588,7 @@ Purpose:
 	if (var->mode == INSTR_VARIANT) {
 		un = VarFindUnionRange(var->adr, item);
 		if (un == NULL) un = VarFindUnionRange(var->var, item);
-	} else if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+	} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 		un = VarUnionRange(var, item);
 	}
 	return un;
@@ -1591,7 +1611,7 @@ Purpose:
 		if (nv1 != var->adr || nv2 != var->var) {
 			return VarNewOp(INSTR_VARIANT, nv1, nv2);
 		}
-	} else if (var->mode == INSTR_CONST || var->mode == INSTR_RANGE) {
+	} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 		nv1 = VarUnionRange(var, item);
 		if (nv1 == item) return NULL;
 	}
@@ -1608,7 +1628,7 @@ Var * VarUnion(Var * left, Var * right)
 
 	result = NULL;
 
-	if (right->mode == INSTR_CONST || right->mode == INSTR_RANGE) {
+	if (right->mode == INSTR_INT || right->mode == INSTR_RANGE) {
 		rr = right;
 		do {
 			left = VarRemoveContainedItems(left, rr);
@@ -2152,7 +2172,7 @@ Result:
 	Type * left, * right;
 
 	if (var == NULL) return NULL;
-	if (var->mode == INSTR_CONST) {
+	if (var->mode == INSTR_INT) {
 		type = var->type;
 		//TODO: Use type from constant (if it exists)
 		if (type->variant == TYPE_INT) {
@@ -2259,7 +2279,7 @@ Purpose:
 {
 	Var * var;
 	var = *p_var;
-	if (var != NULL && var->mode != INSTR_CONST && !InVar(var)) {
+	if (var != NULL && var->mode != INSTR_INT && !InVar(var)) {
 		if (type != NULL && type->variant == TYPE_INT && type->range.min == type->range.max) {
 			*p_var = VarInt(type->range.min);
 		}
@@ -2400,7 +2420,7 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 	// Index of array access must match the type specified in array
 	if (VarIsArrayElement(var)) {
 		idx = var->var;
-		if (idx->mode == INSTR_VAR || idx->mode == INSTR_CONST) {
+		if (idx->mode == INSTR_VAR || idx->mode == INSTR_INT) {
 			ti = FindType(loc, idx, d->final_pass);
 			// Type of the index is undefined, this is restriction
 			if (ti == NULL || ti->variant == TYPE_UNDEFINED) {

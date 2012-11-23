@@ -46,23 +46,27 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 	Return false, if it is less specific or we are not able to decide which of the rules is more specific.
 */
 {
+	Bool r_is_reg;
+
 	if (l == r) return false;
 	if (l == NULL) return false;
 	if (r == NULL) return true;
 
+	r_is_reg = RuleArgIsRegister(r);
 	if (RuleArgIsRegister(l)) {
-		if (!RuleArgIsRegister(r)) return true;
+		if (!r_is_reg) return true;
 	}
 
-	if (l->variant == RULE_VALUE) {
-		if (r->variant != RULE_VALUE) return true;
-	}
+//	if (l->variant == RULE_VALUE) {
+//		if (r->variant != RULE_VALUE) return true;
+//	}
 
 //	if (l->variant == RULE_VARIANT) {
 //		if (r->variant != RULE_VARIANT) return true;
 //	}
 
-	if (r->variant == RULE_VALUE) return false;
+//	if (r->variant == RULE_VALUE) return false;
+	if (r_is_reg) return false;
 
 	if (l->variant == RULE_CONST) {
 		if (r->variant != RULE_CONST) return true;
@@ -301,6 +305,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	RuleArgVariant v = pattern->variant;
 
 	if (arg == NULL) return v == RULE_ANY;
+
 	atype = arg->type;
 	
 	switch(v) {
@@ -312,7 +317,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		// If we have variable and not arithmetic operation, try to match using substraction or addition with 0
 		// %A => %A-0 or %A+0
 
-		if (arg->mode == INSTR_VAR || arg->mode == INSTR_CONST) {
+		if (arg->mode == INSTR_VAR || arg->mode == INSTR_INT) {
 			left  = arg;
 			right = ZERO;
 		} else {
@@ -361,7 +366,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		if (!VarIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
-
+/*
 	// 1
 	case RULE_VALUE:
 		if (!VarIsConst(arg)) return false;
@@ -373,26 +378,23 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 				if (pvar->n != arg->n) return false;
 			}
 		}
-/*
-		if (pvar->value_nonempty) {
-			switch (pvar->type->variant) {
-			case TYPE_INT: 
-				if (pvar->n != arg->n) return false;
-				break;
-			case TYPE_STRING:
-				if (!StrEqual(pvar->str, arg->str)) return false;
-				break;
-			default: break;
-			}
-		} else {
-			// TODO: Test, that arg const matches the specified type
-		}
-*/
 		break;
-
+*/
 	// Exact variable.
 	case RULE_REGISTER:
-		if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
+		if (VarIsConst(pattern->var)) {
+			if (!VarIsConst(arg)) return false;
+			pvar = pattern->var;
+			if (pvar->mode == INSTR_TEXT) {
+				if (!StrEqual(pvar->str, arg->str)) return false;
+			} else {
+				if (pvar->value_nonempty) {
+					if (pvar->n != arg->n) return false;
+				}
+			}
+		} else {
+			if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
+		}
 		break;
 
 	case RULE_VARIANT:
@@ -409,7 +411,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	case RULE_DEREF:
 		if (arg->mode != INSTR_DEREF) return false;
 		arg = arg->var;
-		if (!VarMatchesPattern(arg, pattern)) return false;
+		if (!ArgMatch(pattern->arr, arg, v)) return false;
+//		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
 	// %A:type

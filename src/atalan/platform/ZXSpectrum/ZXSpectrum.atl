@@ -6,9 +6,8 @@ use z80
 
 rule prologue = "   org 30000" "start"
 rule epilogue = "   ret"
-rule code_end = "   end start"      
+rule code_end = ""      
 rule line      = ";### %0(%1) %2"
-
 
 out ula@65535:0..255
 
@@ -46,6 +45,15 @@ paper:macro c:color =
 	MASK_P = (MASK_P bitand %11000111)
 	
 
+;2D array of video graphics attributes.
+
+in out attr@22528:array(0..31, 0..23) of byte
+
+in out screen@16384:array(0..31,0..191) of byte
+
+;Array index is defined in platform assembler file, so we supress generation of the index. 
+rule arrindex screen = ""
+ 
 ;bright:macro c:attr_switch =
 
 ;blink:macro c:attr_switch =
