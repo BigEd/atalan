@@ -20,7 +20,6 @@ rule src_end  = "   end start"
 rule alloc %A:byte1                          = "   DS 1"
 rule alloc %A:card                           = "   DS 2"
 ;rule alloc %A:-128..127                     = "   DS 1"
-rule alloc %A:array(%C:0..65535) of byte1    = "   DS %B"
 rule alloc %A:array(%B:0..255, %C:0..255) of byte1   = "   DS %A.size"
 
 CPU:scope =
@@ -51,7 +50,9 @@ CPU:scope =
 	mul8:proc m1@h m2@e @de @b -> res@hl 
 
 	b1arr2D:type = array(byte,byte) of byte1	
-
+	b1arr:type = array(card) of byte1
+	u8:type = 0..255
+	u16:type = 0..65535	
 
 ;rule decl %A:array(%B:byte, %C:byte) of %D:byte1 =
 ;	mul %Z, %B.count, %C.count
@@ -64,7 +65,7 @@ rule %A:byte1 = %B:byte1 = instr
 	let a, %B
 	let %A, a
 
-;ADD
+;### ADD
 
 rule %A:byte = %B:byte + 1 = instr
 	ld a, %A
@@ -78,6 +79,15 @@ rule %A:byte = %B:byte + %C:byte = instr
 	add	a, a, b
 	let %A, a
 
+rule %A:card = %B:card + %C:byte = instr
+	ld hl, %B
+	ld a, %C
+	ld c, a
+	ld b, 0
+	add hl, hl, bc
+	ld %A, hl
+	 
+;### SUB
 rule %A:byte = %B:byte - const %C:byte = instr
 	let a, %B
 	sub	a, a, %C
@@ -209,8 +219,67 @@ rule if %A:byte <> const %B:byte goto %C = instr
 	cp %B
 	if z = 0 goto %C
 
+;### Compare 2B
 
-;2D array
+rule if %A:byte2 = const %B:byte2 goto %L = instr
+	ifne _loc, %A$0, %B$0
+	ifeq %L, %A$1, %B$1	
+	label _loc
+
+
+;############ b
+
+rule %A:byte2 = %B = instr
+	ld hl, %B
+	ld %A, hl 
+
+
+;############ 1D array (1 byte index)
+
+rule alloc %A:array(%C:0..65535) of byte1    = "   DS %B"
+
+rule %A = %B:b1arr(const %C) = instr
+	ld a, %B$%C
+	ld %A, a  
+
+rule let_adr hl, %A:b1arr(%B:card) = instr
+	let_adr hl, %A
+	ld de, %B
+	add hl, hl, de
+
+rule let_adr %A:adr, %B:b1arr(%C:card) = instr
+	let_adr hl, %B(%C)
+	let %A, hl
+	  	
+rule %A:b1arr(%B:card) = %C:byte1 = instr
+	let_adr hl, %A(%B)
+	ld a, %C
+	ld @hl, a 
+
+rule %A:byte1 = %B:b1arr(%C:card) = instr
+	let_adr hl, %B(%C)
+	ld a, @hl
+	ld %A, a
+
+;---- 1 byte index
+rule let_adr hl, %A:b1arr(%B:byte) = instr
+	let_adr hl, %A
+	ld d, 0
+	let a, %B
+	let e, a
+	add hl, hl, de
+
+rule %A:b1arr(%B:byte) = %C:byte1 = instr
+	let_adr hl, %A(%B)
+	ld a, %C
+	ld @hl, a 
+
+rule %A:byte1 = %B:b1arr(%C:byte) = instr
+	let_adr hl, %B(%C)
+	ld a, @hl
+	ld %A, a
+	 	
+;############ 2D array
 
 rule arrindex %A:array(%B:byte, %C:byte) of byte1 = "%A__idx:" "   REPT %C.count, N" "   DW %A + N * %B.count" "   ENDM"
 
@@ -269,9 +338,18 @@ rule let a, @de                 #7  = "   ld a, (de)"
 rule let @bc, a                 #7  = "   ld (bc), a"
 rule let @de, a                 #7  = "   ld (de), a"
 
+rule let a, %B$%C        #13 = "   ld a, (%B+%C)"
+
+
+;LD array 1B
+
+rule let %A@r, %B$const %C     #7   = "   ld %A, (%B-%B.index.min+%C)"
+
 ;LD card
 rule let hl, %A:byte2           #20 = "   ld hl, (%A)"
 rule let %A:byte2, hl           #20 = "   ld (%A), hl"
+
+rule let_adr %A@rr, %B          #10 = "   ld %A, %B"
 
 ;ADD, INC
 rule %A@r = %A + 1          @szhvn  #4 = "   inc %A"
@@ -332,6 +410,7 @@ rule return #10 = "   ret"
 
 rule str_arg %A:string  = "   DB %A.size,'%A'"				; TODO: Use var_arg %A:const string
 rule var_arg %A:byte    = "   DB 129" "   DW %A"
+rule var_arg %A:u16     = "   DB 130" "   DW %A"
 
 rule data %A:string = "   DB %'A"
 rule data %A    = "   DB %A"
@@ -349,6 +428,9 @@ rule lo %A@rr, %B  #10 = "   ld %A, %B__idx"
 ;Support for ASSERT "expected" command.
 
 ;system.print_assert:macro = instr call system.assert_print_asm
+
+rule file %A     = "   INCBIN '%A'"
+rule org  %A     = "   ORG %A"
 
 system.assert:macro = instr call system.print_out
 

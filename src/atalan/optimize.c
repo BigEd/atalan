@@ -38,7 +38,7 @@ void VarIncRead(Var * var)
 		if (var->mode == INSTR_VAR) {
 			// Do not increment constant used as address
 			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
-		} else if (var->mode == INSTR_INT || var->mode == INSTR_TEXT) {
+		} else if (VarIsConst(var)) {
 		} else {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);

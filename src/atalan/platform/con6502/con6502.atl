@@ -35,4 +35,4 @@ system.assert:macro = instr call system.print_out
 rule assert_begin = ";assert begin"
 rule assert_end   = ";assert end"
 
-rule assert       = "   brk"
+rule assert       = "   dta b($cf)"

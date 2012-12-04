@@ -904,6 +904,8 @@ Bool TypeMatches(Type * subset, Type * master)
 				}
 			}
 		}
+	} else if (subset->variant == TYPE_ARRAY && master->variant == TYPE_ARRAY) {
+		return TypeMatches(subset->index, master->index) && TypeMatches(subset->element, master->element);
 	} else {
 		return TypeIsSubsetOf(subset, master);
 	}
@@ -2974,7 +2976,9 @@ Purpose:
 	ProcInstrEnum(proc, &InstrInferType, &data);
 	ProcInstrEnum(proc, &InstrConstraints, &data);
 
-	PrintProcFlags(proc, PrintInferredTypes);
+	if (Verbose(proc)) {
+		PrintProcFlags(proc, PrintInferredTypes);
+	}
 
 	// Extend the type of variables to handle
 	// - Check variables, whose types can not be inferred here

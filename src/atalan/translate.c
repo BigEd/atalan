@@ -483,8 +483,6 @@ Purpose:
 }
 
 
-
-
 Rule * InstrRule(Instr * instr)
 /*
 Purpose:
@@ -502,6 +500,7 @@ Purpose:
 			break;
 		}
 	}
+
 	return rule;
 }
 
@@ -618,7 +617,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	Var * a;
 	Var  tmp1,  tmp2,  tmp_r;
 	Bool has1, has2, has_r;
-	Type * result_type;
+	Type * result_type = NULL;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
 
@@ -639,7 +638,9 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	if (has1)  { VarInitType(&tmp1, arg1->type); }
 	if (has2)  { VarInitType(&tmp2, arg2->type); }
 
-	result_type = result->type;
+	if (result != NULL) {
+		result_type = result->type;
+	}
 
 	if (has1) {
 		// When the instruction is assignment, it may happen, that assigning the argument to temporary variable 
@@ -688,8 +689,9 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		// No translation of the instruction was found.
 		// Try, if it is possible to use instruction returning result with bigger range and then cast that
 		// bigger result to smaller variable.
+		// The instruction must have a result, of course.
 
-		if (FlagOff(mode, BIGGER_RESULT)) {
+		if (result != NULL && FlagOff(mode, BIGGER_RESULT)) {
 			if (result->mode == INSTR_VAR && result->type->variant == TYPE_INT) {
 				result_type = result->type; 
 				while((result_type = TypeBiggerType(op, result_type)) != NULL) {			

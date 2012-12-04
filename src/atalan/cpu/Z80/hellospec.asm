@@ -13,6 +13,10 @@ start
 	db 7,"Number:"
 	db 128+1
 	dw num
+	db 1, "/"
+	db 128+2
+	dw num2
+	
 	db 2, " x"
 	db 128
 	db 3, "EOL"
@@ -23,6 +27,18 @@ start
 	ret
 
 num	db 123
+num2 dw 10317
+
+platform__new_line_char  EQU 13
+
+;Print one character on screen	
+platform__print_char PROC
+	push hl
+	rst 10h
+	pop hl
+	ret
+
+	ENDP
 
 	include "z80.asm"
 

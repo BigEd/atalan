@@ -2244,6 +2244,8 @@ Var * ParseFile()
 {
 	Var * item = NULL;
 	Bool block = false;
+	FILE * f;
+	char path[MAX_PATH_LEN];
 
 	if (TOK == TOKEN_OPEN_P) {
 		EnterBlock();
@@ -2251,7 +2253,15 @@ Var * ParseFile()
 	}
 
 	if (TOK == TOKEN_STRING) {
-		item = VarNewStr(NAME);
+		strcpy(path, FILE_DIR);
+		strcat(path, NAME);
+		f = fopen(path, "rb");
+		if (f != NULL) {
+			fclose(f);
+			item = VarNewStr(path);
+		} else {
+			SyntaxError("File not found");
+		}
 //		item = VarNewStr(StrAlloc(NAME));
 	} else {
 		SyntaxError("expected string specifying file name");
@@ -2675,7 +2685,7 @@ Bool VarIsImplemented(Var * var)
 	rule = InstrRule2(INSTR_ALLOC, var, i.arg1, i.arg2);
 	if (rule != NULL) return true;
 
-	rule = TranslateRule(INSTR_DECL, var, NULL, NULL);
+	rule = TranslateRule(INSTR_DECL, NULL, var, NULL);
 	if (rule != NULL) {
 		InstrExecute(rule->to);
 		return true;
@@ -3326,7 +3336,7 @@ parsed:
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
-		if (var->mode == INSTR_INT && FlagOn(var->submode, SUBMODE_PARAM)) {
+		if (VarIsConst(var) && FlagOn(var->submode, SUBMODE_PARAM)) {
 			item = VarFindScope2(SRC_FILE, var->name);
 			if (item != NULL) {
 				VarLet(var, item);
@@ -3469,7 +3479,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 				type = ParseTypeInline();
 				arg[1]->type = type;
 				n=3;
-			} else if (op == INSTR_INCLUDE) {
+			} else if (op == INSTR_INCLUDE || op == INSTR_FILE) {
 
 				if (TOK == TOKEN_STRING) {
 					PathMerge(inc_path, FILE_DIR, NAME);

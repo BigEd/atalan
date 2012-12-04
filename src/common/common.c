@@ -72,8 +72,12 @@ Purpose:
 	Filename starts after last dir separator in the filename.
 */
 {
-	char * last_slash;
-	last_slash = strrchr(path, DIRSEP);
+	char * p = path;
+	char * last_slash = NULL;
+	while(*p != 0) {
+		if (*p == '/' || *p == '\\') last_slash = p;
+		p++;
+	}
 	return (last_slash == NULL)?path:last_slash+1;
 }
 

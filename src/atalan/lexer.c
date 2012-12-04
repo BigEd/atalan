@@ -783,7 +783,7 @@ FILE * FindFile2(char * base_dir, char * name, char * ext)
 	FILE * f = NULL;
 	strcpy(FILENAME, base_dir);
 	strcat(FILENAME, name);
-	strcat(FILENAME, ext);
+	if (ext != NULL) strcat(FILENAME, ext);
 	f = fopen(FILENAME, "rb");
 	if (f != NULL) {
 		strcpy(FILE_DIR, base_dir);
