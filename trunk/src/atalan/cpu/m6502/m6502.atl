@@ -250,7 +250,8 @@ rule let %A:byte1arr(const %B),%C:byte  = instr
 
 ;Accessing one dimensional array using constant is optimized to direct access.
 rule let %A:byte1,%B:byte1arr(const %C) = instr
-	let a,%B$%C
+	mul %Z, %C, %B.step
+	let a,%B$%Z
 	let %A, a
 
 ;Access to low or high byte of card
@@ -2295,12 +2296,12 @@ rule var_arg %A:int    = "   dta b(130+32), a(%A)"
 
 rule data %A:string = "   dta %'A"
 rule data %A    = "   dta b(%A)"
-rule align ,%A    = "   .align %A"
-rule file ,%A     = "   ins '%A'"
-rule org  ,%A     = "   org %A"
-rule ptr , %A$0  = "   dta b(<%A)"
-rule ptr , %A$1  = "   dta b(>%A)"
-rule ptr , %A    = "   dta a(%A)"
+rule align %A    = "   .align %A"
+rule file %A     = "   ins '%A'"
+rule org  %A     = "   org %A"
+rule ptr %A$0  = "   dta b(<%A)"
+rule ptr %A$1  = "   dta b(>%A)"
+rule ptr %A    = "   dta a(%A)"
 rule debug  = "   brk"  "   dta b(0)"
 rule line      = ";### %0(%1) %2"
 

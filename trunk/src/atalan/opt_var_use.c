@@ -96,6 +96,11 @@ typedef struct
 } VarAllocInfo;
 
 
+Bool BlockIsLast(InstrBlock * blk)
+{
+	return (blk->to == NULL || blk->to == blk) && (blk->cond_to == NULL || blk->cond_to == blk);
+}
+
 LiveSet MergeLiveSets(InstrBlock * blk, UInt16 count, LiveSet last_block)
 {
 	UInt16 i;
@@ -103,7 +108,7 @@ LiveSet MergeLiveSets(InstrBlock * blk, UInt16 count, LiveSet last_block)
 	LiveSet live = (LiveSet)MemAllocEmpty(count);
 
 	// For the last block, begin with of last block info
-	if (blk->to == NULL && blk->cond_to == NULL) {
+	if (BlockIsLast(blk)) {
 		MemMove(live, last_block, count);
 	// For non-last block, use union of to and cond_to block results
 	} else {

@@ -161,7 +161,7 @@ Purpose:
 void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2)
 /*
 Purpose:
-	Generate cpu instruction translated using specified rule.
+	Generate CPU instruction translated using specified rule.
 */
 {
 	InstrInsert(BLK, INSTR, rule->op, result, arg1, arg2);

@@ -16,13 +16,6 @@ REM mkdir examples\nes
 
 cd ..
 
-echo \svn\ > exclude.list
-
-xcopy src\atalan\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
-xcopy src\atalan\cpu atalan\cpu /E /I /Q /EXCLUDE:exclude.list
-xcopy src\atalan\module atalan\module /E /I /Q /EXCLUDE:exclude.list
-xcopy examples atalan\examples /E /I /Q /EXCLUDE:exclude.list
-
 REM Bin
 
 cd src\atalan
@@ -33,10 +26,26 @@ cd src\con6502
 call build.bat release
 cd ..\..
 
+cd src\conZ80
+call build.bat release
+cd ..\..
+
 copy src\atalan\Release\atalan.exe bin
 copy src\con6502\Release\con6502.exe bin
+copy src\conZ80\Release\conZ80.exe bin
+
+REM Copy modules to distribution
+
+echo \svn\ > exclude.list
+xcopy src\atalan\platform atalan\platform /E /I /Q /EXCLUDE:exclude.list
+xcopy src\atalan\cpu atalan\cpu /E /I /Q /EXCLUDE:exclude.list
+xcopy src\atalan\module atalan\module /E /I /Q /EXCLUDE:exclude.list
+xcopy examples atalan\examples /E /I /Q /EXCLUDE:exclude.list
+
+REM Copy bin to distribution
 
 copy bin\con6502.exe atalan\bin
+copy bin\conZ80.exe atalan\bin
 copy bin\atalan.exe atalan\bin
 
 REM Tools

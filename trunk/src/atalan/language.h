@@ -762,6 +762,8 @@ Var * VarFind2(char * name);
 Var * VarProcScope();
 Var * VarFindTypeVariant(Name name, VarIdx idx, TypeVariant type_variant);
 
+Bool VarIsZeroNonzero(Var * var, Var ** p_zero, Var ** p_non_zero);
+
 Var * VarRuleArg(UInt8 i);
 
 Bool VarIsConst(Var * var);

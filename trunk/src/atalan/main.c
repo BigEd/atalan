@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
 
 	PHASE = PHASE_TRANSLATE;
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_INT && var->type->variant == TYPE_ARRAY && var->instr != NULL) {
+		if (var->mode == INSTR_CONST && var->type->variant == TYPE_ARRAY && var->instr != NULL) {
 			ProcTranslate(var);
 		}
 	NEXT_VAR
@@ -390,6 +390,7 @@ int main(int argc, char *argv[])
 		ProcessUsedProc(ProcOptimize);
 		VarUse();
 		ProcessUsedProc(DeadCodeElimination);
+		ProcessUsedProc(OptimizeJumps);
 		ProcessUsedProc(OptimizeJumps);
 
 //		OptimizeLive(&ROOT_PROC);
@@ -437,7 +438,7 @@ done:
 		fclose(log_file);
 	}
 	PrintCleanup();
- 	exit(result);
+   	exit(result);
 	
 failure:	
 	result = 2;

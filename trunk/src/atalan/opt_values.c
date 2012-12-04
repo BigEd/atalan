@@ -628,7 +628,7 @@ void ProcValuesUse(Var * proc)
 	}
 }
 
-Bool VarIsZeroNonzero(Var * var, Var ** p_zero)
+Bool VarIsZeroNonzero(Var * var, Var ** p_zero, Var ** p_non_zero)
 /*
 Purpose:
 	Test, if variable may have just two values, 0 and some other.
@@ -663,11 +663,13 @@ Purpose:
 			NEXT_LOCAL
 		} else {
 			if ((t->range.min == 0 && t->range.max == 1) || (t->range.min == -1 && t->range.max == 0)) {
-				zero = VarInt(0);
+				zero = ZERO;
+				non_zero = ONE;
 			}
 		}
 	}
 	*p_zero = zero;
+	*p_non_zero = non_zero;
 	return zero != NULL;
 }
 
@@ -1080,7 +1082,7 @@ Purpose:
 {
 	Instr * i, * i2;
 	UInt32 n;
-	Var * r, * result, * arg1, * arg2, * zero;
+	Var * r, * result, * arg1, * arg2, * zero, * nonzero;
 	InstrBlock * blk;
 	InstrOp op;
 
@@ -1101,7 +1103,7 @@ Purpose:
 			if (op == INSTR_IFEQ || op == INSTR_IFNE) {
 				arg1 = i->arg1;
 				arg2 = i->arg2;
-				if (VarIsIntConst(arg2) && arg2->n != 0 && VarIsZeroNonzero(arg1, &zero)) {
+				if (VarIsIntConst(arg2) && arg2->n != 0 && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
 					i->op = OpNot(i->op);
 					i->arg2 = zero;
 				}

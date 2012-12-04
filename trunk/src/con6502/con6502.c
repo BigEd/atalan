@@ -78,8 +78,16 @@ byte Patch6502(register byte Op,register M6502 *R)
 		out_buf_first++;
 		if (out_buf_first == OUT_BUF_SIZE) out_buf_first = 0;
 		return 1;
+
+	// Normal application exit
 	} else if (Op == 0xef) {
 		done = true;
+		return 1;
+
+	// Assert failure
+	} else if (Op == 0xcf) {
+		done = true;
+		result = 3;
 		return 1;
 	} else {
 		return 0;
@@ -177,7 +185,7 @@ int main(int argc, char *argv[])
 		"%s [options] file\n"
 		"  -a Load address of binary file\n"
 		, argv[0]);
-        exit(-1);
+        exit(1);
     }
 
 	load_adr = LoadFile(argv[i], load_adr);

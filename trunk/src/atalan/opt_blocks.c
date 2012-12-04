@@ -331,7 +331,7 @@ goto l1
 Optimization: Tail call optimization
 ====================================
 
-Calling procadure as last thing done in a procedure will be translated to jump.
+Calling procedure as last thing done in a procedure will be translated to jump.
 
 ::::::::::::
 call subproc
@@ -347,6 +347,37 @@ goto subproc
 This optimization is not performed on interrupt routines.
 
 */
+
+Bool InstrRelSwap(Instr * i)
+{
+	Rule * rule;
+	InstrOp op;
+	Var * arg2, * nonzero;
+	op = OpNot(i->op);
+	arg2 = i->arg2;
+
+	rule = InstrRule2(op, i->result, i->arg1, i->arg2);
+
+	if (rule == NULL) {
+		op = i->op;
+		if (op == INSTR_IFEQ || op == INSTR_IFNE) {
+			if (VarIsZeroNonzero(i->arg1, &arg2, &nonzero)) {
+				if (i->arg2 == arg2) {
+					arg2 = nonzero;
+				}
+				rule = InstrRule2(op, i->result, i->arg1, arg2);
+			}
+		}
+	}
+
+	if (rule == NULL) return false;
+
+	i->rule = rule;
+	i->op = op;
+	i->arg2 = arg2;
+
+	return true;
+}
 
 void OptimizeJumps(Var * proc)
 {
@@ -377,6 +408,9 @@ void OptimizeJumps(Var * proc)
 					if (blk->to == blk->next && blk->to != NULL) {
 						InstrDelete(blk, last_i);
 					}
+				} else if (IS_INSTR_BRANCH(last_i->op) && blk->cond_to == blk->next && blk->to == blk->next) {
+					blk->cond_to = NULL;
+					InstrDelete(blk, last_i);
 				}
 			}
 
@@ -386,11 +420,13 @@ void OptimizeJumps(Var * proc)
 			if (i != NULL && i->op == INSTR_GOTO) {
 				if (blk_to->next == blk->cond_to) {
 					if (IS_INSTR_BRANCH(cond_i->op)) {
-						cond_i->op = OpNot(cond_i->op);
-						cond_i->result = i->result;
-						blk->cond_to = i->result->instr;
+						if (InstrRelSwap(cond_i)) {
+//						cond_i->op = OpNot(cond_i->op);
+//						cond_i->result = i->result;
+							blk->cond_to = i->result->instr;
 
-						InstrBlockFree(blk_to);
+							InstrBlockFree(blk_to);
+						}
 					}
 				}
 			}

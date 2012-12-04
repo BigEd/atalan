@@ -247,9 +247,6 @@ void EmitVar(Var * var, UInt8 format)
 				}
 			}
 			EmitVarName(var);
-//			if (non_keyword) {
-//				EmitStr("$A");
-//			}
 
 		} else if (var->mode == INSTR_TEXT) {
 			if (format == 1) {
@@ -260,12 +257,6 @@ void EmitVar(Var * var, UInt8 format)
 		} else {
 			ASSERT(var->mode == INSTR_INT);
 			EmitInt(var->n);
-//			switch(var->type->variant) {
-//			case TYPE_INT: EmitInt(var->n);	break;
-//			case TYPE_STRING: 
-//				break;
-//			default: break;
-//			}
 		}
 	}
 }

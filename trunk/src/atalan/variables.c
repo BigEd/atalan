@@ -659,7 +659,6 @@ Purpose:
 {
 	Var * var, *type_var;
 	Type * type;
-//	Var * dim1, * dim2;
 	Rule * rule;
 
 	// Generate initialized arrays, where location is not specified
@@ -667,7 +666,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_INT) && var->instr != NULL && var->adr == NULL) {		
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr == NULL) {		
 				if (VarIsUsed(var)) {
 					// Make array aligned (it type defines address, it is definition of alignment)
 					type_var = type->owner;
@@ -678,6 +677,7 @@ Purpose:
 					// Label & initializers
 					GenLabel(var);
 					GenBlock(var->instr);
+					var->instr = NULL;
 				}
 			}
 		}
@@ -690,14 +690,11 @@ Purpose:
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_ARRAY) {
 				if (VarIsUsed(var)) {
-//					ArraySize(type, &dim1, &dim2);
-//					if (dim2 != NULL) {
-						// If there is an index rule for the array, generate the index
-						rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
-						if (rule != NULL) {
-							GenRule(rule, NULL, var, NULL);
-						}
-//					}
+					// If there is an index rule for the array, generate the index
+					rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
+					if (rule != NULL) {
+						GenRule(rule, NULL, var, NULL);
+					}
 				}
 			}
 		}
@@ -708,7 +705,7 @@ Purpose:
 	FOR_EACH_VAR(var)
 		type = var->type;
 		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_INT) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
+			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				rule = InstrRule2(INSTR_ORG, NULL, var->adr, NULL);
 				GenRule(rule, NULL, var->adr, NULL);
 				GenLabel(var);

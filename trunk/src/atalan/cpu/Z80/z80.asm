@@ -45,15 +45,24 @@ chars:
 
 numbers:
 	and 127
-	ld c, (hl)
+	ld c, (hl)		; read address of the variable
 	inc hl
 	ld b, (hl)
 	inc hl
 	
 	push hl
-	ld a, (bc)	
+	
+	ld h, 0
 	ld l, a
-	ld h, 0	
+			
+	ld a, (bc)
+	dec l				;if we are supposed to read only one byte, we are done with reading
+	ld l, a
+	jr z, one_byte	
+	inc bc				; read second byte
+	ld a, (bc)
+	ld h, a
+one_byte:			
 	call print_int2
 	pop hl
 	jr token

@@ -3,18 +3,18 @@ type channel:0..3
 
 in out freq@$1000:array(channel) step 2 of frequency
 
-in out z:0..3
+in z:0..3
+out z'@z
 
-freq(0) = 50
-freq(1) = 13
-freq(2) = 19
+freq#0 = 50
+freq#1 = 13
+freq#2 = 19
 
-z = 3
+z' = 3
 x = z		;we must make sure compiler looses track of the value
 freq(x) = 30
 
-
-for i:0..3 "[freq(i)] ",
-""
-
-assert "50 13 19 30 "
+assert freq#0 = 50
+assert freq#1 = 13
+assert freq#2 = 19
+assert freq#3 = 30

@@ -981,15 +981,18 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 
-//			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
-//				Print(" ");
-//			}
-			q = UsageQuotient(header, end, top_var, reg, &init);
+			if (InstrRule2(INSTR_LET, top_reg, top_var, NULL)) {
 
-			if (q < top_q) {
-				top_q = q;
-				top_reg = reg;
-				top_init = init;
+	//			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
+	//				Print(" ");
+	//			}
+				q = UsageQuotient(header, end, top_var, reg, &init);
+
+				if (q < top_q) {
+					top_q = q;
+					top_reg = reg;
+					top_init = init;
+				}
 			}
 		}
 
