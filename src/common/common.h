@@ -31,11 +31,14 @@ typedef signed long Int32;
 typedef unsigned char UInt8;
 typedef signed char Int8;
 
+typedef long long Int64;
+
 #define true 1
 #define false 0
 
 // Memory management
 
+#define MemAlloc(size) malloc(size)
 extern void * MemAllocEmpty(long size);
 #define MemAllocStruct(TYPE) ((TYPE *)MemAllocEmpty(sizeof(TYPE)))
 #define MemEmptyVar(var)  memset(&(var), 0, sizeof(var))
@@ -111,7 +114,8 @@ void PrintHeader(UInt8 level, char * text, ...);
 #endif
 
 #ifdef __Windows__
-#define ASSERT(x) if (!(x)) { printf("Assert: %s:%ld: %s", __FILE__, __LINE__, #x); while(1); }
+#include "crtdbg.h"
+#define ASSERT(x) if (!(x)) { printf("Assert: %s:%ld: %s", __FILE__, __LINE__, #x); _CrtDbgBreak(); }
 #endif
 
 #ifndef ASSERT

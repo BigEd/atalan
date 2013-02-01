@@ -10,11 +10,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h> 
-
 #define STDERR stderr
 
 GLOBAL Bool VERBOSE;

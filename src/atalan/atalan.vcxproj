@@ -86,7 +86,9 @@
     <ClCompile Include="gen.c" />
     <ClCompile Include="instr.c" />
     <ClCompile Include="bigint.c" />
+    <ClCompile Include="names.c" />
     <ClCompile Include="opt_global.c" />
+    <ClCompile Include="opt_live2.c" />
     <ClCompile Include="var_int.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />

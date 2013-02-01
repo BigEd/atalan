@@ -21,6 +21,7 @@ Current position, where will be the next instruction generated is stored in GENL
 
 static BigInt BIGINT_0 = 0;
 static BigInt BIGINT_1 = 1;
+static BigInt BIGINT_255 = 255;
 
 BigInt * Int0()
 {
@@ -32,9 +33,19 @@ BigInt * Int1()
 	return &BIGINT_1;
 }
 
+BigInt * Int255()
+{
+	return &BIGINT_255;
+}
+
 void IntInit(BigInt * dest, Int32 n)
 {
 	*dest = (BigInt)n;
+}
+
+void IntFree(BigInt * n)
+{
+
 }
 
 void IntSet(BigInt * dest, BigInt * src)
@@ -72,10 +83,61 @@ void IntDiv(BigInt * dest, BigInt * l, BigInt * r)
 	*dest = *l / *r;
 }
 
-Bool IntIsN(BigInt * l, Int32 n)
+void IntMod(BigInt * dest, BigInt * l, BigInt * r)
 {
-	return *l == n;
+	*dest = *l % *r;
 }
+
+void IntNeg(BigInt * dest)
+{
+	*dest = -*dest;
+}
+
+void IntShr(BigInt * dest, BigInt * l, BigInt * r)
+{
+	*dest = *l >> *r;
+}
+
+void IntAnd(BigInt * dest, BigInt * l, BigInt * r)
+{
+	*dest = *l & *r;
+}
+
+void IntOr(BigInt * dest, BigInt * l, BigInt * r)
+{
+	*dest = *l | *r;
+}
+
+void IntXor(BigInt * dest, BigInt * l, BigInt * r)
+{
+	*dest = *l ^ *r;
+}
+
+void IntSqrt(BigInt * dest, BigInt * l)
+{
+	*dest = (BigInt)sqrt((double)*l);
+}
+
+Bool IntEqN(BigInt * l, Int32 N)
+{
+	return *l == N;
+}
+
+Bool IntHigherN(BigInt * l, Int32 N)
+{
+	return *l > N;
+}
+
+Bool IntLowerN(BigInt * l, Int32 N)
+{
+	return *l < N;
+}
+
+Bool IntLowerEqN(BigInt * l, Int32 N)
+{
+	return *l <= N;
+}
+
 
 Bool IntEq(BigInt * l, BigInt * r)
 {
@@ -129,7 +191,34 @@ void IntAddN(BigInt * dest, Int32 N)
 	*dest = *dest + N;
 }
 
+void IntAndN(BigInt * dest, UInt32 N)
+{
+	*dest = *dest & N;
+}
+
+void IntOrN(BigInt * dest, UInt32 N)
+{
+	*dest = *dest | N;
+}
+
 Int32 IntN(BigInt * n)
 {
-	return *n;
+	return (Int32)*n;
+}
+
+void PrintBigInt(BigInt * n)
+{
+	PrintInt(IntN(n));
+}
+
+void IntModify(BigInt * dest, BigInt * l)
+{
+	IntFree(dest);
+	IntSet(dest, l);
+}
+
+void IntRangeSize(BigInt * dest, BigInt * min, BigInt * max)
+{
+	IntSub(dest, max, min);
+	IntAddN(dest, 1);
 }

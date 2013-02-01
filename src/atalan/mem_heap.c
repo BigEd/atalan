@@ -147,9 +147,12 @@ Purpose:
 	Type must be integer type defining a range or variant type which has two subtypes.
 */
 {
+	BigInt sz;
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
-			HeapAddBlock(heap, type->range.min, type->range.max - type->range.min + 1);
+			IntRangeSize(&sz, &type->range.min, &type->range.max);
+			HeapAddBlock(heap, IntN(&type->range.min), IntN(&sz));
+			IntFree(&sz);
 		} else if (type->variant == TYPE_VARIANT) {
 			HeapAddType(heap, type->left);
 			HeapAddType(heap, type->right);

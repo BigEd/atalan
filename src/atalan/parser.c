@@ -246,7 +246,7 @@ Purpose:
 	Var * result;
 	Var * top;
 
-	long n1, r;
+	BigInt * n1, r;
 //	PrintStack();
 
 	top = STACK[TOP-1];
@@ -264,18 +264,32 @@ Purpose:
 			RESULT_TYPE = top->type;
 		}
 	}
-	if (VarIsConst(top)) {
-		if (top->type->variant == TYPE_INT) {
-			n1 = STACK[TOP-1]->n;
-			switch(op) {
-			case INSTR_HI: r = (n1 >> 8) & 0xff; break;
-			case INSTR_LO: r = n1 & 0xff; break;
-			case INSTR_SQRT: r = (UInt32)sqrt(n1); break;
-			default: goto unknown_unary; break;
-			}
-			result = VarInt(r);
-			goto done;
+
+	n1 = VarIntConst(top);
+
+	if (n1 != NULL) {
+		n1 = &STACK[TOP-1]->n;
+		switch(op) {
+		case INSTR_HI: 
+			IntSet(&r, n1);
+			IntDivN(&r, 256);
+			IntAndN(&r, 0xff);
+
+			//r = (n1 >> 8) & 0xff; 
+			break;
+		case INSTR_LO: 
+			IntSet(&r, n1);
+			IntAndN(&r, 0xff);
+			//r = n1 & 0xff; 
+			break;
+		case INSTR_SQRT: 
+			IntSqrt(&r, n1);
+//			r = (UInt32)sqrt(n1); 
+			break;
+		default: goto unknown_unary; break;
 		}
+		result = VarN(&r);
+		goto done;
 	}
 unknown_unary:
 	result = VarAllocScopeTmp(NULL, INSTR_VAR, RESULT_TYPE);
@@ -538,15 +552,15 @@ Var * ParseArrayIdx(Type * atype)
 
 	// Syntax a()  represents whole array
 	if (tv == TYPE_ARRAY && TOK == TOKEN_BLOCK_END) {
-		idx  = VarInt(idx_type->range.min);
-		idx2 = VarInt(idx_type->range.max);
+		idx  = VarN(&idx_type->range.min);
+		idx2 = VarN(&idx_type->range.max);
 		idx = VarNewRange(idx, idx2);
 		goto done;
 	}
 
 	// It may be (..<n>), or even () use min as default
 	if (TOK == TOKEN_DOTDOT) {
-		idx  = VarInt(idx_type->range.min);
+		idx  = VarN(&idx_type->range.min);
 	} else {
 		ParseSubExpression(idx_type);
 		if (TOK) {
@@ -561,7 +575,7 @@ Var * ParseArrayIdx(Type * atype)
 	if (NextIs(TOKEN_DOTDOT)) {
 		if (TOK == TOKEN_COMMA || TOK == TOKEN_BLOCK_END) {
 			if (tv == TYPE_ARRAY) {
-				idx2 = VarInt(idx_type->range.max);
+				idx2 = VarN(&idx_type->range.max);
 			}
 		} else {
 			ParseSubExpression(idx_type);
@@ -671,15 +685,15 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 
 	// Syntax a()  represents whole array
 	if (tv == TYPE_ARRAY && TOK == TOKEN_BLOCK_END) {
-		idx  = VarInt(idx_type->range.min);
-		idx2 = VarInt(idx_type->range.max);
+		idx  = VarN(&idx_type->range.min);
+		idx2 = VarN(&idx_type->range.max);
 		idx = VarNewRange(idx, idx2);
 		goto done;
 	}
 
 	// It may be (..<n>), or even () use min as default
 	if (TOK == TOKEN_DOTDOT) {
-		idx  = VarInt(idx_type->range.min);
+		idx  = VarN(&idx_type->range.min);
 	} else {
 		ParseSubExpression(idx_type);
 		if (TOK) {
@@ -694,7 +708,7 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 	if (NextIs(TOKEN_DOTDOT)) {
 		if (TOK == TOKEN_COMMA || TOK == TOKEN_BLOCK_END) {
 			if (tv == TYPE_ARRAY) {
-				idx2 = VarInt(idx_type->range.max);
+				idx2 = VarN(&idx_type->range.max);
 			}
 		} else {
 			ParseSubExpression(idx_type);
@@ -1079,9 +1093,9 @@ retry_indices:
 							if (item == NULL) {
 								if (var->type->variant == TYPE_INT) {
 									if (StrEqual(NAME, "min")) {
-										item = VarInt(var->type->range.min);
+										item = VarN(&var->type->range.min);
 									} else if (StrEqual(NAME, "max")) {
-										item = VarInt(var->type->range.max);
+										item = VarN(&var->type->range.max);
 									}
 								} else if (var->type->variant == TYPE_ARRAY) {
 									if (StrEqual(NAME, "step")) {
@@ -1394,8 +1408,9 @@ Purpose:
 	Var * list, * item, * var;
 	UInt32 count;
 	Type * item_type;
-//	IntLimit min, max;
+//	BigInt min, max;
 	UInt32 var_count;
+	BigInt icnt;
 
 	// Set the parentheses mode on.
 	// This nesures, we are parse comma operator as part of expresion parsing.
@@ -1441,7 +1456,9 @@ Purpose:
 			} while(item != NULL);
 
 			arr->instr = GenEnd();
-			arr->type = TypeArray(TypeAllocInt(0, count), item_type);
+			IntInit(&icnt, count);
+			arr->type = TypeArray(TypeAllocInt(Int0(), &icnt), item_type);
+			IntFree(&icnt);
 		}
 	}
 	return arr;
@@ -1706,7 +1723,7 @@ void ParseCondition()
 	Var * body_label = NULL;
 	Token tok;
 	if (NextIs(TOKEN_EITHER)) {
-		tmp = VarNewTmp(TypeAllocInt(0,1));
+		tmp = VarNewTmp(TypeAllocInt(Int0(),Int1()));
 		GenLet(tmp, VarInt(0));
 		SimpleIf(INSTR_LET, tmp, VarInt(1), NULL); 
 		if (NextIs(TOKEN_OR)) {
@@ -1899,40 +1916,31 @@ Purpose:
 	Create integer type, that will be able to contain range specified by the two variables.
 */
 {
-	Int32 nmin = 0, nmax = 0;
-	Int32 mmin = 0, mmax = 0;
-	Int32 l;
+	BigInt * nmin, * nmax;
+	BigInt * l;
 	Bool defined = true;
 	Type * type = TUNDEFINED;
 
-	if (min->mode == INSTR_INT) {
-		if (min->type->variant == TYPE_INT) {
-			nmin = min->n;
-		} else {
-			SyntaxError("Range minimum is not integer type");
-		}
-	} else if (min->mode == INSTR_VAR) {
-		if (min->type->variant == TYPE_INT) {
-			nmin = min->type->range.min;
-			nmax = min->type->range.max;
-		} else if (min->type->variant != TYPE_UNDEFINED) {
-			SyntaxError("Range minimum is not integer type");
-		} else {
-			defined = false;
+	nmin = VarIntConst(min);
+	if (nmin == NULL) {
+		if (min->mode == INSTR_VAR) {
+			if (min->type->variant == TYPE_INT) {
+				nmin = &min->type->range.min;
+				nmax = &min->type->range.max;
+			} else if (min->type->variant != TYPE_UNDEFINED) {
+				SyntaxError("Range minimum is not integer type");
+			} else {
+				defined = false;
+			}
 		}
 	}
 
 	if (TOK != TOKEN_ERROR) {
-		if (max->mode == INSTR_INT) {
+		nmax = VarIntConst(max);
+		if (nmax == NULL && max->mode == INSTR_VAR) {
 			if (max->type->variant == TYPE_INT) {
-				if (max->n > nmax) nmax = max->n;
-			} else {
-				SyntaxError("Range maximum is not integer type");
-			}
-		} else if (max->mode == INSTR_VAR) {
-			if (max->type->variant == TYPE_INT) {
-				l = max->type->range.max;
-				if (l > nmax) nmax = l;
+				l = &max->type->range.max;
+				if (IntHigher(l, nmax)) nmax = l;
 			} else if (max->type->variant != TYPE_UNDEFINED) {
 				SyntaxError("Range maximum is not integer type");
 			} else {
@@ -1961,14 +1969,19 @@ Syntax:
 	Var * min, * max, * step, * arr, * idx;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
-	Int32 n, nmask;
+//	Int32 n, nmask;
 	LinePos token_pos;
+	BigInt * n, nmask;
+	BigInt t1, t2, t3;
+	Bool higher;
 
 	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
 
 	EnterLocalScope();
 
+	// Parse "for" part.
+	// We may also call this function when the loop begins just with "while" or "until".
 	if (NextIs(TOKEN_FOR)) {
 
 		GenLine();
@@ -2059,7 +2072,7 @@ Syntax:
 			ParseExpression(max);
 			step = STACK[0];
 		} else {
-			step = VarInt(1);
+			step = ONE;
 		}
 	}
 
@@ -2189,26 +2202,46 @@ Syntax:
 		//    to set overflow flag.
 
 		if (max->mode == INSTR_INT) {
-			n = max->n;
-			nmask = 0xff;
-			while(n > nmask) nmask = (nmask << 8) | 0xff;
+			n = &max->n;
+			IntInit(&nmask, 0xff);
+			while(IntHigher(n, &nmask)) {
+				IntMulN(&nmask, 256);
+				IntOrN(&nmask, 0xff);
+//				nmask = (nmask << 8) | 0xff;
+			}
 
-			if (n == nmask && (step->mode != INSTR_INT || step->n > 255)) {
+			if (IntEq(n, &nmask) && (step->mode != INSTR_INT || IntHigherN(&step->n, 255))) {
 				GenInternal(INSTR_IFNOVERFLOW, G_BLOCK->body_label, NULL, NULL);
 				goto var_done;
 			} else if (step->mode == INSTR_INT) {
 
 				// 2. Min,max,step are constants, in such case we may use IFNE and calculate correct stop value
 				if (min->mode == INSTR_INT) {
-					n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
-					n = n & nmask;
-					idx->type->range.max = n;		// set the computed limit value as max of the index variable
-					max = VarInt(n);
+
+					//n = min->n + ((max->n - min->n) / step->n + 1) * step->n;
+					//n = n & nmask;
+
+					IntSub(&t1, &max->n, &min->n);
+					IntDiv(&t3, &t1, &step->n);
+					IntAddN(&t3, 1);
+					IntFree(&t1);
+					IntMul(&t1, &t3, &step->n);
+					IntFree(&t3);
+					IntAdd(&t2, &min->n, &t1);
+					IntFree(&t1);
+					IntAnd(&t3, &t2, &nmask);
+					IntFree(&t2);
+					IntModify(&idx->type->range.max, &t3);		// set the computed limit value as max of the index variable
+					max = VarN(&t3);
+					IntFree(&t3);
 					GenInternal(INSTR_IFNE, G_BLOCK->body_label, idx, max);	//TODO: Overflow
 					goto var_done;
 				// 3. max & step are constant, we may detect, that overflow will not occur
 				} else {
-					if ((nmask - max->n) >= step->n) goto no_overflow;
+					IntSub(&t1, &nmask, &max->n);
+					higher = IntHigherEq(&t1, &step->n);
+					IntFree(&t1);
+					if (higher) goto no_overflow;
 				}
 			}
 		}
@@ -2219,7 +2252,7 @@ Syntax:
 		}
 
 		// If step is 1, it is not necessary to test the overflow
-		if (step->mode != INSTR_INT || step->n != 1) {
+		if (step->mode != INSTR_INT || !IntEq(&step->n, Int1())) {
 			GenInternal(INSTR_IFOVERFLOW, G_BLOCK->f_label, NULL, NULL);
 		}
 no_overflow:
@@ -2359,7 +2392,8 @@ Arguments:
 		if (NextIs(TOKEN_TIMES)) {
 
 			if (item->type->variant == TYPE_INT) {
-				rep = item->n;
+				//TODO: Check, thet repeat is not too big
+				rep = IntN(&item->n);
 			} else {
 				SyntaxError("repeat must be defined using integer");
 				break;
@@ -2440,13 +2474,13 @@ void ArrParserInit(ArrParser * apar, Var * arr)
 		index_lo_i = InstrBlockAlloc();
 		index_hi_i = InstrBlockAlloc();
 
-		apar->sizes = VarAllocScope(arr, INSTR_INT, "size", 0);
+		apar->sizes = VarAllocScope(arr, INSTR_CONST, "size", 0);
 		apar->sizes->instr = sizes_i;
 
-		apar->index_lo = VarAllocScope(arr, INSTR_INT, "index_lo", 0);
+		apar->index_lo = VarAllocScope(arr, INSTR_CONST, "index_lo", 0);
 		apar->index_lo->instr = index_lo_i;
 
-		apar->index_hi = VarAllocScope(arr, INSTR_INT, "index_hi", 0);
+		apar->index_hi = VarAllocScope(arr, INSTR_CONST, "index_hi", 0);
 		apar->index_hi->instr = index_hi_i;
 	} else {
 		arr->instr = InstrBlockAlloc();
@@ -2460,9 +2494,10 @@ void ArrParserNext(ArrParser * apar, UInt32 idx)
 {
 	Var * item;
 	UInt32 size;
+	BigInt isize;
 
 	if (apar->elem_type->variant == TYPE_ARRAY) {
-		item = VarAllocScope(apar->arr, INSTR_INT, "e", idx);
+		item = VarAllocScope(apar->arr, INSTR_CONST, "e", idx);
 		GenBegin();
 
 		size = ParseArrayConst(apar->elem_type, true, NULL);
@@ -2472,7 +2507,10 @@ void ArrParserNext(ArrParser * apar, UInt32 idx)
 		item->instr = GenEnd();
 
 		//TODO: Make min according to array min
-		item->type = TypeArray(TypeAllocInt(0, size), apar->elem_type);
+
+		IntInit(&isize, size);
+		item->type = TypeArray(TypeAllocInt(Int0(), &isize), apar->elem_type);
+		IntFree(&isize);
 
 		InstrInsertRule(apar->sizes->instr, NULL, INSTR_DATA, NULL, VarInt(size), NULL);
 		InstrInsertRule(apar->index_lo->instr, NULL, INSTR_PTR, NULL, VarNewByteElement(item, ZERO), NULL);
@@ -2490,8 +2528,8 @@ void ArrParserFinish(ArrParser * apar, UInt32 idx)
 	Type * idx_type;
 
 	if (apar->elem_type->variant == TYPE_ARRAY) {
-		idx_type = TypeAllocInt(0, idx);
-		apar->sizes->type = TypeArray(idx_type, TypeAllocInt(apar->min_size, apar->max_size));
+		idx_type = TypeAllocIntN(0, idx);
+		apar->sizes->type = TypeArray(idx_type, TypeAllocIntN(apar->min_size, apar->max_size));
 
 		//TODO: Depending on address space
 		apar->index_lo->type = TypeArray(idx_type, TypeByte());
@@ -2548,12 +2586,14 @@ UInt32 ParseArrayC(Var * var)
 
 void ParseEnumItems(Type * type, UInt16 column_count)
 {
-	Int32 last_n = -1;
+	BigInt last_n;
 	Bool id_required;
 	Var * var;
 	Var * local, * first_local;
 	UInt16 i, row;
 	ArrParser * apar;
+
+	IntInit(&last_n, -1);
 
 	first_local = VarFirstLocal(type->owner);
 	
@@ -2571,28 +2611,15 @@ void ParseEnumItems(Type * type, UInt16 column_count)
 
 		// Parse item identifier
 		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-			var = VarAllocScope(NO_SCOPE, INSTR_INT, NAME, 0);
+			var = VarAllocScope(NO_SCOPE, INSTR_CONST, NAME, 0);
 			NextToken();
 			if (NextIs(TOKEN_COLON)) {
 			} else {
 
 			}
-/*
-			if (NextIs(TOKEN_EQUAL)) {
-				// Parse const expression
-				if (TOK == TOKEN_INT) {
-					last_n = LEX.n;
-					NextToken();
-				} else {
-					SyntaxError("expected integer value");
-				}
-			} else {
-				last_n++;
-			}
-*/
-			last_n++;
-			var->n = last_n;
-			var->value_nonempty = true;
+
+			IntAddN(&last_n, 1);
+			var->var = VarN(&last_n);
 
 			TypeAddConst(type, var);
 
@@ -2620,10 +2647,21 @@ void ParseEnumItems(Type * type, UInt16 column_count)
 	}
 }
 
+Var * VarRangeSize(BigInt * min, BigInt * max)
+{
+	Var * var;
+	BigInt bi;
+	IntRangeSize(&bi, min, max);
+	var = VarN(&bi);
+	IntFree(&bi);
+	return var;
+}
+
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 {
 	UInt32 size;
 	Type * dim1, * dim2;
+
 
 	*p_dim1 = NULL;
 	*p_dim2 = NULL;
@@ -2634,16 +2672,16 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 			dim2 = dim1->right;
 			dim1 = dim1->left;
 		}
-		*p_dim1 = VarInt(dim1->range.max - dim1->range.min + 1);
+		*p_dim1 = VarRangeSize(&dim1->range.min, &dim1->range.max);
 
 		if (dim2 != NULL) {
-			*p_dim2 = VarInt(dim2->range.max - dim2->range.min + 1);
+			*p_dim2 = VarRangeSize(&dim2->range.min, &dim2->range.max);
 
 		// Array of array
 		} else {
 			if (type->element != NULL && type->element->variant == TYPE_ARRAY) {
 				dim1 = type->element->index;
-				*p_dim2 = VarInt(dim1->range.max - dim1->range.min + 1);
+				*p_dim2 = VarRangeSize(&dim1->range.min, &dim1->range.max);
 			}
 		}
 	} else if (type->variant == TYPE_STRUCT) {
@@ -2948,6 +2986,7 @@ Purpose:
 	UInt16 bookmark;
 	Bool global_scope;
 	UInt8 arg_no;
+	BigInt ib;
 
 	type = TUNDEFINED;
 	is_assign = false;
@@ -3154,33 +3193,33 @@ parsed:
 						}
 					}
 				}
-			} else {
-				// If type has not been defined, but this is alias, use type of the aliased variable
+			// If type has not been defined, but this is alias, use type of the aliased variable
+			} else if (var->adr != NULL) {
 				adr = var->adr;
-				if (adr != NULL) {
 
-					// We are parsing procedure or macro argument
-					if (adr->mode == INSTR_VAR) {
-						var->type = adr->type;
-					} else if (adr->mode == INSTR_TUPLE) {
-						is_assign = true;
-					} else if (adr->mode == INSTR_ELEMENT) {
-						is_assign = true;
-						var->type = adr->type;
-						idx = adr->var;
+				// We are parsing procedure or macro argument
+				if (adr->mode == INSTR_VAR) {
+					var->type = adr->type;
+				} else if (adr->mode == INSTR_TUPLE) {
+					is_assign = true;
+				} else if (adr->mode == INSTR_ELEMENT) {
+					is_assign = true;
+					var->type = adr->type;
+					idx = adr->var;
 
-						// For array ranges, define type as array(0..<range_size>) of <array_element>
+					// For array ranges, define type as array(0..<range_size>) of <array_element>
 
-						if (idx->mode == INSTR_RANGE) {
-							min = idx->adr; max = idx->var;
-							if (min->mode == INSTR_INT && max->mode == INSTR_INT) {
-								var->type = TypeArray(TypeAllocInt(0, max->n - min->n), adr->adr->type->element);
-							} else {
-								SyntaxError("Address can not use variable slices");
-							}
+					if (idx->mode == INSTR_RANGE) {
+						min = idx->adr; max = idx->var;
+						if (min->mode == INSTR_INT && max->mode == INSTR_INT) {
+							IntSub(&ib, &max->n, &min->n);
+							var->type = TypeArray(TypeAllocInt(Int0(), &ib), adr->adr->type->element);
+							IntFree(&ib);
+						} else {
+							SyntaxError("Address can not use variable slices");
 						}
-
 					}
+
 				}
 			}
 		} else {
@@ -3256,7 +3295,7 @@ parsed:
 							}
 						} else if (var->mode == INSTR_CONST) {
 							var->mode = INSTR_TEXT;
-							VarLetStr(var, NAME);
+							VarInitStr(var, NAME);
 							NextToken();
 						} else {
 							SyntaxError("string may be assigned only to variable or to constant");
@@ -3286,15 +3325,16 @@ parsed:
 
 								item = STACK[stack];
 
-								if (FlagOn(submode, SUBMODE_ARG_IN) || FlagOn(submode, SUBMODE_ARG_OUT)) {		// mode == INSTR_ARG
+								// Default value for procedure argument or parameter
+								if (VarIsParam(var) || FlagOn(submode, SUBMODE_ARG_IN) || FlagOn(submode, SUBMODE_ARG_OUT)) {		// mode == INSTR_ARG
 									var->var = item;
-								} else if (var->mode == INSTR_INT) {
-									var->n = item->n;
-									var->value_nonempty = item->value_nonempty;
+								} else if (var->mode == INSTR_CONST) {
+									VarLet(var, item);
 									// Set the type based on the constant
 									if (typev == TYPE_UNDEFINED) {
-										var->type = TypeAllocConst(item->n);
+										var->type = TypeAllocConst(&var->var->n);
 									}
+
 								} else {
 									// If the result is stored into temporary variable, we may direct the result directly to the assigned variable.
 									// This can be done only if there is just one result.
@@ -3336,12 +3376,12 @@ parsed:
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
-		if (VarIsConst(var) && FlagOn(var->submode, SUBMODE_PARAM)) {
+		if (VarIsParam(var)) {
 			item = VarFindScope2(SRC_FILE, var->name);
 			if (item != NULL) {
 				VarLet(var, item);
 			} else {
-				if (!var->value_nonempty) {
+				if (var->var == NULL) {
 					SyntaxError("Value of parameter [A] has not been specified.");
 				}
 			}
@@ -3658,6 +3698,7 @@ void ParseRuleUnary(RuleArg * arg)
 		if (arg->arr->variant == RULE_ARG) {
 			ParseRuleArgArray(arg);
 		}
+		ParseRuleType(arg->arr);
 	} else {
 		ParseSimpleRuleArg(arg, false);
 	}
@@ -3816,7 +3857,7 @@ void ParseRuleArg(Rule * rule, RuleArg * arg)
 void ResolveRuleArg(Rule * rule, RuleArg * arg)
 {
 	UInt8 i;
-	if (arg->variant == RULE_ARG) {
+	if (arg->variant == RULE_ARG && arg->type == NULL) {
 		for(i=0; i<3; i++) {
 			if (&rule->arg[i] != arg && rule->arg[i].arg_no == arg->arg_no) {
 				arg->variant = rule->arg[i].variant;
@@ -4068,8 +4109,8 @@ Var * VarSize(Var * var)
 			size = VarNewElement(size, var->var);
 		}
 	} else {
-		if (var->type->variant == TYPE_ARRAY) {
-			size = VarInt(var->type->index->range.max - var->type->index->range.min + 1);
+		if (var->type->variant == TYPE_ARRAY) {			
+			size = VarRangeSize(&var->type->index->range.min, &var->type->index->range.max);
 		}
 	}
 	return size;
@@ -4506,7 +4547,9 @@ void ParseCommands()
 		switch(TOK) {
 
 		// *** Module parameters (2)
-		// Module parameters are declared in the same way as constant, only prefixed with 'param' keyword.
+		// Module parameters are declared in the module is the same way as constants, only prefixed with ::param:: keyword.
+		// For example: ::param ORG:0..65535 = $2000
+
 		case TOKEN_PARAM: 
 			NextToken();
 			ParseDeclarations(INSTR_CONST, SUBMODE_PARAM); break;

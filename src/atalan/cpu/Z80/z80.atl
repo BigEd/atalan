@@ -36,7 +36,9 @@ CPU:scope =
 	szhvn@(s,z,hc,v,n)
 	szhvnc@(s,z,hc,v,n,cr)
 	nc@(n,c)
-		
+
+	cra@(cr,a)
+			
 	type memory:array(0..$ffff) of 0..255
 
 	r@(a,b,c,d,e,h,l)
@@ -53,7 +55,11 @@ CPU:scope =
 	b1arr:type = array(card) of byte1
 	u8:type = 0..255
 	u16:type = 0..65535	
+	s8:type = -128..127
 
+type
+	byte2a:byte2 or adr
+	
 ;rule decl %A:array(%B:byte, %C:byte) of %D:byte1 =
 ;	mul %Z, %B.count, %C.count
 ;	decl %A.data: array %Z of %D
@@ -65,6 +71,11 @@ rule %A:byte1 = %B:byte1 = instr
 	let a, %B
 	let %A, a
 
+rule @%A = %B:byte1 = instr
+	let hl, %A
+	let a, %B
+	let @hl, a
+	
 ;### ADD
 
 rule %A:byte = %B:byte + 1 = instr
@@ -79,6 +90,13 @@ rule %A:byte = %B:byte + %C:byte = instr
 	add	a, a, b
 	let %A, a
 
+rule %A:s8 = %B:s8 + %C:s8 = instr
+	let a, %C
+	let b, a
+	let a, %B
+	add	a, a, b
+	let %A, a
+
 rule %A:card = %B:card + %C:byte = instr
 	ld hl, %B
 	ld a, %C
@@ -86,7 +104,20 @@ rule %A:card = %B:card + %C:byte = instr
 	ld b, 0
 	add hl, hl, bc
 	ld %A, hl
-	 
+
+rule %A:card = %B:card + @%C:adr of byte = instr
+	ld hl, %C
+	ld a, %B$0
+	add a, a, @hl
+	ld %A$0, a
+	ld a, %B$1
+	add cra, a, 0+cr
+	ld %A$1, a
+	
+rule %A:byte2a = %A + 1 = instr
+	let_adr hl, %A
+	add @hl, @hl, 1
+		 
 ;### SUB
 rule %A:byte = %B:byte - const %C:byte = instr
 	let a, %B
@@ -100,6 +131,12 @@ rule %A:byte = %B:byte - %C:byte = instr
 	sub	a, a, b
 	let %A, a
 
+rule %A:s8 = %B:s8 - %C:s8 = instr
+	let a, %C
+	let b, a
+	let a, %B
+	sub	a, a, b
+	let %A, a
 
 ;Multiplication
 
@@ -209,12 +246,12 @@ rule %A:byte = %B:byte bitxor %C:byte = instr
 
 ;Jumps
 
-rule if %A:byte = const %B:byte goto %C = instr
+rule if %A:byte1 = const %B:byte1 goto %C = instr
 	ld a, %A
 	cp %B
 	if z = 1 goto %C
 
-rule if %A:byte <> const %B:byte goto %C = instr
+rule if %A:byte1 <> const %B:byte1 goto %C = instr
 	ld a, %A
 	cp %B
 	if z = 0 goto %C
@@ -246,6 +283,10 @@ rule let_adr hl, %A:b1arr(%B:card) = instr
 	let_adr hl, %A
 	ld de, %B
 	add hl, hl, de
+
+rule let_adr %A:adr, %B:b1arr = instr
+	let_adr hl, %B
+	let %A, hl
 
 rule let_adr %A:adr, %B:b1arr(%C:card) = instr
 	let_adr hl, %B(%C)
@@ -327,6 +368,8 @@ rule %A@r = const %B:byte1 #7 = "   ld %A, %B"
 rule %A@r = %B@r           #4 = "   ld %A, %B"
 
 rule let %A:byte1, a        #13 = "   ld (%A), a"
+rule let %A$const %B, a #13 = "   ld (%A+%B), a"
+
 rule let a, const %B:byte1  #7  = "   ld a, %B"			;We must define this explicitly for A, to prevent using rule on next line
 rule let a, %B:byte1        #13 = "   ld a, (%B)"
 
@@ -346,8 +389,8 @@ rule let a, %B$%C        #13 = "   ld a, (%B+%C)"
 rule let %A@r, %B$const %C     #7   = "   ld %A, (%B-%B.index.min+%C)"
 
 ;LD card
-rule let hl, %A:byte2           #20 = "   ld hl, (%A)"
-rule let %A:byte2, hl           #20 = "   ld (%A), hl"
+rule let hl, %A:byte2a           #20 = "   ld hl, (%A)"
+rule let %A:byte2a, hl           #20 = "   ld (%A), hl"
 
 rule let_adr %A@rr, %B          #10 = "   ld %A, %B"
 
@@ -355,14 +398,24 @@ rule let_adr %A@rr, %B          #10 = "   ld %A, %B"
 rule %A@r = %A + 1          @szhvn  #4 = "   inc %A"
 rule a = a + const %A:byte1 @szhvnc #7 = "   add a, %A"    
 rule a = a + %A@r           @szhvnc #4 = "   add a, %A"
-
+rule a = a + @hl            @szhvnc #7 = "   add a, (hl)"
 rule hl = hl + %A@rr        @nc    #11 = "   add hl, %A"
 rule %A@rr = %A + 1         	   #6  = "   inc %A"
- 
+rule @hl = @hl + 1          @szhvn #7  = "   inc (hl)"
+
+;ADC
+
+rule cra = a + (const %A:byte1 + cr) @szhvnc #7 = "   adc a, %A"    
+rule cra = a + (%A@r + cr)      @szhvnc #4 = "   adc a, %A"
+rule cra = a + (@hl + cr)       @szhvnc #7 = "   adc a, (hl)"
+
+
 ;SUB, DEC
 rule %A@r = %A - 1          @szhvn  #4 = "   dec %A"
 rule a = a - const %A:byte1 @szhvnc #7 = "   sub %A"    
 rule a = a - %A@r           @szhvnc #4 = "   sub %A"
+rule a = a - @hl            @szhvnc #7 = "   sub (hl)"
+rule @hl = @hl - 1          @szhvn #7  = "   dec (hl)"
 rule %A@rr = %A - 1         	   #6  = "   dec %A"
 
 ;CP
@@ -409,8 +462,9 @@ rule call %A:proc() #17 = "   call %A"
 rule return #10 = "   ret"
 
 rule str_arg %A:string  = "   DB %A.size,'%A'"				; TODO: Use var_arg %A:const string
-rule var_arg %A:byte    = "   DB 129" "   DW %A"
+rule var_arg %A:u8      = "   DB 129" "   DW %A"
 rule var_arg %A:u16     = "   DB 130" "   DW %A"
+rule var_arg %A:s8      = "   DB 129+32"    "   DW %A"
 
 rule data %A:string = "   DB %'A"
 rule data %A    = "   DB %A"

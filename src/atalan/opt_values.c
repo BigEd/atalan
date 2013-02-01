@@ -39,29 +39,29 @@ Purpose:
 	}
 }
 
-Bool VarIsOffset3(Var * l, Var * r, Int32 * diff);
+Bool VarIsOffset3(Var * l, Var * r, BigInt * diff);
 
 static UInt16 G_EXP_NEST;
 
-Bool ExpIsIntConst(Exp * exp, Int32 * n)
+Bool ExpIsIntConst(Exp * exp, BigInt ** p_n)
 {
+	*p_n = NULL;
 	if (exp->op == INSTR_VAR) {
-		if (VarIsIntConst(exp->var)) {
-			*n = exp->var->n;
-		}
+		*p_n = VarIntConst(exp->var);
 	}
-	return false;
+	return *p_n != NULL;
 }
 
-Bool ExpIsOffset(Exp * lexp, Exp * rexp, Int32 * diff)
+Bool ExpIsOffset(Exp * lexp, Exp * rexp, BigInt * diff)
 {
 	return false;
 }
 
-Bool ExpIsOffsetOfVar(Exp * lexp, Var * r, Int32 * diff)
+Bool ExpIsOffsetOfVar(Exp * lexp, Var * r, BigInt * diff)
 {
 	Bool result = true;
-	Int32 n;
+	BigInt * n;
+	BigInt dd;
 	if (G_EXP_NEST == 100) {
 		return false;
 	}
@@ -75,9 +75,14 @@ Bool ExpIsOffsetOfVar(Exp * lexp, Var * r, Int32 * diff)
 	// 1. r + <const> = r  => -const
 	// 2. r - <const> = r  => const
 	if (lexp->op == INSTR_ADD || lexp->op == INSTR_SUB) {
-		if (ExpIsIntConst(lexp->arg[1], &n) && ExpIsOffsetOfVar(lexp->arg[0], r, diff)) {
-			if (lexp->op == INSTR_SUB) n = -n;
-			*diff -= n;
+		if (ExpIsIntConst(lexp->arg[1], &n) && ExpIsOffsetOfVar(lexp->arg[0], r, &dd)) {
+			if (lexp->op == INSTR_SUB) {
+				IntAdd(diff, &dd, n);	// n = -n;
+			} else {
+				IntSub(diff, &dd, n);
+			}
+			//*diff -= n;
+			IntFree(&dd);
 			goto yes;
 		}
 	} else if (lexp->op == INSTR_VAR) {
@@ -93,13 +98,14 @@ yes:
 }
 
 
-Bool VarIsOffset3(Var * l, Var * r, Int32 * diff)
+Bool VarIsOffset3(Var * l, Var * r, BigInt * diff)
 /*
 Purpose:
 	Test, whether r expression gives same result as l expression, except incremented by some constant value.
 */
 {
 	Exp * ldep;
+	BigInt * il, * ir;
 
 	if (G_EXP_NEST == 100) {
 		return false;
@@ -111,14 +117,13 @@ Purpose:
 	// 1. If the two variables are same, the difference is zero (no matter, what kind of variable it is)
 	// TODO: Handle input variables
 
-	if (l == r) {
-		*diff = 0;
-		goto yes;
-	}
+	if (l == r) goto yes0;
 
 	// 2. Two constants are just offset
-	if (VarIsIntConst(l) && VarIsIntConst(r)) {
-		*diff = r->n - l->n;
+
+	il = VarIntConst(l); ir = VarIntConst(r);
+	if (il != NULL && ir != NULL) {
+		IntSub(diff, ir, il);		// = r->n - l->n;
 		goto yes;
 	}
 
@@ -131,7 +136,7 @@ Purpose:
 
 	if (r->dep != NULL) {
 		if (ExpIsOffsetOfVar(r->dep, l, diff)) {
-			*diff = -*diff;
+			IntNeg(diff);
 			goto yes;
 		}
 //		if (r->dep->op == INSTR_VAR) {
@@ -141,12 +146,12 @@ Purpose:
 no:
 	return false;
 yes0:
-	*diff = 0;
+	IntInit(diff, 0); // diff = 0;
 yes:
 	return true;
 }
 
-Bool VarIsOffset(Var * l, Var * r, Int32 * diff)
+Bool VarIsOffset(Var * l, Var * r, BigInt * diff)
 /*
 Purpose:
 	Test, whether two variables at specified place differ only by a constant.
@@ -521,7 +526,7 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 			if (v1->mode == v2->mode) {
 				if (v1->type->variant == v2->type->variant) {
 					if (v1->mode == INSTR_INT) {
-						eq = (v1->n == v2->n);
+						eq = IntEq(&v1->n, &v2->n);
 						goto done;
 					}
 				}
@@ -646,12 +651,12 @@ Purpose:
 
 			FOR_EACH_LOCAL(t->owner, item)
 				if (VarIsIntConst(item)) {
-					if (item->n == 0) {
+					if (VarIsN(item, 0)) {
 						zero = item;
 					} else {
 						if (non_zero != NULL) {
 							// There are two different non-zero constants!
-							if (non_zero->n != item->n) {
+							if (!VarEq(non_zero, item)) {
 								zero = NULL;
 								break;
 							}
@@ -662,9 +667,12 @@ Purpose:
 				}
 			NEXT_LOCAL
 		} else {
-			if ((t->range.min == 0 && t->range.max == 1) || (t->range.min == -1 && t->range.max == 0)) {
+			if (IntEq(&t->range.min, Int0()) && IntEq(&t->range.max, Int1())) {
 				zero = ZERO;
 				non_zero = ONE;
+			} else if (IntEqN(&t->range.min, -1) && IntEq(&t->range.max, Int0())) {
+				zero = ZERO;
+				non_zero = VarInt(-1);
 			}
 		}
 	}
@@ -797,11 +805,12 @@ Bool OptimizeValues(Var * proc)
 	InstrBlock * blk;
 	InstrOp op, src_op;
 	char buf[32];
-	Int32 diff;
+	BigInt diff;
 	Bool  opt_increment;
 	Loc loc;
 	UInt16 regi;
 	UInt8 color;
+	Bool is_zero;
 
 	loc.proc = proc;
 
@@ -909,19 +918,22 @@ retry:
 						*/
 
 						if (i->op == INSTR_LET && VarIsOffset(result, arg1, &diff)) {
-							op = INSTR_ADD;
-							if (diff < 0) {
+
+							if (IntLowerN(&diff, 0)) {
 								op = INSTR_SUB;
-								diff = -diff;
+								IntNeg(&diff);
+							} else {
+								op = INSTR_ADD;
 							}
 
-							r2 = VarInt(diff);
+							r2 = VarN(&diff);
 							if (TransformInstrIfCheaper(&loc, op, result, result, r2, "Converting to inc/dec")) {
 								arg1 = result;
 								arg2 = r2;
 								opt_increment = true;
 								modified = true;
 							}
+							IntFree(&diff);
 						}
 
 						// Instruction result is set to different value, we must therefore reset
@@ -1038,10 +1050,14 @@ retry:
 						for(regi = 0; regi < CPU->REG_CNT; regi++) {
 							r = CPU->REG[regi];
 							if (!VarIsEqual(r, i->arg1)) {
-								if (VarIsOffset(r, i->arg1, &diff) && diff == 0) {
-									if (TransformInstr(&loc, i->op, i->result, r, i->arg2, "Register reuse")) {
-										modified = true;
-										break;
+								if (VarIsOffset(r, i->arg1, &diff)) {
+									is_zero = IntEqN(&diff, 0);
+									IntFree(&diff);
+									if (is_zero) {
+										if (TransformInstr(&loc, i->op, i->result, r, i->arg2, "Register reuse")) {
+											modified = true;
+											break;
+										}
 									}
 								}
 							}
@@ -1062,7 +1078,7 @@ retry:
 						while (!InVar(arg1) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
 					if (VarIsIntConst(arg1)) {
-						sprintf(buf, "%d", arg1->n);
+						sprintf(buf, "%d", IntN(&arg1->n));
 						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarInt(StrLen(buf)), "Arg to const")) {
 							modified = true;
 						}
@@ -1103,7 +1119,7 @@ Purpose:
 			if (op == INSTR_IFEQ || op == INSTR_IFNE) {
 				arg1 = i->arg1;
 				arg2 = i->arg2;
-				if (VarIsIntConst(arg2) && arg2->n != 0 && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
+				if (!VarEq(arg2, ZERO) /*VarIsIntConst(arg2) && arg2->n != 0*/ && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
 					i->op = OpNot(i->op);
 					i->arg2 = zero;
 				}

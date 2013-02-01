@@ -866,7 +866,6 @@ FILE * FindFile(char * name, char * ext, char * path)
 // When using module using USE command, programmer may specify comma separated list of parameters in the form 'name = value'.
 // Parsed parameters are stored as constants in source file variable scope.
 // Type of parameter is not known at this moment, so we store whatever value is parsed (integer or string or identifier).
-// The value is later used when parsing the declaration of parameter with same name.
 
 void ParseModuleParameters(Bool SkipOnly)
 /*
@@ -892,13 +891,17 @@ Syntax:
 								
 						// Parse till comma or closing brace
 						if (!SkipOnly) {
-							param = VarAllocScope(SRC_FILE, INSTR_INT, opt_name, 0);
+							//TODO: Use parse assignment
+							param = VarAllocScope(SRC_FILE, INSTR_CONST, opt_name, 0);
 							if (TOK == TOKEN_INT) {
-								param->type    = &TINT;
-								param->n       = LEX.n;
+								param->type = &TINT;
+								param->var = VarInt(LEX.n);
+//								param->type    = &TINT;
+//								param->n       = LEX.n;
 							} else {
 								param->type    = &TSTR;
-								param->str     = StrAlloc(NAME);
+								param->var = VarNewStr(NAME);
+//								param->str     = StrAlloc(NAME);
 							}
 						}
 
@@ -967,7 +970,7 @@ Purpose:
 		// Reference to file is stored in variable of INSTR_SRC_FILE
 
 		file_var = VarAllocScope(SRC_FILE, INSTR_SRC_FILE, filename, 0);
-		file_var->n    = 0;
+		IntInit(&file_var->n, 0);
 
 		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
 			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);

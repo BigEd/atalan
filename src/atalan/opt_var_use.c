@@ -50,44 +50,6 @@ done:
 	return calls;
 }
 
-typedef Bool (*VarFilter)(Var * var);
-
-void ProcAddLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
-/*
-Purpose:
-	Return all local variables from procedure.
-	Variables from subscopes are added (for example 'for' variables).
-	Variables from other procedured are not added.
-*/
-{
-	Var * var;
-
-	FOR_EACH_LOCAL(proc, var)
-		if (var->mode == INSTR_SCOPE) {
-			if (var != CPU->SCOPE) {
-				ProcAddLocalVars(var, set, filter_fn);
-			}
-		} else {
-			// Unused variables and labels are not part of result
-			if ((var->write > 0 || var->read > 0)) {
-				if (var->mode == INSTR_VAR) {
-					if (filter_fn(var)) {
-						VarSetAdd(set, var, NULL);
-					}
-				}
-			}
-		}
-	NEXT_LOCAL
-}
-
-void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
-{
-	VarSetEmpty(set);
-	ProcAddLocalVars(proc, set, filter_fn);
-}
-
-typedef UInt8 * LiveSet;
-
 typedef struct
 {
 	VarSet vars;
@@ -135,7 +97,6 @@ void MarkVarCollision(VarAllocInfo * info, LiveSet live, UInt16 idx)
 			info->collisions[i*count+idx] = 1;
 		}
 	}
-
 }
 
 void VarAllocVar(VarAllocInfo * info, Var * var, LiveSet live, UInt8 mark)
@@ -158,6 +119,11 @@ Purpose:
 		if (var->adr != NULL) {
 			VarAllocVar(info, var->adr, live, mark);
 		}
+
+	// For array element, we mark the index variable as read, while whole array gets marked as dead/alive
+	} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+		VarAllocVar(info, var->adr, live, mark);
+		VarAllocVar(info, var->var, live, 1);
 	}
 }
 
@@ -195,7 +161,7 @@ Purpose:
 	}
 }
 
-void VarAllocBlock(InstrBlock * blk, void * pinfo)
+Bool VarAllocBlock(Var * proc, InstrBlock * blk, void * pinfo)
 {
 	Instr * i;
 	VarAllocInfo * info = (VarAllocInfo *)pinfo;
@@ -229,7 +195,9 @@ void VarAllocBlock(InstrBlock * blk, void * pinfo)
 	}
 	blk->analysis_data = live;
 
+	return true;
 }
+
 
 Bool FilterVar(Var * var)
 {
@@ -370,6 +338,35 @@ next: ;
 */
 }
 
+void AllocateVariablesFromHeapNoOptim(Var * proc, MemHeap * heap)
+{
+	Var * var;
+	UInt32 size, adr;
+
+	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+
+		// Scope can contain variables in subscope, we need to allocate them too
+		if (var->mode == INSTR_SCOPE) {
+			AllocateVariablesFromHeap(var, heap);
+		} else {
+			// Do not assign address to unused variables, labels and registers
+			if (var->adr == NULL && var->mode == INSTR_VAR) {
+				if ((var->write > 0 || var->read > 0) && !VarIsLabel(var) && !VarIsReg(var)) {
+					size = TypeSize(var->type);		
+					if (size > 0) {
+						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
+//							PrintVarName(var); Print("@%d\n", adr);
+							var->adr = VarInt(adr);
+						} else {
+							// failed to alloc in zero page
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 #define VAR_ADD 0
 #define VAR_REMOVE 1
 
@@ -377,6 +374,7 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 {
 	UInt32 size, adr;
 	Var * vadr;
+	BigInt * ia;
 
 	if (var == NULL) return;
 
@@ -387,8 +385,9 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 			if (vadr->mode == INSTR_TUPLE) {
 				HeapVarOp(heap, vadr, op);
 			} else {
-				if (vadr->mode == INSTR_INT && vadr->type->variant == TYPE_INT) {
-					adr  = vadr->n;
+				ia = VarIntConst(vadr);
+				if (ia != NULL) {
+					adr  = IntN(ia);
 					if (op == VAR_REMOVE) {
 						HeapRemoveBlock(heap, adr, size);
 					} else {
@@ -478,7 +477,7 @@ void AllocateVariables(Var * proc)
 	
 	//==== Allocate space for all variables, that has not been assigned yet
 
-	AllocateVariablesFromHeap(proc, &heap);
+	AllocateVariablesFromHeapNoOptim(proc, &heap);
 
 	HeapCleanup(&heap);
 }

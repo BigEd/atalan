@@ -117,8 +117,9 @@ void VarSetScope(Var * var, Var * scope)
 		scope->subscope = var;
 	} else {
 		// We append the variable as last variable in the scope.
-		for(sub = scope->subscope; sub->next_in_scope != NULL;) 
+		for(sub = scope->subscope; sub->next_in_scope != NULL;) {
 			sub = sub->next_in_scope;
+		}
 		sub->next_in_scope = var;
 	}
 
@@ -328,10 +329,9 @@ Bool VarIsArrayElement(Var * var)
 //	return var != NULL && var->mode == INSTR_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
 }
 
-void VarLetStr(Var * var, char * str)
+void VarInitStr(Var * var, char * str)
 {
 	var->type = &TSTR;
-	var->value_nonempty = true;
 	var->str = StrAlloc(str);
 }
 
@@ -339,7 +339,7 @@ Var * VarNewStr(char * str)
 {
 	Var * var;
 	var = VarAlloc(INSTR_TEXT, NULL, 0);
-	VarLetStr(var, str);
+	VarInitStr(var, str);
 	return var;
 }
 
@@ -385,9 +385,12 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
-Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx)
+Var * VarAllocScope(Var * scope, InstrOp mode, char * name, VarIdx idx)
 {
 	Var * var;
+
+	ASSERT(mode != INSTR_INT);
+
 	if (scope == NULL) scope = SCOPE;
 	if (scope == NO_SCOPE) scope = NULL;
 
@@ -484,7 +487,7 @@ Var * VarFindScope2(Var * scope, char * name)
 {
 	Var * var = NULL;
 	Var * s;
-	for (s = SCOPE; s != NULL; s = s->scope) {
+	for (s = scope; s != NULL; s = s->scope) {
 		var = VarFindScope(s, name, 0);
 		if (var != NULL) break;
 		// For procedures whose type has been defined using predefined type, try to find arguments from this type
@@ -532,7 +535,7 @@ Var * VarFind(char * name, VarIdx idx)
 	return var;
 }
 
-Var * VarFindTypeVariant(Name name, VarIdx idx, TypeVariant type_variant)
+Var * VarFindTypeVariant(char * name, VarIdx idx, TypeVariant type_variant)
 {
 	Var * var;
 	for (var = VARS; var != NULL; var = var->next) {
@@ -568,24 +571,33 @@ Bool VarIsConst(Var * var)
 
 Bool VarIsIntConst(Var * var)
 {
-	return var != NULL && var->mode == INSTR_INT && var->type->variant == TYPE_INT;
+	return var != NULL && (var->mode == INSTR_INT || (var->mode == INSTR_CONST && TypeIsInt(var->type)));
 }
 
-
-IntLimit * VarIntConst(Var * var)
+BigInt * VarIntConst(Var * var)
+/*
+Purpose:
+	Return integer value represented by the variable, if it is constant.
+*/
 {
 	if (var == NULL) return NULL;
-	if (var->type->variant == TYPE_INT) {
-		if (var->mode == INSTR_INT) return &var->n;
-		if (var->type->range.min == var->type->range.max) return &var->type->range.min;
-	}
+
+	// For named const, work with it's referenced value
+	while(var->mode == INSTR_CONST && var->type->variant == TYPE_INT && var->var != NULL) var = var->var;
+
+	if (var->mode == INSTR_INT) return &var->n;
+	if (TypeIsIntConst(var->type)) return &var->type->range.min;
+
 	return NULL;
 }
 
 
 Bool VarIsN(Var * var, Int32 n)
 {
-	return VarIsIntConst(var) && var->n == n;
+	BigInt * i;
+
+	i = VarIntConst(var);
+	return i != NULL && IntEqN(i, n);
 }
 
 Var * VarNewType(Type * type)
@@ -827,7 +839,7 @@ Purpose:
 		} else if (var->mode == INSTR_BYTE) {
 			return 1;
 		} else if (var->mode == INSTR_INT) {
-			return ConstByteSize(var->n);
+			return IntByteSize(&var->n);
 		} else if (var->mode == INSTR_TEXT) {
 			return StrLen(var->str);
 		}
@@ -1176,9 +1188,9 @@ Purpose:
 
 	if (vtype == TYPE_INT) {
 		if (StrEqual(fld_name, "min")) {
-			fld = VarInt(type->range.min);
+			fld = VarN(&type->range.min);
 		} else if (StrEqual(fld_name, "max")) {
-			fld = VarInt(type->range.max);
+			fld = VarN(&type->range.max);
 		}
 	} else if (vtype == TYPE_ARRAY) {
 		if (StrEqual(fld_name, "step")) {
@@ -1193,35 +1205,72 @@ Purpose:
 }
 
 Var * VarEvalConst(Var * var)
+/*
+Purpose:
+	Evaluate the variable, trying to make constant of it.
+	Return the same variable, if no evaluating is possible.
+*/
 {
-	Var * r = var;
-	IntLimit a, idx;
+	Var * res = var;
+	BigInt * a, * idx;
+	BigInt t1, t2;
 
-	if (var != NULL) {
-		if (var->mode == INSTR_BYTE) {
-			if (VarIsIntConst(var->adr) && VarIsIntConst(var->var)) {
-				a = var->adr->n;
-				idx = var->var->n;
-				a = (a >> (idx * 8)) & 0xff;
-				r = VarInt(a);
+	if (res != NULL) {
+
+		// Get the most elementary constant out of the variable
+
+		while (res->mode == INSTR_CONST && res->type->variant != TYPE_ARRAY && res->var != NULL) {
+			res = res->var;
+		}
+
+		// Getting n-th byte is same as special variant of AND
+		if (res->mode == INSTR_BYTE) {
+			a   = VarIntConst(var->adr);
+			idx = VarIntConst(var->var);
+
+			if (a != NULL && idx != NULL) {
+				// t3 = (a >> (idx * 8)) & 0xff;
+				IntSet(&t1, idx);
+				IntMulN(&t1, 8);
+				IntShr(&t2, a, &t1);
+				IntAndN(&t2, 0xff);
+
+				//a = (a >> (idx * 8)) & 0xff;
+				res = VarN(&t2);
+
+				IntFree(&t1);
+				IntFree(&t2);			
 			}
 		}
 	}
-	return r;
+	return res;
 }
 
+Bool VarIsValue(Var * var)
+/*
+Purpose:
+	Varue is value, if it directly represents numeric or text value.
+*/
+{
+	return var != NULL && (var->mode == INSTR_INT || var->mode == INSTR_TEXT);
+}
 
 void VarLet(Var * var, Var * val)
 /*
 Purpose:
 	Set the variable var to specified value.
+	The variable must be of type INSTR_CONST or INSTR_VAR and the value is set to var property.
 */
 {
 	if (var != NULL && val != NULL) {
-		if (val->type->variant == TYPE_INT) {
-			var->n = val->n;
-			var->value_nonempty = true;
+		ASSERT(var->mode == INSTR_CONST || var->mode == INSTR_VAR);
+
+		if (VarIsValue(val)) {
+			var->var = val;
+		} else {
+			var->var = val->var;
 		}
+
 	}
 }
 
@@ -1275,4 +1324,22 @@ Purpose:
 	if (var->idx == 0) return var->name;
 	sprintf(VAR_NAME, "%s%d", var->name, var->idx-1);
 	return VAR_NAME;
+}
+
+Bool VarIsParam(Var * var)
+{
+	return VarIsConst(var) && FlagOn(var->submode, SUBMODE_PARAM);
+}
+
+Bool VarEq(Var * left, Var * right)
+{
+	BigInt * l, * r;
+	if (left == right) return true;
+	l = VarIntConst(left);
+	r = VarIntConst(right);
+
+	if (l != NULL && r != NULL) {
+		return IntEq(l, r);
+	}
+	return false;
 }

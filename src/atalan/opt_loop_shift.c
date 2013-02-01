@@ -15,7 +15,37 @@ This way, we still have the loop range information deduced by inferencer.
 
 */
 
-Bool VarShiftIndex(Var ** p_var, Var * idx, IntLimit shift)
+/*
+OPTIMIZATION: Pointer based loops
+
+For loops like:
+
+:::::::::::::::::::
+for i:min..max step s
+	a#i = v
+:::::::::::::::::::
+
+we may want to iterate over pointer instead of using indexed array
+
+:::::::::::::::::::::::::
+for p:a.adr+min..a.adr+max step s
+	@p = v
+:::::::::::::::::::::::::
+
+This optimization may be used only in specific cases. For example on 6502, there is no need to use it when the index fits into 0..255.
+The index range for which the 
+It is special version of loop shift.
+
+There are several options to stop the loop:
+
+ 1. if the top index is constant and we use the whole array, we may use constant address of the array (@a + max).
+ 2. address of top variable may be computed in other situations
+ 3. it may be useful to increment the address while decrementing the counter variable
+
+*/
+
+
+Bool VarShiftIndex(Var ** p_var, Var * idx, BigInt * shift)
 /*
 Purpose:
 	If variable is in the form arr(idx) where idx is specified value, shift it down by specified offset.
@@ -28,7 +58,7 @@ Purpose:
 		if (var->mode == INSTR_ELEMENT) {
 			var_idx = var->var;
 			if (VarIsEqual(var_idx, idx)) {
-				idx = VarNewOp(INSTR_SUB, idx, VarInt(shift));
+				idx = VarNewOp(INSTR_SUB, idx, VarN(shift));
 				*p_var = VarNewElement(var->adr, idx);
 				return true;
 			} else if (var_idx->mode == INSTR_SUB) {
@@ -39,7 +69,65 @@ Purpose:
 	return false;
 }
 
-Bool VarShiftIsPossible(InstrBlock * head, InstrBlock * loop_end, Var * var, IntLimit shift)
+Bool VarIsIdxElem(Var * var, Var * idx)
+{
+	return var != NULL && var->mode == INSTR_ELEMENT && var->var == idx;
+}
+
+Var * FindPtrReplace(InstrBlock * head, InstrBlock * loop_end, Var * idx)
+/*
+Purpose:
+	Test, that it is possible to use address instead of arr#idx in the loop.
+	This means:
+		- there is at least one use of arr#idx
+*/{
+	Var * arr = NULL;
+	InstrBlock * blk;
+	Instr * i;
+
+	for(blk = head; blk != loop_end; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_LINE) continue;
+			if (VarIsIdxElem(i->result, idx)) return i->result->adr;
+			if (VarIsIdxElem(i->arg1, idx)) return i->arg1->adr;
+			if (VarIsIdxElem(i->arg2, idx)) return i->arg2->adr;
+		}
+	}
+	return arr;
+}
+
+void VarReplaceArr(Var ** p_var, Var * arr, Var * idx, Var * ptr_ref)
+{
+	if (VarIsIdxElem(*p_var, idx) && (*p_var)->adr == arr) {
+		*p_var = ptr_ref;
+	}
+}
+
+void LoopPtr(InstrBlock * head, InstrBlock * loop_end, Var * arr, Var * idx, Var * ptr)
+{
+	InstrBlock * blk;
+	Instr * i;
+	Var * ptr_deref;
+
+	ptr_deref = VarNewDeref(ptr);
+
+	for(blk = head; blk != loop_end; blk = blk->next) {
+		for(i = blk->first; i != NULL; i = i->next) {
+			if (i->op == INSTR_LINE) continue;
+			VarReplaceArr(&i->result, arr, idx, ptr_deref);
+			VarReplaceArr(&i->arg1, arr, idx, ptr_deref);
+			VarReplaceArr(&i->arg2, arr, idx, ptr_deref);
+
+			if (i->op == INSTR_ADD || i->op == INSTR_SUB) {
+				if (i->result == idx && i->result == idx) {
+					InstrInsert(blk, i, i->op, ptr, ptr, i->arg2);
+				}
+			}
+		}
+	}
+}
+
+Bool VarShiftIsPossible(InstrBlock * head, InstrBlock * loop_end, Var * var, BigInt * shift)
 {
 	Bool reversal_possible = true;
 	InstrBlock * blk;
@@ -82,16 +170,27 @@ Var * VarShift(Var * var, Var * to_shift, Var * shift)
 	return var;
 }
 */
-Var * VarAddNMod(Var * left, IntLimit right, IntLimit modulo)
+
+Var * VarAddNMod(Var * left, BigInt * right, BigInt * modulo)
 {
 	Var * var = NULL;
-	if (VarIsIntConst(left)) {
-		var = VarInt((left->n + right) % modulo);
+	BigInt * l = VarIntConst(left);
+	BigInt r;
+	BigInt r2;
+
+	if (l != NULL) {
+		IntAdd(&r, l, right);
+		IntMod(&r2, &r, modulo);
+
+		var = VarN(&r2);
+//		var = VarInt((left->n + right) % modulo);
+		IntFree(&r2);
+		IntFree(&r);
 	}
 	return var;
 }
 
-void LoopShift(InstrBlock * head, InstrBlock * loop_end, Var * var, IntLimit shift, IntLimit top)
+void LoopShift(InstrBlock * head, InstrBlock * loop_end, Var * var, BigInt * shift, BigInt * top)
 {
 	InstrBlock * blk;
 	Instr * i;
@@ -120,12 +219,11 @@ void OptimizeLoopShift(Var * proc)
 	Loc preheader;
 	Instr * i, * init_i;
 	Loc loc;
-	Var * loop_var;
+	Var * loop_var, * ptr;
 	Type * type;
-	IntLimit shift;
-	IntLimit top;
-
-//	return;
+	BigInt shift;
+	BigInt top;
+	Var * arr;
 
 	if (Verbose(proc)) {
 		PrintHeader(3, "Loop shift");
@@ -172,15 +270,27 @@ void OptimizeLoopShift(Var * proc)
 							}
 						}
 
-						// Compute the difference (we compute defference up to 256 - zero overflow)
+						// Test, if it is possible to do some address shifts
+
+//						arr = FindPtrReplace(header, loc.blk->next, loop_var);
+						arr = NULL;
+						if (arr != NULL) {
+							ptr = VarNewTmp(TypeAdrOf(arr->type->element));
+							InstrInsert(preheader.blk, init_i, INSTR_LET_ADR, ptr, arr, NULL);
+							LoopPtr(header, loc.blk->next, arr, loop_var, ptr);
+						}
+
+						// Compute the difference (we compute difference up to 256 - zero overflow)
 						
 						IntInit(&top, 256);
 						IntSub(&shift, &top, TypeMax(type));
 
-						if (init_i != NULL && VarShiftIsPossible(header, loc.blk->next, loop_var, shift)) {
-							LoopShift(header, loc.blk->next, loop_var, shift, top);
-							init_i->arg1 = VarAddNMod(init_i->arg1, shift, top);
+						if (init_i != NULL && VarShiftIsPossible(header, loc.blk->next, loop_var, &shift)) {
+							LoopShift(header, loc.blk->next, loop_var, &shift, &top);
+							init_i->arg1 = VarAddNMod(init_i->arg1, &shift, &top);
 						}
+						IntFree(&top);
+						IntFree(&shift);
 						
 					}
 				}

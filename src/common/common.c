@@ -23,7 +23,7 @@ Purpose:
 	Allocate memory and set it to zeroes.
 */
 {
-	void * m = malloc(size);
+	void * m = MemAlloc(size);
 	memset(m, 0, size);
 	return m;
 }
@@ -36,7 +36,7 @@ char * StrAlloc(char * str)
 
 char * StrAllocLen(char * str, UInt16 len)
 {
-	char * s = (char *)malloc(len + 1);
+	char * s = (char *)MemAlloc(len + 1);
 	memcpy(s, str, len);
 	s[len] = 0;
 	return s;
@@ -180,7 +180,7 @@ Int16 StrEditDistance(char * s, char * t)
   m = StrLen(t);
 
   if (n!=0&&m!=0) {
-    d = (int *)malloc((sizeof(int))*(m+1)*(n+1));
+    d = (int *)MemAlloc((sizeof(int))*(m+1)*(n+1));
     m++;
     n++;
     //Step 2	

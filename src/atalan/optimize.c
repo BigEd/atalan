@@ -148,7 +148,8 @@ Purpose:
 
 	var = *p_var;
 	if (var != NULL) {
-		if (var == from || (var->mode == INSTR_INT && from->mode == INSTR_INT && var->n == from->n)) {
+		// TODO: We basically garantee that the int valueas are the same variable
+		if (var == from || (var->mode == INSTR_INT && from->mode == INSTR_INT && IntEq(&var->n, &from->n))) {
 			*p_var = to;
 			n++;
 		} else {
@@ -161,6 +162,8 @@ Purpose:
 					*p_var = var->adr;
 					n = VarTestReplace(p_var, from, to);
 				}
+			} else if (var->mode == INSTR_CONST) {
+
 			} else /*if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE)*/ {
 				v2 = var->adr;
 				v3 = var->var;
@@ -252,9 +255,10 @@ Bool VarReadsVar(Var * var, Var * read_var)
 
 	return VarUsesVar(var->adr, read_var) || VarUsesVar(var->var, read_var);
 }
+
 Bool SameVar(Var * l, Var * r)
 {
-	return l != NULL && r != NULL && (l == r || (l->mode == INSTR_INT && r->mode == INSTR_INT && l->n == r->n));
+	return l != NULL && r != NULL && l == r;		// || (l->mode == INSTR_INT && r->mode == INSTR_INT && IntEq(&l->n, &r->n));
 }
 
 Bool InstrReadsVar(Instr * i, Var * var)

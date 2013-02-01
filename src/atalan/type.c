@@ -144,10 +144,10 @@ Type * TypeAlloc(TypeVariant variant)
 	return type;
 }
 
-static IntLimit LIM_MIN = INTLIMIT_MIN;
-static IntLimit LIM_MAX = INTLIMIT_MAX;
+static BigInt LIM_MIN = INTLIMIT_MIN;
+static BigInt LIM_MAX = INTLIMIT_MAX;
 
-IntLimit * TypeMin(Type * type)
+BigInt * TypeMin(Type * type)
 {
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
@@ -165,7 +165,7 @@ IntLimit * TypeMin(Type * type)
 	return &LIM_MIN;
 }
 
-IntLimit * TypeMax(Type * type)
+BigInt * TypeMax(Type * type)
 {
 	if (type != NULL) {
 		if (type->variant == TYPE_INT) {
@@ -196,33 +196,47 @@ Integer types.
 
 */
 
-Type * TypeAllocConst(IntLimit n)
+Type * TypeAllocConst(BigInt * n)
 /*
 Purpose:
 	Alloc integer type for constant.
 */
 {
 	Type * type = NULL;
-	if (n>=0 && n<TYPE_CONST_COUNT) {
-		type = TCONST[n];
-	}
-	if (type == NULL) {
+//	if (n>=0 && n<TYPE_CONST_COUNT) {
+//		type = TCONST[n];
+//	}
+//	if (type == NULL) {
 		type = TypeAlloc(TYPE_INT);
 		type->range.flexible = false;
-		type->range.min = type->range.max = n;
-		if (n>=0 && n<TYPE_CONST_COUNT) {
-			TCONST[n] = type;
-		}
-	}
+		IntSet(&type->range.min, n);
+		IntSet(&type->range.max, n);
+//		if (n>=0 && n<TYPE_CONST_COUNT) {
+//			TCONST[n] = type;
+//		}
+//	}
 	return type;
 }
 
-Type * TypeAllocInt(IntLimit min, IntLimit max)
+Type * TypeAllocInt(BigInt * min, BigInt * max)
 {
 	Type * type = TypeAlloc(TYPE_INT);
 	type->range.flexible = false;
-	type->range.min = min;
-	type->range.max = max;
+	IntSet(&type->range.min, min);
+	IntSet(&type->range.max, max);
+	return type;
+}
+
+Type * TypeAllocIntN(Int32 min, Int32 max)
+{
+	Type * type;
+	BigInt imin, imax;
+
+	IntInit(&imin, min);
+	IntInit(&imax, max);
+
+	type = TypeAllocInt(&imin, &imax);
+	IntFree(&imin); IntFree(&imax);
 	return type;
 }
 
@@ -274,84 +288,36 @@ Type * TypeDerive(Type * base)
 	type->owner   = SCOPE;
 	return type;
 }
-/*
-void TypeLet(Type * type, Var * var)
-{
-	Type * vtype;
-	Var * arr;
-	Int32 min, max;
 
-	vtype = var->type;
+//void TAdd(BigInt * x, BigInt * tr) { IntAdd(x, x, tr); }
+//void TSub(BigInt * x, BigInt * tr) { IntSub(x, x, tr); }
+//void TMul(BigInt * x, BigInt * tr) { IntMul(x, x, tr); }
 
-	if (vtype == NULL) return;
-
-	// Assigning array element sets the type to the type of the array element
-
-	if (var->mode == INSTR_ELEMENT) {
-		arr = var->adr;
-		if (arr->type->variant == TYPE_ARRAY) {
-			vtype = arr->type->element;
-		} else {
-			// Element variables on non-array variables are byte access to variable elements
-			vtype = TypeByte();
-		}
-	}
-
-	switch(vtype->variant)
-	{
-	case TYPE_INT:
-
-		// When setting constant N to the variable, it's range is set to N..N
-		// Variables with type like this are in fact constants.
-		if (var->mode == INSTR_INT) {
-			min = max = var->n;
-		} else {
-			min = vtype->range.min;
-			max = vtype->range.max;
-		}
-	
-		if (type->variant == TYPE_UNDEFINED) {
-			type->base = vtype;
-			type->variant = TYPE_INT;
-			type->range.min = min;
-			type->range.max = max;
-			type->owner = NULL;
-		} else if (type->variant == TYPE_INT) {
-			if (min < type->range.min) type->range.min = min;
-			if (max > type->range.max) type->range.max = max;
-
-		}
-		break;
-	default:
-		break;
-	}
-}
-*/
-
-void TAdd(Int32 * x, Int32 tr) { *x = *x + tr; }
-void TSub(Int32 * x, Int32 tr) { *x = *x - tr; }
-void TMul(Int32 * x, Int32 tr) { *x = *x * tr; }
-void TDiv(Int32 * x, Int32 tr) 
+void TDiv(BigInt * dest, BigInt * l, BigInt * r) 
 { 
 	// We may divide by zero.
 	// In such case, no type transformation is performed
-	if (tr != 0) {
-		*x = *x / tr; 
+	if (IntEqN(r, 0)) {
+		IntSet(dest, l);
+	} else {
+		IntDiv(dest, l, r); 
 	}
 }
 
-void TMod(Int32 * x, Int32 tr)  
+void TMod(BigInt * dest, BigInt * l, BigInt * r)  
 { 
 	// For types like 0..255 etc., tr can be zero.
 	// In such case, we do not modify the type.
-	if (tr != 0) {
-		*x = *x % tr;
+	if (IntEqN(r, 0)) {
+		IntSet(dest, l);
+	} else {
+		IntMod(dest, l, r);
 	}
 }
 
-void TAnd(Int32 * x, Int32 tr) { *x = *x & tr; }
-void TOr(Int32 * x, Int32 tr)  { *x = *x | tr; }
-void TXor(Int32 * x, Int32 tr)  { *x = *x ^ tr; }
+//void TAnd(BigInt * x, BigInt * tr) { *x = *x & tr; }
+//void TOr(BigInt * x, BigInt * tr)  { *x = *x | tr; }
+//void TXor(BigInt * x, BigInt * tr)  { *x = *x ^ tr; }
 
 RangeTransform InstrFn(InstrOp op)
 {
@@ -359,12 +325,12 @@ RangeTransform InstrFn(InstrOp op)
 	switch(op) {
 		case INSTR_DIV: r = &TDiv; break;
 		case INSTR_MOD: r = &TMod; break;
-		case INSTR_MUL: r = &TMul; break;
-		case INSTR_ADD: r = &TAdd; break;
-		case INSTR_SUB: r = &TSub; break;
-		case INSTR_AND: r = &TAnd; break;
-		case INSTR_OR:  r = &TOr; break;
-		case INSTR_XOR: r = &TXor; break;
+		case INSTR_MUL: r = &IntMul; break;
+		case INSTR_ADD: r = &IntAdd; break;
+		case INSTR_SUB: r = &IntSub; break;
+		case INSTR_AND: r = &IntAnd; break;
+		case INSTR_OR:  r = &IntOr; break;
+		case INSTR_XOR: r = &IntXor; break;
 		default: break;
 	}
 	return r;
@@ -438,33 +404,38 @@ void TypeAddConst(Type * type, Var * var)
 /*
 Purpose:
 	Add specified variable as associated constant to type.
+	The added variable must be of type INSTR_CONST.
 */
 {
+	Var * c;
+
+	ASSERT(var->mode == INSTR_CONST);
 
 	if (type->variant == TYPE_INT) {
 		// Register type of this constant as specified type
 		var->type  = type;
 		var->scope = var->type->owner;
 
-		if (!var->value_nonempty) {
+		if (var->var == NULL) {
 			if (type->range.flexible) {
-				type->range.max++;
-				var->n = type->range.max;
-				var->value_nonempty = true;
+				IntAddN(&type->range.max, 1);
+				var->var = VarN(&type->range.max);
 			} else {
 				SyntaxError("it is necessary to define constant value explicitly for this type");
 			}
 		} else {
-			if (var->n < type->range.min) {
+			c = var->var;
+			ASSERT(c->mode == INSTR_INT);
+			if (IntLower(&c->n, &type->range.min)) {
 				if (type->range.flexible) {
-					type->range.min = var->n;
+					IntModify(&type->range.min, &c->n);
 				} else {
 					SyntaxError("constant out of available range");
 				}
 			}
-			if (var->n > type->range.max) {
+			if (IntHigher(&c->n, &type->range.max)) {
 				if (type->range.flexible) {
-					type->range.max = var->n;
+					IntModify(&type->range.max, &c->n);
 				} else {
 					SyntaxError("constant out of available range");
 				}
@@ -480,8 +451,8 @@ Purpose:
 */
 {
 	Var * min, * max;
-	min = VarInt(type->range.min);
-	max = VarInt(type->range.max);
+	min = VarN(&type->range.min);
+	max = VarN(&type->range.max);
 	*p_min = min;
 	*p_max = max;
 }
@@ -636,41 +607,57 @@ Var * FirstItem(Var * scope, VarSubmode submode)
 
 UInt32 TypeStructSize(Var * var);
 
-UInt8 ConstByteSize(Int32 n)
+UInt8 IntByteSize(BigInt * n)
 {
 	UInt8 size;
-	if (n <= 255) size = 1;
-	else if (n <= 65535) size = 2;
-	else if (n <= 0xffffff) size = 3;
+	if (IntLowerEqN(n, 255)) size = 1;
+	else if (IntLowerEqN(n,  65535)) size = 2;
+	else if (IntLowerEqN(n, 0xffffff)) size = 3;
 	else size = 4;		// we currently do not support bigger numbers than 4 byte integers
 	return size;
 }
 
-UInt32 ArrayIndexCount(Type * index)
+void ArrayItemCount(Type * index, BigInt * dest)
 {
-	if (index == 0) return 0;
-	if (index->variant == TYPE_INT) {
-		return index->range.max - index->range.min + 1;
+	BigInt bi1, bi2;
+	if (index == NULL) {
+		IntInit(dest, 0);
+	} else if (index->variant == TYPE_INT) {
+		IntRangeSize(dest, &index->range.min, &index->range.max);
 	} else if (index->variant == TYPE_TUPLE) {
-		return ArrayIndexCount(index->left) * ArrayIndexCount(index->right);
+		ArrayItemCount(index->left, &bi1);
+		ArrayItemCount(index->right, &bi2);
+		IntMul(dest, &bi1, &bi2);
+		IntFree(&bi1); IntFree(&bi2);
+	} else {
+		IntInit(dest, 0);
 	}
-	return 0;
 }
 
 UInt32 TypeSize(Type * type)
+/*
+Purpose:
+	Return number of bytes required to represent this type in memory.
+*/
 {
 	UInt32 size;
-	Int32 lrange;
+	UInt32 sizen;
+	BigInt bi;
+
 	size = 0;
 	if (type != NULL) {
 		switch(type->variant) {
 		case TYPE_INT:
+			// we may have negative range, positive range
 
-			lrange = type->range.min;
-			if (lrange > 0) lrange = 0;
+//			lrange = type->range.min;
+//			if (lrange > 0) lrange = 0;
 
-			size = ConstByteSize(type->range.max - lrange);
-			
+			size = IntByteSize(&type->range.max);
+			sizen = IntByteSize(&type->range.min);
+
+			if (size < sizen) size = sizen;
+
 			break;
 
 		case TYPE_ADR:
@@ -682,7 +669,9 @@ UInt32 TypeSize(Type * type)
 			break;
 
 		case TYPE_ARRAY:
-			size = TypeSize(type->element) * ArrayIndexCount(type->index);
+			ArrayItemCount(type->index, &bi);
+			size = TypeSize(type->element) * IntN(&bi);
+			IntFree(&bi);
 			break;
 		default: break;
 		}
@@ -780,12 +769,12 @@ Bool TypeIsIntConst(Type * type)
 {
 	if (type == NULL) return false;
 	if (type->variant != TYPE_INT) return false;
-	return type->range.min == type->range.max;
+	return IntEq(&type->range.min, &type->range.max);
 }
 
 Bool TypeIsN(Type * type, Int32 n)
 {
-	return TypeIsIntConst(type) && IntIsN(&type->range.min, n);
+	return TypeIsIntConst(type) && IntEqN(&type->range.min, n);
 }
 
 //TODO: Merge the two functions
@@ -825,8 +814,8 @@ Purpose:
 	if (type->variant == TYPE_INT) {
 		if (vtype->variant != TYPE_INT) return false;
 		if (var->mode == INSTR_INT) {
-			if (var->n < type->range.min) return false;
-			if (var->n > type->range.max) return false;
+			if (IntLower(&var->n, &type->range.min)) return false;
+			if (IntHigher(&var->n, &type->range.max)) return false;
 		} else if (var->mode == INSTR_VAR || var->mode == INSTR_ELEMENT) {
 			if (vtype->range.min < type->range.min) return false;
 			if (vtype->range.max > type->range.max) return false;
@@ -957,16 +946,16 @@ Purpose:
 			// If variable is constant, the check is different
 			if (var->mode == INSTR_INT) {
 				if (vtype->variant != TYPE_INT) return false;
-				if (var->n < type->range.min) return false;
-				if (var->n > type->range.max) return false;
+				if (IntLower(&var->n, &type->range.min)) return false;
+				if (IntHigher(&var->n, &type->range.max)) return false;
 			} else if (var->mode == INSTR_ELEMENT) {
 				// Specified variable is element, but the type is not array
 				if (type->variant != TYPE_ARRAY) return false;
 			} else {
 
 				if (vtype->variant != TYPE_INT) return false;
-				if (type->range.max < vtype->range.max) return false;
-				if (type->range.min > vtype->range.min) return false;
+				if (IntLower(&type->range.max, &vtype->range.max)) return false;
+				if (IntHigher(&type->range.min, &vtype->range.min)) return false;
 
 				// If the size of matched type is 
 				if (TypeSize(type) > TypeSize(vtype)) {
@@ -1032,9 +1021,9 @@ void PrintType(Type * type)
 	if (type == NULL) { Print("NULL"); return; }
 	switch(type->variant) {
 	case TYPE_INT:
-		PrintInt(type->range.min);
+		PrintBigInt(&type->range.min);
 		if (!IntEq(&type->range.min, &type->range.max)) {
-			Print(".."); PrintInt(type->range.max);
+			Print(".."); PrintBigInt(&type->range.max);
 		}
 		break;
 	case TYPE_SEQUENCE:
@@ -1106,7 +1095,7 @@ Purpose:
 	UInt32 cnt = 0;
 	BigInt n;
 	IntSet(&n, num);
-	while(!IntIsN(&n, 0)) {
+	while(!IntEqN(&n, 0)) {
 		IntDivN(&n, 2);
 		cnt++;
 	}
@@ -1127,13 +1116,6 @@ Bool TypeBitMask(Type * type, UInt32 * p_bit_size)
 	return false;
 }
 
-Type * TypeAllocInt2(BigInt * min, BigInt * max)
-{
-	IntLimit minl = *min;
-	IntLimit maxl = * max;
-	return TypeAllocInt(minl, maxl);
-}
-
 Type * TypeAllocBits(UInt32 bit_count)
 {
 	Type * rt;
@@ -1147,7 +1129,7 @@ Type * TypeAllocBits(UInt32 bit_count)
 		bit_count--;
 	}
 
-	rt = TypeAllocInt2(Int0(), &n);
+	rt = TypeAllocInt(Int0(), &n);
 
 	return rt;
 }
@@ -1180,8 +1162,9 @@ Type * BitType(InstrOp op, Type * left, Type * right)
 Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 {
 	RangeTransform r_fn;
-	Int32 min, max, t;
+	BigInt * min, * max, * t;
 	Type * rt = NULL;
+	BigInt rmin, rmax;
 
 	// When assigning the value, resulting type is simply the same as original value
 	switch(op) {
@@ -1204,16 +1187,18 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 
 				r_fn = InstrFn(op);
 				if (r_fn != NULL) {
-					rt = TypeAllocInt(left->range.min, left->range.max);
-					min = right->range.min;
-					max = right->range.max;
+					rt = TypeAllocInt(&left->range.min, &left->range.max);
+					min = &right->range.min;
+					max = &right->range.max;
 					if (op == INSTR_DIV || op == INSTR_MOD || op == INSTR_SUB) {
 						t = min;
 						min = max;
 						max = t;
 					}
-					r_fn(&rt->range.min, min);
-					r_fn(&rt->range.max, max);
+					r_fn(&rmin, &left->range.min, min);
+					r_fn(&rmax, &left->range.max, max);
+					rt = TypeAllocInt(&rmin, &rmax);
+					IntFree(&rmin); IntFree(&rmax);
 				}
 			}
 		}
@@ -1224,7 +1209,7 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 Type * SeqTypeEval(InstrOp op, Type * left, Type * right)
 {
 	Type * rt = NULL;
-	RangeTransform r_fn;
+//	RangeTransform r_fn;
 
 	if (right->variant == TYPE_INT) {
 		switch(op) {
@@ -1237,7 +1222,7 @@ Type * SeqTypeEval(InstrOp op, Type * left, Type * right)
 				rt->seq.step       = left->seq.step;
 				rt->seq.limit      = left->seq.limit;
 			
-				r_fn = InstrFn(op);
+//				r_fn = InstrFn(op);
 			
 				rt->seq.init       = IntTypeEval(op, left->seq.init, right);
 			}
@@ -1298,9 +1283,9 @@ Type * TypeEval(InstrOp op, Type * left, Type * right)
 
 #define TYPE_IS_UNDEFINED(t)  (t == NULL)
 
-Bool  SequenceRange(Type * type, IntLimit * min, IntLimit * max)
+Bool  SequenceRange(Type * type, BigInt * min, BigInt * max)
 {
-	IntLimit init, step, limit, max_over, step_min;
+	BigInt init, step, limit, max_over, step_min;
 	InstrOp op;
 
 	if (type != NULL && type->variant == TYPE_SEQUENCE) {
@@ -1347,10 +1332,10 @@ Purpose:
 	Try to combine sequence type into integer type.
 */
 {
-	IntLimit min, max;
+	BigInt min, max;
 
 	if (SequenceRange(type, &min, &max)) {
-		return TypeAllocInt(min, max);
+		return TypeAllocInt(&min, &max);
 	}
 	return NULL;
 }
@@ -1376,7 +1361,7 @@ Purpose:
 */
 {
 	Type * type = NULL, * t;
-	Int32 min, max;
+	BigInt * min, * max;
 
 	if (left == right) return left;
 
@@ -1444,12 +1429,12 @@ Purpose:
 	switch (left->variant) {
 	case TYPE_INT:
 		if (right->variant == TYPE_INT) {
-			if (left->range.max >= right->range.min || right->range.max >= left->range.min) {
-				min =  left->range.min; if (right->range.min < min) min = right->range.min;
-				max = right->range.max; if ( left->range.max > max) max =  left->range.max;
-				if (left->range.min == min && left->range.max == max) {
+			if (IntHigherEq(&left->range.max, &right->range.min) || IntHigherEq(&right->range.max, &left->range.min)) {
+				min = IntMin(&left->range.min, &right->range.min);
+				max = IntMax(&left->range.max, &right->range.max); //&right->range.max; if ( left->range.max > max) max =  left->range.max;
+				if (IntEq(&left->range.min, min) && IntEq(&left->range.max, max)) {
 					type = left;
-				} else if (left->range.min == min && left->range.max == max) {
+				} else if (IntEq(&left->range.min, min) && IntEq(&left->range.max, max)) {
 					type = right;
 				} else {
 					type = TypeAllocInt(min, max);
@@ -1652,12 +1637,12 @@ Var * VarUnion(Var * left, Var * right)
 	return result;
 }
 
-Type * TypeExpandRange(Type * type, IntLimit min, IntLimit max)
+Type * TypeExpandRange(Type * type, BigInt * min, BigInt * max)
 {
-	if (type->range.min < min) min = type->range.min;
-	if (type->range.max > max) max = type->range.max;
+	min = IntMin(&type->range.min, min);
+	max = IntMax(&type->range.max, max);
 
-	if (min != type->range.min || max != type->range.max) {		
+	if (!IntEq(min, &type->range.min) || !IntEq(max, &type->range.max)) {		
 		type = TypeAllocInt(min, max);
 	}
 	return type;
@@ -1671,7 +1656,7 @@ Purpose:
 */
 {
 	Type * type = NULL;
-	Int32 min, max;
+	BigInt min, max;
 
 	if (left == NULL) return right;
 	if (right == NULL) return left;
@@ -1682,7 +1667,7 @@ Purpose:
 	switch (left->variant) {
 	case TYPE_INT:
 		if (right->variant == TYPE_INT) {
-			type = TypeExpandRange(left, right->range.min, right->range.max);
+			type = TypeExpandRange(left, &right->range.min, &right->range.max);
 //			min = left->range.min; 			
 //			if (right->range.min < min) min = right->range.min;
 //			max = right->range.max;
@@ -1696,7 +1681,8 @@ Purpose:
 			type = TypeExpand(type, right->right);
 		} else if (right->variant == TYPE_SEQUENCE) {
 			if (SequenceRange(right, &min, &max)) {
-				type = TypeExpandRange(left, min, max);
+				type = TypeExpandRange(left, &min, &max);
+				IntFree(&min); IntFree(&max);
 			}
 		}
 		break;
@@ -1712,15 +1698,37 @@ Purpose:
 
 //$R
 
-Type * TypeRestrictRange(Type * type, IntLimit rmin, IntLimit rmax)
+Type * TypeAllocOpenRight(BigInt * min, BigInt * max)
+{
+	Type * type;
+	BigInt a;
+
+	IntSub(&a, max, Int1());
+	type = TypeAllocInt(min, &a);
+	IntFree(&a);
+	return type;
+}
+
+Type * TypeAllocOpenLeft(BigInt * min, BigInt * max)
+{
+	Type * type;
+	BigInt a;
+
+	IntAdd(&a, min, Int1());
+	type = TypeAllocInt(&a, max);
+	IntFree(&a);
+	return type;
+}
+
+Type * TypeRestrictRange(Type * type, BigInt * rmin, BigInt * rmax)
 {
 	Type * r = type;
-	IntLimit min, max;
+	BigInt * min, * max;
 
 	switch(type->variant) {
 	case TYPE_INT:
-		min = type->range.min;
-		max = type->range.max;
+		min = &type->range.min;
+		max = &type->range.max;
 
 		// <    > type range
 		// (    ) restriction range
@@ -1731,7 +1739,7 @@ Type * TypeRestrictRange(Type * type, IntLimit rmin, IntLimit rmax)
 			r = &TVOID;
 		// 1. <---(    )--->
 		} else if (min < rmin && rmax < max) {
-			r = TypeUnion(TypeAllocInt(min, rmin-1), TypeAllocInt(rmax+1, max));
+			r = TypeUnion(TypeAllocOpenRight(min, rmin), TypeAllocOpenLeft(rmax, max));
 		// 2. <------>  (     )
 		} else if (max < rmin) {
 			r = type;
@@ -1740,10 +1748,10 @@ Type * TypeRestrictRange(Type * type, IntLimit rmin, IntLimit rmax)
 			r = type;
 		// 3.  <---(     >   )
 		} else if (min < rmin) {
-			r = TypeAllocInt(min, rmin-1);
+			r = TypeAllocOpenRight(min, rmin);
 		// 5.  (     <  )----->
 		} else if (rmax >= min) {
-			r = TypeAllocInt(rmax+1, max);
+			r = TypeAllocOpenLeft(rmax, max);
 		}
 		break;
 
@@ -1765,7 +1773,7 @@ Type * TypeRestrict(Type * type, Type * restriction)
 
 	switch(restriction->variant) {
 	case TYPE_INT:
-		r = TypeRestrictRange(type, restriction->range.min, restriction->range.max);
+		r = TypeRestrictRange(type, &restriction->range.min, &restriction->range.max);
 		break;
 	case TYPE_TUPLE:
 		r = TypeUnion(TypeRestrict(type, restriction->left), TypeRestrict(type, restriction->right));
@@ -1779,8 +1787,8 @@ Type * TypeRestrict(Type * type, Type * restriction)
 Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 {
 	Type * rt, * left, * right;
-	IntLimit min, max, init, step;
-
+	BigInt min, max, init, step, ib;
+	
 	// If no restriction is defined, the type is returned unrestricted
 	if (restriction == NULL || restriction->variant == TYPE_UNDEFINED) return type;
 
@@ -1831,7 +1839,7 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 //				} else {
 					if (type->seq.compare_op != op) {
 						type->seq.compare_op = op;
-						type->seq.limit = TypeAllocInt(max, max);
+						type->seq.limit = TypeAllocInt(&max, &max);
 						type = ResolveSequence(type);			// type =
 					}
 //				}
@@ -1844,12 +1852,14 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 					init = type->seq.init->range.min;
 					step = type->seq.step->range.max;			// maximal step
 					if (type->seq.op == INSTR_ADD) {
-						rt = TypeAllocInt(init, max + step);	// we may overstep maximal value by step
+						IntAdd(&ib, &max, &step);
+						rt = TypeAllocInt(&init, &ib);	// we may overstep maximal value by step
+						IntFree(&ib);
 					}
 				} else {
 					if (type->seq.compare_op != op) {
 						type->seq.compare_op = op;
-						type->seq.limit = TypeAllocInt(max, max);
+						type->seq.limit = TypeAllocInt(&max, &max);
 					}
 				}
 				break;
@@ -1890,7 +1900,7 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 			}
 
 			if (rt == NULL) {
-				rt = TypeRestrictRange(type, min, max);
+				rt = TypeRestrictRange(type, &min, &max);
 			}
 		}
 	}
@@ -1957,7 +1967,7 @@ Type * TypeAllocIntRange(Type * min, Type * max)
 {
 	Type * type = TUNDEFINED;
 	if (TypeIsInt(min) && TypeIsInt(max)) {
-		type = TypeAllocInt(min->range.min, max->range.max);
+		type = TypeAllocInt(&min->range.min, &max->range.max);
 	}
 	return type;
 }
@@ -2172,17 +2182,23 @@ Result:
 	Type * arr_type;
 	Type * index_type;
 	Type * left, * right;
+	BigInt * bi;
 
 	if (var == NULL) return NULL;
-	if (var->mode == INSTR_INT) {
-		type = var->type;
-		//TODO: Use type from constant (if it exists)
+
+	// Type of integer constants
+
+	bi = VarIntConst(var);
+	if (bi != NULL) {
+		type = TypeAllocInt(bi, bi);
+/*		type = var->type;
 		if (type->variant == TYPE_INT) {
-			if (type->range.min != var->n || type->range.max != var->n) {
-				type = TypeAllocInt(var->n, var->n);
+			if (!IntEq(&type->range.min, &var->n) || !IntEq(&type->range.max, &var->n)) {
+				type = TypeAllocInt(&var->n, &var->n);
 				type->flexible = false;
 			}
 		}
+*/
 	} else if (var->mode == INSTR_RANGE) {
 		left = FindType(loc, var->adr, report_errors);
 		right = FindType(loc, var->var, report_errors);
@@ -2282,8 +2298,8 @@ Purpose:
 	Var * var;
 	var = *p_var;
 	if (var != NULL && var->mode != INSTR_INT && !InVar(var)) {
-		if (type != NULL && type->variant == TYPE_INT && type->range.min == type->range.max) {
-			*p_var = VarInt(type->range.min);
+		if (type != NULL && type->variant == TYPE_INT && IntEq(&type->range.min, &type->range.max)) {
+			*p_var = VarN(&type->range.min);
 		}
 	}
 }
@@ -2496,8 +2512,8 @@ void CheckIndex(Loc * loc, Var * var)
 		if (type != NULL) {
 			if (!TypeIsSubsetOf(type, var->adr->type->index)) {
 				if (type->variant == TYPE_INT) {
-					ErrArg(VarInt(type->range.max));
-					ErrArg(VarInt(type->range.min));
+					ErrArg(VarN(&type->range.max));
+					ErrArg(VarN(&type->range.min));
 					ErrArg(var->adr);
 					LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
 				} else {
@@ -2657,10 +2673,10 @@ Bool InstrInferType(Loc * loc, void * data)
 						if (d->final_pass) {
 							if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
 								ErrArg(result);
-								ErrArg(VarInt(ti->range.max));
-								ErrArg(VarInt(ti->range.min));
-								ErrArg(VarInt(tr->range.max));
-								ErrArg(VarInt(tr->range.min));
+								ErrArg(VarN(&ti->range.max));
+								ErrArg(VarN(&ti->range.min));
+								ErrArg(VarN(&tr->range.max));
+								ErrArg(VarN(&tr->range.min));
 								if (TypeIsIntConst(tr)) {
 									LogicWarningLoc("The value [A] does not fit into variable", loc);
 								} else {
@@ -2717,14 +2733,14 @@ Bool InstrInitInfer(Loc * loc, void * data)
 	return false;
 }
 
-Bool LoopSteps(Instr * i, IntLimit * min_steps, IntLimit * max_steps)
+Bool LoopSteps(Instr * i, BigInt * min_steps, BigInt * max_steps)
 /*
 Purpose:
 	Compute number of steps performed by loop depending on loop instruction.
 */
 {
 	Type * type;
-	IntLimit min_span, max_span;
+	BigInt min_span, max_span;
 
 	// Compute number of repeats for this loop (returned as integer type)
 	if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
@@ -2746,14 +2762,14 @@ Purpose:
 	return false;
 }
 
-Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, IntLimit min_steps, IntLimit max_steps)
+Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, BigInt min_steps, BigInt max_steps)
 {
 	Bool modified = false;
 	Loc loc;
 	InstrBlock * stop = end->next;
 	Instr * i;
 	Type * type;
-	IntLimit stop_min, stop_max;
+	BigInt stop_min, stop_max;
 
 	loc.proc = proc;
 	loc.blk  = header;
@@ -2766,12 +2782,12 @@ Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, IntLimit min_ste
 					if (type->seq.op == INSTR_ADD) {
 						stop_min = type->seq.init->range.min + ((min_steps - 1) * type->seq.step->range.min);
 						stop_max = type->seq.init->range.max + ((max_steps - 1) * type->seq.step->range.max);
-						i->type[RESULT] = TypeAllocInt(stop_min, stop_max);
+						i->type[RESULT] = TypeAllocInt(&stop_min, &stop_max);
 						modified = true;
 					} else if (type->seq.op == INSTR_SUB) {
 //						stop_max = type->seq.init->range.max - ((min_steps - 1) * type->seq.step->range.min);
 						stop_min = type->seq.init->range.min - ((max_steps - 1) * type->seq.step->range.max);
-						i->type[RESULT] = TypeAllocInt(stop_min, type->seq.init->range.max);
+						i->type[RESULT] = TypeAllocInt(&stop_min, &type->seq.init->range.max);
 						modified = true;
 					}
 				}
@@ -2789,7 +2805,7 @@ Purpose:
 */ {
 	InstrBlock * header;
 	Instr * i;
-	IntLimit min_steps, max_steps;
+	BigInt min_steps, max_steps;
 
 	Bool modified = false;
 	Loc loc;

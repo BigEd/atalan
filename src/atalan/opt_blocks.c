@@ -387,8 +387,10 @@ void OptimizeJumps(Var * proc)
 
 	LinkBlocks(proc);
 
-//	Print("============= jumps =============\n");
-//	PrintProc(proc);
+//	if (Verbose(proc)) {
+//		Print("============= jumps =============\n");
+//		PrintProc(proc);
+//	}
 
 	blk = proc->instr;
 	while (blk != NULL) {
@@ -422,7 +424,7 @@ void OptimizeJumps(Var * proc)
 					if (IS_INSTR_BRANCH(cond_i->op)) {
 						if (InstrRelSwap(cond_i)) {
 //						cond_i->op = OpNot(cond_i->op);
-//						cond_i->result = i->result;
+							cond_i->result = i->result;
 							blk->cond_to = i->result->instr;
 
 							InstrBlockFree(blk_to);
