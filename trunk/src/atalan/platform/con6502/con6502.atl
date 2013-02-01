@@ -19,7 +19,7 @@ rule line      = ";### %0(%1) %2"
 BIN_EXTENSION: "c65"
 
 ;VARHEAP defines memory area that can be used by Atalan to allocate variables.
-type VARHEAP:128..255   
+type VARHEAP:128..255 or 512..1023  
 
 
 ;Support for ASSERT "expected" command.

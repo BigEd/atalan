@@ -173,7 +173,7 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 
 				// Output variable name
 				if (VarIsIntConst(var)) {
-					PrintInt(var->n);
+					PrintBigInt(&var->n);
 				} else {
 					PrintQuotedVarName(var);
 				}

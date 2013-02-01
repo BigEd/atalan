@@ -33,6 +33,24 @@ Normal rules translate compiler instruction to zero or more compiler instruction
 GLOBAL RuleSet TRANSLATE_RULES;
 GLOBAL RuleSet INSTR_RULES;
 
+/*
+================
+Rule specificity
+================
+
+The rules are sorted by their specificity.
+The most specific rule is the first in the list, less specific rules follow.
+This ensures, that the more specific rules have bigger priority than less specific ones.
+
+Rule is more specific if it's arguments are more specific.
+
+1. using actual CPU register or actual variable
+2. using constant
+3. using array or byte access
+4. other possibilities
+
+*/
+
 Bool RuleArgIsRegister(RuleArg * l)
 {
 	if (l->variant == RULE_REGISTER || l->variant == RULE_VARIANT) return true;
@@ -57,15 +75,6 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 		if (!r_is_reg) return true;
 	}
 
-//	if (l->variant == RULE_VALUE) {
-//		if (r->variant != RULE_VALUE) return true;
-//	}
-
-//	if (l->variant == RULE_VARIANT) {
-//		if (r->variant != RULE_VARIANT) return true;
-//	}
-
-//	if (r->variant == RULE_VALUE) return false;
 	if (r_is_reg) return false;
 
 	if (l->variant == RULE_CONST) {
@@ -366,31 +375,18 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		if (!VarIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
-/*
-	// 1
-	case RULE_VALUE:
-		if (!VarIsConst(arg)) return false;
-		pvar = pattern->var;
-		if (pvar->mode == INSTR_TEXT) {
-			if (!StrEqual(pvar->str, arg->str)) return false;
-		} else {
-			if (pvar->value_nonempty) {
-				if (pvar->n != arg->n) return false;
-			}
-		}
-		break;
-*/
+
 	// Exact variable.
 	case RULE_REGISTER:
-		if (VarIsConst(pattern->var)) {
+		pvar = pattern->var;
+		if (VarIsConst(pvar)) {
 			if (!VarIsConst(arg)) return false;
-			pvar = pattern->var;
 			if (pvar->mode == INSTR_TEXT) {
 				if (!StrEqual(pvar->str, arg->str)) return false;
-			} else {
-				if (pvar->value_nonempty) {
-					if (pvar->n != arg->n) return false;
-				}
+			} else if (pvar->mode == INSTR_INT) {
+//				if (pvar->value_nonempty) {
+					if (arg->mode != INSTR_INT || !IntEq(&pvar->n, &arg->n)) return false;
+//				}
 			}
 		} else {
 			if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
@@ -774,6 +770,10 @@ Purpose:
 	in_assert = false;
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+
+		if (Verbose(proc)) {
+			PrintBlockHeader(blk);
+		}
 
 		loc.blk = blk;
 		loc.n = 1;

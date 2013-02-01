@@ -231,15 +231,7 @@ retry:
 //	}
 	return false;
 }
-/*
-UInt16 LetCycles(Var * result, Var * arg1)
-{
-	Rule * rule = InstrRule2(INSTR_LET, result, arg1, NULL);
-	if (rule != NULL) {
-		return rule->cycles;
-	}
-}
-*/
+
 Bool LetCycles(Var * result, Var * arg1, UInt16 * p_q)
 {
 	Rule * rule = InstrRule2(INSTR_LET, result, arg1, NULL);
@@ -279,7 +271,7 @@ Arguments:
 
 	blk_exit = end->next;
 
-	// At the begining, the quotient is 0.
+	// At the beginning, the quotient is 0.
 	ResetValues();
 	initial.op = INSTR_LET; initial.result = reg; initial.arg1 = top_var; initial.arg2 = NULL;
 	VarSetSrcInstr(reg, &initial);
@@ -366,7 +358,7 @@ Arguments:
 			}
 
 			// If the instruction stores the result to the variable, we will want to change it to store the result in the top_reg.
-			// If the register is currently ysed for some different purpose, we must spill it.
+			// If the register is currently used for some different purpose, we must spill it.
 
 			if (i->result == top_var && !VarContains(reg, top_var)) {
 				if (i->next_use[0] != NULL && LetCycles(top_var, reg, &cycles)) {
@@ -462,6 +454,7 @@ Purpose:
 	New block will be inserted into code, if there is not single instruction.
 */
 {
+	loc->proc = proc;
 	loc->blk = FindLoopDominator(proc, header);
 	loc->i = loc->blk->last;
 
@@ -981,7 +974,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 
-			if (InstrRule2(INSTR_LET, top_reg, top_var, NULL)) {
+			if (InstrRule2(INSTR_LET, reg, top_var, NULL)) {
 
 	//			if (StrEqual(reg->name, "x") && StrEqual(top_var->name, "i")) {
 	//				Print(" ");
@@ -1093,7 +1086,7 @@ del2:					if (verbose) { PrintDelete(); }
 
 				if (changed > 0) {
 
-					if (i->op == INSTR_LET && i->result == i->arg1) {
+					if (i->op == INSTR_LET && ti.result == ti.arg1) {
 						goto del2;
 					}
 

@@ -429,7 +429,8 @@ Result:
 */
 {
 	Var * r = NULL;
-	IntLimit * n1, * n2;
+	BigInt * n1, * n2;
+	BigInt nr;
 
 	/*
 	==============================
@@ -449,52 +450,69 @@ Result:
 
 		switch(op) {
 			case INSTR_SQRT:
-				if (*n1 >= 0) {
-					r = VarInt((UInt32)sqrt(*n1));
+				if (IntHigherEq(n1, Int0())) {
+					IntSqrt(&nr, n1);		// r = VarInt((UInt32)sqrt(*n1));
 				} else {
+					SyntaxError("sqrt of negative number");
 					// Error: square root of negative number
 				}
 				break;
 			case INSTR_LO:
-				r = VarInt(*n1 & 0xff);
+				IntAnd(&nr, n1, Int255());
+//				r = VarInt(*n1 & 0xff);
 				break;
 			case INSTR_HI:
-				r = VarInt((*n1 >> 8) & 0xff);
+				IntSet(&nr, n1);
+				IntDivN(&nr, 256);
+				IntAndN(&nr, 0xff);
+//				r = VarInt((*n1 >> 8) & 0xff);
 				break;
 			case INSTR_DIV:
-				if (*n2 != 0) {
-					r = VarInt(*n1 / *n2);
+				if (!IntEqN(n1, 0)) {
+					IntDiv(&nr, n1, n2);
+//					r = VarInt(*n1 / *n);
 				} else {
 					SyntaxError("division by zero");
 				}
 				break;
 			case INSTR_MOD:
-				if (*n2 != 0) {
-					r = VarInt(*n1 % *n2);
+				if (!IntEqN(n1, 0)) {
+					IntMod(&nr, n1, n2);
+//					r = VarInt(*n1 % *n);
 				} else {
 					SyntaxError("division by zero");
 				}
 				break;
 			case INSTR_MUL:
-				r = VarInt(*n1 * *n2);
+				IntMul(&nr, n1, n2);
+//				r = VarInt(*n1 * *n);
 				break;
 			case INSTR_ADD:
-				r = VarInt(*n1 + *n2);
+				IntAdd(&nr, n1, n2);
+//				r = VarInt(*n1 + *n);
 				break;
 			case INSTR_SUB:
-				r = VarInt(*n1 - *n2);
+				IntSub(&nr, n1, n2);
+//				r = VarInt(*n1 - *n);
 				break;
 			case INSTR_AND:
-				r = VarInt(*n1 & *n2);
+				IntAnd(&nr, n1, n2);
+//				r = VarInt(*n1 & *n);
 				break;
 			case INSTR_OR:
-				r = VarInt(*n1 | *n2);
+				IntOr(&nr, n1, n2);
+//				r = VarInt(*n1 | *n);
 				break;
 			case INSTR_XOR:
-				r = VarInt(*n1 ^ *n2);
+				IntXor(&nr, n1, n2);
+//				r = VarInt(*n1 ^ *n);
 				break;
-			default: break;
+			default: 
+				return NULL;
+				break;
 		}
+		r = VarN(&nr);
+		IntFree(&nr);
 	}
 	return r;
 }
@@ -561,19 +579,19 @@ Purpose:
 	return nmask;
 }
 
-
-void GenArrayInit(Var * arr, Var * init)
 /*
+void GenArrayInit(Var * arr, Var * init)
+
 Purpose:
 	Generate array initialization loop.
 Arguments:
 	arr		Reference to array or array element or array slice
-*/
+
 {
 	Type * type, * src_type, * idx1_type;
 	Var * idx, * src_idx, * label, * range, * stop, * label_done;
 	Int32 nmask;
-	Int32 stop_n;
+	BigInt stop_n;
 	Var * min1, * max1, * src_min, * src_max;
 	Var * dst_arr;
 
@@ -656,7 +674,7 @@ Arguments:
 		GenLabel(label_done);
 	}
 }
-
+*/
 /****************************************************************
 
  Print tokens
@@ -758,7 +776,7 @@ void PrintVarVal(Var * var)
 				PrintVarVal(var->var);
 				Print(")");
 			} else if (var->mode == INSTR_INT) {
-				PrintInt(var->n);
+				PrintBigInt(&var->n);
 			} else if (var->mode == INSTR_TEXT) {
 				Print("'"); Print(var->str); Print("'");
 			} else {
@@ -857,7 +875,7 @@ void PrintVar(Var * var)
 		Print("$");
 		PrintVar(var->var);
 	} else if (var->mode == INSTR_INT) {
-		PrintInt(var->n);
+		PrintBigInt(&var->n);
 		return;
 	} else if (var->mode == INSTR_TYPE) {
 		PrintType(var->type);
@@ -882,14 +900,14 @@ void PrintVar(Var * var)
 		}
 
 		if (VarIsConst(var)) {
-			Print(" = "); PrintInt(var->n);
+			Print(" = "); PrintBigInt(&var->n);
 		} else {
 			type = var->type;
 			if (type != NULL) {
 				if (type->variant == TYPE_INT) {
 					if (type->range.min == 0 && type->range.min == 255) {
 					} else {
-						Print(":"); PrintInt(type->range.min); Print(".."); PrintInt(type->range.max);
+						Print(":"); PrintBigInt(&type->range.min); Print(".."); PrintBigInt(&type->range.max);
 					}
 				}
 			}

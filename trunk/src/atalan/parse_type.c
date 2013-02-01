@@ -4,7 +4,7 @@ void ExpectExpression(Var * result);
 void ParseEnumItems(Type * type, UInt16 column_count);
 void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type);
 Var * ParseVariable();
-Var * ParseConstExpression(Var * result);
+BigInt * ParseIntConstExpression(Var * result);
 
 Type * ParseType();
 Type * ParseSubtype();
@@ -93,6 +93,7 @@ Type * ParseIntType()
 	Var * var;
 	Bookmark bookmark;
 	UInt8 arg_no = 0;
+	BigInt * bi;
 
 	// When parsing rule, type may be preceded by %name:
 	if (ParsingPattern()) {
@@ -129,8 +130,7 @@ Type * ParseIntType()
 			}
 			goto done;
 		} else if (var->mode == INSTR_INT) {
-			type = TypeAlloc(TYPE_INT);
-			type->range.min = var->n;
+			type = TypeAllocConst(&var->n);
 		} else {
 			//TODO: If simple integer variable, use it as type range
 			SyntaxErrorBmk("expected type or constant expression", bookmark);
@@ -142,8 +142,9 @@ Type * ParseIntType()
 			ExpectExpression(NULL);
 			if (TOK) {
 				var = BufPop();
-				if (var->mode == INSTR_INT) {
-					type->range.max = var->n;
+				bi = VarIntConst(var);
+				if (bi != NULL) {
+					IntModify(&type->range.max, bi);
 				} else {
 					SyntaxErrorBmk("expected constant expression", bookmark);
 				}
@@ -243,8 +244,10 @@ void ParseEnumStruct(Type * type)
 Type * ParseConstList(Type * type)
 {
 	Bool id_required;
-	Var * var, * c;
-	Int32 last_n = 0;
+	Var * var;
+	BigInt last_n, * c;
+
+	IntInit(&last_n, 0);
 
 	EnterBlockWithStop(TOKEN_VOID);
 		
@@ -255,16 +258,16 @@ Type * ParseConstList(Type * type)
 		while(NextIs(TOKEN_EOL));
 
 		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-			var = VarAllocScope(NO_SCOPE, INSTR_INT, NAME, 0);
+			var = VarAllocScope(NO_SCOPE, INSTR_CONST, NAME, 0);
 			NextToken();
 			if (NextIs(TOKEN_EQUAL)) {
 				SyntaxError("Unexpected equal");
 			}
 
 			if (NextIs(TOKEN_COLON)) {
-				c = ParseConstExpression(type->owner);
+				c = ParseIntConstExpression(type->owner);
 				if (TOK) {
-					last_n = c->n;
+					IntModify(&last_n, c);
 				}
 /*
 				// Parse const expression
@@ -276,10 +279,10 @@ Type * ParseConstList(Type * type)
 				}
 */
 			} else {
-				last_n++;
+				IntAddN(&last_n, 1);
 			}
-			var->n = last_n;
-			var->value_nonempty = true;
+
+			var->var = VarN(&last_n);
 
 			if (type->owner != SCOPE) {
 				type = TypeDerive(type);
@@ -300,6 +303,7 @@ Type * ParseConstList(Type * type)
 		if (NextIs(TOKEN_COMMA)) id_required = true;
 		NextIs(TOKEN_EOL);
 	}
+	IntFree(&last_n);
 	return type;
 }
 
@@ -308,6 +312,7 @@ Type * ParseType3()
 	Type * type = NULL, * variant_type = NULL;
 	Type * elmt, * t;
 	Var * var;
+	BigInt * st;
 
 	//# "type" restrict_type
 	if (NextIs(TOKEN_TYPE2)) {
@@ -386,8 +391,9 @@ Type * ParseType3()
 				ExpectExpression(NULL);
 				if (TOK) {
 					var = STACK[0];
-					if (VarIsIntConst(var)) {
-						type->step = var->n;
+					st = VarIntConst(var);
+					if (st != NULL) {
+						type->step = IntN(st);
 					} else {
 						SyntaxError("Expected integer constant");
 					}
@@ -554,19 +560,20 @@ Type * ParseType()
 	return ParseType2(INSTR_VAR);
 }
 
-Var * ParseConstExpression(Var * result)
+BigInt * ParseIntConstExpression(Var * result)
 {
-	Var * var = NULL;
+	BigInt * bi = NULL;
+	Var * var;
+
 	ParseExpression(result);
 	if (TOK) {
 		var = BufPop();
-		if (var->mode == INSTR_INT) {
-		} else {
+		bi = VarIntConst(var);
+		if (bi == NULL) {
 			SyntaxError("expected constant expression");
-			var = NULL;
 		}
 	}
-	return var;
+	return bi;
 }
 
 Type * ParseTypeInline() 
@@ -576,6 +583,7 @@ Syntax: "+" full_type | "(" full_type ")" | normal_type |  identifier | int ".."
 	Type * type = NULL;
 	Var * var;
 	UInt16 bookmark;
+	BigInt * bi;
 
 	PARSE_INLINE = true;
 
@@ -603,26 +611,16 @@ Syntax: "+" full_type | "(" full_type ")" | normal_type |  identifier | int ".."
 			}
 		} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
 			type = TypeAlloc(TYPE_INT);
-			var = ParseConstExpression(NULL);
+			bi = ParseIntConstExpression(NULL);
 			if (TOK) {
-				if (var->mode == INSTR_INT) {
-					type->range.min = var->n;
-					if (NextIs(TOKEN_DOTDOT)) {
-						ExpectExpression(NULL);
-						if (TOK) {
-							var = BufPop();
-							if (var->mode == INSTR_INT) {
-								type->range.max = var->n;
-							} else {
-								SyntaxError("expected constant expression");
-							}
-						}
-					} else {
-						type->range.max = type->range.min;
-		//				type->range.min = 0;
+				IntModify(&type->range.min, bi);
+				if (NextIs(TOKEN_DOTDOT)) {
+					bi = ParseIntConstExpression(NULL);
+					if (TOK) {
+						IntModify(&type->range.max, bi);
 					}
 				} else {
-					SyntaxError("expected constant expression");
+					IntModify(&type->range.max, &type->range.min);
 				}
 			}
 		}

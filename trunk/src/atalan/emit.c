@@ -231,7 +231,7 @@ void EmitVar(Var * var, UInt8 format)
 		} else if (var->name != NULL) {
 			// *** Module parameters (4)
 			// When parameter name is emmited, it is prefixed with PARAM_ prefix
-			if (var->mode == INSTR_INT && FlagOn(var->submode, SUBMODE_PARAM)) {
+			if (VarIsParam(var)) {
 				EmitStr("PARAM_");
 			} else if (var->mode == INSTR_INT && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
 				EmitVarName(var->type->owner);
@@ -256,7 +256,7 @@ void EmitVar(Var * var, UInt8 format)
 			}
 		} else {
 			ASSERT(var->mode == INSTR_INT);
-			EmitInt(var->n);
+			EmitBigInt(&var->n);
 		}
 	}
 }
@@ -270,6 +270,7 @@ void EmitInstr2(Instr * instr, char * str)
 	char * s, c;
 	UInt32 n;
 	BigInt bn;
+	BigInt * pn;
 	s = str;
 
 	if (instr->op == INSTR_LINE) {
@@ -320,11 +321,11 @@ void EmitInstr2(Instr * instr, char * str)
 					} else if (StrEqualPrefix(s, "index.min", 9)) {
 						s += 9;
 						if (var->type->variant == TYPE_ARRAY) {
-							n = var->type->index->range.min;
+							pn = &var->type->index->range.min;
 						} else {
-							n = 0;
+							pn = Int0();
 						}
-						EmitInt(n);
+						EmitBigInt(pn);
 						continue;
 					}
 					s--;
@@ -488,24 +489,29 @@ Purpose:
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
 		if (VarIsReg(var)) continue;
 
+//		if (var->name != NULL && strcmp(var->name, "ORG") == 0) {
+//			Print("");
+//		}
+
 		adr = var->adr;
-		if (
-			   (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
-			|| (var->mode == INSTR_INT && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL > 0)
+		if ( (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
+		  || (VarIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
 		) {
 
-			if (adr != NULL && adr->mode == INSTR_INT && adr->n >= DATA_SEGMENT) continue;
+			if (adr != NULL && adr->mode == INSTR_INT && IntN(&adr->n) >= DATA_SEGMENT) {
+				continue;
+			}
 
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
 			instr.arg2 = NULL;
 
-			if (var->mode != INSTR_INT) {
-				//n = var->adr; 
-				ov = var->adr;
+			if (var->mode == INSTR_INT) {
+				ov = var;				
+			} else if (var->mode == INSTR_CONST) {
+				ov = var->var;
 			} else {
-				n = var->n;
-				ov = VarInt(n);
+				ov = var->adr;				
 			}
 			instr.arg1 = ov;
 			EmitInstr(&instr);

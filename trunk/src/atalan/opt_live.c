@@ -131,7 +131,7 @@ Purpose:
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
 				// This is the same array and the index of the variable is the same
 				if (var->adr == test_var->adr) {
-					if (var->var->mode != INSTR_INT || test_var->var->mode != INSTR_INT || var->var->n == test_var->var->n) return true;
+					if (var->var->mode != INSTR_INT || test_var->var->mode != INSTR_INT || IntEq(&var->var->n, &test_var->var->n)) return true;
 				}
 			}
 		}
@@ -279,7 +279,7 @@ Bool VarIsDead(Var * var)
 
 	if (var->mode == INSTR_TUPLE) {
 		return VarIsDead(var->adr) && VarIsDead(var->var);
-	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL && !VarIsConst(var->adr)) {
 		return VarIsDead(var->adr);
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);

@@ -118,3 +118,38 @@ void ProcTypeFinalize(Type * proc_type)
 	ProcAssignRegisterArguments(proc, SUBMODE_ARG_IN);
 	ProcAssignRegisterArguments(proc, SUBMODE_ARG_OUT);
 }
+
+
+void ProcAddLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
+/*
+Purpose:
+	Return all local variables from procedure.
+	Variables from subscopes are added (for example 'for' variables).
+	Variables from other procedured are not added.
+*/
+{
+	Var * var;
+
+	FOR_EACH_LOCAL(proc, var)
+		if (var->mode == INSTR_SCOPE) {
+			if (var != CPU->SCOPE) {
+				ProcAddLocalVars(var, set, filter_fn);
+			}
+		} else {
+			// Unused variables and labels are not part of result
+			if ((var->write > 0 || var->read > 0)) {
+				if (var->mode == INSTR_VAR) {
+					if (filter_fn(var)) {
+						VarSetAdd(set, var, NULL);
+					}
+				}
+			}
+		}
+	NEXT_LOCAL
+}
+
+void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
+{
+	VarSetEmpty(set);
+	ProcAddLocalVars(proc, set, filter_fn);
+}

@@ -86,6 +86,12 @@
     <ClCompile Include="opt_global.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="opt_live2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="names.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">

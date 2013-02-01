@@ -54,7 +54,7 @@ CPU:scope =
 	s8:type = -128..127
 	s16:type = -32768..32767
 	s24:type = -8388607..8388607  
-	
+		
 	;Definition of the more common 6502 instructions as macros, so the code is more readable 
 	lda:macro o = instr let a, o
 	ldx:macro o = instr let x, o
@@ -804,7 +804,7 @@ rule add %A:int, %B:int, const %C:int = instr
 	let %A$1, a
 
 ;3-byte Increment
-rule add %A:long,%A:long,1 = instr
+rule add %A:long,%A,1 = instr
   inc %A$0
   ifeq _lab2, z, 0
   inc %A$1

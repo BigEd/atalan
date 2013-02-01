@@ -19,14 +19,23 @@ void MarkBlockAsUnprocessed(InstrBlock * block)
 	}
 }
 
-
-void OptimizeDataFlow(Var * proc, ProcessBlockFn block_fn, void * info, void * first_block_info)
+void DataFlowAnalysis(Var * proc, AnalyzeBlockFn block_fn, void * info)
 {
+	InstrBlock * blk;
+	Bool change;
+
+	change = true;
+	while (change) {
+		change = false;
+		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+			change |= block_fn(proc, blk, info);
+		}
+	}
 }
 
 #define Processed(blk, foll) (blk->foll == NULL || blk->foll->processed || blk->foll == blk)
 
-void OptimizeDataFlowBack(Var * proc, ProcessBlockFn block_fn, void * info)
+void OptimizeDataFlowBack(Var * proc, AnalyzeBlockFn block_fn, void * info)
 /*
 Purpose:
 	Perform analysis of whole procedure block by block.
@@ -47,7 +56,7 @@ Purpose:
 			if (!blk->processed) {
 				// Process block, if all it's followers have been processed (or if it has none).
 				if (Processed(blk, to) && Processed(blk, cond_to)) {	//(blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed || blk->cond_to == blk)) {
-					block_fn(blk, info);
+					block_fn(proc, blk, info);
 					blk->processed = true;
 					change = true;
 				}

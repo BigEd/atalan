@@ -4,6 +4,9 @@
 
 use "m6502"
 
+;It is possible to use the ORG parameter to define starting address of the programm.
+param ORG:0..$ffff = $2000 
+
 ;Set the position of print buffer to address $600.
 _stdbuf@$600
 _putchr_proc_adr@$653  ;+$654 
@@ -353,7 +356,7 @@ DOSVEC@10:card
 DOS:macro =
 	goto DOSVEC
 
-rule prologue  = "   org $2e0" "   dta a($2000)" "   org $2000"
+rule prologue  = "   org $2e0" "   dta a(PARAM_ORG)" "   org PARAM_ORG"
 rule epilogue  = instr 
 	label __epil
 	goto __epil

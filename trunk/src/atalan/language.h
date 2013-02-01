@@ -308,6 +308,31 @@ void PlatformError(char * text);
 
 /*********************************************************
 
+ Names
+
+ Names are managed separatelly from variables.
+ Variables do not have to be named, but if they are, they contain reference to a name.
+
+*********************************************************/
+
+//TODO: Names are no used yet...
+
+typedef struct NameTag Name;
+
+typedef struct NameTag {
+
+	Name * next;			// next name
+	char * name;
+
+	// Position, where the name was declared
+
+	Var *   file;			// file in which the name has been defined
+	LineNo  line_no;		// line of number, on which the name has been defined
+	LinePos line_pos;		// position on line at which the name has been declared
+};
+
+/*********************************************************
+
  Variables & types
 
 *********************************************************/
@@ -386,15 +411,14 @@ Integer Limits
 
 #include "bigint.h"
 
-typedef BigInt IntLimit;
 #define INTLIMIT_MIN (-2147483647 - 1)		// To prevent error in some compilers parser
 #define INTLIMIT_MAX 2147483647L
 
 // min + N * mul  (<max)
 typedef struct {
 	Bool flexible;		// range has been fixed by user
-	IntLimit min;
-	IntLimit max;
+	BigInt min;
+	BigInt max;
 } Range;
 
 /*
@@ -403,7 +427,7 @@ typedef struct {
  In such case, the value must refer to type which refers back to it.
 
 typedef struct {
-	IntLimit n;
+	BigInt n;
 } IntConst;
 
 */
@@ -506,20 +530,21 @@ typedef enum {
 #define VarLabelDefined    32
 
 typedef unsigned int VarIdx;
-typedef char * Name;
+//typedef char * Name;
 
 typedef UInt8 VarFlags;
 
 struct VarTag {
 
+	InstrOp	mode;
+	VarSubmode submode;
+
 	// Variable identification (name,idx,scope)
-	Name	name;
+	char *	name;
 	VarIdx  idx;	 // two variables with same name but different index may exist
 					 // 0 means no index, 1 means index 1 etc.
 					 // variable name "x1" is automatically converted to x,1
 	Var  *  scope;	 // scope, in which this variable has been declared
-	InstrOp	mode;
-	VarSubmode submode;
 
 	VarFlags  flags;
 	Var *	adr;	 // Address of variable in memory. For INSTR_TYPE, this means alignment of variable of this type.
@@ -528,10 +553,11 @@ struct VarTag {
 
 	Type *  type;	 // Type of variable
 
-	int     value_nonempty;
+//	int     value_nonempty;
 	// TODO: Replace value_nonempty just with flag VarDefined
 	union {
-		long	n;				// for const, or function default argument (other variants of value must be supported - array, struct, etc.)
+		BigInt  n;
+		//long	n;				// for const, or function default argument (other variants of value must be supported - array, struct, etc.)
 		InstrBlock * instr;		// instructions for procedure or array initialization
 		char * str;
 		Var * var;
@@ -554,6 +580,20 @@ struct VarTag {
 	Var  *  next_in_scope;  // in future, this will be replaced by 'next'
 	Var  *  subscope;
 };
+
+/*
+TODO:
+
+Const type variable
+
+Type may be implemented as variable.
+
+type	- parent type of the type
+var     - set of possible values (for example range 3..4, etc.)
+
+subscope - fields defining the type properties (for example index variable for array - we would prefer to specify index in some other way, but name # may be appropriate)
+
+*/
 
 
 /*
@@ -648,11 +688,12 @@ void HeapPrint(MemHeap * heap);
 
 void TypeInit();		// initialize the Type subsytem
 
-UInt8 ConstByteSize(Int32 n);
+UInt8 IntByteSize(BigInt * n);
 
 Type * TypeAlloc(TypeVariant variant);
-Type * TypeAllocConst(IntLimit n);
-Type * TypeAllocInt(IntLimit min, IntLimit max);
+Type * TypeAllocConst(BigInt * n);
+Type * TypeAllocInt(BigInt * min, BigInt * max);
+Type * TypeAllocIntN(Int32 min, Int32 max);
 Type * TypeAllocRange(Var * min, Var * max);
 Type * TypeAllocVar(Var * var);
 
@@ -672,7 +713,7 @@ Type * TypeAdrOf(Type * element);
 void TypeLimits(Type * type, Var ** p_min, Var ** p_max);
 
 //void TypeLet(Type * type, Var * var);
-typedef void (*RangeTransform)(Int32 * x, Int32 tr);
+typedef void (*RangeTransform)(BigInt * dest, BigInt * x, BigInt * tr);
 //void TypeTransform(Type * type, Var * var, InstrOp op);
 
 void TypeAddConst(Type * type, Var * var);
@@ -683,8 +724,8 @@ Bool TypeIsInt(Type * type);
 Bool TypeIsIntConst(Type * type);
 Bool TypeIsN(Type * type, Int32 n);
 
-IntLimit * TypeMax(Type * type);
-IntLimit * TypeMin(Type * type);
+BigInt * TypeMax(Type * type);
+BigInt * TypeMin(Type * type);
 
 Type * TypeUnion(Type * left, Type * right);
 
@@ -697,7 +738,10 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2);
 void PrintType(Type * type);
 
 //--- Proc type
+
 void ProcTypeFinalize(Type * proc);
+typedef Bool (*VarFilter)(Var * var);
+void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn);
 
 
 Bool VarMatchType(Var * var, Type * type);
@@ -740,6 +784,8 @@ void ExitScope();
 
 
 Var * VarAllocUnused();
+void VarSetScope(Var * var, Var * scope);
+
 Var * VarInt(long n);
 Var * VarN(BigInt * n);
 
@@ -747,29 +793,30 @@ Var * VarNewStr(char * str);
 Var * VarNewLabel(char * name);
 Var * FindOrAllocLabel(char * name, UInt16 idx);
 
-void VarLetStr(Var * var, char * str);
+void VarInitStr(Var * var, char * str);
 
 Var * VarNewTmp(Type * type);
 Var * VarNewTmpLabel();
-Var * VarAlloc(InstrOp mode, Name name, VarIdx idx);
-Var * VarAllocScope(Var * scope, InstrOp mode, Name name, VarIdx idx);
+Var * VarAlloc(InstrOp mode, char * name, VarIdx idx);
+Var * VarAllocScope(Var * scope, InstrOp mode, char * name, VarIdx idx);
 Var * VarAllocScopeTmp(Var * scope, InstrOp mode, Type * type);
-Var * VarFind(Name name, VarIdx idx);
+Var * VarFind(char * name, VarIdx idx);
 Var * VarFindScope(Var * scope, char * name, VarIdx idx);
 Var * VarFindScope2(Var * scope, char * name);
 Var * VarFind2(char * name);
 //Var * VarFindInProc(char * name, VarIdx idx);
 Var * VarProcScope();
-Var * VarFindTypeVariant(Name name, VarIdx idx, TypeVariant type_variant);
+Var * VarFindTypeVariant(char * name, VarIdx idx, TypeVariant type_variant);
 
 Bool VarIsZeroNonzero(Var * var, Var ** p_zero, Var ** p_non_zero);
 
 Var * VarRuleArg(UInt8 i);
 
 Bool VarIsConst(Var * var);
+Bool VarIsParam(Var * var);
 Bool VarIsType(Var * var);
 Bool VarIsIntConst(Var * var);
-IntLimit * VarIntConst(Var * var);
+BigInt * VarIntConst(Var * var);
 
 Var * VarUnion(Var * left, Var * right);
 Var * VarNewVariant(Var * left, Var * right);
@@ -777,6 +824,7 @@ Var * VarNewVariant(Var * left, Var * right);
 Bool VarIsN(Var * var, Int32 n);
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
+Bool VarIsValue(Var * var);
 Bool VarIsTmp(Var * var);
 Bool VarIsStructElement(Var * var);
 Bool VarIsArrayElement(Var * var);
@@ -829,6 +877,8 @@ Var * VarNewTuple(Var * left, Var * right);
 Var * VarNewOp(InstrOp op, Var * left, Var * right);
 
 Var * VarEvalConst(Var * var);
+
+Bool VarEq(Var * left, Var * right);
 
 void VarResetUse();
 
@@ -1080,7 +1130,9 @@ void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result,
 
 InstrBlock * LastBlock(InstrBlock * block);
 
+
 typedef void (*ProcessBlockFn)(InstrBlock * block, void * info);
+
 void ForEachBlock(InstrBlock * blk, ProcessBlockFn process_fn, void * info);
 Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data);
 
@@ -1288,11 +1340,35 @@ extern LinePos OP_LINE_POS;				// Position of last parsed binary operator
 
 /*************************************************************
 
+Analytics
+
+*************************************************************/
+
+typedef Bool (*AnalyzeBlockFn)(Var * proc, InstrBlock * block, void * info);
+/*
+Purpose:
+	Perform data flow analysis for specified block.
+Arguments:
+	block		Block to analyze
+	info		Global information information shared between all blocks
+Result:
+	Return true, if there was some change in the block information, false otherwise.
+*/
+
+void DataFlowAnalysis(Var * proc, AnalyzeBlockFn block_fn, void * info);
+
+typedef UInt8 * LiveSet;		// VarLive, VarDead, VarUndefined
+
+void LiveVariableAnalysis(Var * proc);
+void FreeLiveVariableAnalysis(Var * proc);
+
+/*************************************************************
+
  Optimize phase
 
 *************************************************************/
 
-void OptimizeDataFlowBack(Var * proc, ProcessBlockFn block_fn, void * info);
+void OptimizeDataFlowBack(Var * proc, AnalyzeBlockFn block_fn, void * info);
 
 void ResetValues();
 
@@ -1321,6 +1397,8 @@ void GenerateBasicBlocks(Var * proc);
 void MarkLoops(Var * proc);
 
 Bool OptimizeLive(Var * proc);
+Bool OptimizeLive2(Var * proc);
+
 Bool OptimizeValues(Var * proc);
 Bool OptimizeVarMerge(Var * proc);
 Bool OptimizeLoops(Var * proc);
