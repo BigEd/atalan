@@ -1,0 +1,1 @@
+Var * Not(Var * l);

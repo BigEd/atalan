@@ -1,0 +1,8 @@
+prologue		;basically "proc ROOT"
+
+epilogue		;"endproc ROOT"
+
+
+code_end
+data_end
+src_end

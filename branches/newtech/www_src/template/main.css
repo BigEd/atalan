@@ -1,0 +1,196 @@
+﻿#title {
+	font-weight: normal; 
+	color: 0; 
+	background-color: #888888;
+/*	background: url('../raster/background.jpg');*/ 
+	text-align: left; 
+	padding: 20px; 
+	font-size: 22pt;
+}
+
+#contents {
+	margin: 0 170px 1em 1em;
+	padding: 0;
+}
+
+div#sidebar {
+	padding: 0 5px 5px 5px;
+	width: 150px;
+	float: right;
+	background-color: #ffffff;
+	margin: 3px 0 0 10px;
+	border: 1px solid;
+
+}
+
+div#sidebar h1 a  { 
+	font-size: 16pt; 
+	font-family: Georgia, Times New Roman;
+	font-weight: normal;
+	text-align: left;
+	color: RGB(0,153,204);
+	margin: 0 0 1px 0;
+	border: none;
+	text-decoration: none;
+	padding: 0;
+}
+
+div#sidebar a {
+	display: block;
+	margin: 0;
+	padding: 0 0 0 12px;
+	text-decoration: none;
+} 
+
+div#sidebar a:hover {
+	background-color: rgb(200,200,255);
+} 
+
+BODY { 
+       background-color: RGB(240,240,240);
+       background-repeat: no-repeat;
+       background-position: top left;
+       font-size: 11pt; font-family: Tahoma;
+}
+
+div#index h1 { 
+  font-size: 11pt; font-family: Tahoma;
+/*	font-size: 16pt;*/ 
+/*	font-family: Georgia, Times New Roman;*/
+/*	font-weight: normal;*/
+	text-align: left;
+/*	color: RGB(0,153,204);*/
+	margin: 0 0 0 0;
+	border: none;
+	text-decoration: none;
+	padding: 0;
+  border-style: none;
+}
+
+div#index h2 {
+  font-size: 9pt; font-family: Tahoma;
+	display: block;
+	margin: 0;
+	padding: 0 0 0 12px;
+	text-decoration: none;
+  border-style: none;
+} 
+
+H1 { 
+	font-size: 20pt; 
+	font-family: Georgia, Times New Roman;
+	font-weight: normal; 
+
+	text-align: left;
+	color: rgb(0,153,204);
+		
+	border-width: 0 0 1px 0;
+  	border-color: rgb(0,153,204);
+  	border-style: solid;
+}
+
+H2 { 
+	font-size: 14pt; 
+	font-family: Times New Roman; 
+	font-weight: normal; 
+	color: RGB(0,153,204);
+
+	border-width: 0 0 1px 0;
+  	border-color: blue;
+  	border-style: dotted;
+}
+
+H3 { 
+	font-size: 12pt; 
+	font-family: Times New Roman; 
+	font-weight: normal; 
+	color: RGB(0,153,204)
+}
+
+.func {
+	font-size: 11pt; 
+	font-family: Courier New;
+	font-weight: normal; 
+	color: RGB(0,153,200)
+}
+
+H4 { 
+	font-size: 12pt; 
+	font-family: Tahoma; 
+	font-weight: normal; 
+	color: RGB(0,153,204)
+}
+
+CODE {
+	color: #606060;
+	white-space: pre;
+}
+
+PRE {
+	color: #606060;
+	white-space: pre;
+}
+
+.code {
+	color: #606060;
+	font-family: Courier
+	white-space: pre;
+}
+
+DT {
+	font-weight: bold;
+}
+
+/*
+CODE CITE {
+	color: #f0f0f0;
+	font-family: Serif;
+	font-size: 14;
+	font-weight: normal;
+	font-style: normal;
+}
+
+
+CODE DFN {
+	font-weight: bold;
+	color: gray;
+	font-style: normal;
+}
+
+CODE SAMP {
+	font-weight: normal;
+	color: gray;
+}
+*/
+
+#LOGO {
+       position: absolute; width: 140; height: 120; top: 500; left: -140;
+       background-image: url(ESPACE_logo.jpg);
+       background-repeat: no-repeat;
+       background-position: top left;
+}
+
+
+P { font-size: 11pt; font-family: Tahoma }
+
+PRE { color: gray }
+
+.Code { color: gray; font-size: 11pt; font-family: courier; font-wight: normal; font-style: normal; 
+	 line-height: 10pt; text-decoration: none; text-align: left; text-indent: 5pt;
+	 background: transparent}
+
+.Version { font-family: courier; }
+
+
+.Class {
+	background-image: url(Icons/class.bmp);
+	background-color: white;
+	background-repeat: no-repeat;
+	background-position: top left;	
+	font-size: 14pt;
+	font-family: Tahomal;
+	font-weight: bold ;
+	color: RGB(0,153,204);
+}
+
+/* http://www.kosek.cz/clanky/web/css-ref.html */
