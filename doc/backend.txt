@@ -5,9 +5,11 @@ ATALAN Compiler Backend
 Atalan compiler provides configurable backend, that can be easily enhanced (or 
 maybe even used to produce code for other processors).
 
-Compilation is done in four phases:
+Compilation is following phases:
 
 - parsing
+- type inferring
+- each variable gets assigned CPU type
 - translation
 - optimization
 - emit
@@ -18,6 +20,7 @@ Parsing
 
 Parser parses code and produces program written using compiler instructions.
 Compiler instructions are three address instructions, like
+Expressions are kept in derivation tree.
 
 ::::::::::::::::::::::::
 let P, 10

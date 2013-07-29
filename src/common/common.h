@@ -12,8 +12,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-#define OK 0
-
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
@@ -116,6 +114,8 @@ void PrintHeader(UInt8 level, char * text, ...);
 #ifdef __Windows__
 #include "crtdbg.h"
 #define ASSERT(x) if (!(x)) { printf("Assert: %s:%ld: %s", __FILE__, __LINE__, #x); _CrtDbgBreak(); }
+#define TODO(x) printf("TODO: %s:%ld: %s", __FILE__, __LINE__, #x); _CrtDbgBreak();
+#define FAILURE(x) printf("Failure: %s:%ld: %s", __FILE__, __LINE__, #x); _CrtDbgBreak();
 #endif
 
 #ifndef ASSERT

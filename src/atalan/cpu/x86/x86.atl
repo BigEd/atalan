@@ -1,0 +1,116 @@
+﻿;Implementation of x86 CPU module for Atalan programming language
+;(c) 2013 Rudla Kudla
+;Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+;This module generates code, that can be compiled with masm32 assembler.
+
+platform: ()
+
+;Types defined in CPU are special in the way, that the CPU rules must use the types.
+
+x86:system.CPU
+	s32:type -2147483648..2147483647				
+	memory:type array(0..$ffffffff) of 0..255
+	flag:type 0..1
+	
+	eax:s32
+	ebx:s32
+	ecx:s32
+	edx:s32
+	ebp:s32
+
+	z:flag		;zero
+	s:flag		;sign
+	c:flag      ;carry
+	o:flag		;overflow
+	p:flag		;parity
+	ac:flag     ;auxiliary carry
+
+	r@(eax, ebx, ecx, edx)
+				
+	ocszacp@(o,c,s,z,ac,p)
+	
+rule alloc %A:s32  -> "   %A  sdword ?"
+
+rule include %A -> "   include <%A>"
+	
+rule src_end   -> "end start"
+rule code_end  -> ".data?"
+rule data_end  -> "	;data_end"
+
+rule %A:s32 = %B:s32 -> 
+	eax = %B
+	%A = eax   
+
+rule %A:s32 = %B:s32 + %C:s32 ->
+	eax = %B
+	eax = eax + %C
+	%A = eax
+
+rule %A:s32 = %B:s32 - %C:s32 ->
+	eax = %B
+	eax = eax - %C
+	%A = eax
+
+rule if %A:s32 = %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
+	if z = 0 goto %C
+		
+;############### CPU rules
+
+rule vardef %A, %B  ->   "%A   equ %B"
+rule label %A      -> "%A:"
+
+rule %A@r = %B:s32 -> "   mov %A, %B"
+rule %A:s32 = %B@r -> "   mov %A, %B"	
+
+rule %A@r = %A + %B:s32 @ocszacp -> "   add %A, %B"
+rule %A@r = %A - %B:s32 @ocszacp -> "   sub %A, %B"
+
+rule ocszacp = %A@r - %B:s32     -> "   cmp %A, %B" 
+
+;==== Conditional jumps
+;---- common
+
+rule if z = 1 goto %A            -> "   jz %A"
+rule if z = 0 goto %A            -> "   jnz %A"
+rule if s = 1 goto %A            -> "   js %A"
+rule if s = 0 goto %A            -> "   jns %A"
+rule if o = 1 goto %A            -> "   jo %A"
+rule if o = 0 goto %A            -> "   jno %A"
+rule if p = 1 goto %A            -> "   jp %A"
+rule if p = 0 goto %A            -> "   jnp %A"
+
+;---- unsigned conditionals
+
+rule if c = 0 goto %A           -> "   jae %A"   ;>=
+rule if c = 1 goto %A           -> "   jb  %A"   ;<
+rule if c = 0 and z = 0 goto %A -> "   ja  %A"   ;>
+rule if c = 1 or z = 1 goto %A  -> "   jbe %A"   ;<=
+
+;---- signed conditionals
+
+rule if s = o goto %A          -> "   jge %A"   ;>=
+rule if s ≠ o goto %A          -> "   jl  %A"   ;<
+rule if s = o or z = 0 goto %A -> "   jg  %A"   ;>
+rule if s ≠ o or z = 1 goto %A -> "   jle %A"   ;<=
+
+;==== Procedures
+rule call %A -> "   call %A"  
+rule return  -> "   ret"
+
+;Printing
+
+system.print:proc @x86.eax @x86.ebx @x86.ecx @x86.edx @x86.ebp
+
+system.print_scr:macro = instr
+	call system.print
+
+rule data const %A:0..255 -> "   DB %A"
+rule var_arg %A:string    -> "   DB %A.size,'%A'"
+rule var_arg %A:s32       -> "   DB 132" "   DD %A"
+
+;rule var_arg %A:u8      -> "   DB 129" "   DW %A"
+;rule var_arg %A:u16     -> "   DB 130" "   DW %A"
+;rule var_arg %A:s8      -> "   DB 129+32"    "   DW %A"

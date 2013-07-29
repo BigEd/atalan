@@ -9,6 +9,18 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
+    <Filter Include="Source Files\cells">
+      <UniqueIdentifier>{fa82b19a-9bea-4137-a8fc-e2cabe44eb35}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\optimizations">
+      <UniqueIdentifier>{bcd476b6-35a5-4b21-a39f-c536fec11081}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\operations">
+      <UniqueIdentifier>{e4e8807a-1547-416e-b24b-3411e44100f0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\support">
+      <UniqueIdentifier>{e5f8b3a6-7c5b-421b-b29a-f1d576549add}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="emit.c">
@@ -38,31 +50,7 @@
     <ClCompile Include="errors.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="opt_blocks.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="opt_values.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="opt_live.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="mem_heap.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="opt_var_use.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="type_proc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="var_set.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="opt_loops.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\common\common.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="translate.c">
@@ -71,26 +59,95 @@
     <ClCompile Include="gen.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="bigint.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="opt_loop_shift.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="parse_type.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="var_int.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="cell_array.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_int.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_op.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_proc.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_text.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_var.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_blocks.c">
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_var_use.c">
+      <Filter>Source Files\optimizations</Filter>
     </ClCompile>
     <ClCompile Include="opt_global.c">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_live.c">
+      <Filter>Source Files\optimizations</Filter>
     </ClCompile>
     <ClCompile Include="opt_live2.c">
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_loop_shift.c">
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_loops.c">
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="opt_values.c">
+      <Filter>Source Files\optimizations</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_module.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="translate_type.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="names.c">
+    <ClCompile Include="infer_types.c">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_range.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_sequence.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="bigint.c">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="mem_heap.c">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="var_set.c">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="operations\arith.c">
+      <Filter>Source Files\operations</Filter>
+    </ClCompile>
+    <ClCompile Include="operations\compare.c">
+      <Filter>Source Files\operations</Filter>
+    </ClCompile>
+    <ClCompile Include="operations\properties.c">
+      <Filter>Source Files\operations</Filter>
+    </ClCompile>
+    <ClCompile Include="operations\set.c">
+      <Filter>Source Files\operations</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\common.c">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="operations\bool.c">
+      <Filter>Source Files\operations</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -98,7 +155,22 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bigint.h">
-      <Filter>Header Files</Filter>
+      <Filter>Source Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="operations\arith.h">
+      <Filter>Source Files\operations</Filter>
+    </ClInclude>
+    <ClInclude Include="operations\set.h">
+      <Filter>Source Files\operations</Filter>
+    </ClInclude>
+    <ClInclude Include="operations\compare.h">
+      <Filter>Source Files\operations</Filter>
+    </ClInclude>
+    <ClInclude Include="operations\properties.h">
+      <Filter>Source Files\operations</Filter>
+    </ClInclude>
+    <ClInclude Include="operations\bool.h">
+      <Filter>Source Files\operations</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

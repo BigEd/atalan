@@ -20,6 +20,7 @@ typedef UInt16 LineIndent;
 
 #define UNDEFINED_INDENT 65535
 
+
 /*
 
 Lexer traces block nesting using stack of BlockStyle structures.
@@ -47,11 +48,15 @@ char SYSTEM_DIR[MAX_PATH_LEN];
 char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
 char FILENAME[MAX_PATH_LEN];
 
+GLOBAL Var * MODULES;					// variable with all modules loadad into application (contained in scope)
+
 GLOBAL Var *  SRC_FILE;					// current source file
 
+GLOBAL ParseState * PREV_LEXER;
+GLOBAL FILE * F;
 GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
 GLOBAL char * PREV_LINE;				// previous line
-GLOBAL LineNo  LINE_NO;
+GLOBAL LineNo LINE_NO;
 GLOBAL LinePos  LINE_LEN;
 GLOBAL LinePos  LINE_POS;				// index of next character in line
 static LineIndent     LINE_INDENT;
@@ -61,10 +66,9 @@ GLOBAL LinePos  TOKEN_POS;
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
 GLOBAL Token TOK_NO_SPACES;				// if the current token was not preceded by whitespaces, it is copied here
-GLOBAL static BlockStyle BLK[64];		// Lexer blocks (indent, parentheses, line block)
+GLOBAL static BlockStyle LEXBLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
-
 
 void PrintLex()
 {
@@ -72,7 +76,7 @@ void PrintLex()
 	char * c;
 
 	for(i=0; i<=BLK_TOP; i++) {
-		switch(BLK[i].end_token) {
+		switch(LEXBLK[i].end_token) {
 		case TOKEN_EOL:  c = "LINE"; break;
 		case TOKEN_OUTDENT: c = "INDENT"; break;
 		case TOKEN_CLOSE_P: c = "("; break;
@@ -82,9 +86,10 @@ void PrintLex()
 		}
 		if (i==0) c = "ROOT";
 
-		printf("%6s %4d T%dS%d\n", c, BLK[i].line_no, BLK[i].indent/256, BLK[i].indent % 256); 
+		printf("%6s %4d T%dS%d\n", c, LEXBLK[i].line_no, LEXBLK[i].indent/256, LEXBLK[i].indent % 256); 
 	}
 }
+
 
 /*******************************************************************
 
@@ -95,7 +100,7 @@ void PrintLex()
 
 static int ReadByte()
 {
-	return fgetc(LEX.f);
+	return fgetc(F);
 }
 
 static Bool ReadLine()
@@ -198,9 +203,9 @@ have_char:
 	// If there are some other blocks then TOKEN_OUTDENT or TOKEN_EOL, it is an error (missing closing parenthesis)
 	if (LINE_LEN == 0) {
 		for(top = BLK_TOP; top > 0; top--) {
-			t = BLK[top].end_token;
-			BLK[top].end_token = TOKEN_BLOCK_END;
-			BLK[top].stop_token = TOKEN_VOID;			// !!!! Do not emit stop tokens for automatically ended tokens
+			t = LEXBLK[top].end_token;
+			LEXBLK[top].end_token = TOKEN_BLOCK_END;
+			LEXBLK[top].stop_token = TOKEN_VOID;			// !!!! Do not emit stop tokens for automatically ended tokens
 			if (t == TOKEN_EOF) break;
 			if (t == TOKEN_CLOSE_P) {
 				SyntaxError("missing closing parenthesis");
@@ -212,11 +217,11 @@ have_char:
 	// The indent on this line is smaller than indent of previous block
 
 	top = BLK_TOP;
-	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) top--;
-	if (indent < BLK[top].indent) {
-		prev_indent = BLK[top].indent;
+	if (LEXBLK[BLK_TOP].indent == UNDEFINED_INDENT) top--;
+	if (indent < LEXBLK[top].indent) {
+		prev_indent = LEXBLK[top].indent;
 		while(top > 0) {
-			if (BLK[top].indent == indent) break;		// this is O.K., we found the same indent
+			if (LEXBLK[top].indent == indent) break;		// this is O.K., we found the same indent
 			// We haven't encountered same indent and this indent is already bigger than our indent
 			// We have no chance of finding the same indent
 			top--;
@@ -230,18 +235,18 @@ have_char:
 		}
 	}
 
-	if (BLK[BLK_TOP].indent == UNDEFINED_INDENT) {
-		BLK[BLK_TOP].indent = indent;
+	if (LEXBLK[BLK_TOP].indent == UNDEFINED_INDENT) {
+		LEXBLK[BLK_TOP].indent = indent;
 		// If the indent is smaller or equal than previous indented block, 
 		// this is empty indented block, and must be ended immediately.
 		// We make sure following loop will end this block by making it's indent bigger than current indent.
-		if (indent <= BLK[BLK_TOP-1].indent) BLK[BLK_TOP].indent++; //BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+		if (indent <= LEXBLK[BLK_TOP-1].indent) LEXBLK[BLK_TOP].indent++; //LEXBLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
 	}
 
 	// End all indent blocks with indent smaller than actual indent
-	for(top = BLK_TOP; top > 0 && (BLK[top].end_token == TOKEN_BLOCK_END || BLK[top].end_token == TOKEN_OUTDENT || BLK[top].end_token == TOKEN_EOL) && BLK[top].indent > indent; top--) {
-		BLK[top].end_token = TOKEN_BLOCK_END;
-		BLK[top].stop_token = TOKEN_VOID;		// we didn't stop on stop token, so we do not want to return it
+	for(top = BLK_TOP; top > 0 && (LEXBLK[top].end_token == TOKEN_BLOCK_END || LEXBLK[top].end_token == TOKEN_OUTDENT || LEXBLK[top].end_token == TOKEN_EOL) && LEXBLK[top].indent > indent; top--) {
+		LEXBLK[top].end_token = TOKEN_BLOCK_END;
+		LEXBLK[top].stop_token = TOKEN_VOID;		// we didn't stop on stop token, so we do not want to return it
 	}
 
 	return true;
@@ -307,11 +312,11 @@ void EnterBlockWithStop(Token stop_token)
 	}
 
 	BLK_TOP++;
-	BLK[BLK_TOP].indent = BLK[BLK_TOP-1].indent;
-	if (end == TOKEN_OUTDENT) BLK[BLK_TOP].indent = UNDEFINED_INDENT;
-	BLK[BLK_TOP].end_token   = end;
-	BLK[BLK_TOP].stop_token  = stop;
-	BLK[BLK_TOP].line_no     = LINE_NO;
+	LEXBLK[BLK_TOP].indent = LEXBLK[BLK_TOP-1].indent;
+	if (end == TOKEN_OUTDENT) LEXBLK[BLK_TOP].indent = UNDEFINED_INDENT;
+	LEXBLK[BLK_TOP].end_token   = end;
+	LEXBLK[BLK_TOP].stop_token  = stop;
+	LEXBLK[BLK_TOP].line_no     = LINE_NO;
 
 	// NextToken MUST be called AFTER new block  has been created 
 	// (so it may possibly immediately exit that block, if it is empty)
@@ -332,7 +337,7 @@ Purpose:
 {
 	BLK_TOP--;
 	// We may need to end block preceding this block, if the current token is block terminator.
-	if (BLK[BLK_TOP].end_token == TOK) {
+	if (LEXBLK[BLK_TOP].end_token == TOK) {
 		TOK = TOKEN_BLOCK_END;
 		BLK_TOP--;
 	}
@@ -344,6 +349,19 @@ Purpose:
 
 ************************************************/
 //$T
+
+Bool ParseInt(Var ** p_i)
+{
+	*p_i = NULL;
+	ifok {
+		if (TOK == TOKEN_INT) {
+			*p_i = IntCell(&LEX.n);
+			NextToken();
+			return true;
+		}
+	}
+	return false;
+}
 
 static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "unless", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
@@ -403,7 +421,7 @@ store:
 	} while(1);
 	NAME[n] = 0;
 
-	if (TOK != TOKEN_ERROR) {
+	ifok {
 		if (n != 0) {
 			TOK = TOKEN_STRING;
 		} else {
@@ -430,8 +448,8 @@ void NextToken()
 	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
 	// For blocks ended with stop token, return the stop_token instead
 retry:
-	if (BLK[BLK_TOP].end_token == TOKEN_BLOCK_END) {
-		TOK = BLK[BLK_TOP].stop_token;
+	if (LEXBLK[BLK_TOP].end_token == TOKEN_BLOCK_END) {
+		TOK = LEXBLK[BLK_TOP].stop_token;
 		if (TOK == TOKEN_VOID) TOK = TOKEN_BLOCK_END;
 		BLK_TOP--;
 		return;
@@ -445,11 +463,11 @@ retry:
 		ReadLine();
 
 		// This is end of line, all line blocks in current file should be ended
-		for(top = BLK_TOP; top > 0 && BLK[top].end_token == TOKEN_EOL || BLK[top].end_token == TOKEN_BLOCK_END; top--) {
-//		for(top = BLK_TOP; top > 0 && BLK[top].end_token != TOKEN_EOF; top--) {
-			if (BLK[top].end_token == TOKEN_EOL) {
-				BLK[top].end_token = TOKEN_BLOCK_END;
-				BLK[top].stop_token = TOKEN_VOID;
+		for(top = BLK_TOP; top > 0 && LEXBLK[top].end_token == TOKEN_EOL || LEXBLK[top].end_token == TOKEN_BLOCK_END; top--) {
+//		for(top = BLK_TOP; top > 0 && LEXBLK[top].end_token != TOKEN_EOF; top--) {
+			if (LEXBLK[top].end_token == TOKEN_EOL) {
+				LEXBLK[top].end_token = TOKEN_BLOCK_END;
+				LEXBLK[top].stop_token = TOKEN_VOID;
 			}
 		}
 
@@ -481,8 +499,8 @@ retry:
 	if (LINE[LINE_POS] == '-' && LINE[LINE_POS+1] == '-' && LINE[LINE_POS+2] == '-') {
 		LINE_POS += 3;
 		while(LINE[LINE_POS] == '-') LINE_POS++;
-//		BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
-//		BLK[BLK_TOP].stop_token = TOKEN_HORIZ_RULE;
+//		LEXBLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+//		LEXBLK[BLK_TOP].stop_token = TOKEN_HORIZ_RULE;
 //		TOK = TOKEN_BLOCK_END;
 		return;
 	}
@@ -567,11 +585,11 @@ retry:
 		
 	// Decimal number
 	} else if (isdigit(c)) {
-		LEX.n = 0;
+		IntInit(&LEX.n, 0);
 		while (isdigit(c) || c == '\'') {
 			if (c != '\'') {
-				LEX.n *= 10;
-				LEX.n += c - '0';
+				IntMulN(&LEX.n, 10);
+				IntAddN(&LEX.n, c - '0');
 			}
 			c = LINE[LINE_POS++];
 		}
@@ -682,12 +700,12 @@ store:
 	}
 
 	// Stop token will be returned on next call, now end block and return TOKEN_BLOCK_END
-	if (TOK == BLK[BLK_TOP].stop_token) {
+	if (TOK == LEXBLK[BLK_TOP].stop_token) {
 		TOK = TOKEN_BLOCK_END;
-		BLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
+		LEXBLK[BLK_TOP].end_token = TOKEN_BLOCK_END;
 
 	// Block end token is replaced by block end
-	} else if (TOK == BLK[BLK_TOP].end_token) {
+	} else if (TOK == LEXBLK[BLK_TOP].end_token) {
 		BLK_TOP--;
 		TOK = TOKEN_BLOCK_END;
 	}
@@ -718,7 +736,7 @@ Bool NextNoSpaceIs(Token tok)
 
 void ExpectToken(Token tok)
 {
-	if (TOK != TOKEN_ERROR) {
+	ifok {
 		if (tok == TOKEN_ID) {
 			LEX.ignore_keywords = true;
 		}
@@ -744,12 +762,12 @@ Bool ParsingSystem()
 	return SRC_FILE == NULL || FlagOn(SRC_FILE->submode, SUBMODE_SYSTEM);
 }
 
-ParseState * ParseStateLabel()
+void ParseStatePush()
 {
 	ParseState * s;
 
 	s = MemAllocStruct(ParseState);
-	s->file      = LEX.f;
+	s->file      = F;
 	s->line      = StrAlloc(LINE);
 	s->line_len  = LINE_LEN;
 	s->line_no   = LINE_NO;
@@ -757,14 +775,18 @@ ParseState * ParseStateLabel()
 	s->prev_line = PREV_LINE;
 	s->token     = TOK;
 	s->prev_char = PREV_CHAR;
+	s->var       = SRC_FILE;
+	s->parent    = PREV_LEXER;
+	PREV_LEXER   = s;
 
-	return s;
 }
 
-void ParseStateGoto(ParseState * s)
+void ParseStatePop()
 {
+	ParseState * s = PREV_LEXER;
 	if (s != NULL) {
-		LEX.f     = s->file;
+		PREV_LEXER = s->parent;
+		F     = s->file;
 		strcpy(LINE, s->line);
 		LINE_LEN  = s->line_len;
 		LINE_NO   = s->line_no;
@@ -772,6 +794,7 @@ void ParseStateGoto(ParseState * s)
 		PREV_LINE = s->prev_line;
 		TOK       = s->token;
 		PREV_CHAR = s->prev_char;
+		SRC_FILE  = s->var;
 
 		MemFree(s->line);
 		MemFree(s);
@@ -876,12 +899,12 @@ Syntax:
 */
 {
 	char opt_name[256];
-	Var * param;
+	Var * param, * val;
 
 	NextToken();		// Skip filename token
 	if (TOK == TOKEN_OPEN_P) {
 		EnterBlock();
-		while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+		while (OK && !NextIs(TOKEN_BLOCK_END)) {
 			do {
 				// identifier
 				if (TOK == TOKEN_ID) {
@@ -890,22 +913,17 @@ Syntax:
 					if (NextIs(TOKEN_EQUAL)) {
 								
 						// Parse till comma or closing brace
-						if (!SkipOnly) {
-							//TODO: Use parse assignment
-							param = VarAllocScope(SRC_FILE, INSTR_CONST, opt_name, 0);
-							if (TOK == TOKEN_INT) {
-								param->type = &TINT;
-								param->var = VarInt(LEX.n);
-//								param->type    = &TINT;
-//								param->n       = LEX.n;
-							} else {
-								param->type    = &TSTR;
-								param->var = VarNewStr(NAME);
-//								param->str     = StrAlloc(NAME);
-							}
+						//TODO: Use parse assignment
+//							param = NewVar(SRC_FILE, opt_name, NULL);
+						if (ParseInt(&val)) {
+						} else {
+							val = TextCell(NAME);
+							NextToken();
 						}
 
-						NextToken();
+						if (!SkipOnly) {
+							param = NewVar(SRC_FILE, opt_name, val);
+						}
 					}
 				}
 			} while (NextIs(TOKEN_COMMA));
@@ -955,7 +973,7 @@ Purpose:
 		// If the file has been already loaded (variable with filename exists), 
 		// ignore the load request (do not however report error)
 
-		if (VarFind(filename, 0)) {
+		if (VarFind(MODULES, filename)) {
 			if (parse_options) ParseModuleParameters(true);
 			return false;
 		}
@@ -963,14 +981,13 @@ Purpose:
 		// Create new block for the file 
 		// File block is ended with TOKEN_EOF and starts with indent 0
 		BLK_TOP++;
-		BLK[BLK_TOP].end_token = TOKEN_EOF;
-		BLK[BLK_TOP].indent    = 0;
-		BLK[BLK_TOP].stop_token = TOKEN_VOID;
+		LEXBLK[BLK_TOP].end_token = TOKEN_EOF;
+		LEXBLK[BLK_TOP].indent    = 0;
+		LEXBLK[BLK_TOP].stop_token = TOKEN_VOID;
 
 		// Reference to file is stored in variable of INSTR_SRC_FILE
 
-		file_var = VarAllocScope(SRC_FILE, INSTR_SRC_FILE, filename, 0);
-		IntInit(&file_var->n, 0);
+		file_var = NewVar(MODULES, filename, NULL);
 
 		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
 			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);
@@ -982,10 +999,10 @@ Purpose:
 			ParseModuleParameters(false);
 		}
 
-		file_var->parse_state = ParseStateLabel();
+		ParseStatePush();
 
 		PREV_CHAR = EOF;
-		LEX.f     = f;
+		F         = f;
 		LINE_NO   = 0;
 		LINE_POS  = 0;
 		LINE_LEN  = 0;
@@ -1019,14 +1036,16 @@ Purpose:
 */
 {
 	Token tok;
-	if (LEX.f != NULL) {
-		fclose(LEX.f);
-		LEX.f = 0;
+	if (F != NULL) {
+		fclose(F);
+		F = 0;
 	}
 	tok = TOK;
-	ParseStateGoto(SRC_FILE->parse_state);
-	SRC_FILE = SRC_FILE->scope;
-	if (tok == TOKEN_ERROR) {
+	ParseStatePop();
+//	if (SRC_FILE != NULL) {
+//		SRC_FILE = SRC_FILE->scope;
+//	}
+	iferr {
 		TOK = tok;
 	}
 }
@@ -1034,10 +1053,13 @@ Purpose:
 void LexerInit()
 {
 	*FILE_DIR = 0;
-
+	PREV_LEXER = NULL;
 	BLK_TOP = 0;
-	BLK[BLK_TOP].end_token = TOKEN_VOID;
-	BLK[BLK_TOP].indent    = 0;
-	BLK[BLK_TOP].stop_token = TOKEN_VOID;
+	LEXBLK[BLK_TOP].end_token = TOKEN_VOID;
+	LEXBLK[BLK_TOP].indent    = 0;
+	LEXBLK[BLK_TOP].stop_token = TOKEN_VOID;
 	TOK = TOKEN_VOID;
+
+	MODULES = NewCell(INSTR_SCOPE);
+
 }

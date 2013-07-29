@@ -279,7 +279,7 @@ Bool VarIsDead(Var * var)
 
 	if (var->mode == INSTR_TUPLE) {
 		return VarIsDead(var->adr) && VarIsDead(var->var);
-	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL && !VarIsConst(var->adr)) {
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL && !CellIsConst(var->adr)) {
 		return VarIsDead(var->adr);
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);
@@ -307,7 +307,7 @@ Bool FlagIsDead(Var * var, Instr * i)
 			i2 = i->prev;
 			while (i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
 			if (i2 != NULL) {
-				if (VarIsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
+				if (CellIsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
 					return true;
 				}
 			}
@@ -357,9 +357,9 @@ Bool OptimizeLive(Var * proc)
 //				Print("");
 //			}
 
-			if (StrEqual(var->name, "a") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
-				Print("");
-			}
+//			if (StrEqual(var->name, "a") && var->scope != NULL && StrEqual(var->scope->name, "CPU")) {
+//				Print("");
+//			}
 
 			// Non-local variables (except registers) are always considered live
 			if (!VarIsLocal(var, proc) && !VarIsReg(var)) {

@@ -171,7 +171,7 @@ void EmitHex(UInt8 c)
 	EmitChar(h[c & 0xf]);
 }
 
-void EmitVarName(Var * var)
+void EmitIntCellName(Var * var)
 /*
 Purpose:
 	Emit name of variable.
@@ -213,10 +213,10 @@ void EmitVar(Var * var, UInt8 format)
 	Bool non_keyword = true;
 
 	if (var != NULL) {
-		if (var->mode == INSTR_SRC_FILE) {
-			EmitStr(var->name);
-
-		} else if (var->mode == INSTR_ELEMENT) {
+//		if (var->mode == INSTR_SRC_FILE) {
+//			EmitStr(var->name);
+//		} else 
+		if (var->mode == INSTR_ELEMENT) {
 			if (VarIsStructElement(var)) {
 				EmitVar(var->adr, format);
 				EmitStr("+");
@@ -233,11 +233,11 @@ void EmitVar(Var * var, UInt8 format)
 			// When parameter name is emmited, it is prefixed with PARAM_ prefix
 			if (VarIsParam(var)) {
 				EmitStr("PARAM_");
-			} else if (var->mode == INSTR_INT && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {
-				EmitVarName(var->type->owner);
+//			} else if (var->mode == INSTR_NAME && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {		// Here owner is scope!
+//				EmitIntCellName(var->type->owner);
 				EmitStr("__");
 			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
-				EmitVarName(var->scope);
+				EmitIntCellName(var->scope);
 				EmitStr("__");
 			} else {
 				non_keyword = true;
@@ -246,7 +246,7 @@ void EmitVar(Var * var, UInt8 format)
 					EmitStr("_");
 				}
 			}
-			EmitVarName(var);
+			EmitIntCellName(var);
 
 		} else if (var->mode == INSTR_TEXT) {
 			if (format == 1) {
@@ -361,27 +361,7 @@ void EmitInstr2(Instr * instr, char * str)
 	}
 }
 
-extern Bool RULE_MATCH_BREAK;
-
-Bool EmitInstr(Instr * i)
-{
-	Rule * rule;
-	Instr * to;
-
-	rule = InstrRule(i);
-
-	if (rule != NULL) {
-		for(to = rule->to->first; to != NULL; to = to->next) {
-			EmitInstr2(i, to->arg1->str);
-			EmitChar(EOL);
-		}
-		return true;
-	} else {
-		InternalError("CPU does not support instruction");
-		InstrPrint(i);
- 		return false;
-	}
-}
+extern Bool INSTR_MATCH_BREAK;
 
 Bool EmitInstrInline(Instr * i)
 {
@@ -400,6 +380,28 @@ Bool EmitInstrInline(Instr * i)
 		InstrPrint(i);
  		return false;
 	}
+}
+
+Bool EmitInstr(Instr * i)
+{
+	Rule * rule;
+	Instr * to;
+
+	rule = InstrRule(i);
+
+	if (rule != NULL) {
+		for(to = rule->to->first; to != NULL; to = to->next) {
+			EmitInstr2(i, to->arg1->str);
+			EmitChar(EOL);
+		}
+	} else {
+		if (FlagOff(INSTR_INFO[i->op].flags, INSTR_OPTIONAL)) {
+			InternalError("CPU does not support instruction");
+			InstrPrint(i);
+			return false;
+		}
+	}
+	return true;
 }
 
 Bool EmitInstrOp(InstrOp op, Var * result, Var * arg1, Var * arg2)
@@ -474,28 +476,19 @@ Purpose:
 	Emit definition of constants and variables whose address has been defined.
 */
 {
-	Var * var, * ov, * adr;
+	Var * var, * adr;
 	Instr instr;
 	Type * type;
-	UInt32 n;
 
-	for(var = VarFirst(), n = 1; var != NULL; var = VarNext(var), n++) {
+	FOR_EACH_VAR(var)
 		type = var->type;
-
-//		if (var->idx == 27 && var->scope != NULL && StrEqual(var->scope->name, "music\'init")) {
-//			Print("");
-//		}
 
 		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
 		if (VarIsReg(var)) continue;
 
-//		if (var->name != NULL && strcmp(var->name, "ORG") == 0) {
-//			Print("");
-//		}
-
 		adr = var->adr;
 		if ( (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
-		  || (VarIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
+		  || (CellIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
 		) {
 
 			if (adr != NULL && adr->mode == INSTR_INT && IntN(&adr->n) >= DATA_SEGMENT) {
@@ -504,19 +497,21 @@ Purpose:
 
 			instr.op = INSTR_VARDEF;
 			instr.result = var;
+			instr.arg1 = adr;
 			instr.arg2 = NULL;
-
-			if (var->mode == INSTR_INT) {
-				ov = var;				
-			} else if (var->mode == INSTR_CONST) {
-				ov = var->var;
+/*
+			if (adr->mode == INSTR_INT) {
+				ov = adr;				
+			} else if (var->mode == INSTR_VAR) {
+				ov = var;
 			} else {
-				ov = var->adr;				
+				ov = var->adr;
 			}
 			instr.arg1 = ov;
+*/
 			EmitInstr(&instr);
 		}
-	}
+	NEXT_VAR
 }
 
 void EmitProcedures()
@@ -525,7 +520,7 @@ void EmitProcedures()
 	Type * type;
 	Instr vardef;
 
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+	FOR_EACH_VAR(var)
 		type = var->type;
 		if (var->mode != INSTR_TYPE && var->mode != INSTR_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
 			if (var->read > 0) {
@@ -539,7 +534,7 @@ void EmitProcedures()
 				EmitInstr(&vardef);
 			}
 		}
-	}
+	NEXT_VAR
 }
 
 void EmitAsmIncludes()
@@ -554,26 +549,30 @@ Purpose:
 	FILE * f;
 	char name[MAX_PATH_LEN], path[MAX_PATH_LEN];
 	UInt16 len;
-
+	
 	MemEmptyVar(i);
 	i.op = INSTR_INCLUDE;
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		if (var->mode == INSTR_SRC_FILE) {
-			if (FlagOff(var->submode, SUBMODE_MAIN_FILE)) {
+	FOR_EACH_LOCAL(MODULES, var)
 
-				strcpy(name, var->name);
-				len = StrLen(name);
-				name[len-4] = 0;
-				f = FindFile(name, ".asm", path);
+		// We do not try to generate asm include file for main file, as the compiler generates it
+		//  I.e.
+		//    When compiling 'x.atl', compiler emits 'x.asm'.
+		//    Including this file would create a loop.
 
-				if (f != NULL) {
-					fclose(f);
-					i.arg1 = VarNewStr(FILENAME);
-					EmitInstr(&i);
-				}
+		if (FlagOff(var->submode, SUBMODE_MAIN_FILE)) {
+
+			StrCopy(name, var->name);
+			len = StrLen(name);
+			name[len-4] = 0;
+			f = FindFile(name, ".asm", path);
+
+			if (f != NULL) {
+				fclose(f);
+				i.arg1 = TextCell(FILENAME);
+				EmitInstr(&i);
 			}
 		}
-	}
+	NEXT_VAR
 }
 
 void Emit(char * filename)
@@ -588,13 +587,13 @@ void Emit(char * filename)
 
 		PrintHeader(1, "Variables");
 
-		for(var = VarFirst(); var != NULL; var = VarNext(var)) {
+		FOR_EACH_VAR(var)
 			if (var->write >= 1 || var->read >= 1) {
 				if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var)) {
 					PrintVar(var); PrintEOL();
 				}
 			}
-		}
+		NEXT_VAR
 
 		PrintHeader(1, "Output");
 	} // verbose

@@ -57,8 +57,8 @@ Purpose:
 	if (var != NULL) {
 		if (var->mode == INSTR_ELEMENT) {
 			var_idx = var->var;
-			if (VarIsEqual(var_idx, idx)) {
-				idx = VarNewOp(INSTR_SUB, idx, VarN(shift));
+			if (CellIsEqual(var_idx, idx)) {
+				idx = NewOp(INSTR_SUB, idx, IntCell(shift));
 				*p_var = VarNewElement(var->adr, idx);
 				return true;
 			} else if (var_idx->mode == INSTR_SUB) {
@@ -137,8 +137,8 @@ Bool VarShiftIsPossible(InstrBlock * head, InstrBlock * loop_end, Var * var, Big
 	for(blk = head; blk != loop_end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LINE) continue;
-			if (VarIsEqual(i->result, var) || VarIsEqual(i->arg1, var) || VarIsEqual(i->arg2, var)) {
-				if (IS_INSTR_BRANCH(i->op) && VarIsConst(i->arg2) || VarIsConst(i->arg1)) {
+			if (CellIsEqual(i->result, var) || CellIsEqual(i->arg1, var) || CellIsEqual(i->arg2, var)) {
+				if (IS_INSTR_BRANCH(i->op) && CellIsConst(i->arg2) || CellIsConst(i->arg1)) {
 					// this is comparison against constant, that's possible
 				}  else {
 					if (!InstrIsSelfReferencing(i)) return false;
@@ -160,11 +160,11 @@ Var * VarShift(Var * var, Var * to_shift, Var * shift)
 {
 	Var * idx;
 	if (var == to_shift) {
-		return VarNewOp(INSTR_ADD, var, shift);
+		return NewOp(INSTR_ADD, var, shift);
 	} if (var->mode == INSTR_ELEMENT) {
 		idx = VarShift(var->var, to_shift, shift);
 		if (idx != var->var) {
-			return VarNewOp(INSTR_ELEMENT, var->adr, idx);
+			return NewOp(INSTR_ELEMENT, var->adr, idx);
 		}
 	}
 	return var;
@@ -174,7 +174,7 @@ Var * VarShift(Var * var, Var * to_shift, Var * shift)
 Var * VarAddNMod(Var * left, BigInt * right, BigInt * modulo)
 {
 	Var * var = NULL;
-	BigInt * l = VarIntConst(left);
+	BigInt * l = IntFromCell(left);
 	BigInt r;
 	BigInt r2;
 
@@ -182,8 +182,8 @@ Var * VarAddNMod(Var * left, BigInt * right, BigInt * modulo)
 		IntAdd(&r, l, right);
 		IntMod(&r2, &r, modulo);
 
-		var = VarN(&r2);
-//		var = VarInt((left->n + right) % modulo);
+		var = IntCell(&r2);
+//		var = IntCellN((left->n + right) % modulo);
 		IntFree(&r2);
 		IntFree(&r);
 	}
@@ -198,9 +198,9 @@ void LoopShift(InstrBlock * head, InstrBlock * loop_end, Var * var, BigInt * shi
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LINE) continue;
 			if (IS_INSTR_BRANCH(i->op)) {
-				if (VarIsEqual(i->arg1, var)) {
+				if (CellIsEqual(i->arg1, var)) {
 					i->arg2 = VarAddNMod(i->arg2, shift, top);
-				} else if (VarIsEqual(i->arg2, var)) {
+				} else if (CellIsEqual(i->arg2, var)) {
 					i->arg1 = VarAddNMod(i->arg1, shift, top);
 				}
 			} else {
@@ -247,8 +247,8 @@ void OptimizeLoopShift(Var * proc)
 				loop_var = i->arg1;
 
 				type = i->type[ARG1];
-				if (type->variant == TYPE_SEQUENCE) {
-					if (type->seq.op == INSTR_ADD && TypeIsIntConst(type->seq.step) && TypeIsIntConst(type->seq.init) && TypeIsIntConst(type->seq.limit)) {
+				if (type->mode == INSTR_SEQUENCE) {
+					if (type->seq.op == INSTR_ADD && CellIsIntConst(type->seq.step) && CellIsIntConst(type->seq.init) && CellIsIntConst(type->seq.limit)) {
 
 						// Find the initialization of loop variable
 						// We do not need to find the initialization, we can just increment it
@@ -263,8 +263,8 @@ void OptimizeLoopShift(Var * proc)
 						}
 
 						if (i != NULL) {
-							if (i->op == INSTR_LET && VarIsEqual(i->result, loop_var)) {
-								if (VarIsIntConst(i->arg1)) {
+							if (i->op == INSTR_LET && CellIsEqual(i->result, loop_var)) {
+								if (CellIsIntConst(i->arg1)) {
 									init_i = i;
 								}
 							}
@@ -275,7 +275,7 @@ void OptimizeLoopShift(Var * proc)
 //						arr = FindPtrReplace(header, loc.blk->next, loop_var);
 						arr = NULL;
 						if (arr != NULL) {
-							ptr = VarNewTmp(TypeAdrOf(arr->type->element));
+							ptr = NewTempVar(TypeAdrOf(arr->type->element));
 							InstrInsert(preheader.blk, init_i, INSTR_LET_ADR, ptr, arr, NULL);
 							LoopPtr(header, loc.blk->next, arr, loop_var, ptr);
 						}

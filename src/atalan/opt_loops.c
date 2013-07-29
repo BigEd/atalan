@@ -616,7 +616,7 @@ Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
 	Bool out_of_loop;
 
 	if (var == NULL) return true;
-	if (VarIsConst(var)) return true;
+	if (CellIsConst(var)) return true;
 	if (InVar(var)) return false;
 
 	// For array access, array adr is constant (except referenced array), important is index change
@@ -673,7 +673,7 @@ Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
 {
 
 	if (var == NULL) return false;
-	if (VarIsConst(var)) return false;
+	if (CellIsConst(var)) return false;
 	if (InVar(var)) return true;
 
 	// For array access, array adr is constant (except referenced array), important is index change
@@ -996,7 +996,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			color = PrintColor(OPTIMIZE_COLOR);
 			PrintFmt("*** Loop %d..%d\n", header->seq_no, end->seq_no);
 			Print("Var: "); PrintVarVal(top_var); PrintEOL();
-			Print("Register: "); PrintVarName(top_reg); PrintEOL();
+			Print("Register: "); PrintIntCellName(top_reg); PrintEOL();
 			PrintFmt("Quotient: %d\n", top_q);
 			PrintColor(color);
 		}
@@ -1134,7 +1134,7 @@ del2:					if (verbose) { PrintDelete(); }
 			// There may be exit label as part of the loop
 			// We need to spill after it
 
-			if (!VarIsConst(top_var)) {
+			if (!CellIsConst(top_var)) {
 				if (blk_exit == NULL || blk_exit->callers != NULL || blk_exit->from != end) {
 					blk_exit = InstrBlockAlloc();
 					blk_exit->to = end->to;

@@ -28,7 +28,7 @@ Purpose:
 
  	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
 
-	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+	while (OK && !NextIs(TOKEN_BLOCK_END)) {
 
 		if (!out_part && NextIs(TOKEN_RIGHT_ARROW)) {
 			out_part = true;
@@ -51,8 +51,8 @@ Purpose:
 		// Variables preceded by @ define local variables used in the procedure.
 		if (NextIs(TOKEN_ADR)) {
 			adr = ParseVariable();
-			if (TOK) {
-				var = VarAllocScopeTmp(to_type->owner, INSTR_VAR, adr->type);
+			ifok {
+				var = NewVarInScope(adr->type, to_type);
 				var->adr  = adr;
 				NextIs(TOKEN_EOL);
 				continue;
@@ -67,14 +67,6 @@ Purpose:
 			SyntaxError("Expected variable name");
 		}
 	}
-}
-
-Type * TypeAllocVar(Var * var)
-{
-	Type * type;
-	type = TypeAlloc(TYPE_VAR);
-	type->typevar = var;
-	return type;
 }
 
 Type * TypeAllocArg(UInt8 arg_no, Type * arg_type)
@@ -93,7 +85,6 @@ Type * ParseIntType()
 	Var * var;
 	Bookmark bookmark;
 	UInt8 arg_no = 0;
-	BigInt * bi;
 
 	// When parsing rule, type may be preceded by %name:
 	if (ParsingPattern()) {
@@ -109,28 +100,30 @@ Type * ParseIntType()
 
 	bookmark = SetBookmark();
 	ExpectExpression(NULL);
-	if (TOK) {
+	ifok {
 		var = BufPop();
 
 		// If we parsed rule argument
 		if (var->mode == INSTR_ELEMENT || VarIsRuleArg(var)) {
-			type = TypeAllocVar(var);
+			type = var;
 			goto done;
 		// Integer type may be defined using predefined type definition or be defined as type of other variable
 		} else if (var->mode == INSTR_TYPE || var->mode == INSTR_VAR) {
 			type = var->type;
 
-			if (type->variant == TYPE_TYPE) {
-				type = var->type_value;
-				SetFlagOn(var->submode, SUBMODE_USED_AS_TYPE);
-			}
+			if (type->mode == INSTR_TYPE) {
+				if (type->variant == TYPE_TYPE) {
+					type = var->type_value;
+					SetFlagOn(var->submode, SUBMODE_USED_AS_TYPE);
+				}
 
-			if (type->variant != TYPE_INT) {
-				SyntaxErrorBmk("Expected integer type", bookmark);
+				if (type->variant != TYPE_INT) {
+					SyntaxErrorBmk("Expected integer type", bookmark);
+				}
 			}
 			goto done;
-		} else if (var->mode == INSTR_INT) {
-			type = TypeAllocConst(&var->n);
+		} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
+			type = var;
 		} else {
 			//TODO: If simple integer variable, use it as type range
 			SyntaxErrorBmk("expected type or constant expression", bookmark);
@@ -140,73 +133,24 @@ Type * ParseIntType()
 			NextToken();
 			bookmark = SetBookmark();
 			ExpectExpression(NULL);
-			if (TOK) {
+			ifok {
 				var = BufPop();
-				bi = VarIntConst(var);
-				if (bi != NULL) {
-					IntModify(&type->range.max, bi);
-				} else {
-					SyntaxErrorBmk("expected constant expression", bookmark);
-				}
+				type = NewRange(type, var);
 			}
 		} else {
-			type->range.max = type->range.min;
-			type->range.min = 0;
 		}
 
-		if (type->range.min > type->range.max) {
+		if (type->mode == INSTR_RANGE && !IsLowerEq(type->adr, type->var)) {
 			SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
 		}
 	}
 done:
 
-	if (TOK) {
+	ifok {
 		if (arg_no != 0) {
 			type = TypeAllocArg(arg_no, type);
 		}
 	}
-/*
-	if (TOK == TOKEN_INT) {
-		type = TypeAlloc(TYPE_INT);
-		type->range.min = LEX.n;
-		NextToken();
-		if (TOK == TOKEN_DOTDOT) {
-			NextToken();
-			if (TOK == TOKEN_INT) {
-				type->range.max = LEX.n;
-				NextToken();
-			}
-		} else {
-			type->range.max = type->range.min;
-			type->range.min = 0;
-		}
-
-		if (type->range.min > type->range.max) {
-			SyntaxError("range minimum bigger than maximum");
-		}
-	// Sme variable
-	} else if (TOK == TOKEN_ID) {
-		var = VarFind2(NAME);
-		if (var != NULL) {
-			if (var->mode == INSTR_INT) {
-				if (var->type->variant == TYPE_INT) {
-					type = TypeAlloc(TYPE_INT);
-					type->range.min = 0;
-					type->range.max = var->n;
-				} else {
-					SyntaxError("Expected integer constant");
-				}
-			} else {
-				type = var->type;
-			}
-			NextToken();
-		} else {
-			SyntaxError("$unknown variable");
-		}
-	} else {
-		SyntaxError("Expected definition of integer type");
-	}
-*/
 	return type;
 }
 
@@ -217,7 +161,7 @@ void ParseEnumStruct(Type * type)
 
  	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
 
-	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+	while (OK && !NextIs(TOKEN_BLOCK_END)) {
 
 		if (TOK == TOKEN_ID) {
 			ParseAssign(INSTR_VAR, SUBMODE_EMPTY, type);
@@ -229,7 +173,7 @@ void ParseEnumStruct(Type * type)
 	}
 
 	// Convert parsed fields to constant arrays
-	FOR_EACH_LOCAL(type->owner, var)
+	FOR_EACH_LOCAL(type, var)
 		var->type = TypeArray(type, var->type);		
 //		var->type->step = TypeSize(var->type->element);
 		var->mode = INSTR_INT;
@@ -253,42 +197,36 @@ Type * ParseConstList(Type * type)
 		
 	id_required = false;
 
-	while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+	while (OK && !NextIs(TOKEN_BLOCK_END)) {
 
 		while(NextIs(TOKEN_EOL));
 
 		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-			var = VarAllocScope(NO_SCOPE, INSTR_CONST, NAME, 0);
+			var = NewVar(type, NAME, NULL);
 			NextToken();
 			if (NextIs(TOKEN_EQUAL)) {
 				SyntaxError("Unexpected equal");
 			}
 
 			if (NextIs(TOKEN_COLON)) {
-				c = ParseIntConstExpression(type->owner);
-				if (TOK) {
+				c = ParseIntConstExpression(type);
+				ifok {
 					IntModify(&last_n, c);
 				}
-/*
-				// Parse const expression
-				if (TOK == TOKEN_INT) {
-					last_n = LEX.n;
-					NextToken();
-				} else {
-					SyntaxError("expected integer value");
-				}
-*/
 			} else {
 				IntAddN(&last_n, 1);
 			}
 
-			var->var = VarN(&last_n);
+			var->type = IntCell(&last_n);
 
-			if (type->owner != SCOPE) {
-				type = TypeDerive(type);
-			}
+
+			// ????
+//			if (type->owner != SCOPE) {
+//				type = TypeDerive(type);
+//			}
 
 			TypeAddConst(type, var);
+
 
 		} else {
 			if (id_required) {
@@ -317,11 +255,11 @@ Type * ParseType3()
 	//# "type" restrict_type
 	if (NextIs(TOKEN_TYPE2)) {
 		variant_type = ParseType2(INSTR_VAR);
-		type = TypeType(variant_type);
+		type = TypeAlloc(TYPE_TYPE);
+		type->possible_values = variant_type;
 	//# "enum" ["struct"]
 	} else if (NextIs(TOKEN_ENUM)) {
 		type = TypeAlloc(TYPE_INT);
-		type->range.flexible = true;
 		type->is_enum        = true;
 		if (NextIs(TOKEN_STRUCT)) {
 			ParseEnumStruct(type);
@@ -333,7 +271,7 @@ Type * ParseType3()
 	} else if (NextIs(TOKEN_PROC)) {
 		type = TypeAlloc(TYPE_PROC);
 		ParseArgList(SUBMODE_ARG_IN, type);
-		if (TOK) {
+		ifok {
 			ProcTypeFinalize(type);
 		}
 	//# "macro" args
@@ -358,7 +296,7 @@ Type * ParseType3()
 
 		if (TOK == TOKEN_OPEN_P) {
 			EnterBlockWithStop(TOKEN_EQUAL);
-			while (TOK != TOKEN_ERROR && !NextIs(TOKEN_BLOCK_END)) {
+			while (OK && !NextIs(TOKEN_BLOCK_END)) {
 				elmt = ParseIntType();
 				if (type->index == NULL) {
 					type->index = elmt;
@@ -376,22 +314,19 @@ Type * ParseType3()
 		// If no dimension has been defined, use flexible array.
 		// This is possible only for constants now.
 
-		if (TOK) {
+		ifok {
 			if (type->index == NULL) {
-				elmt = TypeAlloc(TYPE_INT);
-				elmt->range.flexible = true;
-				elmt->range.min = 0;
-				type->index = elmt;
+				type->index = ZERO;
 			}
 		}
 
 		// Element STEP may be defined
-		if (TOK) {
+		ifok {
 			if (NextIs(TOKEN_STEP)) {
 				ExpectExpression(NULL);
-				if (TOK) {
+				ifok {
 					var = STACK[0];
-					st = VarIntConst(var);
+					st = IntFromCell(var);
 					if (st != NULL) {
 						type->step = IntN(st);
 					} else {
@@ -401,7 +336,7 @@ Type * ParseType3()
 			}
 		}
 
-		if (TOK) {
+		ifok {
 			if (NextIs(TOKEN_OF)) {
 				type->element = ParseSubtype();
 			} else {
@@ -409,7 +344,7 @@ Type * ParseType3()
 			}
 		}
 
-		if (TOK) {
+		ifok {
 			if (type->step == 0) {
 				type->step = TypeSize(type->element);
 			}
@@ -424,39 +359,7 @@ Type * ParseType3()
 	}
 	return type;
 }
-/*
-Type * ParseIntRange(Type * type)
-{
-	Var * min, * max;
-	Bookmark bookmark;
 
-	bookmark = SetBookmark();
-	ParseExpressionType(TypeType(NULL));
-	if (TOK && TOP != 0) {
-		min = BufPop();
-		max = NULL;
-		if (NextIs(TOKEN_DOTDOT)) {
-			ExpectExpression(NULL);
-			if (TOK) {
-				max = BufPop();
-				type = TypeDerive(type);
-			}
-		}
-
-		if (VarIsIntConst(min) && VarIsIntConst(max)) {
-			type = TypeAllocRange(min, max);
-
-			if (type->range.min > type->range.max) {
-				SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
-			}
-
-		} else {
-			SyntaxErrorBmk("expected type constant expression", bookmark);
-		}
-	}
-	return type;
-}
-*/
 Type * ParseType2(InstrOp mode)
 /*
 Purpose:
@@ -469,6 +372,8 @@ Input:
 	Var * var;
 	Type * type = NULL, * variant_type = NULL;
 	Var * min, * max;
+	BigInt * imin, * imax;
+
 	Bookmark bookmark;
 
 next:
@@ -477,15 +382,25 @@ next:
 
 	if (type == NULL) {
 		bookmark = SetBookmark();
-		ParseExpressionType(TypeType(NULL));
+		ParseExpressionType(NULL);
 		if (TOK && TOP != 0) {
+
 			min = BufPop();
+			if (min->mode == INSTR_RANGE) {
+				if (CellIsEqual(min->adr, min->var)) return min->adr;
+				return min;
+			}
+
 			max = NULL;
 			if (NextIs(TOKEN_DOTDOT)) {
 				ExpectExpression(NULL);
-				if (TOK) {
+				ifok {
 					max = BufPop();
 				}
+			//# <int>
+			} else if (CellIsIntConst(min)) {
+				type = min;
+				goto done;
 			}
 
 			type = NULL;
@@ -493,8 +408,8 @@ next:
 				var = min;
 				if (var->mode == INSTR_TYPE) {
 					type = var->type;
-				} else if (var->mode == INSTR_VAR && var->type->variant == TYPE_TYPE) {
-					type = var->type_value;
+				} else if (var->mode == INSTR_VAR && var->type->mode == INSTR_TYPE && var->type->variant == TYPE_TYPE) {
+					type = var->type->possible_values;
 					SetFlagOn(var->submode, SUBMODE_USED_AS_TYPE);
 				}
 
@@ -510,20 +425,30 @@ next:
 				max = var;		
 			}
 
-			if (VarIsIntConst(min) && VarIsIntConst(max)) {
-				type = TypeAllocRange(min, max);
-
-				if (type->range.min > type->range.max) {
-					SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
-				}
-
+			if (CellIsEqual(min, max)) {
+				type = min;
+				goto done;
 			} else {
-				SyntaxErrorBmk("expected type constant expression", bookmark);
+				imin = IntFromCell(min);
+				imax = IntFromCell(max);
+				if (imin != NULL && imax != NULL) {
+					if (IntHigher(imin, imax)) {
+						SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
+						goto done;
+					}
+
+					type = NewRange(min, max);
+
+				} else {
+					SyntaxErrorBmk("expected type constant expression", bookmark);
+				}
 			}
+		//# "text"
 		} else if (TOK == TOKEN_STRING) {
-			type = TypeAlloc(TYPE_VAR);
-			type->typevar = VarNewStr(NAME);
+			type = TextCell(NAME);
 			NextToken();
+			goto done;
+
 		}
 	}
 
@@ -531,7 +456,7 @@ const_list:
 	// Parse type specific constants
 	// There can be list of constants specified in block.
 	// First thing in the block must be an identifier, so we try to open the block with this in mind.
-	// We try to parse constants only for integer types (in future, we may try other numberic or string types)
+	// We try to parse constants only for integer types (in future, we may try other numeric or string types)
 
 	if (type != NULL && type->variant == TYPE_INT && !type->is_enum) {
 		if (TOK != TOKEN_OR) {
@@ -539,7 +464,7 @@ const_list:
 		}
 	}
 done:
-	if (TOK) {
+	ifok {
 		if (variant_type != NULL) {
 			variant_type->right = type;
 			type = variant_type;
@@ -566,9 +491,9 @@ BigInt * ParseIntConstExpression(Var * result)
 	Var * var;
 
 	ParseExpression(result);
-	if (TOK) {
+	ifok {
 		var = BufPop();
-		bi = VarIntConst(var);
+		bi = IntFromCell(var);
 		if (bi == NULL) {
 			SyntaxError("expected constant expression");
 		}
@@ -583,7 +508,6 @@ Syntax: "+" full_type | "(" full_type ")" | normal_type |  identifier | int ".."
 	Type * type = NULL;
 	Var * var;
 	UInt16 bookmark;
-	BigInt * bi;
 
 	PARSE_INLINE = true;
 
@@ -595,32 +519,29 @@ Syntax: "+" full_type | "(" full_type ")" | normal_type |  identifier | int ".."
 		if (type != NULL) return type;
 
 		if (ParseArg(&var)) {
-			type = TypeAllocVar(var);
+			type = var;
 		} else if (TOK == TOKEN_ID) {
 			bookmark = SetBookmark();
 			var = ParseVariable();
-			if (TOK) {
+			ifok {
 				if (var->mode == INSTR_TYPE) {
 					type = var->type;
-				} else if (var->mode == INSTR_VAR && var->type->variant == TYPE_TYPE) {
-					type = var->type_value;
+				} else if (var->mode == INSTR_VAR && var->type->mode == INSTR_TYPE && var->type->variant == TYPE_TYPE) {
+					type = var->type->possible_values;
 				} else {
 					ErrArg(var);
 					SyntaxErrorBmk("Variable [A] does not define type.", bookmark);
 				}
 			}
 		} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
-			type = TypeAlloc(TYPE_INT);
-			bi = ParseIntConstExpression(NULL);
-			if (TOK) {
-				IntModify(&type->range.min, bi);
+			ParseExpression(NULL);
+			ifok {
+				type = BufPop();
 				if (NextIs(TOKEN_DOTDOT)) {
-					bi = ParseIntConstExpression(NULL);
-					if (TOK) {
-						IntModify(&type->range.max, bi);
+					ParseExpression(NULL);
+					ifok {
+						type = NewRange(type, BufPop());
 					}
-				} else {
-					IntModify(&type->range.max, &type->range.min);
 				}
 			}
 		}
@@ -636,28 +557,3 @@ Type * ParseSubtype()
 		return ParseType();
 	}
 }
-
-
-/*
-	} else if (TOK == TOKEN_ID) {
-		var = ParseVariable();
-		if (TOK != TOKEN_ERROR) {
-			if (var->type->variant == TYPE_TYPE) {
-				type = var->type_value;
-			} else {
-				if (mode == INSTR_TYPE) {
-					type = TypeDerive(var->type);
-					// For integer type, constants may be defined
-					if (type->variant == TYPE_INT) goto const_list;
-				} else {
-					if (var->mode != INSTR_TYPE) {
-						Print("xxx");
-					}
-					type = var->type;
-				}
-			}
-		}
-//	}	//TODO: We may solve the integer type as default, when there was no other type involved
-
-//	} else if (TOK == TOKEN_INT || TOK == TOKEN_MINUS) {
-*/

@@ -128,8 +128,6 @@ repeat:
 			dst->from = nb;
 		}
 
-//		if (op == INSTR_VOID) continue;
-
 		// If this is conditional jump or jump, register it as caller to destination block
 
 		if (IS_INSTR_JUMP(op)) {
@@ -360,7 +358,7 @@ Bool InstrRelSwap(Instr * i)
 
 	if (rule == NULL) {
 		op = i->op;
-		if (op == INSTR_IFEQ || op == INSTR_IFNE) {
+		if (op == INSTR_EQ || op == INSTR_NE) {
 			if (VarIsZeroNonzero(i->arg1, &arg2, &nonzero)) {
 				if (i->arg2 == arg2) {
 					arg2 = nonzero;

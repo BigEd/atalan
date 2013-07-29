@@ -1,0 +1,21 @@
+﻿
+video_line:type = 4..242 ; video lines numbered 4..242 are visible on screen
+
+x:array(video_line) of byte
+speed:array(video_line) of 1..4
+
+out reg:0..255
+out reg2:0..255
+
+for y:video_line 
+	x#y  = 15
+	speed#y = 3
+
+;Make sure the arrays are used
+for y:video_line
+	reg = x#y
+	reg2 = speed#y
+
+;make sure they do not overlap	
+assert x#5 = 15
+assert speed#7 = 3

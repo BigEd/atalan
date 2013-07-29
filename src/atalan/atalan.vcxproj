@@ -60,6 +60,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <TargetMachine>MachineX86</TargetMachine>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -81,15 +82,29 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\common\common.c" />
+    <ClCompile Include="cell_array.c" />
+    <ClCompile Include="cell_module.c" />
+    <ClCompile Include="cell_int.c" />
+    <ClCompile Include="cell_op.c" />
+    <ClCompile Include="cell_proc.c" />
+    <ClCompile Include="cell_range.c" />
+    <ClCompile Include="cell_sequence.c" />
+    <ClCompile Include="cell_text.c" />
+    <ClCompile Include="cell_type.c" />
+    <ClCompile Include="cell_var.c" />
     <ClCompile Include="emit.c" />
     <ClCompile Include="errors.c" />
     <ClCompile Include="gen.c" />
+    <ClCompile Include="infer_types.c" />
     <ClCompile Include="instr.c" />
     <ClCompile Include="bigint.c" />
-    <ClCompile Include="names.c" />
+    <ClCompile Include="operations\arith.c" />
+    <ClCompile Include="operations\bool.c" />
+    <ClCompile Include="operations\compare.c" />
+    <ClCompile Include="operations\properties.c" />
+    <ClCompile Include="operations\set.c" />
     <ClCompile Include="opt_global.c" />
     <ClCompile Include="opt_live2.c" />
-    <ClCompile Include="var_int.c" />
     <ClCompile Include="lexer.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="mem_heap.c" />
@@ -103,6 +118,7 @@
     <ClCompile Include="parser.c" />
     <ClCompile Include="parse_type.c" />
     <ClCompile Include="translate.c" />
+    <ClCompile Include="translate_type.c" />
     <ClCompile Include="type.c" />
     <ClCompile Include="type_proc.c" />
     <ClCompile Include="variables.c" />
@@ -111,6 +127,11 @@
   <ItemGroup>
     <ClInclude Include="bigint.h" />
     <ClInclude Include="language.h" />
+    <ClInclude Include="operations\arith.h" />
+    <ClInclude Include="operations\bool.h" />
+    <ClInclude Include="operations\compare.h" />
+    <ClInclude Include="operations\properties.h" />
+    <ClInclude Include="operations\set.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

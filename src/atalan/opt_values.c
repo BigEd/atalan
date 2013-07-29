@@ -47,7 +47,7 @@ Bool ExpIsIntConst(Exp * exp, BigInt ** p_n)
 {
 	*p_n = NULL;
 	if (exp->op == INSTR_VAR) {
-		*p_n = VarIntConst(exp->var);
+		*p_n = IntFromCell(exp->var);
 	}
 	return *p_n != NULL;
 }
@@ -121,7 +121,7 @@ Purpose:
 
 	// 2. Two constants are just offset
 
-	il = VarIntConst(l); ir = VarIntConst(r);
+	il = IntFromCell(l); ir = IntFromCell(r);
 	if (il != NULL && ir != NULL) {
 		IntSub(diff, ir, il);		// = r->n - l->n;
 		goto yes;
@@ -167,13 +167,68 @@ Purpose:
 	return result;
 }
 
+Bool ResetValuesItem(Var * cell, void * data)
+{
+	cell->src_i       = NULL;
+	ExpFree(&cell->dep);		// TODO: Release the expression objects
+	return false;
+}
+
 void ResetValues()
 {
-	Var * var;
-	FOR_EACH_VAR(var)
-		var->src_i       = NULL;
-		ExpFree(&var->dep);		// TODO: Release the expression objects
-	NEXT_VAR
+	ForEachCell(&ResetValuesItem, NULL);
+}
+
+Bool ResetValueItem(Var * var, void * data)
+{
+	Var * res;
+	Instr * i;
+
+	res = (Var *)data;
+
+	if (!CellIsConst(var)) {
+
+		i = var->src_i;
+		if (i != NULL) {
+			// If source instruction is assignment, set the result to source of assignment argument
+			// This makes sure, that we can utilize common values in cases like
+			// let _a, 10
+			// let p, _a
+			// let _a, 20
+			// let q, _a
+			// add r, p, q
+
+			if (i->op == INSTR_LET) {
+				if (i->arg1 == res) {
+					i->result->src_i = i->arg1->src_i;
+
+					// When the new source instruction uses the changed variable, it cannot be used.
+					// For example:
+					//  9|    let y, a
+					// 10|    let a, @_arr$y
+					// 11|    let w$0, a
+					// 12|    add y, y, 1         <= we must reset dependency of w$0 on instr 10, as y is changing so the value of @_arr$y has changed
+					// 13|    let a, @_arr$y
+					// 14|    let w$1, a
+					// 17|    let a, y$0
+
+					if (InstrUsesVar(i->result->src_i, res)) {
+						i->result->src_i = NULL;
+					}
+				} else {
+					if (InstrUsesVar(i, res)) {
+						var->src_i = NULL;
+					}
+				}
+			} else {
+				//TODO: Only reset the instruction, if there is no source
+				if (i->arg1 == res || i->arg2 == res) {
+					var->src_i = NULL;
+				}
+			}
+		}
+	}
+	return false;
 }
 
 void ResetValue(Var * res)
@@ -184,56 +239,9 @@ Purpose:
 */
 {
 	Var * var;
-	Instr * i;
 	if (res == NULL) return;
 
-	FOR_EACH_VAR(var)
-		if (!VarIsConst(var)) {
-//			if (var->name != NULL && StrEqual(var->name, "a")) {
-//				i = NULL;
-//			}
-
-			i = var->src_i;
-			if (i != NULL) {
-				// If source instruction is assignment, set the result to source of assignment argument
-				// This makes sure, that we can utilize common values in cases like
-				// let _a, 10
-				// let p, _a
-				// let _a, 20
-				// let q, _a
-				// add r, p, q
-
-				if (i->op == INSTR_LET) {
-					if (i->arg1 == res) {
-						i->result->src_i = i->arg1->src_i;
-
-						// When the new source instruction uses the changed variable, it cannot be used.
-						// For example:
-						//  9|    let y, a
-						// 10|    let a, @_arr$y
-						// 11|    let w$0, a
-						// 12|    add y, y, 1         <= we must reset dependency of w$0 on instr 10, as y is changing so the value of @_arr$y has changed
-						// 13|    let a, @_arr$y
-						// 14|    let w$1, a
-						// 17|    let a, y$0
-					
-						if (InstrUsesVar(i->result->src_i, res)) {
-							i->result->src_i = NULL;
-						}
-					} else {
-						if (InstrUsesVar(i, res)) {
-							var->src_i = NULL;
-						}
-					}
-				} else {
-					//TODO: Only reset the instruction, if there is no source
-					if (i->arg1 == res || i->arg2 == res) {
-						var->src_i = NULL;
-					}
-				}
-			}
-		}
-	NEXT_VAR
+	ForEachCell(&ResetValueItem, res);
 
 	// If value is alias to some other value, reset it too
 	//TODO: How about element (non constant, let's say?)
@@ -265,15 +273,34 @@ Purpose:
 	return false;
 }
 
+Bool ResetVarDepRootFn(Var * var, void * data)
+{
+	Var * res = (Var *)data;
+	if (VarIsAlias(var, res)) {
+		ExpFree(&var->dep);
+	}
+	return false;
+}
+
 void ResetVarDepRoot(Var * res)
 {
-	Var * var;
+	ForEachCell(&ResetVarDepRootFn, res);
+}
 
-	FOR_EACH_VAR(var)
-		if (VarIsAlias(var, res)) {
+Bool ResetVarDepFn(Var * var, void * data)
+{
+	Exp * exp;
+	Var * res = (Var *)data;
+	exp = var->dep;
+
+	if (exp != NULL) {
+		if (ExpUsesValue(exp, res)) {
+			ExpFree(&var->dep);
+		} else if (var->mode == INSTR_DEREF && VarUsesVar(var->var, res)) {
 			ExpFree(&var->dep);
 		}
-	NEXT_VAR
+	}
+	return false;
 }
 
 void ResetVarDep(Var * res)
@@ -284,28 +311,8 @@ Purpose:
 */
 {
 	Var * var;
-	Exp * exp;
 
-	FOR_EACH_VAR(var)
-
-//		if (var->adr != NULL && StrEqual(var->adr->name, "_arr")) {
-//			Print("");
-//			PrintExp(var->dep);
-//		}
-
-//		if (VarIsAlias(var, res)) {
-//			ExpFree(&var->dep);
-//		} else {
-			exp = var->dep;
-			if (exp != NULL) {
-				if (ExpUsesValue(exp, res)) {
-					ExpFree(&var->dep);
-				} else if (var->mode == INSTR_DEREF && VarUsesVar(var->var, res)) {
-					ExpFree(&var->dep);
-				}
-			}
-//		}
-	NEXT_VAR
+	ForEachCell(&ResetVarDepFn, res);
 
 	// If the variable is alias for some other variable,
 	// reset aliased variable too
@@ -600,7 +607,7 @@ void ProcValuesUse(Var * proc)
 		// We know, that the reference to procedure address may not be variable with actual instructions,
 		// so we use just local variables.
 		// TODO: This may not be sufficient, as we do not know, what local variables may be called by the procedure.
-		ProcValuesUseLocal(proc->type->element->owner);
+		ProcValuesUseLocal(proc->type->element);
 	} else {
 		if (FlagOff(proc->flags, VarProcessed)) {
 			SetFlagOn(proc->flags, VarProcessed);
@@ -645,18 +652,19 @@ Purpose:
 	Var * item;
 
 	if (var == NULL) return false;
+	ASSERT(var->mode == INSTR_VAR);
 	t = var->type;
-	if (t->variant == TYPE_INT) {
-		if (t->is_enum) {
+	if (TypeIsInt(t)) {
+		if (t->mode == INSTR_TYPE && t->variant == TYPE_INT && t->is_enum) {
 
-			FOR_EACH_LOCAL(t->owner, item)
-				if (VarIsIntConst(item)) {
-					if (VarIsN(item, 0)) {
+			FOR_EACH_LOCAL(t, item)
+				if (CellIsIntConst(item)) {
+					if (CellIsEqual(item, ZERO)) {
 						zero = item;
 					} else {
 						if (non_zero != NULL) {
 							// There are two different non-zero constants!
-							if (!VarEq(non_zero, item)) {
+							if (!CellIsEqual(non_zero, item)) {
 								zero = NULL;
 								break;
 							}
@@ -666,13 +674,14 @@ Purpose:
 					}
 				}
 			NEXT_LOCAL
+		// Variable is range. It may be either 0..1 or -1..0
 		} else {
-			if (IntEq(&t->range.min, Int0()) && IntEq(&t->range.max, Int1())) {
+			if (CellIsEqual(CellMin(t), ZERO) && CellIsEqual(CellMax(t), ONE)) {
 				zero = ZERO;
 				non_zero = ONE;
-			} else if (IntEqN(&t->range.min, -1) && IntEq(&t->range.max, Int0())) {
+			} else if (CellIsEqual(CellMin(t), MINUS_ONE) && CellIsEqual(CellMax(t), ZERO)) {
 				zero = ZERO;
-				non_zero = VarInt(-1);
+				non_zero = MINUS_ONE;
 			}
 		}
 	}
@@ -689,29 +698,6 @@ Var * SrcVar(Var * var)
 	return var;
 }
 
-/*
-Var * VarStripFlags(Var * var)
-
-Purpose:
-	Return variable with register flags stripped off.
-
-{
-	Var * l, * r;
-	if (VarIsReg(var) && var->type->variant == TYPE_INT && var->type->range.min == 0 && var->type->range.max == 1) {
-		return NULL;
-	}
-	if (var->mode == INSTR_TUPLE) {
-		l = VarStripFlags(var->adr);
-		r = VarStripFlags(var->var);
-		if (l == NULL) return r;
-		if (r == NULL) return l;
-	} else if (var->mode == INSTR_VAR && var->adr != NULL) {
-		return VarStripFlags(var->adr);
-	}
-
-	return var;
-}
-*/
 UInt32 GOG = 0;
 //UInt32 GOG2 = 0;
 
@@ -926,7 +912,7 @@ retry:
 								op = INSTR_ADD;
 							}
 
-							r2 = VarN(&diff);
+							r2 = IntCell(&diff);
 							if (TransformInstrIfCheaper(&loc, op, result, result, r2, "Converting to inc/dec")) {
 								arg1 = result;
 								arg2 = r2;
@@ -1049,7 +1035,7 @@ retry:
 						// If some register contains the value we need to set
 						for(regi = 0; regi < CPU->REG_CNT; regi++) {
 							r = CPU->REG[regi];
-							if (!VarIsEqual(r, i->arg1)) {
+							if (!CellIsEqual(r, i->arg1)) {
 								if (VarIsOffset(r, i->arg1, &diff)) {
 									is_zero = IntEqN(&diff, 0);
 									IntFree(&diff);
@@ -1077,9 +1063,9 @@ retry:
 					if (arg1 != NULL) {
 						while (!InVar(arg1) && arg1->src_i != NULL && arg1->src_i->op == INSTR_LET) arg1 = arg1->src_i->arg1;
 					}
-					if (VarIsIntConst(arg1)) {
+					if (CellIsIntConst(arg1)) {
 						sprintf(buf, "%d", IntN(&arg1->n));
-						if (TransformInstr(&loc, INSTR_STR_ARG, i->result, VarNewStr(buf), VarInt(StrLen(buf)), "Arg to const")) {
+						if (TransformInstr(&loc, INSTR_VAR_ARG, i->result, TextCell(buf), NULL, "Arg to const")) {
 							modified = true;
 						}
 					}
@@ -1116,10 +1102,10 @@ Purpose:
 			// If we compare variable that has only two possible values and one of them is 0, we want
 			// to always compare with the zero, because on most platforms, that test is more effective.
 
-			if (op == INSTR_IFEQ || op == INSTR_IFNE) {
+			if (op == INSTR_EQ || op == INSTR_NE) {
 				arg1 = i->arg1;
 				arg2 = i->arg2;
-				if (!VarEq(arg2, ZERO) /*VarIsIntConst(arg2) && arg2->n != 0*/ && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
+				if (!CellIsEqual(arg2, ZERO) && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
 					i->op = OpNot(i->op);
 					i->arg2 = zero;
 				}
@@ -1147,7 +1133,7 @@ Purpose:
 				//      add R1, Y, #c1
 				//      add R2, Y, #c1+#c2
 				} else {
-					if (i->op == INSTR_ADD && VarIsConst(arg2)) {
+					if (i->op == INSTR_ADD && CellIsConst(arg2)) {
 
 						// Get source instruction or directly previous instruction
 						i2 = arg1->src_i;
@@ -1156,7 +1142,7 @@ Purpose:
 						}
 						if (i2 != NULL && i2->result == arg1) {
 							if (i2->op == INSTR_ADD) {
-								if (VarIsConst(i2->arg2)) {
+								if (CellIsConst(i2->arg2)) {
 									if (result != arg1) {
 										r = InstrEvalConst(i->op, arg2, i2->arg2);
 										i2->arg2 = r;

@@ -56,3 +56,4 @@ void IntFree(BigInt * n);
 
 void IntRangeSize(BigInt * dest, BigInt * min, BigInt * max);
 // max - min + 1
+UInt32 IntBitSize(BigInt * num);

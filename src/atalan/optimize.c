@@ -38,7 +38,7 @@ void VarIncRead(Var * var)
 		if (var->mode == INSTR_VAR) {
 			// Do not increment constant used as address
 			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
-		} else if (VarIsConst(var)) {
+		} else if (CellIsConst(var)) {
 		} else {
 			VarIncRead(var->adr);
 			VarIncRead(var->var);
@@ -93,43 +93,45 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end)
 }
 
 
+Bool VarUseProcFn(Var * proc, void * data)
+{
+	Var * var;
+	if (proc->type != NULL && proc->type->variant == TYPE_PROC && proc->read > 0) {
+		if (proc->instr != NULL) {
+			InstrVarUse(proc->instr, NULL);
+		} else {
+			// Procedure that has no defined body can still define variables and arguments it uses.
+			// We must mark these variables as used, if the procedure is used.
+			FOR_EACH_LOCAL(proc, var)
+				VarIncRead(var);
+			NEXT_LOCAL
+		}
+	}
+	return false;
+}
+
+Bool VarUseArrayFn(Var * proc, void * data)
+{
+	if (proc->mode == INSTR_VAR && proc->type != NULL && proc->type->variant == TYPE_ARRAY && proc->mode == INSTR_VAR) {
+		if (proc->read > 0 || proc->write > 0) {
+			if (proc->instr != NULL) {
+				InstrVarUse(proc->instr, NULL);
+			}
+		}
+	}
+	return false;
+}
+
 void VarUse()
 /*
 Purpose:
 	Compute use of variables.
 */
 {
-	Var * proc;
-	Var * var;
 	VarResetUse();
-
-	FOR_EACH_VAR(proc)
-		if (proc->type != NULL && proc->type->variant == TYPE_PROC && proc->read > 0) {
-			if (proc->instr != NULL) {
-				InstrVarUse(proc->instr, NULL);
-			} else {
-				// Procedure that has no defined body can still define variables and arguments it uses.
-				// We must mark these variables as used, if the procedure is used.
-				for(var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
-					VarIncRead(var);
-				}
-			}
-		}
-	NEXT_VAR
-
+	ForEachCell(&VarUseProcFn, NULL);
 	InstrVarUse(ROOT_PROC.instr, NULL);
-
-	FOR_EACH_VAR(proc)
-		if (proc->type != NULL && proc->type->variant == TYPE_ARRAY && proc->mode == INSTR_VAR) {
-			if (proc->read > 0 || proc->write > 0) {
-				if (proc->instr != NULL) {
-					InstrVarUse(proc->instr, NULL);
-				}
-			}
-		}
-	NEXT_VAR
-
-
+	ForEachCell(&VarUseArrayFn, NULL);
 }
 
 //TODO: Replace variable management (keep array of those variables and reuse them)
@@ -153,16 +155,14 @@ Purpose:
 			*p_var = to;
 			n++;
 		} else {
-			if (var->mode == INSTR_INT) {
-				// const does not get replaced
-			} else if (var->mode == INSTR_TEXT) {
-
+			if (CellIsValue(var)) {
+				// values do not get replaced
 			} else if (var->mode == INSTR_VAR) {
 				if (var->adr != NULL) {
 					*p_var = var->adr;
 					n = VarTestReplace(p_var, from, to);
 				}
-			} else if (var->mode == INSTR_CONST) {
+			} else if (var->mode == INSTR_NAME) {
 
 			} else /*if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE)*/ {
 				v2 = var->adr;
@@ -174,8 +174,7 @@ Purpose:
 				// TODO: Use VarNewElement.
 
 				if (n2 > 0 || n3 > 0) {
-					var2 = VarAllocUnused();
-					memcpy(var2, var, sizeof(Var));
+					var2 = CellCopy(var);
 					var2->adr = v2;
 					var2->var = v3;
 					var2->next = NULL;
@@ -374,7 +373,7 @@ Purpose:
 						BufEmpty();
 						FOR_EACH_ARG(subproc, arg, SUBMODE_ARG_IN+SUBMODE_ARG_OUT)
 							if (arg->adr == NULL) {
-								var = VarAllocScopeTmp(proc, INSTR_VAR, arg->type);
+								var = NewVarInScope(proc, arg->type);
 							} else {
 								var = arg->adr;
 							}

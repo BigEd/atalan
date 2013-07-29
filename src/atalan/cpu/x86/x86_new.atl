@@ -1,0 +1,103 @@
+;Implementation of x86 CPU module for Atalan programming language
+;(c) 2013 Rudla Kudla
+;Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+
+;This module generates code, that can be compiled with masm32 assembler.
+
+platform:scope
+
+;Types defined in CPU are special in the way, that rules must use the types.
+
+x86:system.CPU
+	s32:type -2147483648..2147483647				
+	memory:type array(0..$ffffffff) of 0..255
+	flag:type 0..1
+	
+	eax:s32
+	ebx:s32
+	ecx:s32
+	edx:s32
+	ebp:s32
+
+	z:flag		;zero
+	s:flag		;sign
+	c:flag      ;carry
+	o:flag		;overflow
+	p:flag		;parity
+	ac:flag     ;auxiliary carry
+
+	r@(eax, ebx, ecx, edx)
+	ocszacp: @o,@c,@s,@z,@ac,@p
+	
+	rule alloc a:s32                         = "   [A]  sdword ?"
+	
+	rule include A = "   include <[A]>"
+		
+	rule src_end   = "end start"
+	rule code_end  = ".data?"
+	rule data_end  = "	;data_end"
+	
+	rule r:s32 = b:s32 = 
+		eax = a
+		r = eax   
+	
+	rule r:s32 = a:s32 + b:s32 =
+		eax = a
+		eax = eax + b
+		r = eax
+	
+	rule r:s32 = a:s32 - b:s32 =
+		eax = a
+		eax = eax - b
+		r = eax
+	
+	;############### CPU rules
+
+	rule label A      = "[A]:"
+	
+	rule a:r = b:s32  = "   mov [a], [b]"
+	rule a:s32 = b@r  = "   mov [a], [b]"	
+	
+	rule a:r = a + b:s32 @ocszacp = "   add [a], [b]"
+	rule a:r = a - b:s32 @ocszacp = "   sub [a], [b]"
+	
+	rule ocszacp = a:r - b:s32     = "   cmp [a], [b]" 
+	
+	;---- conditionals
+	
+	rule if @z = 1 goto a            = "   jz [a]"
+	rule if @z = 0 goto a            = "   jnz [a]"
+	rule if @s = 1 goto a            = "   js [a]"
+	rule if @s = 0 goto a            = "   jns [a]"
+	rule if @o = 1 goto a            = "   jo [a]"
+	rule if @o = 0 goto a            = "   jno [a]"
+	rule if @p = 1 goto a            = "   jp [a]"
+	rule if @p = 0 goto a            = "   jnp [a]"
+	
+	;---- unsigned conditionals
+	
+	rule if @c = 0 goto a            = "   jae [a]"   ;>=
+	rule if @c = 1 goto a            = "   jb  [a]"   ;<
+	rule if @c = 0 and @z = 0 goto a = "   ja  [a]"   ;>
+	rule if @c = 1 or @z = 1 goto a  = "   jbe [a]"   ;<=
+	
+	;---- signed conditionals
+	
+	rule if @s = @o goto [a]           = "   jge [a]"   ;>=
+	rule if @s ? @o goto [a]           = "   jl  [a]"   ;<
+	rule if @s = @o or @z = 0 goto [a] = "   jg  [a]"   ;>
+	rule if @s ? @o or @z = 1 goto [a] = "   jle [a]"   ;<=
+		
+	rule call a = "   call [a]"  
+	rule return  = "   ret"
+
+	rule data const a:0..255 = "   DB [a]"
+	rule var_arg a:string    = "   DB [a.size],'[a]'"
+	rule var_arg a:s32       = "   DB 132" "   DD [a]"
+
+;Printing
+
+system.print:proc @x86.eax @x86.ebx @x86.ecx @x86.edx @x86.ebp
+
+system.print_scr:macro = instr
+	call system.print

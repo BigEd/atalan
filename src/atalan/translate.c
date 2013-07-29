@@ -12,7 +12,7 @@ Translate compiler instructions to processor instructions by applying rewriting 
 #include "language.h"
 
 GLOBAL Var * RULE_PROC;						// This procedure is used to represent macro used when translating rule
-GLOBAL Bool RULE_MATCH_BREAK;
+GLOBAL Bool INSTR_MATCH_BREAK;
 
 GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];		// Set of variables representing macro arguments
 GLOBAL Var * MACRO_ARG[MACRO_ARG_CNT];
@@ -53,7 +53,7 @@ Rule is more specific if it's arguments are more specific.
 
 Bool RuleArgIsRegister(RuleArg * l)
 {
-	if (l->variant == RULE_REGISTER || l->variant == RULE_VARIANT) return true;
+	if (l->variant == INSTR_VAR || l->variant == INSTR_VARIANT) return true;
 	return false;
 }
 
@@ -77,13 +77,13 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 
 	if (r_is_reg) return false;
 
-	if (l->variant == RULE_CONST) {
-		if (r->variant != RULE_CONST) return true;
+	if (l->variant == INSTR_MATCH_VAL) {
+		if (r->variant != INSTR_MATCH_VAL) return true;
 	}
 
 	// Accessing variable using byte or element is more specific than other variants
-	if (l->variant == RULE_BYTE || l->variant == RULE_ELEMENT) {
-		if (r->variant != RULE_BYTE && l->variant != RULE_ELEMENT) return true;
+	if (l->variant == INSTR_BYTE || l->variant == INSTR_ELEMENT) {
+		if (r->variant != INSTR_BYTE && l->variant != INSTR_ELEMENT) return true;
 
 	}
 	return false;
@@ -174,9 +174,9 @@ Purpose:
 void RuleArgMarkNonGarbage(RuleArg * rule)
 {
 	if (rule != NULL) {
-		if (rule->variant == RULE_VARIABLE || rule->variant == RULE_CONST) {
+		if (rule->variant == INSTR_MATCH || rule->variant == INSTR_MATCH_VAL) {
 			TypeMark(rule->type);
-		} else if (rule->variant == RULE_TUPLE || rule->variant == RULE_DEREF) {
+		} else if (rule->variant == INSTR_TUPLE || rule->variant == INSTR_DEREF) {
 			RuleArgMarkNonGarbage(rule->arr);
 		}
 		RuleArgMarkNonGarbage(rule->index);
@@ -234,7 +234,7 @@ void EmptyRuleArgs()
 	}
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant);
+static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant);
 
 Bool RuleMatch(Rule * rule, Instr * i, CompilerPhase match_mode)
 /*
@@ -249,13 +249,13 @@ Purpose:
 	EmptyRuleArgs();
 	MATCH_MODE = match_mode;
 
-	match = ArgMatch(&rule->arg[0], i->result, RULE_UNDEFINED) 
-		&& ArgMatch(&rule->arg[1], i->arg1, RULE_UNDEFINED) 
-		&& ArgMatch(&rule->arg[2], i->arg2, RULE_UNDEFINED);
+	match = ArgMatch(&rule->arg[0], i->result, INSTR_NULL) 
+		&& ArgMatch(&rule->arg[1], i->arg1, INSTR_NULL) 
+		&& ArgMatch(&rule->arg[2], i->arg2, INSTR_NULL);
 
 	if (match) {
-		if (RULE_MATCH_BREAK) {
-			RULE_MATCH_BREAK = true;
+		if (INSTR_MATCH_BREAK) {
+			INSTR_MATCH_BREAK = true;
 		}
 	}
 	return match;
@@ -275,7 +275,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 //				Print("");
 			} else {
 				// 1D index
-				if (!ArgMatch(pattern->index, var->var, RULE_ELEMENT)) return false;
+				if (!ArgMatch(pattern->index, var->var, INSTR_ELEMENT)) return false;
 				return true;
 			}
 		} else {
@@ -286,8 +286,9 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	} else {
 		if (VarIsArrayElement(var)) return false;
 	}
-
-	return VarMatchesType(var, type);
+	if (type == NULL) return true;
+	return IsSubset(var, type);
+//	return VarMatchesType(var, type);
 }
 
 Bool VarIsOneOf(Var * var, Var * variants)
@@ -300,27 +301,27 @@ Bool VarIsOneOf(Var * var, Var * variants)
 	}
 
 	while(o->mode == INSTR_TUPLE) {
-		if (VarIsEqual(var, o->adr)) return true;
+		if (CellIsEqual(var, o->adr)) return true;
 		o = o->var;
 	}
-	return VarIsEqual(var, o);
+	return CellIsEqual(var, o);
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant)
+static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 {
 	Type * atype;
 	Var * pvar, * left, * right;
 	UInt8 j;
-	RuleArgVariant v = pattern->variant;
+	InstrOp v = pattern->variant;
 
-	if (arg == NULL) return v == RULE_ANY;
+	if (arg == NULL) return v == INSTR_NULL;
 
 	atype = arg->type;
 	
 	switch(v) {
 
-	case RULE_ADD:
-	case RULE_SUB:
+	case INSTR_ADD:
+	case INSTR_SUB:
 		right = arg->var;
 
 		// If we have variable and not arithmetic operation, try to match using substraction or addition with 0
@@ -330,8 +331,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 			left  = arg;
 			right = ZERO;
 		} else {
-			if (v == RULE_ADD && arg->mode != INSTR_ADD) return false;
-			if (v == RULE_SUB && arg->mode != INSTR_SUB) return false;
+			if (v == INSTR_ADD && arg->mode != INSTR_ADD) return false;
+			if (v == INSTR_SUB && arg->mode != INSTR_SUB) return false;
 			left = arg->adr;
 		}
 		if (!ArgMatch(pattern->index, right, v)) return false;
@@ -339,7 +340,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 		break;
 
 	// <X>..<Y>
-	case RULE_RANGE:
+	case INSTR_RANGE:
 		if (arg->mode != INSTR_RANGE) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
@@ -350,37 +351,37 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 	// All flags defined by source instruction (argument) must be part of pattern though.
 
 	// <X>,<Y>
-	case RULE_TUPLE:
+	case INSTR_TUPLE:
 		if (arg->mode != INSTR_TUPLE) return false;
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
 	// <X>$<Y>
-	case RULE_BYTE:
+	case INSTR_BYTE:
 		if (arg->mode != INSTR_BYTE) return false;		// pattern expects byte, and variable is not an byte
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;		
 		return ArgMatch(pattern->arr, arg->adr, v);
 		break;
 
 	// <X>(<Y>)
-	case RULE_ELEMENT:
+	case INSTR_ELEMENT:
 		if (arg->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
 		if (!ArgMatch(pattern->index, arg->var, v)) return false;
 		return ArgMatch(pattern->arr, arg->adr, v); 
 		break;
 
 	// const %A:type
-	case RULE_CONST:
-		if (!VarIsConst(arg)) return false;
+	case INSTR_MATCH_VAL:
+		if (!CellIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
-	// Exact variable.
-	case RULE_REGISTER:
+	// Exact variable or constant.
+	case INSTR_VAR:
 		pvar = pattern->var;
-		if (VarIsConst(pvar)) {
-			if (!VarIsConst(arg)) return false;
+		if (CellIsConst(pvar)) {
+			if (!CellIsConst(arg)) return false;
 			if (pvar->mode == INSTR_TEXT) {
 				if (!StrEqual(pvar->str, arg->str)) return false;
 			} else if (pvar->mode == INSTR_INT) {
@@ -389,46 +390,46 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 //				}
 			}
 		} else {
-			if (pattern->var != NULL && !VarIsEqual(arg, pattern->var)) return false;
+			if (pattern->var != NULL && !CellIsEqual(arg, pattern->var)) return false;
 		}
 		break;
 
-	case RULE_VARIANT:
+	case INSTR_VARIANT:
 		if (!VarIsOneOf(arg, pattern->var)) return false;
 		break;
 
-	case RULE_VARIABLE:
-		if (arg->mode != INSTR_VAR) return false;
+	case INSTR_MATCH:
+//		if (arg->mode != INSTR_VAR) return false;
 		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
-		if (parent_variant != RULE_BYTE && !VarMatchesPattern(arg, pattern)) return false;
+		if (parent_variant != INSTR_BYTE && !VarMatchesPattern(arg, pattern)) return false;
 		break;
 	
 	// @%A
-	case RULE_DEREF:
+	case INSTR_DEREF:
 		if (arg->mode != INSTR_DEREF) return false;
 		arg = arg->var;
 		if (!ArgMatch(pattern->arr, arg, v)) return false;
-//		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
 	// %A:type
-	case RULE_ARG:
-		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
-		if (arg->mode == INSTR_VAR || VarIsConst(arg) || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
-			if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-			if (!VarMatchesPattern(arg, pattern)) return false;
-		} else {
-			return false;
-		}
-//		if (arg->mode == INSTR_DEREF || arg->mode == INSTR_RANGE || (arg->mode == INSTR_BYTE && MATCH_MODE == PHASE_EMIT) || arg->mode == INSTR_ELEMENT) return false;
-//		if (parent_variant != RULE_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-//		if (!VarMatchesPattern(arg, pattern)) return false;
+//	case INSTR_MATCH:
+//		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
+//		if (arg->mode == INSTR_VAR || CellIsConst(arg) || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
+//			if (parent_variant != INSTR_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
+//			if (!VarMatchesPattern(arg, pattern)) return false;
+//		} else {
+//			return false;
+//		}
 		break;
 
-	case RULE_ANY:
+	case INSTR_NULL:
 		break;
 
-	default: break;
+	default:
+		if (pattern->variant != arg->mode) return false;
+		if (!ArgMatch(pattern->index, arg->r, v)) return false;
+		return ArgMatch(pattern->arr, arg->l, v); 
+		break;
 	}
 
 	// If there is macro argument number %A-%Z specified in rule argument, we set or check it here
@@ -456,6 +457,12 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, RuleArgVariant parent_variant
 //		}
 	}
 	return true;
+}
+
+Bool InstrRuleIsDefined(InstrOp op)
+{
+	return INSTR_RULES.rules[op] != NULL;
+
 }
 
 Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2)
@@ -598,10 +605,10 @@ Purpose:
 	rule = TRANSLATE_RULES.rules[op];
 
 	for(; rule != NULL; rule = rule->next) {
-		if (rule->arg[0].variant == RULE_ARG) {
+		if (rule->arg[0].variant == INSTR_MATCH) {
 			result_type = rule->arg[0].type;
-			if (TypeIsSubsetOf(type, result_type) && !TypeIsSubsetOf(result_type, type)) {
-				if (found_type == NULL || TypeIsSubsetOf(result_type, found_type)) found_type = result_type;
+			if (IsSubset(type, result_type) && !IsSubset(result_type, type)) {
+				if (found_type == NULL || IsSubset(result_type, found_type)) found_type = result_type;
 			}
 		}
 	}
@@ -616,6 +623,11 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	Type * result_type = NULL;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
+
+	if (op == INSTR_LET && arg2 == NULL && FlagOn(INSTR_INFO[arg1->mode].flags, INSTR_OPERATOR)) {
+		op = arg1->mode; arg2 = arg1->r; arg1 = arg1->l;
+		if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
+	}
 
 	// It is not possible to translate the instruction directly.
 	// We will try to simplify the translated instruction by taking one of it's complex arguments
@@ -706,18 +718,18 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 found_translation:
 	if (mode == GENERATE) {
 		if (has1) {
-			a = VarNewTmp(arg1->type);
+			a = NewTempVar(arg1->type);
 			InstrTranslate3(INSTR_LET, a, arg1, NULL, GENERATE);
 			arg1 = a;
 		}
 		if (has2) {
-			a = VarNewTmp(arg2->type);
+			a = NewTempVar(arg2->type);
 			InstrTranslate3(INSTR_LET, a, arg2, NULL, GENERATE);
 			arg2 = a;
 		}
 		if (has_r) {
 			a = result;
-			result = VarNewTmp(result_type);
+			result = NewTempVar(result_type);
 		}
 
 		InstrTranslate2(op, result, arg1, arg2, GENERATE);
@@ -777,9 +789,6 @@ Purpose:
 
 		loc.blk = blk;
 		loc.n = 1;
-		// The translation is done by using procedures for code generating.
-		// We detach the instruction list from block and set the block as destination for instruction generator.
-		// In this moment, the code generating stack must be empty anyways.
 
 		first_i = blk->first;
 		blk->first = blk->last = NULL;
@@ -808,12 +817,13 @@ Purpose:
 			}
 
 			if (!InstrTranslate3(i->op, i->result, i->arg1, i->arg2, GENERATE)) {
-				InternalErrorLoc("Unsupported instruction", &loc); 
-				InstrPrint(i);
+				if (FlagOff(INSTR_INFO[i->op].flags, INSTR_OPTIONAL)) {
+					InternalErrorLoc("Unsupported instruction", &loc); 
+					InstrPrint(i);
+				}
 			}
 next:
 			next_i = i->next;
-//			InstrFree(i);
 			i = next_i;
 			loc.n++;
 		}
@@ -838,11 +848,10 @@ void TranslateInit()
 	// Create RULE procedure and allocate it's arguments
 
 	type = TypeAlloc(TYPE_PROC);
-	RULE_PROC = VarAlloc(INSTR_VAR, NULL, 0);
-	RULE_PROC->type = type;
+	RULE_PROC = NewTempVar(type);
 
 	for(i=0; i<MACRO_ARG_CNT; i++) {
-		var = VarAllocScope(RULE_PROC, INSTR_VAR, NULL, i+1);
+		var = NewVarWithIndex(RULE_PROC, NULL, i+1, NULL);
 		var->submode = SUBMODE_ARG_IN;
 		MACRO_ARG_VAR[i] = var;
 	}

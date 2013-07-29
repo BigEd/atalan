@@ -1,5 +1,6 @@
 /*
-Table of variables
+
+Cell management
 
 There is one global table of variables.
 
@@ -10,25 +11,26 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
-GLOBAL Var * UNUSED_VARS;		    // scope in which are all the free variables
-GLOBAL VarBlock * VAR_BLOCKS;       // list of all variable blocks
-GLOBAL VarBlock * LAST_VAR_BLOCK;   // list of all variable blocks
+GLOBAL Var * UNUSED_VARS;		     // scope in which are all the free variables
+GLOBAL CellBlock * CELL_BLOCKS;       // list of all variable blocks
+GLOBAL CellBlock * LAST_CELL_BLOCK;   // list of all variable blocks
 
-GLOBAL Var * VARS;		// global variables
-GLOBAL Var * LAST_VAR;  // Last allocated variable.
+//GLOBAL Var * VARS;		// global variables
+//GLOBAL Var * LAST_VAR;  // Last allocated variable.
 
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
 
+// Used for cell enumerating
+CellBlock * G_BLK;
+UInt16 G_VAR_I;
 
-GLOBAL char VAR_NAME[128];
-
-void IntConstInit();
+void IntCellInit();
 
 
 /*
-We have theoretical option of supporting mltiple CPUs simultaneously (this the CPUS array).
+We have theoretical option of supporting multiple CPUs simultaneously (this the CPUS array).
 Current CPU used is stored in CPU variable.
 */
 
@@ -40,13 +42,12 @@ char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
 
-
-VarBlock * VarBlockAlloc()
+CellBlock * NewCellBlock()
 {
 	Var * var, * next;
 	UInt16 i;
-	VarBlock * varblk;
-	varblk = MemAllocStruct(VarBlock);
+	CellBlock * varblk;
+	varblk = MemAllocStruct(CellBlock);
 
 	// Initialize all variables in the block as unused and put them in the list of unused variables.
 
@@ -65,41 +66,68 @@ VarBlock * VarBlockAlloc()
 	return varblk;
 }
 
-Var * VarAllocUnused()
+Var * NewCell(InstrOp mode)
 {
-	Var * var;
+	Var * cell;
+
 	if (UNUSED_VARS == NULL) {
-		LAST_VAR_BLOCK->next = VarBlockAlloc();
-		LAST_VAR_BLOCK = LAST_VAR_BLOCK->next;
+		LAST_CELL_BLOCK->next = NewCellBlock();
+		LAST_CELL_BLOCK = LAST_CELL_BLOCK->next;
 	}
-	var = UNUSED_VARS;
-	UNUSED_VARS = var->next_in_scope;
-	var->next_in_scope = NULL;
-	return var;
+	cell = UNUSED_VARS;
+	UNUSED_VARS = cell->next_in_scope;
+	cell->next_in_scope = NULL;
+
+	cell->mode = mode;
+	cell->submode = 0;
+	cell->scope = NULL;
+	cell->subscope = NULL;
+
+	return cell;
 }
 
-void VarInit()
+Var * NewCellInScope(InstrOp mode, Var * scope)
 {
-
-	VARS = NULL;
-	LAST_VAR = NULL;
-
-	TMP_IDX = 1;
-	TMP_LBL_IDX = 0;
-	SCOPE_IDX = 0;
-
-	VAR_BLOCKS = LAST_VAR_BLOCK = VarBlockAlloc();
-
-	// Alloc rule procedure and rule arguments (rule arguments are local arguments of RULE_PROC)
-
-	CPU = &CPUS[0];
-
-	IntConstInit();
-
-
+	Var * cell = NewCell(mode);
+	CellSetScope(cell, scope);
+	return cell;
 }
 
-void VarSetScope(Var * var, Var * scope)
+Var * CellCopy(Var * var)
+{
+	Var * copy;
+	copy = NewCell(var->mode);
+	memcpy(copy, var, sizeof(Var));
+	return copy;
+}
+
+Var * ForEachCell(Bool (*cell_fn)(Var * cell, void * data), void * data)
+{
+	CellBlock * blk;
+	Var * cell;
+	UInt16 i;
+	for(blk = CELL_BLOCKS; blk != NULL; blk = blk->next) {
+		for(i=0, cell = &blk->vars[0]; i < VAR_BLOCK_CAPACITY; i++, cell++) {		
+			if (cell->mode != INSTR_NULL) {
+				if (cell_fn(cell, data)) return cell;
+			}
+		}
+	}
+	return NULL;
+}
+
+
+/**************************************************************
+
+  Scope management
+
+  Scopes are represented as name cells without actual variable.
+  However all elements in the scope are available.
+
+***************************************************************/
+
+
+void CellSetScope(Var * var, Var * scope)
 {
 	Var * sub;
 
@@ -107,9 +135,14 @@ void VarSetScope(Var * var, Var * scope)
 		InternalError("Variable already has the scope set");
 	}
 
-	var->scope = scope;
+	if (scope == NO_SCOPE) {
+		var->scope = NULL;
+		return;
+	}
 
-	if (scope == NULL) return;
+	if (scope == NULL) scope = SCOPE;
+
+	var->scope = scope;
 
 	//==== Append as last variable in scope
 
@@ -126,144 +159,6 @@ void VarSetScope(Var * var, Var * scope)
 
 }
 
-Var * VarFindOp(InstrOp op, Var * left, Var * right)
-/*
-Purpose:
-	Find variable created as combination of two other variables.
-Argument:
-	ref		Array is accessed using reference.
-*/
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == op && var->adr == left && var->var == right) return var;
-	}
-	return NULL;
-}
-
-Var * VarNewRange(Var * min, Var * max)
-{
-	Var * var = VarNewOp(INSTR_RANGE, min, max);
-
-	return var;
-}
-
-Var * VarNewTuple(Var * left, Var * right)
-/*
-Purpose:
-	Create new tuple from the two variables.
-	If the right variable is NULL, left is returned.
-*/
-{
-	Var * var;
-
-	if (right == NULL) return left;
-	if (left == NULL) return right;
-
-	var = VarFindOp(INSTR_TUPLE, left, right);
-	if (var == NULL) {
-		var = VarAllocScope(NO_SCOPE, INSTR_TUPLE, NULL, 0);
-		var->type = TypeTuple(left->type, right->type);
-		var->adr = left;
-		var->var = right;
-	}
-	return var;
-}
-
-Var * VarNewDeref(Var * adr)
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == INSTR_DEREF && var->var == adr) return var;
-	}
-
-	var = VarAlloc(INSTR_DEREF, NULL, 0);
-	var->var = adr;
-	if (adr->type != NULL && adr->type->variant == TYPE_ADR) {
-		var->type = adr->type->element;
-	}
-	return var;
-}
-
-Var * VarNewVariant(Var * left, Var * right)
-{
-	if (left == NULL) return right;
-	if (right == NULL) return left;
-	if (right == left) return left;
-	return VarNewOp(INSTR_VARIANT, left, right);
-}
-
-Var * VarNewOp(InstrOp op, Var * arr, Var * idx)
-/*
-Purpose:
-	Alloc new reference to array element.
-Argument:
-	ref		Array is accessed using reference.
-*/
-{
-	Var * item;
-
-	// Try to find same element
-
-	Var * var = VarFindOp(op, arr, idx);
-	if (var != NULL) return var;
-/*
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->mode == op) {
-			if (var->adr == arr && var->var == idx) return var;
-		}
-	}
-*/
-	item = VarAlloc(op, NULL, 0);
-//	if (ref) item->submode = SUBMODE_REF;
-	item->adr  = arr;
-
-	// Type of array element variable is type of array element
-	// We may attempt to address individual bytes of non-array variable as an aray
-	// in such case the type of the lement is byte.
-	if (arr->type != NULL) {
-		if (arr->type->variant == TYPE_ARRAY) {
-			item->type = arr->type->element;
-		} else if (arr->type->variant == TYPE_STRUCT) {
-			item->type = idx->type;
-			item->submode |= (idx->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
-		} else {
-			item->type = TypeByte();
-		}
-	} else {
-	}
-	item->var  = idx;
-	// If this is element from in or out variable, it is in or out too
-	item->submode |= (arr->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
-	return item;
-}
-
-Var * VarNewElement(Var * arr, Var * idx)
-{
-	return VarNewOp(INSTR_ELEMENT, arr, idx);
-}
-
-Var * VarNewByteElement(Var * arr, Var * idx)
-/*
-Purpose:
-	Alloc new reference to specified byte of variable.
-Argument:
-	ref		Array is accessed using reference.
-*/
-{	
-	//TODO: VarNewByteElement may create simple integer when used with two integer constants
-
-	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
-	item->type = TypeByte();
-	return item;
-}
-
-Var * VarNewBitElement(Var * arr, Var * idx)
-{
-	Var * item = VarNewOp(INSTR_BYTE, arr, idx);
-	return item;
-}
-
 Var * InScope(Var * new_scope)
 {
 	Var * scope;
@@ -277,30 +172,101 @@ void ReturnScope(Var * prev)
 	SCOPE = prev;
 }
 
-void ExitScope()
+void EnterSubscope()
+{
+	Var * var;
+	SCOPE_IDX++;
+	var = NewVarWithIndex(SCOPE, SCOPE_NAME, SCOPE_IDX, TypeScope());
+	SCOPE = var;
+}
+
+void ExitSubscope()
 {
 	SCOPE = SCOPE->scope;
 }
 
-void EnterLocalScope()
+void PrintScope(Var * scope)
+/*
+Purpose:
+	Print variables in specified scope, and parent scopes.
+	If scope is NULL, only global variables will be searched.
+*/
 {
 	Var * var;
-	SCOPE_IDX++;
-	var = VarAllocScope(SCOPE, INSTR_SCOPE, SCOPE_NAME, SCOPE_IDX);
-	var->type = TypeScope();
-	SCOPE = var;
+//	PrintFmt("===== %s =======\n", scope->name);
+	FOR_EACH_LOCAL(scope, var)
+		if (var->scope == scope) {
+			PrintVar(var); PrintEOL();
+		}
+	NEXT_LOCAL
 }
 
-Var * VarFirst()
-{
-	return VARS;
-}
-
-Var * VarNewTmp(Type * type)
+void PrintUserScope(Var * scope)
+/*
+Purpose:
+	Print variables in specified scope, and parent scopes.
+	If scope is NULL, only global variables will be searched.
+*/
 {
 	Var * var;
-	var = VarAllocScopeTmp(NULL, INSTR_VAR, type);
-	return var;
+//	PrintFmt("===== %s =======\n", scope->name);
+	FOR_EACH_LOCAL(scope, var)
+		if (FlagOff(var->submode, SUBMODE_SYSTEM) && FlagOn(var->submode, SUBMODE_USER_DEFINED)) {
+			PrintVar(var); PrintEOL();
+		}
+		
+	NEXT_LOCAL
+}
+
+/*************************************************************************************/
+
+Type * CellType(Var * cell)
+{
+	if (cell == NULL) return &EMPTY;
+	if (cell->mode == INSTR_VAR) {
+		return cell->type;
+	} else if (cell->mode == INSTR_ARRAY) {
+		return cell->type;
+	}
+	return NULL;
+}
+
+Bool CellIsValue(Var * var)
+/*
+Purpose:
+	Cell is value, if it directly represents numeric, text or array value.
+*/
+{
+	return var != NULL && (var->mode == INSTR_INT || var->mode == INSTR_TEXT || var->mode == INSTR_ARRAY || var->mode == INSTR_TYPE);
+}
+
+Bool TypeIsConst(Var * var)
+/*
+Purpose:
+	If the cell is used as type, will it represent const (single value?).
+*/
+{
+	switch(var->mode) {
+	case INSTR_TYPE:
+		return CellIsValue(var->possible_values);
+
+	case INSTR_RANGE:
+		return CellIsEqual(var->adr, var->var);
+
+	case INSTR_VAR:
+		return TypeIsConst(var->type);
+
+	default:
+		return CellIsValue(var);
+	}
+}
+
+Bool CellIsConst(Var * var)
+{
+	if (var == NULL) return false;
+	if (CellIsValue(var)) return true;
+	if (var->mode == INSTR_VAR && TypeIsConst(var->type)) return true;
+	return false;
 }
 
 Bool VarIsArray(Var * var)
@@ -329,40 +295,24 @@ Bool VarIsArrayElement(Var * var)
 //	return var != NULL && var->mode == INSTR_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
 }
 
-void VarInitStr(Var * var, char * str)
-{
-	var->type = &TSTR;
-	var->str = StrAlloc(str);
-}
-
-Var * VarNewStr(char * str)
-{
-	Var * var;
-	var = VarAlloc(INSTR_TEXT, NULL, 0);
-	VarInitStr(var, str);
-	return var;
-}
-
 Var * VarNewLabel(char * name)
 {
 	Var * var;
-	var = VarAlloc(INSTR_VAR, name, 0);
-	var->type = &TLBL;
+	var = NewVar(NULL, name, &TLBL);
 	return var;
 }
 
-Var * FindOrAllocLabel(char * name, UInt16 idx)
+Var * FindOrAllocLabel(char * name)
 {
 	Var * var = NULL;
 	Var * proc;
 	Var * scope;
 
 	proc = VarProcScope();
-	var = VarFindScope(proc, name, idx);
+	var = VarFind(proc, name);
 	if (var == NULL) {
 		scope = InScope(proc);
 		var = VarNewLabel(name);
-		var->idx = idx;
 		ReturnScope(scope);
 	}
 	return var;
@@ -385,114 +335,16 @@ Var * VarNewTmpLabel()
 	return var;
 }
 
-Var * VarAllocScope(Var * scope, InstrOp mode, char * name, VarIdx idx)
-{
-	Var * var;
-
-	ASSERT(mode != INSTR_INT);
-
-	if (scope == NULL) scope = SCOPE;
-	if (scope == NO_SCOPE) scope = NULL;
-
-	var = VarAllocUnused();
-
-	var->mode  = mode;
-	var->name  = StrAlloc(name);
-	var->idx   = idx;
-	var->adr   = NULL;
-	var->next  = NULL;
-	var->type  = TUNDEFINED;		// freshly allocated variable has undefined type (but not NULL!)
-
-	VarSetScope(var, scope);
-
-	if (VARS == NULL) {
-		VARS = var;
-	} else {
-		LAST_VAR->next = var;
-	}
-	LAST_VAR = var;
-	return var;
-
-}
-
-Var * VarAllocScopeTmp(Var * scope, InstrOp mode, Type * type)
-/*
-Purpose:
-	Alloc new temporary variable in specified scope.
-*/
-{
-	Var * var;
-	var = VarAllocScope(scope, mode, NULL, 0);
-	var->name = TMP_NAME;
-	var->idx = TMP_IDX;
-	if (type == NULL) type = TUNDEFINED;
-	var->type = type;
-	TMP_IDX++;
-	return var;
-}
-
-
-Var * VarClone(Var * scope, Var * var)
-{
-	Var * copy;
-
-	copy = VarAllocUnused();
-	MemMove(copy, var, sizeof(Var));
-	VarSetScope(var, scope);
-	return copy;
-}
-
-Var * VarAlloc(InstrOp mode, char * name, VarIdx idx)
-/*
-Purpose:
-	Alloc new variable.
-*/
-{
-	return VarAllocScope(SCOPE, mode, name, idx);
-}
-
-Var * VarFindScope(Var * scope, char * name, VarIdx idx)
-/*
-Purpose:
-	Find variable in specified scope.
-	If scope is NULL, only global variables will be searched.
-*/
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->scope == scope && var->mode != INSTR_VOID) {
-			if (var->idx == idx && StrEqual(name, var->name)) break;
-		}
-	}
-	return var;
-}
-
-void PrintScope(Var * scope)
-/*
-Purpose:
-	Find variable in specified scope, and parent scopes.
-	If scope is NULL, only global variables will be searched.
-*/
-{
-	Var * var;
-	PrintFmt("===== %s =======\n", scope->name);
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->scope == scope) {
-			PrintVar(var); PrintEOL();
-		}
-	}
-}
-
 Var * VarFindScope2(Var * scope, char * name)
 {
 	Var * var = NULL;
 	Var * s;
 	for (s = scope; s != NULL; s = s->scope) {
-		var = VarFindScope(s, name, 0);
+		var = VarFind(s, name);
 		if (var != NULL) break;
 		// For procedures whose type has been defined using predefined type, try to find arguments from this type
-		if (s->type->variant == TYPE_PROC && s->type->owner != NULL && s->type->owner != s) {
-			var = VarFindScope(s->type->owner, name, 0);
+		if (s->type->variant == TYPE_PROC && s->type != NULL /*&& s->type->owner != s*/) {			// ??????
+			var = VarFind(s->type, name);
 			if (var != NULL) break;
 		}
 	}
@@ -506,15 +358,6 @@ Purpose:
 */
 {
 	return VarFindScope2(SCOPE, name);
-/*
-	Var * var = NULL;
-	Var * s;
-	for (s = SCOPE; s != NULL; s = s->scope) {
-		var = VarFindScope(s, name, 0);
-		if (var != NULL) break;
-	}
-	return var;
-*/
 }
 
 Var * VarProcScope()
@@ -526,28 +369,15 @@ Var * VarProcScope()
 	return s;
 }
 
-Var * VarFind(char * name, VarIdx idx)
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->idx == idx && StrEqual(name, var->name)) break;
-	}
-	return var;
-}
-
-Var * VarFindTypeVariant(char * name, VarIdx idx, TypeVariant type_variant)
-{
-	Var * var;
-	for (var = VARS; var != NULL; var = var->next) {
-		if (var->idx == idx && StrEqual(name, var->name) && (type_variant == TYPE_UNDEFINED || (var->type != NULL && var->type->variant == type_variant))) break;
-	}
-	return var;
-}
-
 TypeVariant VarType(Var * var)
 {
 	if (var == NULL) return TYPE_VOID;
-	return var->type->variant;
+	if (var->mode == INSTR_INT) return TYPE_INT;
+	if (var->mode == INSTR_RANGE) return TYPE_INT;
+	if (var->mode == INSTR_TEXT) return TYPE_STRING;
+	if (var->mode == INSTR_TYPE) return var->variant;
+	if (var->mode == INSTR_VAR) return VarType(var->type);
+	return TYPE_VOID;
 }
 
 Bool VarIsLabel(Var * var)
@@ -555,68 +385,25 @@ Bool VarIsLabel(Var * var)
 	return var->type->variant == TYPE_LABEL;
 }
 
-Bool TypeIsConst(Type * type)
-{
-	if (type->variant == TYPE_VAR) {
-		return VarIsConst(type->typevar);
-	}
-	return false;
-}
-
-Bool VarIsConst(Var * var)
-{
-	if (var == NULL) return false;
-	return var->mode == INSTR_INT || var->mode == INSTR_CONST || var->mode == INSTR_TEXT || TypeIsConst(var->type);
-}
-
-Bool VarIsIntConst(Var * var)
-{
-	return var != NULL && (var->mode == INSTR_INT || (var->mode == INSTR_CONST && TypeIsInt(var->type)));
-}
-
-BigInt * VarIntConst(Var * var)
-/*
-Purpose:
-	Return integer value represented by the variable, if it is constant.
-*/
-{
-	if (var == NULL) return NULL;
-
-	// For named const, work with it's referenced value
-	while(var->mode == INSTR_CONST && var->type->variant == TYPE_INT && var->var != NULL) var = var->var;
-
-	if (var->mode == INSTR_INT) return &var->n;
-	if (TypeIsIntConst(var->type)) return &var->type->range.min;
-
-	return NULL;
-}
-
-
-Bool VarIsN(Var * var, Int32 n)
-{
-	BigInt * i;
-
-	i = VarIntConst(var);
-	return i != NULL && IntEqN(i, n);
-}
-
-Var * VarNewType(Type * type)
-{
-	Var * var;
-	var = VarAlloc(INSTR_VAR, NULL, 0);
-	var->type = TypeType(NULL);
-	var->type_value = type;
-	return var;
-}
-
-Bool VarIsType(Var * var)
-{
-	return var != NULL && (var->mode == INSTR_TYPE || var->type->variant == TYPE_TYPE);
-}
-
 Bool VarIsUsed(Var * var)
 {
 	return var != NULL && (var->read > 0 || var->write > 0);
+}
+
+Bool IsVirtual(Var * cell)
+{
+	Var * type;
+	if (cell == NULL || cell->mode != INSTR_VAR) return true;
+	type = cell->type;
+	return 
+		CellIsConst(cell)
+	 || VarIsReg(cell)
+	 || VarIsRuleArg(cell)
+	 || type->mode == INSTR_NULL
+	 || (type->mode == INSTR_TYPE && (type->variant == TYPE_PROC || type->variant == TYPE_MACRO || type->variant == TYPE_LABEL || type->variant == TYPE_SCOPE || (type->variant == TYPE_TYPE && type->possible_values == NULL)))
+	 || (type->mode == INSTR_VAR && IsVirtual(type));
+
+
 }
 
 void VarEmitAlloc()
@@ -625,37 +412,47 @@ Purpose:
 	Emit instructions allocating variables, that are not placed at specific location.
 */
 {
-	Var * var, *cnst, * type_var;
+	Var * var, *cnst;
 	Type * type;
 	UInt32 size;	//, i;
 	Var * dim1, * dim2;
 
-	// Generate empty arrays
-
 	FOR_EACH_VAR(var)
-		type = var->type;
-		if (type != NULL) {
-			if (var->mode == INSTR_VAR && type->variant == TYPE_ARRAY && var->adr == NULL && var->instr == NULL) {
+		if (var->mode == INSTR_VAR && var->adr == NULL) {
+			if (var->read > 0 || var->write > 0) {
+				type = var->type;
+				ASSERT(type != NULL);
+				if (type != NULL) {
 
-				if (VarIsUsed(var)) {
+					if (type->mode == INSTR_TYPE && type->variant == TYPE_ARRAY && var->instr == NULL) {
+
+						if (VarIsUsed(var)) {
 					
-					size = TypeSize(type);
+							size = TypeSize(type);
 
-					// Make array aligned (it type defines address, it is definition of alignment)
-					type_var = type->owner;
-					if (type_var->adr != NULL) {
-						EmitInstrOp(INSTR_ALIGN, NULL, type_var->adr, NULL);
-					}
+							// Make array aligned (it type defines address, it is definition of alignment)
 
-					ArraySize(type, &dim1, &dim2);
+							if (type->adr != NULL) {
+								EmitInstrOp(INSTR_ALIGN, NULL, type->adr, NULL);
+							}
 
-					if (dim2 != NULL) {
-						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-						EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
+							ArraySize(type, &dim1, &dim2);
+
+							if (dim2 != NULL) {
+								EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+								EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
+							} else {
+								cnst = IntCellN(size);
+								EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+								EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
+							}
+						}
 					} else {
-						cnst = VarInt(size);
-						EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-						EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
+						if (!IsVirtual(var)) {
+							if (InstrRule2(INSTR_ALLOC, var, NULL, NULL)) {
+								EmitInstrOp(INSTR_ALLOC, var, NULL, NULL);
+							}
+						}
 					}
 				}
 			}
@@ -669,27 +466,28 @@ Purpose:
 	Generate instructions allocating space for arrays.
 */
 {
-	Var * var, *type_var;
+	Var * var;
 	Type * type;
 	Rule * rule;
+	Var * arr;
 
 	// Generate initialized arrays, where location is not specified
 
 	FOR_EACH_VAR(var)
-		type = var->type;
-		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr == NULL) {		
+		if (var->mode == INSTR_NAME && var->var != NULL && var->var->mode == INSTR_ARRAY) {
+			arr = var->var;
+			if (arr->instr != NULL && arr->adr == NULL) {
 				if (VarIsUsed(var)) {
+					type = var->type;
 					// Make array aligned (it type defines address, it is definition of alignment)
-					type_var = type->owner;
-					if (type_var->adr != NULL) {
-						rule = InstrRule2(INSTR_ALIGN, NULL, type_var->adr, NULL);
-						GenRule(rule, NULL, type_var->adr, NULL);
+					if (type->adr != NULL) {
+						rule = InstrRule2(INSTR_ALIGN, NULL, type->adr, NULL);
+						GenRule(rule, NULL, type->adr, NULL);
 					}
 					// Label & initializers
 					GenLabel(var);
-					GenBlock(var->instr);
-					var->instr = NULL;
+					GenBlock(arr->instr);
+					arr->instr = NULL;
 				}
 			}
 		}
@@ -715,13 +513,15 @@ Purpose:
 	// Generate initialized arrays at specified addresses
 
 	FOR_EACH_VAR(var)
-		type = var->type;
-		if (type->variant == TYPE_ARRAY) {
-			if ((var->mode == INSTR_VAR || var->mode == INSTR_CONST) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
+		if (var->mode == INSTR_NAME && var->var != NULL && var->var->mode == INSTR_ARRAY) {
+			arr = var->var;
+			type = var->type;
+			if (arr->instr != NULL && arr->adr != NULL && VarIsUsed(var)) {
+//			if ((var->mode == INSTR_VAR || var->mode == INSTR_NAME) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				rule = InstrRule2(INSTR_ORG, NULL, var->adr, NULL);
 				GenRule(rule, NULL, var->adr, NULL);
 				GenLabel(var);
-				GenBlock(var->instr);
+				GenBlock(arr->instr);
 			}
 		}
 	NEXT_VAR
@@ -733,7 +533,7 @@ void VarResetUse()
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->type->variant != TYPE_PROC) {
+		if (var->mode != INSTR_VAR || var->type->variant != TYPE_PROC) {
 			var->read = 0;
 			var->write = 0;
 			var->flags = var->flags & (~(VarUninitialized|VarLoop|VarLoopDependent));
@@ -760,13 +560,13 @@ Purpose:
 		FOR_EACH_LOCAL(CPU->SCOPE, var)
 			// Only variables without address are registers.
 			// The variables with address are register sets.
-			if (var->mode == INSTR_VAR && var->adr == NULL && var->type->variant == TYPE_INT) {
+			if (var->mode == INSTR_VAR && var->adr == NULL && TypeIsInt2(var->type)) {
 				SetFlagOn(var->submode, SUBMODE_REG);
 				CPU->REG[CPU->REG_CNT++] = var;
 			}
 		NEXT_LOCAL
 
-		var = VarFindScope(CPU->SCOPE, "memory", 0);
+		var = VarFind(CPU->SCOPE, "memory");
 		if (var != NULL) {
 			CPU->MEMORY = var->type;
 		} else {
@@ -800,62 +600,13 @@ Purpose:
 	return false;
 }
 
-void VarCount(Var * var, BigInt * cnt)
-{
-	BigInt * min, * max;
-	Type * type;
-
-	if (var == NULL) return;
-
-	if (var->mode == INSTR_INT) {
-		IntInit(cnt, 1);
-	}
-	if (var->mode == INSTR_RANGE) {
-		VarRange(var, &min, &max);
-		IntSub(cnt, max, min);
-		IntAddN(cnt, 1);
-	}
-
-	type = var->type;
-	if (type->variant == TYPE_INT) {
-		max = TypeMax(type);
-		min = TypeMin(type);
-		IntSub(cnt, max, min);
-		IntAddN(cnt, 1);
-	}
-}
-
-UInt32 VarByteSize(Var * var)
-/*
-Purpose:
-	Return size of variable in bytes.
-*/
-{
-	Type * type;
-	if (var != NULL) {
-		type = var->type;
-		if (var->mode == INSTR_ELEMENT) {
-			return 1;		//TODO: Compute size in a better way
-		} else if (var->mode == INSTR_BYTE) {
-			return 1;
-		} else if (var->mode == INSTR_INT) {
-			return IntByteSize(&var->n);
-		} else if (var->mode == INSTR_TEXT) {
-			return StrLen(var->str);
-		}
-		return TypeSize(type);
-	}
-	return 0;
-}
-
 Bool ProcIsInterrupt(Var * proc)
 {
 	Type * base;
 	base = proc->type;
 	if (base != NULL) {
-		while(
-			base->base != NULL) base = base->base;
-		if (base->owner == INTERRUPT) return true;
+		while(base->type != NULL) base = base->type;
+		if (base == INTERRUPT) return true;
 	}
 	return false;
 }
@@ -928,7 +679,7 @@ Arguments:
 							loc.i   = i;
 							bmk = SetBookmarkLine(&loc);
 
-							var = VarFindTypeVariant(label->name, label->idx, TYPE_LABEL);
+							var = VarFindTypeVariant(label->name, TYPE_LABEL);
 							if (var != NULL) {
 								ErrArg(var);
 								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								
@@ -959,7 +710,7 @@ Purpose:
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_RANGE) {
 		l = VarReplaceVar(var->adr, from, to);
 		r = VarReplaceVar(var->var, from, to);
-		if (l != var->adr || r != var->var) var = VarNewOp(var->mode, l, r);
+		if (l != var->adr || r != var->var) var = NewOp(var->mode, l, r);
 
 	} else if (var->mode == INSTR_DEREF) {
 		l = VarReplaceVar(var->var, from, to);
@@ -1123,21 +874,6 @@ Bool VarIsLocal(Var * var, Var * scope)
 	return false;
 }
 
-Var * VarNextLocal(Var * scope, Var * local)
-{
-	while(true) {
-		local = local->next;
-		if (local == NULL) break;
-		if (local->scope == scope) break;
-	}
-	return local;
-}
-
-Var * VarFirstLocal(Var * scope)
-{
-	return VarNextLocal(scope, VARS);
-}
-
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
 {
 	Var * var = arg->next;
@@ -1148,21 +884,23 @@ Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
 Var * FirstArg(Var * proc, VarSubmode submode)
 {
 	Var * var;
-	Var * owner;
 
-	// We may call the procedure using address stored in a variable, but we need to parse the arguments using
-	// procedure itself.
-	if (proc->type->variant == TYPE_ADR) {
-		proc = proc->type->element->owner;
+	if (proc->mode == INSTR_VAR) {
+		// We may call the procedure using address stored in a variable, but we need to parse the arguments using
+		// procedure itself.
+		if (proc->type->variant == TYPE_ADR) {
+			proc = proc->type->element;
+		} else if (proc->type->variant == TYPE_PROC) {
+			proc = proc->type;
+		}
 	}
 
-	// If this procedure type is defined using shared definition, use the definition to fing the arguments
+	// If this procedure type is defined using shared definition, use the definition to find the arguments
 
-	owner = proc->type->owner;
-	if (owner != NULL && owner != proc) {
-		proc = owner;
-	}
-	var = proc->next;
+//	if (owner != NULL && owner != proc) {
+//		proc = owner;
+//	}
+	var = proc->subscope;
 	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
 	return var;
 }
@@ -1186,20 +924,18 @@ Purpose:
 	type = var->type;
 	vtype = type->variant;
 
-	if (vtype == TYPE_INT) {
-		if (StrEqual(fld_name, "min")) {
-			fld = VarN(&type->range.min);
-		} else if (StrEqual(fld_name, "max")) {
-			fld = VarN(&type->range.max);
-		}
-	} else if (vtype == TYPE_ARRAY) {
+	if (StrEqual(fld_name, "min")) {
+		fld = CellMin(type);
+	} else if (StrEqual(fld_name, "max")) {
+		fld = CellMax(type);
+	} else if (var->mode == INSTR_TYPE && vtype == TYPE_ARRAY) {
 		if (StrEqual(fld_name, "step")) {
-			fld = VarInt(type->step);
+			fld = IntCellN(type->step);
 		}
 	}
 
 	if (fld == NULL) {
-		fld = VarFindScope(var, fld_name, 0);
+		fld = VarFind(var, fld_name);
 	}
 	return fld;
 }
@@ -1219,14 +955,14 @@ Purpose:
 
 		// Get the most elementary constant out of the variable
 
-		while (res->mode == INSTR_CONST && res->type->variant != TYPE_ARRAY && res->var != NULL) {
+		while (res->mode == INSTR_NAME && res->type->variant != TYPE_ARRAY && res->var != NULL) {
 			res = res->var;
 		}
 
 		// Getting n-th byte is same as special variant of AND
 		if (res->mode == INSTR_BYTE) {
-			a   = VarIntConst(var->adr);
-			idx = VarIntConst(var->var);
+			a   = IntFromCell(var->adr);
+			idx = IntFromCell(var->var);
 
 			if (a != NULL && idx != NULL) {
 				// t3 = (a >> (idx * 8)) & 0xff;
@@ -1236,7 +972,7 @@ Purpose:
 				IntAndN(&t2, 0xff);
 
 				//a = (a >> (idx * 8)) & 0xff;
-				res = VarN(&t2);
+				res = IntCell(&t2);
 
 				IntFree(&t1);
 				IntFree(&t2);			
@@ -1246,26 +982,17 @@ Purpose:
 	return res;
 }
 
-Bool VarIsValue(Var * var)
-/*
-Purpose:
-	Varue is value, if it directly represents numeric or text value.
-*/
-{
-	return var != NULL && (var->mode == INSTR_INT || var->mode == INSTR_TEXT);
-}
-
 void VarLet(Var * var, Var * val)
 /*
 Purpose:
 	Set the variable var to specified value.
-	The variable must be of type INSTR_CONST or INSTR_VAR and the value is set to var property.
+	The variable must be of type INSTR_NAME or INSTR_VAR and the value is set to var property.
 */
 {
 	if (var != NULL && val != NULL) {
-		ASSERT(var->mode == INSTR_CONST || var->mode == INSTR_VAR);
+		ASSERT(var->mode == INSTR_VAR);
 
-		if (VarIsValue(val)) {
+		if (CellIsValue(val)) {
 			var->var = val;
 		} else {
 			var->var = val->var;
@@ -1289,57 +1016,32 @@ Bool VarIsArg(Var * var)
 	return FlagOn(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT);
 }
 
-Bool VarIsEqual(Var * left, Var * right)
-{
-	if (left == NULL || right == NULL) return false;
-	if (left == right) return true;
-	if (left->mode == INSTR_VAR && left->adr != NULL) return VarIsEqual(left->adr, right);
-	if (right->mode == INSTR_VAR && right->adr != NULL) return VarIsEqual(left, right->adr);
-
-	if (left->mode == right->mode) {
-		if (left->mode == INSTR_TUPLE) {
-			return VarIsEqual(left->adr, right->adr) && VarIsEqual(left->var, right->var);
-		}
-	}
-
-	return false;
-}
 
 Var * VarFindAssociatedConst(Var * var, char * name)
 {
 	if (var == NULL) return NULL;
-	return VarFindScope(var->type->owner, name, 0);
+	return VarFind(var->type, name);
 }
 
-char * VarName(Var * var)
-/*
-Purpose:
-	Return name of the specified variable.
-	Only one name at the moment may be used.
-	Next call to the function will render the name invalid.
-*/
-{
-	VAR_NAME[0] = 0;
-	if (var == NULL) return "";
-	if (var->idx == 0) return var->name;
-	sprintf(VAR_NAME, "%s%d", var->name, var->idx-1);
-	return VAR_NAME;
-}
 
 Bool VarIsParam(Var * var)
 {
-	return VarIsConst(var) && FlagOn(var->submode, SUBMODE_PARAM);
+	return CellIsConst(var) && FlagOn(var->submode, SUBMODE_PARAM);
 }
 
-Bool VarEq(Var * left, Var * right)
+void VarInit()
 {
-	BigInt * l, * r;
-	if (left == right) return true;
-	l = VarIntConst(left);
-	r = VarIntConst(right);
 
-	if (l != NULL && r != NULL) {
-		return IntEq(l, r);
-	}
-	return false;
+	TMP_IDX = 1;
+	TMP_LBL_IDX = 0;
+	SCOPE_IDX = 0;
+
+	CELL_BLOCKS = LAST_CELL_BLOCK = NewCellBlock();
+
+	// Alloc rule procedure and rule arguments (rule arguments are local arguments of INSTR_PROC)
+
+	CPU = &CPUS[0];
+
+	IntCellInit();
+
 }

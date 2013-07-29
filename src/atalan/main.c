@@ -20,6 +20,7 @@ extern Var  ROOT_PROC;
 extern InstrBlock * BLK;
 Var * INTERRUPT;
 Var * SYSTEM_SCOPE;
+Var * CPU_TYPE;
 Var * MACRO_PRINT;
 Var * MACRO_ASSERT;
 Var * MACRO_ASSERT_PRINT;
@@ -54,18 +55,25 @@ void PlatformError(char * text)
 	}
 }
 
-void ProcessUsedProc(void (*process)(Var * proc))
-{
-	Var * var;
-	Type * type;
+typedef void (*ProcFn)(Var * proc);
 
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
-			process(var);
-		}
+Bool ProcessUsedProcFn(Var * var, void * data)
+{
+	Type * type;
+	ProcFn process_fn;
+
+	type = var->type;
+	if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
+		process_fn = (ProcFn)data;
+		process_fn(var);
 	}
-	process(&ROOT_PROC);
+	return false;
+}
+
+void ProcessUsedProc(void (*process_fn)(Var * proc))
+{
+	ForEachCell(&ProcessUsedProcFn, process_fn);
+	process_fn(&ROOT_PROC);
 }
 
 void InitPlatform()
@@ -74,14 +82,14 @@ Purpose:
 	This procedure is called after the platform file has been parsed.
 */
 {
-	MACRO_PRINT  = VarFindScope(SYSTEM_SCOPE, "print_scr", 0);			// TODO: Screen print
+	MACRO_PRINT  = VarFind(SYSTEM_SCOPE, "print_scr");			// TODO: Screen print
 	if (MACRO_PRINT == NULL) {
-		MACRO_PRINT  = VarFindScope(&ROOT_PROC, "std_print", 0);			// TODO: Screen print
+		MACRO_PRINT  = VarFind(&ROOT_PROC, "std_print");			// TODO: Screen print
 	}
 
-	MACRO_FORMAT = VarFindScope(&ROOT_PROC, "std_format", 0);			// TODO: Memory print
-	MACRO_ASSERT_PRINT =  VarFindScope(SYSTEM_SCOPE, "print_assert", 0);
-	MACRO_ASSERT =  VarFindScope(SYSTEM_SCOPE, "assert", 0);
+	MACRO_FORMAT = VarFind(&ROOT_PROC, "std_format");			// TODO: Memory print
+	MACRO_ASSERT_PRINT =  VarFind(SYSTEM_SCOPE, "print_assert");
+	MACRO_ASSERT =  VarFind(SYSTEM_SCOPE, "assert");
 
 	// If platform does not implement 'assert' instruction, we always turn the assertions off.
 
@@ -92,10 +100,45 @@ Purpose:
 	InitCPU();
 }
 
+void PrintParsedProc(Var * var)
+{
+	if (Verbose(var)) {
+		PrintHeader(2, var->name);
+		PrintProc(var);
+	}
+}
+
+Bool ArrayTranslateFn(Var * var, void * data)
+{
+	if (var->mode == INSTR_NAME && var->var != NULL) {
+		if (var->var->mode == INSTR_ARRAY) {
+			if (var->var->instr != NULL) {
+				ProcTranslate(var->var);
+			}
+		}
+	}
+	return false;
+}
+
+Bool ResetProcUse(Var * var, void * data) 
+{
+	if (var->type != NULL && var->type->variant == TYPE_PROC) {
+		var->read = 0;
+	}
+	return false;
+}
+
+Bool StructProcessFn(Var * var, void * data)
+{
+	if (var->mode == INSTR_TYPE && var->variant == TYPE_STRUCT) {
+		TypeStructAssignOffsets(var);
+	}
+	return false;
+}
+
 int main(int argc, char *argv[])
 {
 	Var * var, * data;
-	Type * type;
 	Int16 i;
 	Bool assembler = true;
 	Bool header = true;
@@ -230,8 +273,8 @@ int main(int argc, char *argv[])
 
 	//===== Initialize
 
-	TypeInit();
 	VarInit();
+	TypeInit();
 	InstrInit();
 	GenerateInit();
 	TranslateInit();
@@ -249,8 +292,9 @@ int main(int argc, char *argv[])
 //	INSTRSET = NULL;
 	if (!Parse("system", false, false)) goto failure;
 	
-	SYSTEM_SCOPE = VarFindScope(&ROOT_PROC, "system", 0);
-	INTERRUPT = VarFindScope(&ROOT_PROC, "interrupt", 0);
+	SYSTEM_SCOPE = VarFind(&ROOT_PROC, "system");
+	INTERRUPT = VarFind(SYSTEM_SCOPE, "interrupt");
+	CPU_TYPE  = VarFind(SYSTEM_SCOPE, "cpu");
 
 	// If the platform has been specified as an argument, parse it
 	if (platform != NULL) {
@@ -266,19 +310,19 @@ int main(int argc, char *argv[])
 	GenInternal(INSTR_PROLOGUE, NULL, NULL, NULL);
 	if (!Parse(filename, true, false)) goto failure;
 
-	if (*PLATFORM == 0) {
-		SyntaxError("No target platform defined");
-		goto failure;
-	}
+//	if (*PLATFORM == 0) {
+//		SyntaxError("No target platform defined");
+//		goto failure;
+//	}
 
-//	var = VarFindScope(CPU->SCOPE, "a", 0);
+//	var = VarFind(CPU->SCOPE, "a", 0);
 
-	var = VarFindScope(&ROOT_PROC, "varheap", 0);
+	var = VarFind(&ROOT_PROC, "varheap");
 	if (var != NULL) {
 		HeapAddType(&VAR_HEAP, var->type);
 	} else {
-		InternalError("Platform does not define varheap");
-		goto done;
+//		InternalError("Platform does not define varheap");
+//		goto done;
 	}
 	GenInternal(INSTR_EPILOGUE, NULL, NULL, NULL);
 
@@ -302,15 +346,7 @@ int main(int argc, char *argv[])
 
 	header_out = false;
 
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		type = var->type;
-		if (type != NULL && type->variant == TYPE_PROC && var->instr != NULL && var->read > 0) {
-			if (Verbose(var)) {
-				PrintHeader(2, var->name);
-				PrintProc(var);
-			}
-		}
-	}
+	ProcessUsedProc(&PrintParsedProc);
 
 	if (Verbose(&ROOT_PROC)) {
 		PrintHeader(2, ROOT_PROC.name);
@@ -340,6 +376,11 @@ int main(int argc, char *argv[])
 
 	if (ERROR_CNT > 0) goto failure;
 
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Translate Types");
+	}
+	ProcessUsedProc(TranslateTypes);
+
 	ProcessUsedProc(OptimizeLoopShift);
 
 	//***** Translation
@@ -347,14 +388,12 @@ int main(int argc, char *argv[])
 		PrintHeader(1, "Translate");
 	}
 
+	// Translate arrays
 	PHASE = PHASE_TRANSLATE;
-	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_CONST && var->type->variant == TYPE_ARRAY && var->instr != NULL) {
-			ProcTranslate(var);
-		}
-	NEXT_VAR
 
+	ForEachCell(&ArrayTranslateFn, NULL);
 	ProcessUsedProc(ProcTranslate);
+
 	if (ERROR_CNT > 0) goto failure;
 	VarUse();
 	VarGenerateArrays();
@@ -363,13 +402,8 @@ int main(int argc, char *argv[])
 	// Translate may have called some other procedures, so we must recalculate used procedures
 	PHASE = PHASE_OPTIMIZE;
 
-	FOR_EACH_VAR(var)
-		if (var->type != NULL && var->type->variant == TYPE_PROC) {
-			var->read = 0;
-		}
-	NEXT_VAR
+	ForEachCell(&ResetProcUse, NULL);
 	ROOT_PROC.read = 0;
-
 	ProcUse(&ROOT_PROC, 0);
 
 	//***** Optimization
@@ -400,30 +434,32 @@ int main(int argc, char *argv[])
 	VarUse();
 
 	//==== Assign offsets to structure items
-	for(var = VarFirst(); var != NULL; var = VarNext(var)) {
-		// Compute offsets for structure members
-		if (var->type != NULL && var->type->variant == TYPE_STRUCT && var->type->owner == var) {
-			TypeStructAssignOffsets(var->type);
-		}
-	}
+	ForEachCell(&StructProcessFn, NULL);
 
 	//==== Assign addresses to variables
 
 	ProcessUsedProc(ProcClearProcessed);
 	ProcessUsedProc(AllocateVariables);
 
-	if (TOK == TOKEN_ERROR) goto failure;
+	iferr goto failure;
 
 	//===== Emit code to resulting file
+	//      (Only if there is something to emit)
 
-	Emit(filename);
+	if (ROOT_PROC.instr->first != NULL) {
+		Emit(filename);
+	} else {
+		// We do not emit, just print the results
+
+		PrintUserScope(&ROOT_PROC);
+	}
 
 	//==== Call the assembler
 	//     The command to call is defined using rule for INSTR_COMPILER.
 	//     Argument is filename (without extension) of the compiled file.
 
 	result = 0;
-	if (assembler) {	
+	if (assembler) {
 		result = Assemble(filename);
 	}
 
@@ -443,21 +479,24 @@ failure:
 int Assemble(char * filename)
 {
 	char command[MAX_PATH_LEN], path[MAX_PATH_LEN];
-
 	int result = 0;
-
 	Var * var, * ext;
 
+	// If Compile instruction is not defined, we do not call the compiler
+	if (!InstrRuleIsDefined(INSTR_COMPILER)) return 0;
+
 	PathMerge(path, PROJECT_DIR, filename);
-	var = VarFind("BIN_EXTENSION", 0);
-	if (VarIsConst(var)) {
-		if (var->type->variant == TYPE_VAR) {
-			ext = var->type->typevar;
+
+	//TODO: Implement variable replacement at the EmitInstrOp level
+	var = VarFind(NULL, "BIN_EXTENSION");
+	if (var != NULL) {
+		if (var->type->mode == INSTR_TEXT) {
+			ext = var->type;
 		} else {
-			ext = VarNewStr(var->str);
+			SyntaxError("BIN_EXTENSION should be text constant");
 		}
 	} else {
-		SyntaxError("BIN_EXTENSION should be constant");
+		ext = TextCell("");
 	}
 
 	EmitOpenBuffer(command);
@@ -468,7 +507,7 @@ int Assemble(char * filename)
 #ifdef __Windows__	
 	EmitChar('\"');
 #endif
-	EmitInstrOp(INSTR_COMPILER, NULL, VarNewStr(path), ext);
+	EmitInstrOp(INSTR_COMPILER, NULL, TextCell(path), ext);
 #ifdef __Windows__	
 	EmitChar('\"');
 #endif

@@ -172,10 +172,10 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 				}
 
 				// Output variable name
-				if (VarIsIntConst(var)) {
+				if (var->mode == INSTR_INT) {
 					PrintBigInt(&var->n);
 				} else {
-					PrintQuotedVarName(var);
+					PrintQuotedCellName(var);
 				}
 
 			} else if (c == '$') {

@@ -1,0 +1,21 @@
+=== Floating decimal point ===
+
+We need to define mantissa size, exponent size and possibly base.
+
+bcd: ±9999999999 * 10 ^ -64..63
+single: ±16777215 * 2 ^ -128..127
+
+We need to define a base for mantissa, so we know, how the accuracy is modified with operations. 
+
+=== Solid decimal point ===
+
+pos: 0..255 step 1÷2 
+
+=== Use of plus/minus ===
+
+10 ± 5   = 5..15
+± 5 = 0 ± 5 = -5..5
+a ± b   = a-b..a+b
+
+
+ 

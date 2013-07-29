@@ -208,7 +208,10 @@ Int32 IntN(BigInt * n)
 
 void PrintBigInt(BigInt * n)
 {
-	PrintInt(IntN(n));
+	char buf[64];
+	sprintf(buf, "%lld", (long long)*n);
+	Print(buf);
+//	PrintInt(IntN(n));
 }
 
 void IntModify(BigInt * dest, BigInt * l)
@@ -221,4 +224,20 @@ void IntRangeSize(BigInt * dest, BigInt * min, BigInt * max)
 {
 	IntSub(dest, max, min);
 	IntAddN(dest, 1);
+}
+
+UInt32 IntBitSize(BigInt * num)
+/*
+Purpose:
+	Return number of bits necessary to encode specified number.
+*/
+{
+	UInt32 cnt = 0;
+	BigInt n;
+	IntSet(&n, num);
+	while(!IntEqN(&n, 0)) {
+		IntDivN(&n, 2);
+		cnt++;
+	}
+	return cnt;
 }

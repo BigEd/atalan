@@ -128,8 +128,8 @@ void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	// This simplifies further code processing.
 
 	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
-		if (op != INSTR_IFOVERFLOW && op != INSTR_IFNOVERFLOW) {
-			if (VarIsConst(arg1)) {
+		if (op != INSTR_OVERFLOW && op != INSTR_NOVERFLOW) {
+			if (CellIsConst(arg1)) {
 				var = arg1; arg1 = arg2; arg2 = var;
 
 				op = OpRelSwap(op);
@@ -283,7 +283,7 @@ Purpose:
 		if (l != var->adr || r != var->var) {			
 			var = InstrEvalConst(op, l, r);
 			if (var == NULL) {
-				var = VarNewOp(op, l, r);
+				var = NewOp(op, l, r);
 			}
 		}
 
@@ -310,7 +310,7 @@ Purpose:
 		if (VarIsLocal(var, macro) || VarIsLabel(var)) {
 			arg = VarSetFind(locals, var);
 			if (arg == NULL) {
-				arg = VarAllocScopeTmp(NULL, op, var->type);
+				arg = NewTempVar(CellType(var));
 				VarSetAdd(locals, var, arg);
 			}
 			return arg;

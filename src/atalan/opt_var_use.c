@@ -276,14 +276,14 @@ Purpose:
 				for(j = 0; j < count; j++) {
 					if (i != j && info.collisions[i*count+j] == 0) {
 						var2 = VarSetItem(&info.vars, j)->key;
-						if (VarIsIntConst(var2->adr) && !OutVar(var2) && !InVar(var2)) {
+						if (CellIsIntConst(var2->adr) && !OutVar(var2) && !InVar(var2)) {
 							if (TypeSize(var2->type) == size) {
 								// We have found the variable, whose address we can use
 
 								// Mark variable to which we assign address of other variable to be conflicting with same variables as the other
 								MarkVarCollision(&info, &info.collisions[j*count], i);
 								MarkVarCollision(&info, &info.collisions[i*count], j);
-//								PrintVarName(var); Print("@"); PrintVarName(var2); PrintEOL();
+//								PrintIntCellName(var); Print("@"); PrintIntCellName(var2); PrintEOL();
 //								PrintCollisions(&info);
 
 								var->adr = var2;
@@ -295,8 +295,8 @@ Purpose:
 				}
 
 				if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
-//							PrintVarName(var); Print("@%d\n", adr);
-					var->adr = VarInt(adr);
+//							PrintIntCellName(var); Print("@%d\n", adr);
+					var->adr = IntCellN(adr);
 				} else {
 					// failed to alloc memory
 				}
@@ -313,7 +313,7 @@ next: ;
 	ForEachBlock(proc->instr, &BlockFreeLiveSet, NULL);
 
 /*
-	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+	for (var = CellFirstLocal(proc); var != NULL; var = CellNextLocal(proc, var)) {
 
 		// Scope can contain variables in subscope, we need to allocate them too
 		if (var->mode == INSTR_SCOPE) {
@@ -325,8 +325,8 @@ next: ;
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
-//							PrintVarName(var); Print("@%d\n", adr);
-							var->adr = VarInt(adr);
+//							PrintIntCellName(var); Print("@%d\n", adr);
+							var->adr = IntCellN(adr);
 						} else {
 							// failed to alloc in zero page
 						}
@@ -343,7 +343,7 @@ void AllocateVariablesFromHeapNoOptim(Var * proc, MemHeap * heap)
 	Var * var;
 	UInt32 size, adr;
 
-	for (var = VarFirstLocal(proc); var != NULL; var = VarNextLocal(proc, var)) {
+	FOR_EACH_LOCAL(proc, var)
 
 		// Scope can contain variables in subscope, we need to allocate them too
 		if (var->mode == INSTR_SCOPE) {
@@ -355,8 +355,8 @@ void AllocateVariablesFromHeapNoOptim(Var * proc, MemHeap * heap)
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
-//							PrintVarName(var); Print("@%d\n", adr);
-							var->adr = VarInt(adr);
+//							PrintIntCellName(var); Print("@%d\n", adr);
+							var->adr = IntCellN(adr);
 						} else {
 							// failed to alloc in zero page
 						}
@@ -364,7 +364,7 @@ void AllocateVariablesFromHeapNoOptim(Var * proc, MemHeap * heap)
 				}
 			}
 		}
-	}
+	NEXT_LOCAL
 }
 
 #define VAR_ADD 0
@@ -385,7 +385,7 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 			if (vadr->mode == INSTR_TUPLE) {
 				HeapVarOp(heap, vadr, op);
 			} else {
-				ia = VarIntConst(vadr);
+				ia = IntFromCell(vadr);
 				if (ia != NULL) {
 					adr  = IntN(ia);
 					if (op == VAR_REMOVE) {
@@ -408,13 +408,13 @@ void HeapVariablesOp(MemHeap * heap, Var * scope, int op)
 {
 	Var * var;
 
-	for (var = VarFirstLocal(scope); var != NULL; var = VarNextLocal(scope, var)) {
+	FOR_EACH_LOCAL(scope, var)
 		if (var->mode == INSTR_SCOPE) {
 			HeapVariablesOp(heap, var, op);
 		} else {
 			HeapVarOp(heap, var, op);
 		}
-	}
+	NEXT_LOCAL
 }
 
 extern Var   ROOT_PROC;
@@ -431,7 +431,7 @@ void AllocateVariables(Var * proc)
 	//     We can reuse variables from procedures, that this procedure 
 	//     does not call (even indirectly) and which does not call this procedure.
 
-	for(proc2 = VarFirst(); proc2 != NULL; proc2 = VarNext(proc2)) {
+	FOR_EACH_VAR(proc2)
 		type = proc2->type;
 		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
 //			Print("%s -> %s", proc2->name, proc->name);
@@ -449,13 +449,13 @@ void AllocateVariables(Var * proc)
 			}
 //			Print("\n");
 		}
-	}
+	NEXT_VAR
 
 	//==== Remove space allocated by procedures we are calling or which call us
 
 	//TODO: Procedure must not have body (may be external) and still define arguments
 
-	for(proc2 = VarFirst(); proc2 != NULL; proc2 = VarNext(proc2)) {
+	FOR_EACH_VAR(proc2)
 		type = proc2->type;
 
 //		if (StrEqual(proc2->name, "copyblock") && StrEqual(proc->name, "drawmainscreen")) {
@@ -472,7 +472,7 @@ void AllocateVariables(Var * proc)
 //					HeapPrint(&heap);
 //				}
 			}
-		}
+		NEXT_VAR
 	}
 	
 	//==== Allocate space for all variables, that has not been assigned yet

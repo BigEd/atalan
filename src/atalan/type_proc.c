@@ -56,7 +56,7 @@ void RegFree(Var * reg)
 	SetFlagOff(reg->flags, VarUsed);	
 }
 
-static void ProcAssignRegisterArguments(Var * proc, VarSubmode submode)
+static void ProcAssignRegisterArguments(Type * proc_type, VarSubmode submode)
 /*
 Purpose:
 	Finalize layout of procedure type arguments.
@@ -78,13 +78,13 @@ Purpose:
 	// TODO: We should generate temporaries & initialization for this registers
 
 	VarResetRegUse();
-	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
+	for(arg = FirstArg(proc_type, submode); arg != NULL; arg = NextArg(proc_type, arg, submode)) {
 		VarUseReg(arg->adr);
 	}
 
 	// 2. Try to assign registers to variables
 
-	for(arg = FirstArg(proc, submode); arg != NULL; arg = NextArg(proc, arg, submode)) {
+	for(arg = FirstArg(proc_type, submode); arg != NULL; arg = NextArg(proc_type, arg, submode)) {
 		if (arg->adr == NULL) {
 			var_size = VarByteSize(arg);
 			// Try to find free register
@@ -98,7 +98,7 @@ Purpose:
 					tmp = RegAlloc(1);
 					if (tmp != NULL) {
 						VarUseReg(tmp);
-						reg = VarNewTuple(reg, tmp);
+						reg = NewTuple(reg, tmp);
 					} else {
 						RegFree(reg); 
 						reg = NULL;
@@ -112,11 +112,9 @@ Purpose:
 
 void ProcTypeFinalize(Type * proc_type)
 {
-	Var * proc;
-	proc = proc_type->owner;
 
-	ProcAssignRegisterArguments(proc, SUBMODE_ARG_IN);
-	ProcAssignRegisterArguments(proc, SUBMODE_ARG_OUT);
+	ProcAssignRegisterArguments(proc_type, SUBMODE_ARG_IN);
+	ProcAssignRegisterArguments(proc_type, SUBMODE_ARG_OUT);
 }
 
 
@@ -125,7 +123,7 @@ void ProcAddLocalVars(Var * proc, VarSet * set, VarFilter filter_fn)
 Purpose:
 	Return all local variables from procedure.
 	Variables from subscopes are added (for example 'for' variables).
-	Variables from other procedured are not added.
+	Variables from other procedures are not added.
 */
 {
 	Var * var;
