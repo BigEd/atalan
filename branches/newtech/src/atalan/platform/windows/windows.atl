@@ -15,7 +15,7 @@ rule line      -> ";### %0(%1) %2"
 
 rule assert_begin -> ";assert begin"
 rule assert_end   -> ";assert end"
-rule assert       -> "   "
+rule assert       -> "   invoke ExitProcess, 1"
 
 ;compiler rule defines the command line used to compile generated asm source
 ; %A  defines name of the source code file (including the path) without extension

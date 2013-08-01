@@ -87,7 +87,7 @@ Purpose:
 	if (blk != NULL) {
 		i = InstrPrev(blk->last);
 		if (i != NULL) {
-			if (i->op == INSTR_GOTO) i = InstrPrev(i->prev);
+			if (IsGoto(i)) i = InstrPrev(i->prev);
 		}
 	}
 	return i;
@@ -123,20 +123,20 @@ repeat:
 		// This is not true for block ending with GOTO and ASSERT
 
 		dst = nb->next;
-		if (dst != NULL && op != INSTR_GOTO && op != INSTR_ASSERT) {
+		if (dst != NULL && !IsGoto(i) && op != INSTR_ASSERT) {
 			nb->to = nb->next;
 			dst->from = nb;
 		}
 
 		// If this is conditional jump or jump, register it as caller to destination block
 
-		if (IS_INSTR_JUMP(op)) {
-			label = i->result;
+		if (op == INSTR_IF) {
+			label = i->arg2;
 			// Jumps to other procedures are handled in a special way, as these are not normal jumps.
 			if (label->type->variant != TYPE_PROC) {
 				dst = label->instr;
 
-				if (op == INSTR_GOTO) {
+				if (IsGoto(i)) {
 					nb->to = dst;
 				} else {
 					nb->cond_to = dst;
@@ -173,12 +173,12 @@ repeat:
 				i = InstrPrev(dst->last);
 				if (i != NULL) {
 					label = blk->label;
-					if (i->result == label) {
+					if (i->arg2 == label) {
 						if (blk->to->label == NULL) {
 							blk->to->label = label;
 							label->instr = blk->to;
 						} else {
-							i->result = blk->to->label;
+							i->arg2 = blk->to->label;
 						}
 					}
 				}
@@ -267,6 +267,11 @@ Purpose:
 	}
 
 	LinkBlocks(proc);
+
+	if (Verbose(proc)) {
+		PrintHeader(2, proc->name);
+		PrintProc(proc);
+	}
 
 //	Print("************* Blocks **************\n");
 //	PrintProc(proc);
@@ -404,42 +409,61 @@ void OptimizeJumps(Var * proc)
 			// In such case, block we jump to is same as next block.
 
 			if (last_i != NULL) {
-				if (last_i->op == INSTR_GOTO) {
+				if (IsGoto(last_i)) {
 					if (blk->to == blk->next && blk->to != NULL) {
 						InstrDelete(blk, last_i);
 					}
-				} else if (IS_INSTR_BRANCH(last_i->op) && blk->cond_to == blk->next && blk->to == blk->next) {
+				} else if (last_i->op == INSTR_IF && blk->cond_to == blk->next && blk->to == blk->next) {
 					blk->cond_to = NULL;
 					InstrDelete(blk, last_i);
 				}
 			}
 
+			/*
+
+			===================================
+			Optimization: Dead code elimination
+			===================================
+
+			Invert negative conditional jumps.
+			:::::::::::::::::::::
+			if cond goto lab@
+			---
+			goto lab2@
+			---
+			lab@
+			:::::::::::::::::::::
+
+			Will be transformed to
+
+			:::::::::::::::::::::
+			if not cond goto lab2@
+			:::::::::::::::::::::
+			*/
+
 			i = FirstInstr(blk_to);
 			cond_i = blk->last;
 
-			if (i != NULL && i->op == INSTR_GOTO) {
-				if (blk_to->next == blk->cond_to) {
-					if (IS_INSTR_BRANCH(cond_i->op)) {
-						if (InstrRelSwap(cond_i)) {
-//						cond_i->op = OpNot(cond_i->op);
-							cond_i->result = i->result;
-							blk->cond_to = i->result->instr;
+			if (IsGoto(i)
+			&&  blk_to->next == blk->cond_to
+			&&  cond_i->op == INSTR_IF) {
+				if (InstrRelSwap(cond_i)) {
+					cond_i->arg2 = i->arg2;
+					blk->cond_to = i->result->instr;
 
-							InstrBlockFree(blk_to);
-						}
-					}
+					InstrBlockFree(blk_to);
 				}
 			}
 
 			// Jump to jump
 			if (cond_i != NULL && IS_INSTR_JUMP(cond_i->op)) {
 retry:
-				label = cond_i->result;
+				label = cond_i->arg2;
 				blk_to = label->instr;
 				
 				i = FirstInstr(blk_to);	//for(i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
-				if (i != NULL && i->op == INSTR_GOTO && i->result != cond_i->result) {
-					cond_i->result = i->result;
+				if (IsGoto(i) && i->arg2 != cond_i->arg2) {
+					cond_i->arg2 = i->arg2;
 					goto retry;
 				}
 			}
@@ -452,8 +476,10 @@ retry:
 
 			if (last_i != NULL) {
 				if (last_i->op == INSTR_CALL && !ProcIsInterrupt(proc)) {
-					last_i->op = INSTR_GOTO;
-}
+					last_i->op = INSTR_IF;
+					last_i->arg2 = last_i->arg1;
+					last_i->arg1 = ONE;
+				}
 			}
 		}
 		blk = blk->next;
@@ -466,7 +492,7 @@ retry:
 /*
 
 ===================================
-Optimization: Dead code elimitation
+Optimization: Dead code elimination
 ===================================
 
 Remove blocks of code, that are not called from any other block.

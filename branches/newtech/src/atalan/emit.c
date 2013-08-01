@@ -445,7 +445,7 @@ Bool EmitProc(Var * proc)
 		if (!result) break;
 
 		//TODO: RETURN should be part of procedure
-		if (blk->to == NULL && (blk->last == NULL || blk->last->op != INSTR_GOTO)) {
+		if (blk->to == NULL && (blk->last == NULL || !IsGoto(blk->last))) {
 			if (proc != &ROOT_PROC) {
 				EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
 			}

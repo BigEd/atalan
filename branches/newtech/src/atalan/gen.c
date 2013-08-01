@@ -206,7 +206,7 @@ void GenLet(Var * result, Var * arg1)
 void GenGoto(Var * label)
 {
 	if (label != NULL) {
-		GenInternal(INSTR_GOTO, label, NULL, NULL);
+		GenInternal(INSTR_IF, NULL, ONE, label);
 	}
 }
 
