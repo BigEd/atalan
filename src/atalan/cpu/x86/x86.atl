@@ -55,6 +55,11 @@ rule %A:s32 = %B:s32 - %C:s32 ->
 rule if %A:s32 = %B:s32 goto %C ->
 	eax = %A
 	ocszacp = eax - %B
+	if z = 1 goto %C
+
+rule if %A:s32 ≠ %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
 	if z = 0 goto %C
 		
 ;############### CPU rules
@@ -106,6 +111,8 @@ system.print:proc @x86.eax @x86.ebx @x86.ecx @x86.edx @x86.ebp
 
 system.print_scr:macro = instr
 	call system.print
+
+system.assert:macro = instr call system.print
 
 rule data const %A:0..255 -> "   DB %A"
 rule var_arg %A:string    -> "   DB %A.size,'%A'"

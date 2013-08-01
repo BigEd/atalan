@@ -22,19 +22,18 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_NULL,        "",    "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_VOID,        "nop", "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_LET,         "let", "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_IF,          "iff",  "if", {TYPE_VOID, TYPE_ANY, TYPE_LABEL}, 0, NULL },			// if arg1 goto arg2
 
-	{ INSTR_GOTO,        "goto", "", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_EQ,        "eq", "=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_NE,        "ne", "<>", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_LT,        "lt", "<=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_GE,        "ge", ">=", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_GT,        "gt", ">", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_LE,        "le", "<", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_OVERFLOW,  "overflow", "over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_NOVERFLOW, "noverflow", "not over", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_MATCH_TYPE,      "matchtype", ":", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_NMATCH_TYPE, "nmatchtype", "<>:", {TYPE_LABEL, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_IF,          "iff",  "if", {TYPE_VOID, TYPE_ANY, TYPE_LABEL}, 0, NULL },
+	{ INSTR_EQ,        "eq", "=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_NE,        "ne", "<>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_LT,        "lt", "<=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_GE,        "ge", ">=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_GT,        "gt", ">", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_LE,        "le", "<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_OVERFLOW,  "overflow", "over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_NOVERFLOW, "noverflow", "not over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_MATCH_TYPE,      "matchtype", ":", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_NMATCH_TYPE, "nmatchtype", "<>:", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
 
 	{ INSTR_PROLOGUE,    "prologue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
 	{ INSTR_EPILOGUE,    "epilogue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
@@ -165,6 +164,11 @@ Type * TypeGen(Type * t)
 		}
 	}
 	return type;
+}
+
+Bool IsGoto(Instr * i)
+{
+	return i != NULL && i->op == INSTR_IF && CellIsEqual(i->arg1, ONE);
 }
 
 void InstrDecl(Instr * i)

@@ -20,7 +20,6 @@ Var * Not(Var * v)
 	op = v->mode;
 
 	if (IS_INSTR_BRANCH(op)) {
-		op = OpNot(op);
 		r = NewOp(OpNot(op), v->l, v->r);
 	} else if (op == INSTR_NOT) {
 		r = v->l;

@@ -744,11 +744,86 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 1 && loc->n == 4) {
+	if (loc->blk->seq_no == 1 && loc->n == 7) {
 		Print("");
 	}
 
-	if (i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction))) {
+	// Conditional jumps have special support
+	if (i->op == INSTR_IF) {
+		if (i->type[ARG1] == NULL) {
+			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
+			if (i->type[ARG1] != NULL) d->modified = true;
+		}
+		ReplaceConst(&i->arg1, i->type[ARG1]);
+
+		if (i->type[ARG1] != NULL && !InVar(i->arg1)) {
+			taken = false;
+			not_taken = false;
+			not = false;
+			switch (i->op) {
+			case INSTR_NE:
+				not = true;
+			case INSTR_EQ:
+				// We know for sure the condition is true, if both values are in fact same integer constants
+				taken = CellIsIntConst(i->type[ARG1]) && CellIsIntConst(i->type[ARG2]) && IntEq(MIN1, MIN2);
+				not_taken = IntLower(MAX1, MIN2) || IntHigher(MIN1, MAX2);
+				break;
+
+			case INSTR_GE:
+				not = true;
+			case INSTR_LT:
+				taken = IntLower(MAX1, MIN2);
+				not_taken = IntHigherEq(MIN1, MAX2);
+				break;
+
+			case INSTR_LE:
+				not = true;
+			case INSTR_GT:
+				taken = IntHigher(MIN1, MAX2);
+				not_taken = IntLowerEq(MAX1, MIN2);
+				break;
+			default:
+				break;
+
+			case INSTR_NMATCH_TYPE:
+				not = true;
+			case INSTR_MATCH_TYPE:
+				if (TypeIsComplete(i->type[ARG1]) && TypeIsComplete(i->type[ARG2])) {
+					if (TypeIsEqual(i->type[ARG1], i->type[ARG2])) {
+						taken = true;
+					} else {
+						not_taken = true;
+					}
+				}
+				break;
+			}
+
+			if (not) {
+				if (taken) {
+					not_taken = true;
+					taken = false;
+				} else if (not_taken) {
+					taken = true;
+					not_taken = false;
+				}
+			}
+
+			if (taken) {
+				// Change to goto
+//				i->op = INSTR_GOTO;
+//				i->arg1 = i->arg2 = NULL;
+				i->arg1 = ONE;
+				d->modified_blocks = true;
+				return true;
+			} else if (not_taken) {
+				i->result->write--;
+				InstrDelete(loc->blk, i);
+				d->modified_blocks = true;
+				return true;
+			}
+		}
+
+	} else if ((i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction)))) {
 
 		// If the result of the instruction is array index, try to infer type of the index.
 		// The type may be later used when looking for the type of some instruction argument.
@@ -774,123 +849,57 @@ Bool InstrInferType(Loc * loc, void * data)
 		ReplaceConst(&i->arg2, i->type[ARG2]);
 
 		// For comparisons, we may check whether the condition is not always true or always false
-		if (IS_INSTR_BRANCH(i->op)) {
-			if (i->type[ARG1] != NULL && i->type[ARG2] != NULL && !InVar(i->arg1) && !InVar(i->arg2)) {
-				taken = false;
-				not_taken = false;
-				not = false;
-				switch (i->op) {
-				case INSTR_NE:
-					not = true;
-				case INSTR_EQ:
-					// We know for sure the condition is true, if both values are in fact same integer constants
-					taken = CellIsIntConst(i->type[ARG1]) && CellIsIntConst(i->type[ARG2]) && IntEq(MIN1, MIN2);
-					not_taken = IntLower(MAX1, MIN2) || IntHigher(MIN1, MAX2);
-					break;
+//		if (IS_INSTR_BRANCH(i->op)) {
 
-				case INSTR_GE:
-					not = true;
-				case INSTR_LT:
-					taken = IntLower(MAX1, MIN2);
-					not_taken = IntHigherEq(MIN1, MAX2);
-					break;
+		result = i->result;
 
-				case INSTR_LE:
-					not = true;
-				case INSTR_GT:
-					taken = IntHigher(MIN1, MAX2);
-					not_taken = IntLowerEq(MAX1, MIN2);
-					break;
-					default:
-					break;
+		tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
 
-				case INSTR_NMATCH_TYPE:
-					not = true;
-				case INSTR_MATCH_TYPE:
-					if (TypeIsComplete(i->type[ARG1]) && TypeIsComplete(i->type[ARG2])) {
-						if (TypeIsEqual(i->type[ARG1], i->type[ARG2])) {
-							taken = true;
-						} else {
-							not_taken = true;
-						}
-					}
-					break;
+		// Type was evaluated, test, whether there is not an error while assigning it
+		if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
+			if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == INSTR_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
+
+				// We allow assigning values to arrays, so we must allow this operation in type checker
+
+				ti = result->type;
+
+				// We initialize array with list of elements
+				// TODO: Parser should probably create element of array borders, to distinguish it from
+				//       assigning arrays.
+
+				if (i->op == INSTR_LET && ti->variant == TYPE_ARRAY && tr->variant != TYPE_ARRAY) {
+					ti = ti->element;
 				}
 
-				if (not) {
-					if (taken) {
-						not_taken = true;
-						taken = false;
-					} else if (not_taken) {
-						taken = true;
-						not_taken = false;
-					}
-				}
-
-				if (taken) {
-					i->op = INSTR_GOTO;
-					i->arg1 = i->arg2 = NULL;
-					d->modified_blocks = true;
-					return true;
-				} else if (not_taken) {
-					i->result->write--;
-					InstrDelete(loc->blk, i);
-					d->modified_blocks = true;
-					return true;
-				}
-			}
-		} else {
-
-			result = i->result;
-
-			tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
-
-			// Type was evaluated, test, whether there is not an error while assigning it
-			if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
-				if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == INSTR_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
-
-					// We allow assigning values to arrays, so we must allow this operation in type checker
-
-					ti = result->type;
-
-					// We initialize array with list of elements
-					// TODO: Parser should probably create element of array borders, to distinguish it from
-					//       assigning arrays.
-
-					if (i->op == INSTR_LET && ti->variant == TYPE_ARRAY && tr->variant != TYPE_ARRAY) {
-						ti = ti->element;
-					}
-
-					if (!IsSubset(tr, ti)) {
-						if (d->final_pass) {
-							if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
-								ErrArg(result);
-								ErrArg(IntCell(&ti->range.max));
-								ErrArg(IntCell(&ti->range.min));
-								ErrArg(IntCell(&tr->range.max));
-								ErrArg(IntCell(&tr->range.min));
-								if (CellIsIntConst(tr)) {
-									LogicWarningLoc("The value [A] does not fit into variable", loc);
-								} else {
-									LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", loc);
-								}
+				if (!IsSubset(tr, ti)) {
+					if (d->final_pass) {
+						if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
+							ErrArg(result);
+							ErrArg(IntCell(&ti->range.max));
+							ErrArg(IntCell(&ti->range.min));
+							ErrArg(IntCell(&tr->range.max));
+							ErrArg(IntCell(&tr->range.min));
+							if (CellIsIntConst(tr)) {
+								LogicWarningLoc("The value [A] does not fit into variable", loc);
 							} else {
-								LogicWarningLoc("Value does not fit into variable", loc);								
+								LogicWarningLoc("Result of expression does not fit the target variable.\nThe range of result is [A]..[B]. The range of variable is [C]..[D].", loc);
 							}
+						} else {
+							LogicWarningLoc("Value does not fit into variable", loc);								
 						}
 					}
 				}
-
-			// If the resulting type is defined and we failed to compute the type, we may try to
-			// deduce the type 'backwards'.
-			} else {
 			}
 
-			if (tr != NULL) {
-				i->type[RESULT] = tr;
-				SetFlagOff(i->flags, InstrRestriction);
-				d->modified = true;
-			}
+		// If the resulting type is defined and we failed to compute the type, we may try to
+		// deduce the type 'backwards'.
+		} else {
+		}
+
+		if (tr != NULL) {
+			i->type[RESULT] = tr;
+			SetFlagOff(i->flags, InstrRestriction);
+			d->modified = true;
 		}
 	}
 

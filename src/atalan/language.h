@@ -213,8 +213,8 @@ typedef enum {
 	INSTR_NULL = 0,
 	INSTR_VOID,
 	INSTR_LET,		// var, val
+	INSTR_IF,
 
-	INSTR_GOTO,
 	INSTR_EQ,		// must be even!!!.
 	INSTR_NE,
 	INSTR_LT,
@@ -225,7 +225,6 @@ typedef enum {
 	INSTR_NOVERFLOW,
 	INSTR_MATCH_TYPE,
 	INSTR_NMATCH_TYPE,
-	INSTR_IF,
 
 	INSTR_PROLOGUE,
 	INSTR_EPILOGUE,
@@ -963,7 +962,7 @@ extern CPUType * CPU;
 ***********************************************************/
 
 #define IS_INSTR_BRANCH(x) ((x)>=INSTR_EQ && (x)<=INSTR_NMATCH_TYPE)
-#define IS_INSTR_JUMP(x) (IS_INSTR_BRANCH(x) || (x) == INSTR_GOTO)
+#define IS_INSTR_JUMP(x) ((x) == INSTR_IF)
 
 InstrOp OpNot(InstrOp op);
 InstrOp OpRelSwap(InstrOp op);
@@ -1133,6 +1132,7 @@ void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result,
 
 InstrBlock * LastBlock(InstrBlock * block);
 
+Bool IsGoto(Instr * i);
 
 typedef void (*ProcessBlockFn)(InstrBlock * block, void * info);
 

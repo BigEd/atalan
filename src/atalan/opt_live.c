@@ -162,8 +162,12 @@ Purpose:
 	for (i = block->first; i != NULL; i = i->next) {
 		if (i->op == INSTR_LINE) continue;
 
-		if (i->op == INSTR_CALL || i->op == INSTR_GOTO) {
+		if (i->op == INSTR_CALL) {
 			if (VarUsesVar(i->result, var)) { res1 = 1; goto done; }
+		}
+
+		if (IsGoto(i)) {
+			if (VarUsesVar(i->arg2, var)) { res1 = 1; goto done; }
 		}
 
 		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
@@ -438,7 +442,7 @@ Bool OptimizeLive(Var * proc)
 			//      Result must be marked first dead first, to properly handle instructions like x = x + 1
 
 			if (result != NULL) {
-				if (i->op != INSTR_CALL && i->op != INSTR_GOTO) {
+				if (i->op != INSTR_CALL) {
 					VarMarkDead(result);
 					i->next_use[0] = result->src_i;
 					result->src_i = NULL;			// next use $$$$
@@ -449,7 +453,10 @@ Bool OptimizeLive(Var * proc)
 			//===== Mark arguments as live (used)
 
 			// For procedure call, we mark as live variable all variables used in that procedure
-			if (i->op == INSTR_CALL || i->op == INSTR_GOTO /*result != NULL && result->type->variant == TYPE_PROC*/) {
+			if (IsGoto(i)) {
+				MarkProcLive(i->arg2);
+				VarMarkLive(i->arg2);
+			} else if (i->op == INSTR_CALL) {
 				MarkProcLive(i->result);
 				VarMarkLive(i->result);
 			} else {

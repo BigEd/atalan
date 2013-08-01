@@ -1190,7 +1190,7 @@ void ParseUnary()
 	Var * var;
 	if (NextOpIs(TOKEN_MINUS)) {
 		// Unary minus before X is interpreted as 0 - X
-		BufPush(IntCellN(0));
+		BufPush(ZERO);
 		ParseOperand();
 		InstrBinary(INSTR_SUB);
 	} else if (NextOpIs(TOKEN_HI)) {
@@ -1887,7 +1887,7 @@ void ParseGoto()
 		if (!VarIsLabel(var) && !VarIsArg(var)) {
 			var = VarNewDeref(var);
 		}
-		Gen(INSTR_GOTO, var, NULL, NULL);
+		GenGoto(var);
 	}
 	
 }
@@ -2026,7 +2026,7 @@ void ParseRange(Var ** p_min, Var ** p_max)
 		} else {
 			if (min->mode == INSTR_INT) {
 				max = min;
-				min = IntCellN(0);
+				min = ZERO;
 			} else {
 				if (min->mode == INSTR_TYPE) {
 					type = min->type;
@@ -4423,7 +4423,7 @@ Purpose:
 
 
 	// Generate ending 0 byte
-	var2 = IntCellN(0);
+	var2 = ZERO;
 	Gen(INSTR_DATA, NULL, var2, NULL);
 
 }
@@ -4648,7 +4648,7 @@ void AssertVar(Var * var)
 	char buf[100];
 
 	if (var == NULL) return;
-	if (var->mode == INSTR_VAR && !VarIsReg(var) && var->name != NULL && !VarIsTmp(var)) {
+	if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var) && var->name != NULL && !VarIsTmp(var)) {
 		buf[0] = ' ';
 		StrCopy(buf+1, var->name);
 		StrCopy(buf + 1+ StrLen(var->name), " = ");
@@ -4664,12 +4664,11 @@ void ParseAssert()
 - assert may not have side effects (no side-effect procedure, no reading in-sequence)
 */
 {
-	InstrBlock * cond, * args;
+	InstrBlock * cond_code, * args;
 	Instr * i;
 	char location[100];
 	UInt16 bookmark;
-
-	NextIs(TOKEN_ASSERT);
+	Var * cond, * label;
 
 	if (TOK == TOKEN_STRING) {
 		if (MACRO_ASSERT_PRINT != NULL) {
@@ -4688,34 +4687,39 @@ void ParseAssert()
 		G_BLOCK->not = true;
 		GenBegin();
 		bookmark = SetBookmark();
-		ParseCondition();
+//		ParseCondition();
+		cond = ParseCondExpression();
 		iferr return;
 
-		cond = GenEnd();
+		label =  VarNewTmpLabel();
 
-		if (CodeHasSideEffects(SCOPE, cond)) {
+		Gen(INSTR_IF, NULL, cond, label);
+
+		cond_code = GenEnd();
+
+		if (CodeHasSideEffects(SCOPE, cond_code)) {
 			LogicWarning("assertion has side-effects", bookmark);
 		}
 
-		// Generate arguments for assert only if the ASSERT instruction has beed defined by the platform
+		// Generate arguments for assert only if the ASSERT instruction has been defined by the platform
 
 		if (!ASSERTS_OFF) {
 			GenBegin();
 
 			sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
 			Gen(INSTR_VAR_ARG, NULL, TextCell(location), NULL);
-			for(i = cond->first; i != NULL; i = i->next) {
+			for(i = cond_code->first; i != NULL; i = i->next) {
 				if (i->op != INSTR_LINE) {
 					AssertVar(i->arg1);
 					AssertVar(i->arg2);
 				}
 			}
-			Gen(INSTR_DATA, NULL, IntCellN(0), NULL);
+			Gen(INSTR_DATA, NULL, ZERO, NULL);
 
 			args = GenEnd();
 		}
 
-		GenBlock(cond);
+		GenBlock(cond_code);
 
 		// If condition referenced true label (which is not necessary, if it didn't contain AND or OR),
 		// generate it here
@@ -4735,6 +4739,7 @@ void ParseAssert()
 
 		Gen(INSTR_ASSERT, NULL, NULL, NULL);
 		GenLabel(G_BLOCK->f_label);
+		GenLabel(label);
 		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
 		EndBlock();
 	}
@@ -4755,6 +4760,8 @@ void ParseCommands()
 			ParseGoto();
 		} else if (NextIs(TOKEN_RULE)) {
 			ParseRule();
+		} else if (NextIs(TOKEN_ASSERT)) {
+			ParseAssert();
 		} else {
 			switch(TOK) {
 
@@ -4831,10 +4838,6 @@ void ParseCommands()
 			case TOKEN_DEBUG: 
 				NextToken(); 
 				Gen(INSTR_DEBUG, NULL, NULL, NULL); break;
-
-			case TOKEN_ASSERT:
-				ParseAssert();
-				break;
 
 			case TOKEN_EOL:
 				NextToken(); 

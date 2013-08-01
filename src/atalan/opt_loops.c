@@ -458,7 +458,7 @@ Purpose:
 	loc->blk = FindLoopDominator(proc, header);
 	loc->i = loc->blk->last;
 
-	if (loc->i->op != INSTR_GOTO) {
+	if (!IsGoto(loc->i)) {
 		loc->i = NULL;
 	}
 
@@ -483,7 +483,7 @@ void LoopMoveToPrologue(Var * proc, InstrBlock * header, InstrBlock * from, Inst
 	// Loops with condition at the beginning may start with jump to condition
 	// We need to insert the initialization code before this jump.
 
-	if (i->op == INSTR_GOTO) {
+	if (IsGoto(i)) {
 //		i = i->prev;
 	} else {
 		i = NULL;

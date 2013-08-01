@@ -365,6 +365,9 @@ int main(int argc, char *argv[])
 	}
 
 	//***** Analysis
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Generate Basic Blocks");
+	}
 	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
 
