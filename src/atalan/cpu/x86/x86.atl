@@ -42,6 +42,8 @@ rule %A:s32 = %B:s32 ->
 	eax = %B
 	%A = eax   
 
+;Arithmetics
+
 rule %A:s32 = %B:s32 + %C:s32 ->
 	eax = %B
 	eax = eax + %C
@@ -52,6 +54,8 @@ rule %A:s32 = %B:s32 - %C:s32 ->
 	eax = eax - %C
 	%A = eax
 
+; Conditional jumps
+
 rule if %A:s32 = %B:s32 goto %C ->
 	eax = %A
 	ocszacp = eax - %B
@@ -61,7 +65,27 @@ rule if %A:s32 ≠ %B:s32 goto %C ->
 	eax = %A
 	ocszacp = eax - %B
 	if z = 0 goto %C
-		
+
+rule if %A:s32 ≥ %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
+	if s = o goto %C
+
+rule if %A:s32 > %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
+	if s = o or z = 0 goto %C
+
+rule if %A:s32 ≤ %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
+	if s ≠ o or z = 1 goto %C
+
+rule if %A:s32 < %B:s32 goto %C ->
+	eax = %A
+	ocszacp = eax - %B
+	if s ≠ o goto %C
+			
 ;############### CPU rules
 
 rule vardef %A, %B  ->   "%A   equ %B"

@@ -1,0 +1,9 @@
+﻿in x:0..255
+out x'@x
+
+x' = 137
+
+a = 0 
+if x ≠ 137 then a = 1
+
+assert a = 1

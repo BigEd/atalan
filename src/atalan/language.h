@@ -1261,7 +1261,7 @@ struct RuleTag {
 	LineNo line_no;			// line in the source code, on which the rule was defined
 
 	InstrOp op;
-	RuleArg arg[3];
+	RuleArg * arg[3];
 	InstrBlock * to;
 	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
 	UInt8 cycles;			// How many cycles the instruction uses.
