@@ -99,8 +99,8 @@ Purpose:
 {
 	UInt8 i;
 	for(i=0; i<3; i++) {
-		if (RuleArgIsMoreSpecific(&l->arg[i], &r->arg[i])) return true;
-		if (RuleArgIsMoreSpecific(&r->arg[i], &l->arg[i])) return false;
+		if (RuleArgIsMoreSpecific(l->arg[i], r->arg[i])) return true;
+		if (RuleArgIsMoreSpecific(r->arg[i], l->arg[i])) return false;
 	}
 	return false;
 }
@@ -188,7 +188,7 @@ void RulesMarkNonGarbage(Rule * rule)
 	UInt8 i;
 	while(rule != NULL) {
 		for(i=0; i<2; i++) {
-			RuleArgMarkNonGarbage(&rule->arg[i]);
+			RuleArgMarkNonGarbage(rule->arg[i]);
 		}
 		rule = rule->next;
 	}
@@ -249,9 +249,9 @@ Purpose:
 	EmptyRuleArgs();
 	MATCH_MODE = match_mode;
 
-	match = ArgMatch(&rule->arg[0], i->result, INSTR_NULL) 
-		&& ArgMatch(&rule->arg[1], i->arg1, INSTR_NULL) 
-		&& ArgMatch(&rule->arg[2], i->arg2, INSTR_NULL);
+	match = ArgMatch(rule->arg[0], i->result, INSTR_NULL) 
+		&& ArgMatch(rule->arg[1], i->arg1, INSTR_NULL) 
+		&& ArgMatch(rule->arg[2], i->arg2, INSTR_NULL);
 
 	if (match) {
 		if (INSTR_MATCH_BREAK) {
@@ -312,8 +312,11 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 	Type * atype;
 	Var * pvar, * left, * right;
 	UInt8 j;
-	InstrOp v = pattern->variant;
+	InstrOp v;
 
+	if (pattern == NULL) return arg == NULL;
+
+	v = pattern->variant;
 	if (arg == NULL) return v == INSTR_NULL;
 
 	atype = arg->type;
@@ -605,8 +608,8 @@ Purpose:
 	rule = TRANSLATE_RULES.rules[op];
 
 	for(; rule != NULL; rule = rule->next) {
-		if (rule->arg[0].variant == INSTR_MATCH) {
-			result_type = rule->arg[0].type;
+		if (rule->arg[0]->variant == INSTR_MATCH) {
+			result_type = rule->arg[0]->type;
 			if (IsSubset(type, result_type) && !IsSubset(result_type, type)) {
 				if (found_type == NULL || IsSubset(result_type, found_type)) found_type = result_type;
 			}
