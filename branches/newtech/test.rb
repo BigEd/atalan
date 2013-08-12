@@ -12,30 +12,32 @@ def red(text); colorize(text, "31"); end
 def green(text); colorize(text, "32"); end
 
 
-$tests_to_run = ["arith_bit_8", "arr_2D", "file", "arith_addsub_s16"]
+$tests_to_run = ["if_eq", "if_le_e"]
 $test_results = []
 $bin_path = "atalan/bin"
 
 def compile(test, platform)
-	log = `\"#{$bin_path}/atalan.exe\" -v0 -p con#{platform} tests/#{test}.atl 2>&1`
+	log = `\"#{$bin_path}/atalan.exe\" -v0 -p #{platform} tests/#{test}.atl 2>&1`
 	result=$?.success?
 	return result
-#	return system("#{$bin_path}/atalan.exe -v0 -p con#{platform} tests/#{test}.atl")
 end
 
 def test(test, platform)
 
 	if compile(test, platform)
 		
-		if platform == "6502"
+		if platform == "windows"
+			log =  `tests/#{test}.exe 2>&1`
+			result=$?.success?
+			return result 
+				
+		elsif platform == "con6502"
 			ext = "c65"
-		elsif platform == "Z80"
+		elsif platform == "conZ80"
 			ext = "z80"
 		end
-	
-#		print "#{$bin_path}/con#{platform} tests/#{test}.#{ext}\n" 
-		
-		log =  `\"#{$bin_path}/con#{platform}\" tests/#{test}.#{ext} 2>&1`
+			
+		log =  `\"#{$bin_path}/#{platform}\" tests/#{test}.#{ext} 2>&1`
 		result=$?.success?
 		return result 
 		
@@ -52,8 +54,13 @@ end
 
 $c6502_OK = 0
 $Z80_OK = 0
+$WIN_OK = 0
 $test_count = 0
 $test_ok = 0
+
+$Z80_do = false
+$c6502_do = false
+$WIN_do = true
 
 #Compute maximal lenght of a name
 $name_len = 0
@@ -68,25 +75,40 @@ $tests_to_run.each { |name|
 	print "#{name.ljust($name_len, " ")}"
 
 	test_ok = true
-		
-	print " 6502:"
-	if test(name, "6502") then
-		print green("OK")
-		$c6502_OK += 1
-	else
-		test_ok = false
-		print red("XX")
-	end
 
-	print " Z80:"
-	if test(name, "Z80") then
-		$Z80_OK += 1
-		print green("OK")
-	else
-		test_ok = false
-		print red("XX")
+	if c6502_do		
+		print " 6502:"
+		if test(name, "con6502") then
+			print green("OK")
+			$c6502_OK += 1
+		else
+			test_ok = false
+			print red("XX")
+		end
 	end
 	
+	if Z80_do
+		print " Z80:"
+		if test(name, "conZ80") then
+			$Z80_OK += 1
+			print green("OK")                         	
+		else
+			test_ok = false
+			print red("XX")
+		end
+	end
+	
+	if WIN_do
+		print " WIN:"
+		if test(name, "windows") then
+			$WIN_OK += 1
+			print green("OK")
+		else
+			test_ok = false
+			print red("XX")
+		end
+	end
+		
 	if test_ok then
 		$test_ok += 1
 	end
@@ -95,10 +117,8 @@ $tests_to_run.each { |name|
 }
 
 puts
-puts "Tests  OK: #{$test_ok}  Failed: #{$test_count - $test_ok}"
-puts "6502   OK: #{$c6502_OK}  Failed: #{$test_count - $c6502_OK}"
-puts "Z80    OK: #{$Z80_OK}  Failed: #{$test_count - $Z80_OK}"
-
-
-
+puts "Tests   OK: #{$test_ok}  Failed: #{$test_count - $test_ok}"
+puts "6502    OK: #{$c6502_OK}  Failed: #{$test_count - $c6502_OK}"
+puts "Z80     OK: #{$Z80_OK}  Failed: #{$test_count - $Z80_OK}"
+puts "windows OK: #{$WIN_OK}  Failed: #{$test_count - $WIN_OK}"
 
