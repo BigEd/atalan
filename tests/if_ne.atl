@@ -1,7 +1,7 @@
 ﻿in x:0..255
 out x'@x
 
-x' = 137
+x' = 135
 
 a = 0 
 if x ≠ 137 then a = 1
