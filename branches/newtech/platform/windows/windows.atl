@@ -15,12 +15,12 @@ rule line      -> ";### %0(%1) %2"
 
 rule assert_begin -> ";assert begin"
 rule assert_end   -> ";assert end"
-rule assert       -> "   invoke ExitProcess, 1"
+rule assert       -> "   invoke ExitProcess, 3"
 
 ;compiler rule defines the command line used to compile generated asm source
 ; %A  defines name of the source code file (including the path) without extension
 ; %B  extension of resulting binary as defined by platform
 ; %/  defines path to directory with currently parsed file
 
-rule compiler %A,%B -> "["]%/compile.bat["] ["]%A["]"
+rule compiler %A,%B -> "["]%/compile.bat["] %A"
 

@@ -12,9 +12,9 @@ def red(text); colorize(text, "31"); end
 def green(text); colorize(text, "32"); end
 
 
-$tests_to_run = ["if_eq", "if_le_e"]
+$tests_to_run = ["if_eq", "if_le_e", "if_le_h", "if_le_l", "if_lt", "if_ne"]
 $test_results = []
-$bin_path = "atalan/bin"
+$bin_path = "bin"
 
 def compile(test, platform)
 	log = `\"#{$bin_path}/atalan.exe\" -v0 -p #{platform} tests/#{test}.atl 2>&1`
@@ -27,8 +27,8 @@ def test(test, platform)
 	if compile(test, platform)
 		
 		if platform == "windows"
-			log =  `tests/#{test}.exe 2>&1`
-			result=$?.success?
+			log =  `"tests/#{test}.exe" 2>&1`
+			result=$?.success?			
 			return result 
 				
 		elsif platform == "con6502"
@@ -40,7 +40,6 @@ def test(test, platform)
 		log =  `\"#{$bin_path}/#{platform}\" tests/#{test}.#{ext} 2>&1`
 		result=$?.success?
 		return result 
-		
 	end
 	return false
 end
@@ -76,7 +75,7 @@ $tests_to_run.each { |name|
 
 	test_ok = true
 
-	if c6502_do		
+	if $c6502_do		
 		print " 6502:"
 		if test(name, "con6502") then
 			print green("OK")
@@ -87,7 +86,7 @@ $tests_to_run.each { |name|
 		end
 	end
 	
-	if Z80_do
+	if $Z80_do
 		print " Z80:"
 		if test(name, "conZ80") then
 			$Z80_OK += 1
@@ -98,7 +97,7 @@ $tests_to_run.each { |name|
 		end
 	end
 	
-	if WIN_do
+	if $WIN_do
 		print " WIN:"
 		if test(name, "windows") then
 			$WIN_OK += 1
