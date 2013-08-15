@@ -1,0 +1,13 @@
+in a:0..100
+out a'@a
+in b:0..100
+out b'@b
+
+
+a' = 30
+b' = 21
+
+c = a + b
+
+assert c = 51
+

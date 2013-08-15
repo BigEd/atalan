@@ -276,7 +276,7 @@ Purpose:
 				}
 			}
 		}
-	} else if (op == INSTR_TUPLE || op == INSTR_SUB || op == INSTR_ADD) {
+	} else if (op == INSTR_TUPLE || FlagOn(INSTR_INFO[op].flags, INSTR_OPERATOR)) {
 		l = GenArg(macro, var->adr, args, locals);
 		r = GenArg(macro, var->var, args, locals);
 
@@ -415,6 +415,9 @@ Argument:
 				}
 			} else {
 				if (PHASE == PHASE_TRANSLATE) {
+//					if (result->mode == INSTR_VAR && StrEqual(result->name, "eadx")) {
+//						Print("x");
+//					}
 					if (!InstrTranslate3(op, result, arg1, arg2, 0)) {
 						SyntaxError("Translation for instruction not found");
 					}

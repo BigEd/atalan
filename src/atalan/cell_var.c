@@ -16,6 +16,9 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+GLOBAL UInt32 TMP_IDX;
+char * TMP_NAME = "_";
+
 void VarSetType(Var * var, Type * type)
 {
 	if (type == NULL) type = &EMPTY;
@@ -27,15 +30,6 @@ Var * NewVarInScope(Type * scope, Var * type)
 	Var * var = NewCellInScope(INSTR_VAR, scope);
 	VarSetType(var, type);
 	return var;
-}
-
-Var * NewTempVar(Type * type)
-/*
-Purpose:
-	Alloc variable in specified scope scope.
-*/
-{
-	return NewVarInScope(NULL, type);
 }
 
 Var * NewVarWithIndex(Var * scope, char * name, UInt16 idx, Type * type)
@@ -51,6 +45,16 @@ Var * NewVar(Var * scope, char * name, Type * type)
 	return NewVarWithIndex(scope, name, 0, type);
 }
 
+Var * NewTempVar(Type * type)
+/*
+Purpose:
+	Alloc variable in specified scope scope.
+*/
+{
+	TMP_IDX++;
+	return NewVarWithIndex(NULL, TMP_NAME, TMP_IDX, type);
+}
+
 void CellSetLocation(Var * cell, Var * file, LineNo line_no, LinePos line_pos)
 {
 	cell->file    = SRC_FILE;
@@ -58,6 +62,10 @@ void CellSetLocation(Var * cell, Var * file, LineNo line_no, LinePos line_pos)
 	cell->line_pos = line_pos;
 }
 
+Bool VarIsTmp(Var * var)
+{
+	return var->name == TMP_NAME;
+}
 
 Var * VarFind(Var * scope, char * name)
 /*

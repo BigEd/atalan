@@ -1,0 +1,14 @@
+;Test translation of nested expression (Let x = x - (y * 2))
+out x':100..127
+in  x@x'
+
+out y':0..32
+in  y@y'
+
+x' = 100
+y' = 32    	
+
+
+c = x - y * 2
+
+assert c = 36

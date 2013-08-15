@@ -1,0 +1,31 @@
+out x':100..127
+in  x@x'
+
+out y':0..32
+in  y@y'
+
+out z':0..7
+in  z@z'
+
+;Multiplication
+
+y' = 13
+z' = 7
+
+assert y * 5 = 65
+assert 7 * y = 91
+assert z * y = 91
+assert 91 = z * y
+
+;Division
+
+x' = 100
+
+assert x / 20 = 5
+assert x / 1  = 100
+assert x / 100 = 1
+assert x / 101 = 0
+
+z' = 5
+
+assert x / z = 20

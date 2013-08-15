@@ -1,5 +1,4 @@
 ﻿;Arithmetic testing
-use con6502
 
 ;To prevent compiler from optimizing our test code out, we must
 ;declare one variable as out and another at the same address as in.

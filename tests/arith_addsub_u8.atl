@@ -1,0 +1,22 @@
+out x':100..127
+in  x@x'
+
+out y':0..32
+in  y@y'
+
+x' = 100
+y' = 32    	
+
+;Addition
+assert x + 100 = 200
+assert 50 + x  = 150
+assert x + y = 132
+assert 132 = x + y
+
+;Subtraction
+
+assert x - 50 = 50
+assert 100 - y = 68
+assert x - y = 68
+assert 68 = x - y
+

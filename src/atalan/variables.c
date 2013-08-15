@@ -19,12 +19,12 @@ GLOBAL CellBlock * LAST_CELL_BLOCK;   // list of all variable blocks
 //GLOBAL Var * LAST_VAR;  // Last allocated variable.
 
 GLOBAL Var * SCOPE;		// current scope
-GLOBAL UInt32 TMP_IDX;
 GLOBAL UInt32 TMP_LBL_IDX;
 
 // Used for cell enumerating
 CellBlock * G_BLK;
 UInt16 G_VAR_I;
+extern UInt32 TMP_IDX;
 
 void IntCellInit();
 
@@ -37,7 +37,6 @@ Current CPU used is stored in CPU variable.
 CPUType CPUS[1];			// currently, there is only one supported CPU
 GLOBAL CPUType * CPU;		// current CPU (in case we use multiple CPUs in the future)
 
-char * TMP_NAME = "_";
 char * TMP_LBL_NAME = "_lbl";
 char * SCOPE_NAME = "_s";
 UInt32 SCOPE_IDX;
@@ -272,11 +271,6 @@ Bool CellIsConst(Var * var)
 Bool VarIsArray(Var * var)
 {
 	return var->type != NULL && var->type->variant == TYPE_ARRAY;
-}
-
-Bool VarIsTmp(Var * var)
-{
-	return var->name == TMP_NAME;
 }
 
 Bool VarIsStructElement(Var * var)
