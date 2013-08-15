@@ -215,8 +215,8 @@ typedef enum {
 	INSTR_LET,		// var, val
 	INSTR_IF,
 
-	INSTR_EQ,		// must be even!!!.
-	INSTR_NE,
+	INSTR_EQ,		// 4 must be even!!!.
+	INSTR_NE,       // 5
 	INSTR_LT,
 	INSTR_GE,
 	INSTR_GT,
@@ -226,16 +226,17 @@ typedef enum {
 	INSTR_MATCH_TYPE,
 	INSTR_NMATCH_TYPE,
 
-	INSTR_PROLOGUE,
+	INSTR_PROLOGUE, // 14
 	INSTR_EPILOGUE,
 	INSTR_EMIT,
 	INSTR_VARDEF,
 	INSTR_LABEL,
-	INSTR_ADD,
-	INSTR_SUB,
-	INSTR_MUL,
-	INSTR_DIV,
-	INSTR_SQRT,
+
+	INSTR_ADD,     // 19
+	INSTR_SUB,     // 20
+	INSTR_MUL,     // 21
+	INSTR_DIV,     // 22
+	INSTR_SQRT,    // 23
 
 	INSTR_AND,
 	INSTR_OR,

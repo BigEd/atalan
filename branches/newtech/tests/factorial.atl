@@ -1,0 +1,7 @@
+fact: proc n:0..8 -> result:1..40320 =
+    result = 1
+    for i:2..n result = result * i
+
+assert fact 0 = 1
+assert fact 1 = 1
+assert fact 8 = 40320

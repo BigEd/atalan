@@ -228,35 +228,37 @@ void EmitVar(Var * var, UInt8 format)
 			EmitVar(var->var, format);
 		} else if (var->mode == INSTR_BYTE) {
 			InternalError("don't know how to emit byte array element");
-		} else if (var->name != NULL) {
-			// *** Module parameters (4)
-			// When parameter name is emmited, it is prefixed with PARAM_ prefix
-			if (VarIsParam(var)) {
-				EmitStr("PARAM_");
-//			} else if (var->mode == INSTR_NAME && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {		// Here owner is scope!
-//				EmitIntCellName(var->type->owner);
-				EmitStr("__");
-			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
-				EmitIntCellName(var->scope);
-				EmitStr("__");
-			} else {
-				non_keyword = true;
-				// For variables (excluding registers), emit extra underscore at the beginning to prevent name clash with assembler built-in keywords and register names
-				if (!VarIsReg(var)) {
-					EmitStr("_");
-				}
-			}
-			EmitIntCellName(var);
-
 		} else if (var->mode == INSTR_TEXT) {
 			if (format == 1) {
 				EmitStrConst(var->str); 
 			} else {
 				EmitStr(var->str);
 			}
-		} else {
-			ASSERT(var->mode == INSTR_INT);
+		} else if (var->mode == INSTR_INT) {
 			EmitBigInt(&var->n);
+		} else if (var->mode == INSTR_VAR) {
+			if (var->name != NULL) {
+				// *** Module parameters (4)
+				// When parameter name is emmited, it is prefixed with PARAM_ prefix
+				if (VarIsParam(var)) {
+					EmitStr("PARAM_");
+					//			} else if (var->mode == INSTR_NAME && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {		// Here owner is scope!
+					//				EmitIntCellName(var->type->owner);
+					EmitStr("__");
+				} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
+					EmitIntCellName(var->scope);
+					EmitStr("__");
+				} else {
+					non_keyword = true;
+					// For variables (excluding registers), emit extra underscore at the beginning to prevent name clash with assembler built-in keywords and register names
+					if (!VarIsReg(var)) {
+						EmitStr("_");
+					}
+				}
+				EmitIntCellName(var);			
+			} else {
+				FAILURE("What's this?")
+			}
 		}
 	}
 }

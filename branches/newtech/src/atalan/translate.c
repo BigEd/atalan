@@ -311,7 +311,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 {
 	Type * atype;
 	Var * pvar, * left, * right;
-	UInt8 j;
+	UInt8 arg_no;
 	InstrOp v;
 
 	if (pattern == NULL) return arg == NULL;
@@ -320,7 +320,14 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 	if (arg == NULL) return v == INSTR_NULL;
 
 	atype = arg->type;
-	
+
+	// If this is rule argument and it has been previously set, it must match exactly
+
+	arg_no = pattern->arg_no;
+	if (arg_no != 0 && MACRO_ARG[arg_no-1] != NULL) {
+		return MACRO_ARG[arg_no-1] == arg;	
+	}
+
 	switch(v) {
 
 	case INSTR_ADD:
@@ -435,30 +442,13 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 		break;
 	}
 
-	// If there is macro argument number %A-%Z specified in rule argument, we set or check it here
+	// If this is rule argument, we set it.
 
-	if (pattern->arg_no != 0) {
-
-		// For array element variable store array into the macro argument
-
-		pvar = arg;
-//		if (arg->mode == INSTR_ELEMENT && !VarIsStructElement(arg)) {
-//			pvar = arg->adr;
-//		}
-
-		j = pattern->arg_no-1;
-		if (MACRO_ARG[j] == NULL) {
-			MACRO_ARG[j] = pvar;
-		} else {
-			if (MACRO_ARG[j] != pvar) return false;
-		}
-
-		// Set the index items
-
-//		if (pattern->index != NULL) {
-//			if (!ArgMatch(pattern->index, arg->var)) return false;
-//		}
+	if (arg_no != 0) {
+		ASSERT(MACRO_ARG[arg_no-1] == NULL);
+		MACRO_ARG[arg_no-1] = arg;
 	}
+
 	return true;
 }
 
@@ -626,17 +616,48 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	Type * result_type = NULL;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
-
+/*
 	if (op == INSTR_LET && arg2 == NULL && FlagOn(INSTR_INFO[arg1->mode].flags, INSTR_OPERATOR)) {
 		op = arg1->mode; arg2 = arg1->r; arg1 = arg1->l;
 		if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
 	}
+*/
 
 	// It is not possible to translate the instruction directly.
 	// We will try to simplify the translated instruction by taking one of it's complex arguments
 	// and replacing it by simple variable.
 	// The variable will be assigned the value using LET instruction before it gets used in the instruction.
 	// We are thus replacing one instruction by set of two or more instructions.
+
+	// Try translate things like
+	// Let x = x - (y * 2)
+
+	has1 = has2 = has_r = false;
+
+	if (arg1 != NULL && FlagOn(INSTR_INFO[arg1->mode].flags, INSTR_OPERATOR) ) {
+
+		if (arg1->r != NULL && arg1->r->mode != INSTR_VAR) {
+			VarInitType(&tmp2, result->type);
+			if (InstrTranslate3(INSTR_LET, &tmp2, arg1->r, NULL, mode | TEST_ONLY)) {
+				has2 = true;
+			}
+		}
+
+		if (mode == GENERATE) {
+/*			if (has1) {
+				a = NewTempVar(arg1->type);
+				InstrTranslate3(INSTR_LET, a, arg1, NULL, GENERATE);
+				arg1 = a;
+			}
+*/
+			if (has2) {
+				a = NewTempVar(tmp2.type);
+				InstrTranslate3(INSTR_LET, a, arg1->r, NULL, GENERATE);
+				arg1 = NewOp(arg1->mode, arg1->l, a);
+				goto found_translation2;
+			}
+		}
+	}
 
 	// First we perform simple test detecting, if one of the arguments is more complex, then what we will
 	// use for replacing it (simple variable).
@@ -734,7 +755,7 @@ found_translation:
 			a = result;
 			result = NewTempVar(result_type);
 		}
-
+found_translation2:
 		InstrTranslate2(op, result, arg1, arg2, GENERATE);
 
 		if (has_r) {

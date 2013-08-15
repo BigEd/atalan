@@ -1,7 +1,5 @@
 ﻿;Relational operators test
 
-use con6502
-
 out s8o, s8o2:-128..127
 in  s8i@s8o, s8i2@s8o2:-128..127
 

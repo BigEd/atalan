@@ -12,7 +12,11 @@ def red(text); colorize(text, "31"); end
 def green(text); colorize(text, "32"); end
 
 
-$tests_to_run = ["if_eq", "if_le_e", "if_le_h", "if_le_l", "if_lt", "if_ne_t", "if_ne_f"]
+$tests_to_run = [
+    "arith_add_u8", "arith_addsub_u8", "arith_addsub_s8",
+    "if_eq", "if_le_e", "if_le_h", "if_le_l", "if_lt", "if_ne_t", "if_ne_f"
+	]
+    
 $test_results = []
 $bin_path = "bin"
 
