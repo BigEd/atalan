@@ -29,7 +29,7 @@ x86:system.CPU
 	r@(eax, ebx, ecx, edx)
 				
 	ocszacp@(o,c,s,z,ac,p)
-	eadx@(edx,eax)
+	edax@(edx,eax)
 	
 rule alloc %A:s32  -> "   %A  sdword ?"
 
@@ -58,6 +58,13 @@ rule %A:s32 = %B:s32 - %C:s32 ->
 rule %A:s32 = %B:s32 * %C:s32 ->
 	eax = %B
 	eax = eax * %C
+	%A = eax
+
+rule %A:s32 = %B:s32 / %C:s32 ->
+	eax = %B
+	edx = 0				;TODO: cdq
+	ecx = %C
+	edax = edax / ecx
 	%A = eax
 
 ; Conditional jumps
@@ -103,8 +110,11 @@ rule %A:s32 = %B@r -> "   mov %A, %B"
 rule %A@r = %A + %B:s32 @ocszacp -> "   add %A, %B"
 rule %A@r = %A - %B:s32 @ocszacp -> "   sub %A, %B"
 
+rule %A@r = %A@r * %C:s32 @ocszacp -> "   imul %A, %C" 
 rule %A@r = %B@r * %C:s32 @ocszacp -> "   imul %A, %B, %C" 
-rule eadx = eax * %C:s32 @ocszacp -> "   imul %C"
+rule edax = eax * %C:s32 @ocszacp -> "   imul %C"
+
+rule edax = edax / %A@r @ocszacp -> "   idiv %A" 
 
 rule ocszacp = %A@r - %B:s32     -> "   cmp %A, %B" 
 

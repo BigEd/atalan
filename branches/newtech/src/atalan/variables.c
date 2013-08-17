@@ -226,6 +226,10 @@ Type * CellType(Var * cell)
 		return cell->type;
 	} else if (cell->mode == INSTR_ARRAY) {
 		return cell->type;
+	} else if (cell->mode == INSTR_INT || cell->mode == INSTR_RANGE || cell->mode == INSTR_TEXT) {
+		return cell;
+	} else if (FlagOn(INSTR_INFO[cell->mode].flags, INSTR_OPERATOR)) {
+		return CellOp(cell->mode, CellType(cell->l), CellType(cell->r));
 	}
 	return NULL;
 }

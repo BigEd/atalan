@@ -13,6 +13,11 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "language.h"
 
+Bool CellIsOp(Var * cell)
+{
+	return cell != NULL && FlagOn(INSTR_INFO[cell->mode].flags, INSTR_OPERATOR);
+}
+
 Var * VarFindOp(InstrOp op, Var * left, Var * right, Var * middle)
 /*
 Purpose:
@@ -65,7 +70,7 @@ Var * VarNewDeref(Var * adr)
 	return var;
 }
 
-Var * NewOp(InstrOp op, Var * arr, Var * idx)
+Var * NewOp(InstrOp op, Var * l, Var * r)
 /*
 Purpose:
 	Alloc new operator cell.
@@ -77,30 +82,31 @@ Argument:
 
 	// Try to find same element
 
-	Var * var = VarFindOp(op, arr, idx, NULL);
+	Var * var = VarFindOp(op, l, r, NULL);
 	if (var != NULL) return var;
 
 	item = NewCell(op);
-	item->adr  = arr;
+	item->l    = l;
 	item->m    = NULL;
+	item->type = NULL;
 
 	// Type of array element variable is type of array element
 	// We may attempt to address individual bytes of non-array variable as an array
 	// in such case the type of the element is byte.
-	if (arr->type != NULL) {
-		if (arr->type->variant == TYPE_ARRAY) {
-			item->type = arr->type->element;
-		} else if (arr->type->variant == TYPE_STRUCT) {
-			item->type = idx->type;
-			item->submode |= (idx->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
+	if (l->type != NULL) {
+		if (l->type->variant == TYPE_ARRAY) {
+			item->type = l->type->element;
+		} else if (l->type->variant == TYPE_STRUCT) {
+			item->type = r->type;
+			item->submode |= (r->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
 		} else {
 			item->type = TypeByte();
 		}
 	} else {
 	}
-	item->var  = idx;
+	item->var  = r;
 	// If this is element from in or out variable, it is in or out too
-	item->submode |= (arr->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
+	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
 	return item;
 }
 

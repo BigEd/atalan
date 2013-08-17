@@ -870,6 +870,7 @@ Var * NewBitRange(UInt32 bit_count);
 //===== Tuple
 Var * NewTuple(Var * left, Var * right);
 Var * NewOp(InstrOp op, Var * left, Var * right);
+Bool CellIsOp(Var * cell);
 
 //===== Sequence
 Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp compare_op);
@@ -1189,6 +1190,8 @@ void GenLetPos(Var * result, Var * arg1);
 #define INSTR_NON_CODE    2		// non-executable instruction generating data
 #define INSTR_OPTIONAL    4		// instruction must not be translated
 #define INSTR_OPERATOR    8
+
+#define INSTR_COMMUTATIVE_OPERATOR (INSTR_OPERATOR + INSTR_COMMUTATIVE)
 
 typedef struct {
 	InstrOp  op;

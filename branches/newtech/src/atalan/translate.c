@@ -332,18 +332,19 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 
 	case INSTR_ADD:
 	case INSTR_SUB:
-		right = arg->var;
-
-		// If we have variable and not arithmetic operation, try to match using substraction or addition with 0
-		// %A => %A-0 or %A+0
 
 		if (arg->mode == INSTR_VAR || arg->mode == INSTR_INT) {
+			// If we have variable and not arithmetic operation, try to match using subtraction or addition with 0
+			// %A => %A-0 or %A+0
+			// We do not allow this in emit mode, as it would convert comparison instructions implemented using subtraction.
+
+			if (MATCH_MODE == PHASE_EMIT) return false;
 			left  = arg;
 			right = ZERO;
 		} else {
-			if (v == INSTR_ADD && arg->mode != INSTR_ADD) return false;
-			if (v == INSTR_SUB && arg->mode != INSTR_SUB) return false;
-			left = arg->adr;
+			if (v != arg->mode) return false;
+			left = arg->l;
+			right = arg->r;
 		}
 		if (!ArgMatch(pattern->index, right, v)) return false;
 		return ArgMatch(pattern->arr, left, v); 
@@ -610,10 +611,11 @@ Purpose:
 
 Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
 {
-	Var * a;
+	Var * a, * a_l, * a_r;
 	Var  tmp1,  tmp2,  tmp_r;
 	Bool has1, has2, has_r;
 	Type * result_type = NULL;
+	Type * type;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
 /*
@@ -630,30 +632,50 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	// We are thus replacing one instruction by set of two or more instructions.
 
 	// Try translate things like
-	// Let x = x - (y * 2)
 
 	has1 = has2 = has_r = false;
 
-	if (arg1 != NULL && FlagOn(INSTR_INFO[arg1->mode].flags, INSTR_OPERATOR) ) {
+	if (CellIsOp(arg1)) {
 
-		if (arg1->r != NULL && arg1->r->mode != INSTR_VAR) {
-			VarInitType(&tmp2, result->type);
-			if (InstrTranslate3(INSTR_LET, &tmp2, arg1->r, NULL, mode | TEST_ONLY)) {
+		a_l = arg1->l;
+		a_r = arg1->r;
+
+		// Let r = (x * 4) - y
+		if (CellIsOp(a_l)) {
+			type = TUNDEFINED; if (result != NULL) type = result->type;
+			if (type == TUNDEFINED) if (a_l->l->mode == INSTR_VAR) type = a_l->l->type;
+			if (type == TUNDEFINED) if (a_l->r->mode == INSTR_VAR) type = a_l->r->type;
+			VarInitType(&tmp1, type);
+			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
+				has1 = true;
+			}
+		}
+
+		// Let r = x - (y * 2)
+
+		if (CellIsOp(a_r)) {
+			type = TUNDEFINED; if (result != NULL) type = result->type;
+			if (type == TUNDEFINED) if (a_r->l->mode == INSTR_VAR) type = a_r->l->type;
+			if (type == TUNDEFINED) if (a_r->r->mode == INSTR_VAR) type = a_r->r->type;
+			VarInitType(&tmp2, type);
+			if (InstrTranslate3(INSTR_LET, &tmp2, a_r, NULL, mode | TEST_ONLY)) {
 				has2 = true;
 			}
 		}
 
 		if (mode == GENERATE) {
-/*			if (has1) {
-				a = NewTempVar(arg1->type);
-				InstrTranslate3(INSTR_LET, a, arg1, NULL, GENERATE);
-				arg1 = a;
+			if (has1) {
+				a_l = NewTempVar(tmp1.type);
+				InstrTranslate3(INSTR_LET, a_l, arg1->l, NULL, GENERATE);
 			}
-*/
+
 			if (has2) {
-				a = NewTempVar(tmp2.type);
-				InstrTranslate3(INSTR_LET, a, arg1->r, NULL, GENERATE);
-				arg1 = NewOp(arg1->mode, arg1->l, a);
+				a_r = NewTempVar(tmp2.type);
+				InstrTranslate3(INSTR_LET, a_r, arg1->r, NULL, GENERATE);
+			}
+
+			if (has1 || has2) {
+				arg1 = NewOp(arg1->mode, a_l, a_r);
 				goto found_translation2;
 			}
 		}
