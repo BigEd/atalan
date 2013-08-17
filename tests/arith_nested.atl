@@ -12,3 +12,8 @@ y' = 32
 c = x - y * 2
 
 assert c = 36
+
+c2 = y * 4 - x
+
+assert c2 = 28
+ 
