@@ -309,7 +309,7 @@ Arguments:
 				// we will be able to remove it completely.
 				if (!InVar(i->arg1) && !OutVar(i->result) && VarContains(i->result, i->arg1)) {
 					if (mod_reg) first_init = false;
-					ASSERT(i->rule->cycles > 0);
+//					ASSERT(i->rule->cycles > 0);
 					q -= i->rule->cycles;
 					continue;
 				}

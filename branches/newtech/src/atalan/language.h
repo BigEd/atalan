@@ -169,6 +169,7 @@ FILE * FindFile(char * name, char * ext, char * path);
 extern Var * MODULES;
 
 extern char NAME[256];
+extern char NAME2[256];
 
 // This functions are used only by parser
 
@@ -182,11 +183,16 @@ Bookmark SetBookmark();
 Bool Spaces();
 Bool NextCharIs(UInt8 chr);
 Bool NextIs(Token tok);
+Bool PeekNext(Token tok);
 Bool NextNoSpaceIs(Token tok);
 void EnterBlock();
 void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
-Bool ParseInt(Var ** p_i);
+
+Bool LexInt(Var ** p_i);
+Bool LexId(char * p_name);
+Bool LexString(char * p_str);
+
 void LexerInit();
 
 #define MAX_LINE_LEN 32767
