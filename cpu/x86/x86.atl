@@ -9,7 +9,8 @@ platform: ()
 ;Types defined in CPU are special in the way, that the CPU rules must use the types.
 
 x86:system.CPU
-	s32:type -2147483648..2147483647				
+	s32:type -2147483648..2147483647
+	arr_s32:type array(0..$3fffffff) of s32				
 	memory:type array(0..$ffffffff) of 0..255
 	flag:type 0..1
 	
@@ -29,6 +30,7 @@ x86:system.CPU
 	r@(eax, ebx, ecx, edx)
 				
 	ocszacp@(o,c,s,z,ac,p)
+	oszacp@(o,s,z,ac,p)
 	edax@(edx,eax)
 	
 rule alloc %A:s32  -> "   %A  sdword ?"
@@ -98,6 +100,17 @@ rule if %A:s32 < %B:s32 goto %C ->
 	eax = %A
 	ocszacp = eax - %B
 	if s ≠ o goto %C
+
+
+;One dimensional s32 array
+rule alloc %A:array(%B:0..$3fffffff) of s32    -> "   %A  sdword %B.size dup (?)"
+
+rule %A:s32 = %B:arr_s32(%C:0..$3fffffff) ->
+	ebx = %C
+	eax = %B(ebx)
+	%A = eax 
+	
+rule %A@r = %B:arr_s32(%C@r) -> "   mov %A, %B[%B*4]"
 			
 ;############### CPU rules
 
@@ -106,7 +119,7 @@ rule label %A      -> "%A:"
 
 rule %A@r = %B:s32 -> "   mov %A, %B"
 rule %A:s32 = %B@r -> "   mov %A, %B"	
-
+rule %A@r = %A + 1 @oszacp -> "   inc %A"   
 rule %A@r = %A + %B:s32 @ocszacp -> "   add %A, %B"
 rule %A@r = %A - %B:s32 @ocszacp -> "   sub %A, %B"
 

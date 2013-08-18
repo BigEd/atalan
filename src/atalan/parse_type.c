@@ -90,9 +90,7 @@ Type * ParseIntType()
 	if (ParsingPattern()) {
 		arg_no = ParseArgNo();
 		if (arg_no > 0) {
-			if (TOK == TOKEN_COLON) {
-				NextToken();
-			} else {
+			if (!NextIs(TOKEN_COLON)) {
 				SyntaxError("Argument name must be followed by :");
 			}
 		}
@@ -129,8 +127,7 @@ Type * ParseIntType()
 			SyntaxErrorBmk("expected type or constant expression", bookmark);
 		}
 
-		if (TOK == TOKEN_DOTDOT) {
-			NextToken();
+		if (NextIs(TOKEN_DOTDOT)) {
 			bookmark = SetBookmark();
 			ExpectExpression(NULL);
 			ifok {
@@ -201,9 +198,8 @@ Type * ParseConstList(Type * type)
 
 		while(NextIs(TOKEN_EOL));
 
-		if (TOK == TOKEN_ID || (TOK >= TOKEN_KEYWORD && TOK <= TOKEN_LAST_KEYWORD)) {
-			var = NewVar(type, NAME, NULL);
-			NextToken();
+		if (LexId(NAME2)) {
+			var = NewVar(type, NAME2, NULL);
 			if (NextIs(TOKEN_EQUAL)) {
 				SyntaxError("Unexpected equal");
 			}
@@ -378,12 +374,12 @@ Input:
 
 next:
 	type = ParseType3();
-	if (!TOK) return NULL;
+	iferr return NULL;
 
 	if (type == NULL) {
 		bookmark = SetBookmark();
 		ParseExpressionType(NULL);
-		if (TOK && TOP != 0) {
+		if (OK && TOP != 0) {
 
 			min = BufPop();
 			if (min->mode == INSTR_RANGE) {
@@ -444,9 +440,8 @@ next:
 				}
 			}
 		//# "text"
-		} else if (TOK == TOKEN_STRING) {
-			type = TextCell(NAME);
-			NextToken();
+		} else if (LexString(NAME2)) {
+			type = TextCell(NAME2);
 			goto done;
 
 		}

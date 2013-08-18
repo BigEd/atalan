@@ -69,6 +69,7 @@ GLOBAL Token TOK_NO_SPACES;				// if the current token was not preceded by white
 GLOBAL static BlockStyle LEXBLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
+GLOBAL char NAME2[256];
 
 void PrintLex()
 {
@@ -350,7 +351,20 @@ Purpose:
 ************************************************/
 //$T
 
-Bool ParseInt(Var ** p_i)
+Bool LexString(char * p_str)
+{
+	*p_str = 0;
+	ifok {
+		if (TOK == TOKEN_STRING) {
+			strcpy(p_str, NAME);
+			NextToken();
+			return true;
+		}
+	}
+	return false;
+}
+
+Bool LexInt(Var ** p_i)
 {
 	*p_i = NULL;
 	ifok {
@@ -359,6 +373,16 @@ Bool ParseInt(Var ** p_i)
 			NextToken();
 			return true;
 		}
+	}
+	return false;
+}
+
+Bool LexId(char * p_name)
+{
+	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
+		strcpy(p_name, NAME);
+		NextToken();
+		return true;
 	}
 	return false;
 }
@@ -720,6 +744,11 @@ Bool NextCharIs(UInt8 chr)
 	return true;
 }
 
+Bool PeekNext(Token tok)
+{
+	return TOK == tok;
+}
+
 Bool NextIs(Token tok)
 {
 	if (TOK != tok) return false;
@@ -915,7 +944,7 @@ Syntax:
 						// Parse till comma or closing brace
 						//TODO: Use parse assignment
 //							param = NewVar(SRC_FILE, opt_name, NULL);
-						if (ParseInt(&val)) {
+						if (LexInt(&val)) {
 						} else {
 							val = TextCell(NAME);
 							NextToken();
