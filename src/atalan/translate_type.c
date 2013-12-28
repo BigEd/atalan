@@ -22,13 +22,35 @@ Purpose:
 	Return CPU type that is able to represent all values of the specified type.
 */
 {
-	Var * var;
+	Var * var, * cpu_type, * cpu_array, * step;
 	if (!IsCpuType(type)) {
-		FOR_EACH_LOCAL(CPU->SCOPE, var)
-			if (var->mode == INSTR_VAR && var->type->mode == INSTR_TYPE) {
-				if (IsSubset(type, var->type->possible_values)) return var;
-			}
-		NEXT_LOCAL
+
+		// For array:
+		//   - item must be subset of CPU type item
+		//   - index must be subset of CPU type index, item must be subset of item
+
+		if (type->mode == INSTR_ARRAY_TYPE) {
+			FOR_EACH_LOCAL(CPU->SCOPE, var)
+				if (var->mode == INSTR_VAR && var->type->mode == INSTR_TYPE && var->type->possible_values->mode == INSTR_ARRAY_TYPE) {
+					cpu_array = var->type->possible_values;
+					if (IsSubset(type, cpu_array)) {
+						cpu_type = NewArrayType(IndexType(type), ItemType(cpu_array));
+						step = ArrayStep(type);
+						if (step == NULL) {
+							step = IntCellN(TypeSize(ItemType(cpu_type)));
+						}
+						return cpu_type;
+					}
+				}
+			NEXT_LOCAL
+
+		} else {
+			FOR_EACH_LOCAL(CPU->SCOPE, var)
+				if (var->mode == INSTR_VAR && var->type->mode == INSTR_TYPE) {
+					if (IsSubset(type, var->type->possible_values)) return var;
+				}
+			NEXT_LOCAL
+		}
 	}
 	return type;
 }
@@ -47,7 +69,7 @@ void TranslateTypes(Var * proc)
 
 	FOR_EACH_LOCAL(proc, var)
 		if (var->mode == INSTR_VAR) {
-			if (var->write > 0 || var->read > 0) {
+			if (VarIsUsed(var)) {
 				type = var->type;
 				var->type = CpuType(type);
 				if (verbose) {

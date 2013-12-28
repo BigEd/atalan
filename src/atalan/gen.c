@@ -146,10 +146,12 @@ Purpose:
 	Generate instruction into current code block.
 */
 {
-	Rule * rule;
+	Rule * rule = NULL;
 	GenLine();
 
-	rule = RuleSetFindRule(&GEN_RULES, op, result, arg1, arg2);
+	if (!ParsingRule()) {
+		rule = RuleSetFindRule(&GEN_RULES, op, result, arg1, arg2);
+	}
 	if (rule == NULL) {
 		GenInternal(op, result, arg1, arg2);
 	} else {
@@ -356,7 +358,11 @@ Argument:
 	InstrBlock * blk;
 	Bool local_result;
 
-	blk = macro->instr;
+	ASSERT(macro->mode == INSTR_VAR);
+	ASSERT(macro->type->mode == INSTR_FN);
+
+	blk = macro->type->instr;
+//	blk = macro->instr;
 	if (blk == NULL) return;
 
 	VarSetInit(&locals);
@@ -367,7 +373,7 @@ Argument:
 
 		// In case, we are generating variable (means we are inlining a procedure), generate lines too
 		if (op == INSTR_LINE) {
-			if (macro->type->variant == TYPE_PROC) {
+			if (!IsMacro(macro->type)) {
 				InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
 				i2 = INSTR->prev;
 				i2->result    = i->result;

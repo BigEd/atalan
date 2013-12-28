@@ -273,7 +273,7 @@ rule %A:byte2 = %B = instr
 
 ;############ 1D array (1 byte index)
 
-rule alloc %A:array(%C:0..65535) of byte1    = "   DS %B"
+rule alloc %A:array(%B:0..65535) of byte1    = "   DS %B"
 
 rule %A = %B:b1arr(const %C) = instr
 	ld a, %B$%C

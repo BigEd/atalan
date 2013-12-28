@@ -50,10 +50,10 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_OR,          "or", "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 
 	{ INSTR_ALLOC,       "alloc", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_PROC,        "proc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_FN,        "proc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_RETURN,      "return", "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_ENDPROC,     "endproc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_CALL,        "call", "", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
+	{ INSTR_CALL,        "call", "", {TYPE_VOID, TYPE_PROC, TYPE_VOID}, 0, NULL },
 	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_NON_CODE, NULL },
 
 	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
@@ -107,6 +107,9 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_EMPTY,        "()", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Empty
 	{ INSTR_MATCH,        ":", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match x:type
 	{ INSTR_MATCH_VAL,        ":val", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match const x:type
+	{ INSTR_ARRAY_TYPE,   ":array", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
+	{ INSTR_FN_TYPE,   ":fn", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
+	{ INSTR_ANY,          "", "?", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_IS_TYPE, 0 }
 
 };
 
@@ -141,11 +144,9 @@ Type * TypeGen(Type * t)
 	if (t == NULL) return t;
 
 	type = t;
-	if (t->variant == TYPE_ARRAY) {
-		type = TypeAlloc(TYPE_ARRAY);
-		type->index = TypeGen(t->index);
-		type->element = TypeGen(t->element);
-		type->step   = t->step;
+	if (t->mode == INSTR_ARRAY_TYPE) {
+		type = NewArrayType(TypeGen(t->index), TypeGen(t->element));
+		SetArrayStep(type, ArrayStep(t));
 	} else {
 		var = t;
 		if (var->mode == INSTR_ELEMENT) {
@@ -467,7 +468,7 @@ Result:
 		switch(op) {
 			case INSTR_SQRT:
 				if (IntHigherEq(n1, Int0())) {
-					IntSqrt(&nr, n1);		// r = IntCellN((UInt32)sqrt(*n1));
+					IntSqrt(&nr, n1);
 				} else {
 					SyntaxError("sqrt of negative number");
 					// Error: square root of negative number
@@ -475,18 +476,15 @@ Result:
 				break;
 			case INSTR_LO:
 				IntAnd(&nr, n1, Int255());
-//				r = IntCellN(*n1 & 0xff);
 				break;
 			case INSTR_HI:
 				IntSet(&nr, n1);
 				IntDivN(&nr, 256);
 				IntAndN(&nr, 0xff);
-//				r = IntCellN((*n1 >> 8) & 0xff);
 				break;
 			case INSTR_DIV:
 				if (!IntEqN(n1, 0)) {
 					IntDiv(&nr, n1, n2);
-//					r = IntCellN(*n1 / *n);
 				} else {
 					SyntaxError("division by zero");
 				}
@@ -494,34 +492,27 @@ Result:
 			case INSTR_MOD:
 				if (!IntEqN(n1, 0)) {
 					IntMod(&nr, n1, n2);
-//					r = IntCellN(*n1 % *n);
 				} else {
 					SyntaxError("division by zero");
 				}
 				break;
 			case INSTR_MUL:
 				IntMul(&nr, n1, n2);
-//				r = IntCellN(*n1 * *n);
 				break;
 			case INSTR_ADD:
 				IntAdd(&nr, n1, n2);
-//				r = IntCellN(*n1 + *n);
 				break;
 			case INSTR_SUB:
 				IntSub(&nr, n1, n2);
-//				r = IntCellN(*n1 - *n);
 				break;
 			case INSTR_AND:
 				IntAnd(&nr, n1, n2);
-//				r = IntCellN(*n1 & *n);
 				break;
 			case INSTR_OR:
 				IntOr(&nr, n1, n2);
-//				r = IntCellN(*n1 | *n);
 				break;
 			case INSTR_XOR:
 				IntXor(&nr, n1, n2);
-//				r = IntCellN(*n1 ^ *n);
 				break;
 			default: 
 				return NULL;
@@ -774,8 +765,24 @@ void PrintVar(Var * var)
 	} else if (var->mode == INSTR_SEQUENCE) {
 		Print("seq "); PrintVar(var->seq.init); Print(" + "); PrintVar(var->seq.step);
 
+	} else if (var->mode == INSTR_ARRAY_TYPE) {
+		Print("array (");
+		PrintVar(IndexType(var));
+		Print(") of ");
+		PrintVar(ItemType(var));
+
 	} else if (var->mode == INSTR_TYPE) {
 		PrintType(var);
+
+	} else if (var->mode == INSTR_FN) {
+		if (IsMacro(var->type)) {
+			Print("macro");
+		}
+		PrintVar(var->type);
+	} else if (var->mode == INSTR_FN_TYPE) {
+		PrintVar(ArgType(var));
+		Print(" -> ");
+		PrintVar(ResultType(var));
 	} else if (var->mode == INSTR_VAR) {
 
 		PrintIntCellName(var);
@@ -788,15 +795,7 @@ void PrintVar(Var * var)
 		type = var->type;
 		if (type != NULL) {
 			Print(":");
-			if (type->variant == TYPE_PROC) {
-				Print("proc");
-				PrintVarArgs(var);
-			} else if (type->variant == TYPE_MACRO) {
-				Print("macro");
-				PrintVarArgs(var);
-			} else {
-				PrintVar(type);
-			}
+			PrintVar(type);
 		}
 	} else {
 		PrintVar(var->adr);
@@ -928,9 +927,9 @@ void CodePrint(InstrBlock * blk, UInt32 flags)
 				if (IS_INSTR_BRANCH(i->op)) {
 					Print(" goto ");
 				}
-				if (ii->arg_type[0] == TYPE_LABEL || ii->arg_type[0] == TYPE_PROC) {
-					PrintVar(i->result);
-				}
+//				if (ii->arg_type[1] == TYPE_LABEL || ii->arg_type[1] == TYPE_PROC) {
+//					PrintVar(i->arg1);
+//				}
 
 			}
 			PrintEOL();

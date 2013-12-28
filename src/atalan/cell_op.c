@@ -93,6 +93,8 @@ Argument:
 	// Type of array element variable is type of array element
 	// We may attempt to address individual bytes of non-array variable as an array
 	// in such case the type of the element is byte.
+
+/*
 	if (l->type != NULL) {
 		if (l->type->variant == TYPE_ARRAY) {
 			item->type = l->type->element;
@@ -104,15 +106,22 @@ Argument:
 		}
 	} else {
 	}
+*/
+
+	// If the right is in, out or register, whole operation is the same
 	item->var  = r;
+
 	// If this is element from in or out variable, it is in or out too
+	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
 	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
 	return item;
 }
 
 Var * VarNewElement(Var * arr, Var * idx)
 {
-	return NewOp(INSTR_ELEMENT, arr, idx);
+	Var * var = NewOp(INSTR_ELEMENT, arr, idx);
+	var->type = ANY;
+	return var;
 }
 
 Var * VarNewByteElement(Var * arr, Var * idx)

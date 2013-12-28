@@ -272,6 +272,16 @@ Purpose:
 ************************************************/
 //$B
 
+void NewBlock(Token end_token, Token stop_token)
+{
+	BLK_TOP++;
+	LEXBLK[BLK_TOP].indent = LEXBLK[BLK_TOP-1].indent;
+	if (end_token == TOKEN_OUTDENT) LEXBLK[BLK_TOP].indent = UNDEFINED_INDENT;
+	LEXBLK[BLK_TOP].end_token   = end_token;
+	LEXBLK[BLK_TOP].stop_token  = stop_token;
+	LEXBLK[BLK_TOP].line_no     = LINE_NO;
+}
+
 void EnterBlockWithStop(Token stop_token)
 {
 	Token end  = TOKEN_EOL;
@@ -312,12 +322,7 @@ void EnterBlockWithStop(Token stop_token)
 		}
 	}
 
-	BLK_TOP++;
-	LEXBLK[BLK_TOP].indent = LEXBLK[BLK_TOP-1].indent;
-	if (end == TOKEN_OUTDENT) LEXBLK[BLK_TOP].indent = UNDEFINED_INDENT;
-	LEXBLK[BLK_TOP].end_token   = end;
-	LEXBLK[BLK_TOP].stop_token  = stop;
-	LEXBLK[BLK_TOP].line_no     = LINE_NO;
+	NewBlock(end, stop);
 
 	// NextToken MUST be called AFTER new block  has been created 
 	// (so it may possibly immediately exit that block, if it is empty)

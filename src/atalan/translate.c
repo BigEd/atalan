@@ -530,8 +530,19 @@ Rule * TranslateRule(InstrOp op, Var * result, Var * arg1, Var * arg2)
 void GenMatchedRule(Rule * rule)
 {
 	Var rule_proc;
-	Var * args[MACRO_ARG_CNT];	
-	rule_proc.instr = rule->to;
+	Var rule_type;
+	Var * args[MACRO_ARG_CNT];
+
+	rule_type.mode = INSTR_FN;	
+	rule_type.submode = SUBMODE_MACRO;
+	rule_type.type = VOID;
+	rule_type.instr = rule->to;
+
+	rule_proc.mode = INSTR_VAR;
+	rule_proc.name = NULL;
+	rule_proc.idx = 0;
+	rule_proc.type = &rule_type;
+
 	MemMove(args, MACRO_ARG, sizeof(args));
 	GenMacro(&rule_proc, args);
 }
@@ -649,6 +660,13 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
 				has1 = true;
 			}
+		} else if (a_l->mode == INSTR_ELEMENT) {
+			type = ItemType(a_l->l->type);
+			VarInitType(&tmp1, type);
+			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
+				has1 = true;
+			}
+
 		}
 
 		// Let r = x - (y * 2)

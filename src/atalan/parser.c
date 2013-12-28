@@ -40,7 +40,7 @@ Bool   EXP_IS_REF = false;				// Parsed expression will be used as a reference
 Var *  EXP_EXTRA_SCOPE;					// Scope used by expression parsing to find extra variables.
 UInt16 EXP_PARENTHESES;					// If > 0, we are parsing parenthesis inside expression
 Bool   EXP_INSTR = false;				// parsing expression for instruction (store minus as variable)
-
+Bool   EXP_DEFINES_VARS = false;
 static Var * UNUSED_INSTR_SCOPE = NULL;
 
 //TODO: Remove
@@ -129,6 +129,19 @@ Var * ParseScope()
 	} while(1);
 
 	return scope;
+}
+
+Var * FindExpVar()
+{
+	Var * var = NULL;
+
+	if (EXP_EXTRA_SCOPE != NULL) {
+		var = VarFind(EXP_EXTRA_SCOPE, NAME);
+	} 
+	if (var == NULL) {
+		var = VarFind2(NAME);
+	}
+	return var;
 }
 
 Var * ParseSimpleVariable()
@@ -339,15 +352,6 @@ done:
 	STACK[TOP-1] = result;
 }
 
-void ParseParenthesis()
-{
-	EnterBlock();
-	EXP_PARENTHESES++;
-	ParseExpRoot();
-	if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
-	EXP_PARENTHESES--;
-}
-
 UInt8 ParseArgNo2()
 /*
 Parse %A - %Z and return it as number 1..26.
@@ -401,8 +405,8 @@ Purpose:
 	NextToken();
 	if (LexInt(&item)) {
 	} else if (TOK == TOKEN_ID) {
-		if (arr->type->variant == TYPE_ARRAY) {
-			item = VarFindAssociatedConst(arr->type->index, NAME);
+		if (VarIsArray(arr)) {
+			item = VarFindAssociatedConst(IndexType(arr->type), NAME);
 		}
 		if (item != NULL) {
 			NextToken();
@@ -547,7 +551,8 @@ Var * ParseArrayIdx(Type * atype)
 			idx_type = t = atype->index;
 			if (t->variant == TYPE_TUPLE) idx_type = t->left;
 		} else if (tv == TYPE_ADR) {
-			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
+			TODO("Better implementation");
+//			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
 		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
 		} /*else {
@@ -680,7 +685,8 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 			idx_type = t = atype->index;
 			if (t->variant == TYPE_TUPLE) idx_type = t->left;
 		} else if (tv == TYPE_ADR) {
-			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
+			TODO("Better implementation");
+//			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
 		} else if (tv == TYPE_SCOPE) {
 			idx_type = NULL;
 		}
@@ -925,19 +931,6 @@ void ReportSimilarNames(char * name)
 
 }
 
-Var * FindExpVar()
-{
-	Var * var = NULL;
-
-	if (EXP_EXTRA_SCOPE != NULL) {
-		var = VarFind(EXP_EXTRA_SCOPE, NAME);
-	} 
-	if (var == NULL) {
-		var = VarFind2(NAME);
-	}
-	return var;
-}
-
 void ParseOperand()
 {
 	Var * var = NULL, * item = NULL, * proc, * arg;
@@ -949,8 +942,16 @@ void ParseOperand()
 
 	type_match = false;
 
-	if (TOK == TOKEN_OPEN_P) {
-		ParseParenthesis();
+	if (NextIs(TOKEN_OPEN_P)) {
+		if (NextIs(TOKEN_CLOSE_P)) {
+			BufPush(VOID);
+		} else {
+			NewBlock(TOKEN_CLOSE_P, TOKEN_VOID);
+			EXP_PARENTHESES++;
+			ParseExpRoot();
+			if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");			
+			EXP_PARENTHESES--;
+		}
 	} else {
 		// file "slssl"
 		if (NextIs(TOKEN_FILE)) {
@@ -959,7 +960,7 @@ void ParseOperand()
 			ifok {
 				type = RESULT_TYPE;
 				if (type == NULL) {
-					type = TypeAlloc(TYPE_ARRAY);
+					type = NewArrayType(NULL, NULL);
 				}
 				var = NewTempVar(type);
 				var->mode = INSTR_INT;
@@ -1016,32 +1017,32 @@ void ParseOperand()
 			}
 
 			if (var == NULL) {
-				SyntaxError("~unknown name [$]");
-				ReportSimilarNames(NAME);
-				EndErrorReport();
+				if (!EXP_DEFINES_VARS) {
+					SyntaxError("~unknown name [$]");
+					ReportSimilarNames(NAME);
+					EndErrorReport();
+				}
 
-				return;
+				// We are going to make the compilation continue by creating fake variable as if the
+				// programmer has defined it.
+
+				var = NewVar(NULL, NAME, ANY);
+				goto indices;
+
 			} else {
 				OP_LINE_POS = TOKEN_POS + 1;
 			}
 
-			// For type variable, there can not be any index etc.
-			// This is essential when parsing types in rules like:  %A:byte(%B:byte)
-
-//			if (VarIsType(var)) {
-//				NextToken();
-//				goto done;
-//			}
 
 no_id:
 			// Procedure call
-			if (var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO || (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)) {
+			if (var->type->mode == INSTR_FN || (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)) {
 				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
 					// this is address of procedure
 				} else {
 					proc = var;
 					NextToken();
-					if (var->type->variant == TYPE_MACRO) {
+					if (IsMacro(var->type)) {
 						ParseMacro(proc);
 						return;
 					} else {
@@ -1436,6 +1437,13 @@ void ParseExpressionType(Type * result_type)
 	ParseExpRoot();
 }
 
+void ParseDefExpression()
+{
+	EXP_DEFINES_VARS = true;
+	ParseExpression(NULL);
+	EXP_DEFINES_VARS = false;
+}
+
 void ParseExpression(Var * result)
 /*
 Parse expression, performing evaluation if possible.
@@ -1451,19 +1459,19 @@ If result mode is INSTR_INT, no code is to be generated.
 
 		if (result->mode == INSTR_ELEMENT) {
 			type = result->adr->type;
-			if (type->variant == TYPE_ARRAY) {
+			if (VarIsArray(result->adr)) {
 				RESULT_TYPE = type->element;
 			} else if (type->variant == TYPE_ADR) {
 				type = type->element;		// adr of array(index) of type
-				if (type->variant == TYPE_ARRAY) {
-					RESULT_TYPE = type->element;
+				if (type->mode == INSTR_ARRAY_TYPE) {
+					RESULT_TYPE = ItemType(type);
 				} else {
 					RESULT_TYPE = type;
 				}
 			} else {
 			}
-		} else if (type != NULL && type->variant == TYPE_ARRAY) {
-			RESULT_TYPE = type->element;
+		} else if (type != NULL && type->mode == INSTR_ARRAY_TYPE) {
+			RESULT_TYPE = ItemType(type);
 		} else {
 			RESULT_TYPE = result->type;
 		}
@@ -1804,11 +1812,11 @@ void ParseCondition()
 	if (NextIs(TOKEN_EITHER)) {
 		tmp = NewTempVar(NewRange(ZERO, ONE));
 		GenLet(tmp, ZERO);
-		SimpleIf(INSTR_LET, tmp, IntCellN(1), NULL); 
+		SimpleIf(INSTR_LET, tmp, ONE, NULL); 
 		if (NextIs(TOKEN_OR)) {
 			SimpleIf(INSTR_XOR, tmp, tmp, ONE);
 		}
-		GenRel(INSTR_EQ, tmp, IntCellN(1));
+		GenRel(INSTR_EQ, tmp, ONE);
 
 	} else {	
 retry:
@@ -2795,6 +2803,10 @@ Bool VarIsImplemented(Var * var)
 
 	if (CellIsConst(var)) return true;
 
+	// Macros and procedures are considered implemented
+
+	if (var->mode == INSTR_FN || var->mode == INSTR_FN_TYPE) return true;
+
 	v = var->type->variant;
 
 	// If the variable has no type, it will not be used in instruction,
@@ -2809,7 +2821,7 @@ Bool VarIsImplemented(Var * var)
 
 	// Macros and procedures are considered imp
 
-	if (v == TYPE_MACRO || v == TYPE_PROC || v == TYPE_LABEL || v == TYPE_SCOPE || v == TYPE_TYPE) return true;
+	if (v == TYPE_LABEL || v == TYPE_SCOPE || v == TYPE_TYPE) return true;
 
 	// Register variables are considered implemented.
 //	if (var->adr != NULL && var->adr->scope == CPU_SCOPE) return true;
@@ -3065,7 +3077,6 @@ Purpose:
 	Var * var,  * item, * adr, * scope, * idx, * min, * max;
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type;
-	TypeVariant typev;
 	UInt16 bookmark;
 	Bool global_scope;
 	UInt8 arg_no;
@@ -3246,7 +3257,9 @@ parsed:
 			}
 
 			if (type == NULL || type->mode != INSTR_TYPE || type->variant == TYPE_SCOPE) {
-				ParseElements(vars[0]);
+				if (type == NULL || type->mode != INSTR_FN_TYPE) {
+					ParseElements(vars[0]);
+				}
 //				type = TypeScope();
 			}
 			if (type == NULL) type = TypeScope();
@@ -3343,7 +3356,6 @@ parsed:
 		for(j = 0; j<cnt; j++) {
 			var = vars[j];
 			type = var->type;
-			typev = type->variant;
 
 			ErrArgClear();
 			ErrArg(var);
@@ -3360,24 +3372,26 @@ parsed:
 			}
 
 			// Procedure or macro is defined using parsing code
-			if (typev == TYPE_PROC) {
-				ParseProcBody(var);
-			} else if (typev == TYPE_MACRO) {
+			if (type->mode == INSTR_FN_TYPE) {
+				// if (macro)
 				ParseMacroBody(var);
-			} else if (typev == TYPE_SCOPE) {
-				scope = InScope(var);
-				ParseCommandBlock();
-				ReturnScope(scope);
-			} else if (typev == TYPE_TYPE) {
-				scope = InScope(var);
-				var->type_value = ParseType2(INSTR_VAR);
-				ReturnScope(scope);
+				// else if
+				//ParseProcBody(var);
+				// endif
+//			} else if (typev == TYPE_SCOPE) {
+//				scope = InScope(var);
+//				ParseCommandBlock();
+//				ReturnScope(scope);
+//			} else if (type->mode == INSTR_TYPE) {
+//				scope = InScope(var);
+//				var->type_value = ParseType2(INSTR_VAR);
+//				ReturnScope(scope);
 			} else {
 
 				// Initialization of array
 				// Array is initialized as list of constants.
 
-				if (typev == TYPE_ARRAY && var->mode == INSTR_NAME) {
+				if (type->mode == INSTR_ARRAY_TYPE) {
 //					ASSERT(type->index->variant == TYPE_INT);
 					var->var = ParseArrayC(var->type);			// Warning: The type variable may get modified according to match parsed constant
 
@@ -3457,16 +3471,15 @@ parsed:
 		// No equal sign, this must be call to procedure or macro (without return arguments used)
 		var = vars[0];
 		if (existed && !is_assign && var != NULL) {
-			switch(var->type->variant) {
-				case TYPE_PROC:
-					ParseCall(var);
-					is_assign = true;
-					break;
-				case TYPE_MACRO:
+			if (var->type->mode == INSTR_FN) {
+				is_assign = true;
+				if (IsMacro(var->type)) {
 					ParseMacro(var);
-					is_assign = true;
-					break;
-				default: break;
+				} else {
+					ParseCall(var);
+				}
+			} else {
+				SyntaxError("Expected function or macro name.");
 			}
 		}
 	}
@@ -3580,7 +3593,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 				if (inop == NULL) {
 					SyntaxError("Unknown instruction or macro [$]");
 				} else {
-					if (inop->type->variant == TYPE_MACRO) {
+					if (IsMacro(inop->type)) {
 						EXP_EXTRA_SCOPE = CPU->SCOPE;
 						ParseMacro(inop);
 						EXP_EXTRA_SCOPE = NULL;
@@ -3620,39 +3633,19 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 
 			// Branching instruction has label as first argument
 			// 
-			} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL || op == INSTR_CALL) {
+			} else if (op == INSTR_CALL) {
+				arg[1] = ParseInstrLabel();
+				ifok {
+					n++;
+					goto next_arg;
+				}
+			} else if (IS_INSTR_JUMP(op) || op == INSTR_LABEL) {
 
 				arg[0] = ParseInstrLabel();
 				ifok {
 					n++;
 					goto next_arg;
 				}
-/*
-				if (TOK == TOKEN_ID) {
-					scope = ParseScope();
-					ifok {
-						if (scope != NULL) {
-							label = VarFind(scope, NAME, 0);
-						} else {
-							label = VarFind2(NAME);
-						}
-
-						if (label == NULL) {
-							label = VarNewLabel(NAME);
-						}
-						NextToken();
-						arg[0] = label;
-						n++;
-						goto next_arg;	//NextIs(TOKEN_COMMA);
-					}
-				} else if (arg_no = ParseArgNo()) {
-					arg[0] = VarRuleArg(arg_no-1);
-					NextIs(TOKEN_COMMA);
-					n++;
-				} else {
-					SyntaxError("expected label identifier");
-				}
-*/
 			}
 
 			EXP_IS_DESTINATION = true;
@@ -4280,7 +4273,7 @@ Purpose:
 
 					var = STACK[n];
 
-					if (var->type->variant == TYPE_ARRAY) {
+					if (VarIsArray(var)) {
 						var2 = NewTempVar(TypeAdrOf(var->type));
 						size_var = VarSize(var);
 						Gen(INSTR_LET_ADR, var2, var, NULL);
@@ -4336,7 +4329,7 @@ Purpose:
 }
 
 
-UInt16 ParseArgs(Var * proc, VarSubmode submode, Var ** args)
+UInt16 ParseArgs(Var * proc, Var * arg_type, VarSubmode submode, Var ** args)
 /*
 Purpose:
 	Parse arguments passed to procedure or macro.
@@ -4346,7 +4339,7 @@ Arguments:
 	args     When specified, we store parsed argument values to this array.
 */
 {
-	Var * arg, * val, * tmp;
+	Var * arg, * val, * tmp, * arg_enum;
 	Bool no_next_args;
 	UInt16 first, idx;
 
@@ -4366,7 +4359,12 @@ Arguments:
 	TOP = 0;		// Currently ExpressionParser sets the TOP to 0, so we must do it too.
 	                // In future, we may need to solve it in a better way (ExpressionParser should not do it).
 	first = idx = TOP;
-	arg = FirstArg(proc, submode);
+//	arg = FirstArg(proc, submode);
+	arg_enum = arg = arg_type;
+	if (arg->mode == INSTR_TUPLE) {
+		arg = arg_enum->l;
+	}
+
 	if (arg != NULL) {
 		EnterBlock();
 		while(OK) {
@@ -4427,7 +4425,7 @@ Arguments:
 				if (submode == SUBMODE_ARG_IN) {
 					ErrArg(arg);
 					ErrArg(proc);
-					if (proc->type->variant == TYPE_MACRO) {
+					if (IsMacro(proc->type)) {
 						SyntaxError("Missing argument [B] in use of macro [A]");
 					} else {
 						SyntaxError("Missing argument [B] in call of procedure [A]");
@@ -4438,7 +4436,13 @@ Arguments:
 					break;
 				}
 			}
-			arg = NextArg(proc, arg, submode);
+			if (arg_enum->mode == INSTR_TUPLE) {
+				arg = arg_enum = arg_enum->r;
+				if (arg_enum->mode == INSTR_TUPLE) arg = arg_enum->l;
+			} else {
+				arg = NULL;
+			}
+//			arg = NextArg(proc, arg, submode);
 			NextIs(TOKEN_COMMA);		// Arguments may be optionally separated by comma
 			arg_no++;
 		}
@@ -4450,7 +4454,7 @@ Arguments:
 	TOP = first;
 
 	// Load register arguments
-	if (proc->type->variant != TYPE_MACRO) {
+	if (!IsMacro(proc->type)) {
 		ifok {
 			for(i=0; i<reg_arg_cnt; i++) {
 				GenLet(reg_args[i], reg_vals[i]);
@@ -4464,9 +4468,8 @@ Arguments:
 void ParseCall(Var * var)
 {
 	Var * proc = var;
-
-	ParseArgs(proc, SUBMODE_ARG_IN, NULL);
-	Gen(INSTR_CALL, var, NULL, NULL);
+	ParseArgs(proc, ArgType(var->type->type), SUBMODE_ARG_IN, NULL);
+	Gen(INSTR_CALL, NULL, var, NULL);
 }
 
 void ParseReturn()
@@ -4479,10 +4482,10 @@ Syntax: "return" arg*
 
 	NextToken();
 	proc = VarProcScope();
-	ParseArgs(proc, SUBMODE_ARG_OUT, NULL);
+	ParseArgs(proc, ResultType(proc->type->type), SUBMODE_ARG_OUT, NULL);
 
 	// Return is implemented as jump to end of procedure
-	// Optimizer may later move return insted of jump (if there is no cleanup)
+	// Optimizer may later move return instead of jump (if there is no cleanup)
 
 	label = FindOrAllocLabel("_exit");
 	GenGoto(label);
@@ -4495,7 +4498,7 @@ void ParseMacro(Var * macro)
 	UInt16 arg_cnt;
 	UInt16 in_cnt;
 
-	in_cnt = ParseArgs(macro, SUBMODE_ARG_IN, args);
+	in_cnt = ParseArgs(macro, ArgType(macro->type->type), SUBMODE_ARG_IN, args);
 
 	arg_cnt = in_cnt;
 	// We must generate temporary variables for results and store them to expression stack
@@ -4552,18 +4555,39 @@ Syntax: { [file_ref] }
 void AssertVar(Var * var)
 {
 	Var * name;
-	char buf[100];
+	char buf[200];
 	InstrInfo * ii;
+	char * p;
 
 	if (var == NULL) return;
+	p = buf; 
+	*p++ = ' ';
+
 	if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var) && var->name != NULL && !VarIsTmp(var)) {
-		buf[0] = ' ';
-		StrCopy(buf+1, var->name);
-		StrCopy(buf + 1+ StrLen(var->name), " = ");
+		StrCopy(p, var->name); p += StrLen(var->name);
+		StrCopy(p, " = "); p += 3;
 		name = TextCell(buf);
 		GenInternal(INSTR_VAR_ARG, NULL, name, NULL);
 		GenInternal(INSTR_VAR_ARG, NULL, var, NULL);
-//		PrintIntCellName(var); PrintEOL();
+
+	// Array access will be reported using syntax array#index = value.
+
+	} else if (var->mode == INSTR_ELEMENT) {
+		StrCopy(p, var->l->name); p += StrLen(var->l->name);
+		*p++ = '#';
+		if (var->r->mode == INSTR_INT) {
+			p = IntFormat(p, &var->r->n);
+		}
+		StrCopy(p, " = "); p += 3;
+		name = TextCell(buf);
+
+		GenInternal(INSTR_VAR_ARG, NULL, name, NULL);
+		if (InstrTranslate3(INSTR_VAR_ARG, NULL, var, NULL, TEST_ONLY)) {
+			GenInternal(INSTR_VAR_ARG, NULL, var, NULL);
+		} else {
+			//TODO: Generate temporary variable with the result
+		}
+
 	} else {
 		ii = &INSTR_INFO[var->mode];
 		if (ii->arg_type[1] != TYPE_VOID) AssertVar(var->l);
@@ -4572,9 +4596,6 @@ void AssertVar(Var * var)
 }
 
 void ParseAssert()
-/*
-- assert may not have side effects (no side-effect procedure, no reading in-sequence)
-*/
 {
 	InstrBlock * cond_code, * args;
 	Instr * i;
@@ -4730,10 +4751,10 @@ void ParseCommands()
 			case TOKEN_STRING: 
 				if (MACRO_PRINT != NULL) {
 					GenBegin();
-					if (MACRO_PRINT->type->variant == TYPE_MACRO) {
+					if (IsMacro(MACRO_PRINT->type)) {
 						GenMacroParse(MACRO_PRINT, NULL);
 					} else {
-						Gen(INSTR_CALL, MACRO_PRINT, NULL, NULL);
+						Gen(INSTR_CALL, NULL, MACRO_PRINT, NULL);
 					}
 					ParseString(GenEnd(), 0); 
 				} else {

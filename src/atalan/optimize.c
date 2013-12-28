@@ -162,8 +162,6 @@ Purpose:
 					*p_var = var->adr;
 					n = VarTestReplace(p_var, from, to);
 				}
-			} else if (var->mode == INSTR_NAME) {
-
 			} else /*if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE)*/ {
 				v2 = var->adr;
 				v3 = var->var;
@@ -177,7 +175,7 @@ Purpose:
 					var2 = CellCopy(var);
 					var2->adr = v2;
 					var2->var = v3;
-					var2->next = NULL;
+					var2->next_in_scope = NULL;
 
 					n += n2 + n3;
 					*p_var = var2;
@@ -364,13 +362,14 @@ Purpose:
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_CALL) {
-				subproc = i->result;
+				subproc = i->arg1;
 
 				// 1. We inline procedures that are called just once
 				if (subproc->read == 1) {
 
 					if (subproc->instr != NULL) {
 						BufEmpty();
+
 						FOR_EACH_ARG(subproc, arg, SUBMODE_ARG_IN+SUBMODE_ARG_OUT)
 							if (arg->adr == NULL) {
 								var = NewVarInScope(proc, arg->type);

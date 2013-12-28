@@ -10,7 +10,7 @@ platform: ()
 
 x86:system.CPU
 	s32:type -2147483648..2147483647
-	arr_s32:type array(0..$3fffffff) of s32				
+	arr_s32:type array(0..$ffffffff) of s32				
 	memory:type array(0..$ffffffff) of 0..255
 	flag:type 0..1
 	
@@ -64,7 +64,7 @@ rule %A:s32 = %B:s32 * %C:s32 ->
 
 rule %A:s32 = %B:s32 / %C:s32 ->
 	eax = %B
-	edx = 0				;TODO: cdq
+	edx = 0				;TODO: Use cdq instruction
 	ecx = %C
 	edax = edax / ecx
 	%A = eax
@@ -101,16 +101,21 @@ rule if %A:s32 < %B:s32 goto %C ->
 	ocszacp = eax - %B
 	if s ≠ o goto %C
 
-
 ;One dimensional s32 array
-rule alloc %A:array(%B:0..$3fffffff) of s32    -> "   %A  sdword %B.size dup (?)"
+rule alloc %A:array(%B:0..$ffffffff) of s32    -> "   %A  sdword %B.count dup (?)"
 
-rule %A:s32 = %B:arr_s32(%C:0..$3fffffff) ->
+rule %A:s32 = %B:arr_s32(%C:s32) ->
 	ebx = %C
-	eax = %B(ebx)
+	eax = %B#ebx
 	%A = eax 
-	
-rule %A@r = %B:arr_s32(%C@r) -> "   mov %A, %B[%B*4]"
+
+rule %B:arr_s32(%C:s32) = %A:s32 ->
+	eax = %A
+	ebx = %C
+	%B#ebx = eax
+
+rule %A@r = %B:arr_s32(%C@r) -> "   mov %A, %B[%C*4]"
+rule %B:arr_s32(%C@r) = %A@r -> "   mov %B[%C*4], %A"
 			
 ;############### CPU rules
 
@@ -165,14 +170,16 @@ rule return  -> "   ret"
 
 system.print:proc @x86.eax @x86.ebx @x86.ecx @x86.edx @x86.ebp
 
-system.print_scr:macro = instr
-	call system.print
+system.print_scr:macro -> () 
+    instr call system.print
 
-system.assert:macro = instr call system.print
+system.assert:macro -> () 
+    instr call system.print
 
 rule data const %A:0..255 -> "   DB %A"
 rule var_arg %A:string    -> "   DB %A.size,'%A'"
 rule var_arg %A:s32       -> "   DB 132" "   DD %A"
+rule var_arg %A:arr_s32(const %B) -> "   DB 132" "   DD %A+4*%B"
 
 ;rule var_arg %A:u8      -> "   DB 129" "   DW %A"
 ;rule var_arg %A:u16     -> "   DB 130" "   DW %A"
