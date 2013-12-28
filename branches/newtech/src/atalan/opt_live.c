@@ -163,7 +163,7 @@ Purpose:
 		if (i->op == INSTR_LINE) continue;
 
 		if (i->op == INSTR_CALL) {
-			if (VarUsesVar(i->result, var)) { res1 = 1; goto done; }
+			if (VarUsesVar(i->arg1, var)) { res1 = 1; goto done; }
 		}
 
 		if (IsGoto(i)) {
@@ -457,8 +457,8 @@ Bool OptimizeLive(Var * proc)
 				MarkProcLive(i->arg2);
 				VarMarkLive(i->arg2);
 			} else if (i->op == INSTR_CALL) {
-				MarkProcLive(i->result);
-				VarMarkLive(i->result);
+				MarkProcLive(i->arg1);
+				VarMarkLive(i->arg1);
 			} else {
 				VarMarkLive(i->arg1);
 				VarMarkLive(i->arg2);

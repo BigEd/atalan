@@ -37,7 +37,7 @@ Purpose:
 		for(blk = proc->instr; blk != NULL; blk = blk->next) {
 			for(i = blk->first; i != NULL; i = i->next) {
 				if (i->op == INSTR_CALL) {
-					if (i->result == called_proc || ProcCallsProc(i->result, called_proc)) {
+					if (i->arg1 == called_proc || ProcCallsProc(i->arg1, called_proc)) {
 						calls = true;
 						goto done;
 					}
@@ -176,7 +176,7 @@ Bool VarAllocBlock(Var * proc, InstrBlock * blk, void * pinfo)
 
 		if (i->op == INSTR_CALL) {
 			// mark all variables used by the procedure as live
-			VarAllocProc(info, i->result, live);
+			VarAllocProc(info, i->arg1, live);
 		} else {
 
 			if (ii->arg_type[0] != TYPE_VOID) {
@@ -201,7 +201,7 @@ Bool VarAllocBlock(Var * proc, InstrBlock * blk, void * pinfo)
 
 Bool FilterVar(Var * var)
 {
-	return !VarIsLabel(var) && var->type->variant != TYPE_PROC && var->type->variant != TYPE_MACRO && !VarIsReg(var);
+	return !VarIsLabel(var) && !VarIsReg(var) && !(var->mode == INSTR_VAR && var->type->mode == INSTR_FN);
 }
 
 void PrintCollisions(VarAllocInfo * info)

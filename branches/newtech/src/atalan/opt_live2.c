@@ -27,14 +27,14 @@ static Bool FilterVar(Var * var)
 	We do not perform live analysis for constants, labels, procedures or macros.
 */
 {
-	return !CellIsConst(var) && !VarIsLabel(var) && var->type->variant != TYPE_PROC && var->type->variant != TYPE_MACRO;
+	return !CellIsConst(var) && !VarIsLabel(var) && var->type->mode != INSTR_FN;
 }
 
 static void VarAddReference(Var * var, VarSet * set)
 {
 	if (var == NULL) return;
 
-	if (CellIsConst(var) || VarIsLabel(var) || var->type->variant == TYPE_PROC || var->type->variant == TYPE_MACRO) return;
+	if (CellIsConst(var) || VarIsLabel(var) || var->type->mode == INSTR_FN) return;
 
 	if (var->mode == INSTR_VAR) {
 		VarSetAdd(set, var, NULL);
@@ -59,7 +59,7 @@ static Bool InstrAddReferencedVars(Loc * loc, void * data)
 	InstrInfo * ii = &INSTR_INFO[i->op];
 
 	if (i->op == INSTR_CALL) {
-		ProcAddReferencedVars(i->result, set);
+		ProcAddReferencedVars(i->arg1, set);
 	} else {
 
 		if (ii->arg_type[0] != TYPE_VOID) {

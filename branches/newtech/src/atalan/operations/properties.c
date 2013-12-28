@@ -169,7 +169,6 @@ void VarRange(Var * var, BigInt ** p_min, BigInt ** p_max)
 void VarCount(Var * var, BigInt * cnt)
 {
 	BigInt * min, * max;
-	Type * type;
 
 	if (var == NULL) return;
 
@@ -178,14 +177,6 @@ void VarCount(Var * var, BigInt * cnt)
 	}
 	if (var->mode == INSTR_RANGE) {
 		VarRange(var, &min, &max);
-		IntSub(cnt, max, min);
-		IntAddN(cnt, 1);
-	}
-
-	type = var->type;
-	if (type->variant == TYPE_INT) {
-		max = TypeMax(type);
-		min = TypeMin(type);
 		IntSub(cnt, max, min);
 		IntAddN(cnt, 1);
 	}
@@ -252,37 +243,39 @@ Purpose:
 	UInt32 size;
 	UInt32 sizen;
 	BigInt bi;
-
+	BigInt * min, * max;
 	size = 0;
 	if (type != NULL) {
-		switch(type->variant) {
-		case TYPE_INT:
-			// we may have negative range, positive range
 
-//			lrange = type->range.min;
-//			if (lrange > 0) lrange = 0;
-
-			size = IntByteSize(&type->range.max);
-			sizen = IntByteSize(&type->range.min);
-
+		VarRange(type, &min, &max);
+		if (min != NULL && max != NULL) {
+			size = IntByteSize(max);
+			sizen = IntByteSize(min);
 			if (size < sizen) size = sizen;
+			return size;
+		}
 
-			break;
+		switch(type->mode) {
 
-		case TYPE_ADR:
-			size = TypeAdrSize();
-			break;
-
-		case TYPE_STRUCT:
-			size = TypeStructSize(type);
-			break;
-
-		case TYPE_ARRAY:
-			ArrayItemCount(type->index, &bi);
-			size = TypeSize(type->element) * IntN(&bi);
+		case INSTR_ARRAY_TYPE:
+			ArrayItemCount(IndexType(type), &bi);
+			size = TypeSize(ItemType(type)) * IntN(&bi);
 			IntFree(&bi);
 			break;
-		default: break;
+
+		case INSTR_TYPE:
+
+			switch(type->variant) {
+			case TYPE_ADR:
+				size = TypeAdrSize();
+				break;
+
+			case TYPE_STRUCT:
+				size = TypeStructSize(type);
+				break;
+
+			default: break;
+			}
 		}
 	}
 	return size;

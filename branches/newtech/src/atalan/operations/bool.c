@@ -26,7 +26,7 @@ Var * Not(Var * v)
 	} else if (op == INSTR_AND) {
 		r = NewOp(INSTR_OR, Not(v->l), Not(v->r));
 	} else if (op == INSTR_OR) {
-		r = NewOp(INSTR_OR, Not(v->l), Not(v->r));
+		r = NewOp(INSTR_AND, Not(v->l), Not(v->r));
 	} else if (op == INSTR_XOR) {
 		r = NewOp(INSTR_EQ, v->l, v->r);
 	} else {

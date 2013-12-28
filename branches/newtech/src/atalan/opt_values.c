@@ -531,11 +531,12 @@ Bool ExpEquivalent(Exp * e1, Exp * e2)
 			if (v1->dep != NULL && v1->dep->op == INSTR_VAR && v1->dep->var == v2) { eq = true; goto done; }
 
 			if (v1->mode == v2->mode) {
-				if (v1->type->variant == v2->type->variant) {
-					if (v1->mode == INSTR_INT) {
-						eq = IntEq(&v1->n, &v2->n);
-						goto done;
-					}
+				if (v1->mode == INSTR_INT) {
+					eq = IntEq(&v1->n, &v2->n);
+					goto done;
+				} else {
+//					if (v1->type->variant == v2->type->variant) {
+//					}
 				}
 			}
 			eq = ExpEquivalent(v1->dep, v2->dep);
@@ -622,7 +623,7 @@ void ProcValuesUse(Var * proc)
 					for(i = blk->first; i != NULL; i = i->next) {
 						if (i->op == INSTR_LINE) {
 						} else if (i->op == INSTR_CALL) {
-							ProcValuesUse(i->result);
+							ProcValuesUse(i->arg1);
 						} else if (IS_INSTR_JUMP(i->op)) {
 							// jump instructions do have result, but it is label we jump to
 						} else {
@@ -825,7 +826,7 @@ retry:
 			if (i->op == INSTR_LINE) continue;
 
 			if (i->op == INSTR_CALL) {
-				ProcValuesUse(i->result);
+				ProcValuesUse(i->arg1);
 				continue;
 			}
 

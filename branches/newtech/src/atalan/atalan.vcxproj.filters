@@ -71,9 +71,6 @@
     <ClCompile Include="cell_op.c">
       <Filter>Source Files\cells</Filter>
     </ClCompile>
-    <ClCompile Include="cell_proc.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
     <ClCompile Include="cell_text.c">
       <Filter>Source Files\cells</Filter>
     </ClCompile>
@@ -149,6 +146,15 @@
     <ClCompile Include="operations\bool.c">
       <Filter>Source Files\operations</Filter>
     </ClCompile>
+    <ClCompile Include="cell_array_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_fn_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell_fn.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">
@@ -171,6 +177,18 @@
     </ClInclude>
     <ClInclude Include="operations\bool.h">
       <Filter>Source Files\operations</Filter>
+    </ClInclude>
+    <ClInclude Include="cell_array_type.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell_fn_type.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell_int.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell_fn.h">
+      <Filter>Source Files\cells</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -21,6 +21,12 @@ GLOBAL CellBlock * LAST_CELL_BLOCK;   // list of all variable blocks
 GLOBAL Var * SCOPE;		// current scope
 GLOBAL UInt32 TMP_LBL_IDX;
 
+GLOBAL Var * ANY;
+GLOBAL Var * VOID;
+
+Var ANYVAR;
+Var VOIDVAR;
+
 // Used for cell enumerating
 CellBlock * G_BLK;
 UInt16 G_VAR_I;
@@ -221,7 +227,7 @@ Purpose:
 
 Type * CellType(Var * cell)
 {
-	if (cell == NULL) return &EMPTY;
+	if (cell == NULL) return VOID;
 	if (cell->mode == INSTR_VAR) {
 		return cell->type;
 	} else if (cell->mode == INSTR_ARRAY) {
@@ -251,6 +257,7 @@ Purpose:
 {
 	switch(var->mode) {
 	case INSTR_TYPE:
+		if (var->possible_values != NULL && var->possible_values->mode == INSTR_TYPE) return false;
 		return CellIsValue(var->possible_values);
 
 	case INSTR_RANGE:
@@ -272,11 +279,6 @@ Bool CellIsConst(Var * var)
 	return false;
 }
 
-Bool VarIsArray(Var * var)
-{
-	return var->type != NULL && var->type->variant == TYPE_ARRAY;
-}
-
 Bool VarIsStructElement(Var * var)
 {
 	return var->adr->type->variant == TYPE_STRUCT;
@@ -287,10 +289,8 @@ Bool VarIsArrayElement(Var * var)
 	Var * adr;
 	if (var == NULL || var->mode != INSTR_ELEMENT) return false;
 	adr = var->adr;
-//	if (adr == NULL) return false;			// TODO: ELEMENT with NULL adr?
 	if (adr->mode == INSTR_DEREF) return true;
-	return adr->type != NULL && adr->type->variant == TYPE_ARRAY;
-//	return var != NULL && var->mode == INSTR_ELEMENT && var->adr != NULL && var->adr->type != NULL && (var->adr->type->variant == TYPE_ARRAY);
+	return adr->type != NULL && VarIsArray(adr);
 }
 
 Var * VarNewLabel(char * name)
@@ -340,11 +340,12 @@ Var * VarFindScope2(Var * scope, char * name)
 	for (s = scope; s != NULL; s = s->scope) {
 		var = VarFind(s, name);
 		if (var != NULL) break;
-		// For procedures whose type has been defined using predefined type, try to find arguments from this type
-		if (s->type->variant == TYPE_PROC && s->type != NULL /*&& s->type->owner != s*/) {			// ??????
+/*		// For procedures whose type has been defined using predefined type, try to find arguments from this type
+		if (s->type->variant == TYPE_PROC && s->type != NULL) {			// ??????
 			var = VarFind(s->type, name);
 			if (var != NULL) break;
 		}
+*/
 	}
 	return var;
 }
@@ -362,7 +363,7 @@ Var * VarProcScope()
 {
 	Var * s;
 	for (s = SCOPE; s != NULL; s = s->scope) {
-		if (s->type != NULL && (s->type->variant == TYPE_PROC || s->type->variant == TYPE_MACRO)) break;
+		if (s->mode == INSTR_VAR && s->type != NULL && s->type->mode == INSTR_FN) break;
 	}
 	return s;
 }
@@ -375,17 +376,13 @@ TypeVariant VarType(Var * var)
 	if (var->mode == INSTR_TEXT) return TYPE_STRING;
 	if (var->mode == INSTR_TYPE) return var->variant;
 	if (var->mode == INSTR_VAR) return VarType(var->type);
+
 	return TYPE_VOID;
 }
 
 Bool VarIsLabel(Var * var)
 {
-	return var->type->variant == TYPE_LABEL;
-}
-
-Bool VarIsUsed(Var * var)
-{
-	return var != NULL && (var->read > 0 || var->write > 0);
+	return var->mode == INSTR_VAR && var->type->variant == TYPE_LABEL;
 }
 
 Bool IsVirtual(Var * cell)
@@ -397,8 +394,9 @@ Bool IsVirtual(Var * cell)
 		CellIsConst(cell)
 	 || VarIsReg(cell)
 	 || VarIsRuleArg(cell)
+	 || type->mode == INSTR_FN
 	 || type->mode == INSTR_NULL
-	 || (type->mode == INSTR_TYPE && (type->variant == TYPE_PROC || type->variant == TYPE_MACRO || type->variant == TYPE_LABEL || type->variant == TYPE_SCOPE || (type->variant == TYPE_TYPE && type->possible_values == NULL)))
+	 || (type->mode == INSTR_TYPE && (type->variant == TYPE_LABEL || type->variant == TYPE_SCOPE || (type->variant == TYPE_TYPE && type->possible_values == NULL)))
 	 || (type->mode == INSTR_VAR && IsVirtual(type));
 
 
@@ -410,49 +408,44 @@ Purpose:
 	Emit instructions allocating variables, that are not placed at specific location.
 */
 {
-	Var * var, *cnst;
-	Type * type;
-	UInt32 size;	//, i;
-	Var * dim1, * dim2;
+	Var * var;
 
 	FOR_EACH_VAR(var)
 		if (var->mode == INSTR_VAR && var->adr == NULL) {
-			if (var->read > 0 || var->write > 0) {
+			if (VarIsUsed(var)) {
+/*
 				type = var->type;
 				ASSERT(type != NULL);
 				if (type != NULL) {
-
 					if (type->mode == INSTR_TYPE && type->variant == TYPE_ARRAY && var->instr == NULL) {
-
-						if (VarIsUsed(var)) {
 					
-							size = TypeSize(type);
+						size = TypeSize(type);
 
-							// Make array aligned (it type defines address, it is definition of alignment)
+						// Make array aligned (it type defines address, it is definition of alignment)
 
-							if (type->adr != NULL) {
-								EmitInstrOp(INSTR_ALIGN, NULL, type->adr, NULL);
-							}
+						if (type->adr != NULL) {
+							EmitInstrOp(INSTR_ALIGN, NULL, type->adr, NULL);
+						}
 
-							ArraySize(type, &dim1, &dim2);
+						ArraySize(type, &dim1, &dim2);
 
-							if (dim2 != NULL) {
-								EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-								EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
-							} else {
-								cnst = IntCellN(size);
-								EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
-								EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
-							}
+						if (dim2 != NULL) {
+							EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+							EmitInstrOp(INSTR_ALLOC, var, dim1, dim2);
+						} else {
+							cnst = IntCellN(size);
+							EmitInstrOp(INSTR_LABEL, var, NULL, NULL);		// use the variable as label - this will set the address part of the variable
+							EmitInstrOp(INSTR_ALLOC, var, cnst, NULL);
 						}
 					} else {
+*/
 						if (!IsVirtual(var)) {
 							if (InstrRule2(INSTR_ALLOC, var, NULL, NULL)) {
 								EmitInstrOp(INSTR_ALLOC, var, NULL, NULL);
 							}
 						}
-					}
-				}
+	//				}
+	//			}
 			}
 		}
 	NEXT_VAR
@@ -494,16 +487,11 @@ Purpose:
 	// Generate array indexes
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_VAR /*|| var->mode == INSTR_INT*/) {
-			type = var->type;
-			if (type != NULL && type->variant == TYPE_ARRAY) {
-				if (VarIsUsed(var)) {
-					// If there is an index rule for the array, generate the index
-					rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
-					if (rule != NULL) {
-						GenRule(rule, NULL, var, NULL);
-					}
-				}
+		if (var->mode == INSTR_VAR && VarIsUsed(var) && VarIsArray(var)) {
+			// If there is an index rule for the array, generate the index
+			rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
+			if (rule != NULL) {
+				GenRule(rule, NULL, var, NULL);
 			}
 		}
 	NEXT_VAR
@@ -656,7 +644,7 @@ Arguments:
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
 			if (i->op == INSTR_CALL) {
-				ProcUse(i->result, flag);
+				ProcUse(i->arg1, flag);
 //				// Procedure has side-effect, if it call a procedure with side effect
 //					if (FlagOn(i->result->submode, SUBMODE_OUT)) {
 //					SetFlagOn(proc->submode, SUBMODE_OUT);
@@ -874,8 +862,8 @@ Bool VarIsLocal(Var * var, Var * scope)
 
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
 {
-	Var * var = arg->next;
-	while(var != NULL && (var->mode != INSTR_VAR || var->scope != arg->scope || FlagOff(var->submode, submode))) var = var->next;
+	Var * var = arg->next_in_scope;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != arg->scope || FlagOff(var->submode, submode))) var = var->next_in_scope;
 	return var;
 }
 
@@ -899,7 +887,7 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 //		proc = owner;
 //	}
 	var = proc->subscope;
-	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next;
+	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next_in_scope;
 	return var;
 }
 
@@ -926,10 +914,9 @@ Purpose:
 		fld = CellMin(type);
 	} else if (StrEqual(fld_name, "max")) {
 		fld = CellMax(type);
-	} else if (var->mode == INSTR_TYPE && vtype == TYPE_ARRAY) {
-		if (StrEqual(fld_name, "step")) {
-			fld = IntCellN(type->step);
-		}
+
+	} else if (type->mode == INSTR_ARRAY_TYPE) {
+		fld = ArrayTypeField(type, fld_name);
 	}
 
 	if (fld == NULL) {
@@ -951,11 +938,6 @@ Purpose:
 
 	if (res != NULL) {
 
-		// Get the most elementary constant out of the variable
-
-		while (res->mode == INSTR_NAME && res->type->variant != TYPE_ARRAY && res->var != NULL) {
-			res = res->var;
-		}
 
 		// Getting n-th byte is same as special variant of AND
 		if (res->mode == INSTR_BYTE) {
@@ -1036,7 +1018,13 @@ void VarInit()
 
 	CELL_BLOCKS = LAST_CELL_BLOCK = NewCellBlock();
 
-	// Alloc rule procedure and rule arguments (rule arguments are local arguments of INSTR_PROC)
+	VOIDVAR.mode = INSTR_EMPTY;
+	ANYVAR.mode = INSTR_ANY;
+
+	ANY  = &ANYVAR;
+	VOID = &VOIDVAR;
+
+	// Alloc rule procedure and rule arguments (rule arguments are local arguments of INSTR_FN)
 
 	CPU = &CPUS[0];
 

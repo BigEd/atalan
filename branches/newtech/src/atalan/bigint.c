@@ -209,9 +209,8 @@ Int32 IntN(BigInt * n)
 void PrintBigInt(BigInt * n)
 {
 	char buf[64];
-	sprintf(buf, "%lld", (long long)*n);
+	IntFormat(buf, n);
 	Print(buf);
-//	PrintInt(IntN(n));
 }
 
 void IntModify(BigInt * dest, BigInt * l)
@@ -240,4 +239,9 @@ Purpose:
 		cnt++;
 	}
 	return cnt;
+}
+
+char * IntFormat(char * p, BigInt * n)
+{
+	return p + sprintf(p, "%lld", (long long)*n);
 }

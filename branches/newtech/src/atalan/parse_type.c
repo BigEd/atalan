@@ -69,15 +69,110 @@ Purpose:
 	}
 }
 
-Type * TypeAllocArg(UInt8 arg_no, Type * arg_type)
-{
-	Type * type;
 
-	type = TypeAlloc(TYPE_ARG);
-	type->arg_no = arg_no;
-	type->arg_type = arg_type;
+/*
+      TUPLE
+      /   \
+	 V1   TUPLE
+	      /   \	    
+		 V2  TUPLE
+		      /  \
+			 V3  V4
+
+*/
+
+Var * ParseStruct(Token end_token)
+{
+	Var * list = NULL;
+	Var * var, * type;
+	Var * last_tuple = NULL;
+	UInt32 cnt = 0;
+
+	var = NULL;
+	EnterBlockWithStop(TOKEN_VOID);
+
+	while (OK && !NextIs(TOKEN_BLOCK_END)) {
+
+		if (TOK == end_token) {
+			if (list == NULL) list = VOID;
+			ExitBlock();
+			break;
+		}
+
+		if (LexId(NAME2)) {
+			if (NextIs(TOKEN_COLON)) {
+				type = ParseType();
+			} else {
+				type = ANY;
+			}
+			var = NewVar(NO_SCOPE, NAME2, type);
+		} else {
+			SyntaxError("Expected item name");
+		}
+
+		if (var != NULL) {
+			if (cnt == 0) {
+				list = var;
+			} else if (cnt == 1) {
+				list = NewTuple(list, var);
+				last_tuple = list;
+			} else {
+				last_tuple->r = NewTuple(last_tuple->r, var);
+				last_tuple = last_tuple->r;
+			}
+			cnt++;
+		}
+
+		if (NextIs(TOKEN_COMMA)) {
+			
+		} else {
+			ExitBlock();
+			break;
+		}
+	}
+
+	return list;
+}
+
+void ParseCommandBlock();
+
+Var * ParseFnType()
+{
+	Var * arg, * result = ANY;
+	Var * type;
+	Var * fn, * scope;
+
+	InstrBlock * body;
+
+	arg = ParseStruct(TOKEN_RIGHT_ARROW);
+
+	if (NextIs(TOKEN_RIGHT_ARROW)) {
+		ParseDefExpression();
+		result = BufPop();
+		if (result == NULL) result = VOID;
+	}
+
+	type = NewFnType(arg, result);
+
+	fn = NewFn(type, NULL);
+	fn->scope = SCOPE;
+	scope = InScope(fn);
+	
+	GenBegin();
+	ParseCommandBlock();
+	body = GenEnd();
+	ReturnScope(scope);
+
+	iferr return NULL;
+
+	if (body->first != NULL) {
+		fn->instr = body;
+		type = fn;
+	}
+
 	return type;
 }
+
 
 Type * ParseIntType()
 {
@@ -145,7 +240,11 @@ done:
 
 	ifok {
 		if (arg_no != 0) {
-			type = TypeAllocArg(arg_no, type);
+			var = NewCell(INSTR_MATCH);
+			var->l = VarRuleArg(arg_no-1);
+			var->r = type;
+			type = var;
+//			type = TypeAllocArg(arg_no, type);
 		}
 	}
 	return type;
@@ -245,8 +344,7 @@ Type * ParseType3()
 {
 	Type * type = NULL, * variant_type = NULL;
 	Type * elmt, * t;
-	Var * var;
-	BigInt * st;
+	Var * index, * item, * step;
 
 	//# "type" restrict_type
 	if (NextIs(TOKEN_TYPE2)) {
@@ -273,8 +371,10 @@ Type * ParseType3()
 	//# "macro" args
 	} else if (NextIs(TOKEN_MACRO)) {
 
-		type = TypeAlloc(TYPE_MACRO);
-		ParseArgList(SUBMODE_ARG_IN, type);
+		type = ParseFnType();
+		if (type != NULL) {
+			SetFlagOn(type->submode, SUBMODE_MACRO);
+		}
 
 	// Struct
 	} else if (NextIs(TOKEN_STRUCT)) {
@@ -287,21 +387,22 @@ Type * ParseType3()
 
 	// Array
 	} else if (NextIs(TOKEN_ARRAY)) {		
-		type = TypeAlloc(TYPE_ARRAY);
-		t = NULL;
+		index = NULL; t = NULL;
+		item = NULL;
+		step = NULL;
 
 		if (TOK == TOKEN_OPEN_P) {
 			EnterBlockWithStop(TOKEN_EQUAL);
 			while (OK && !NextIs(TOKEN_BLOCK_END)) {
 				elmt = ParseIntType();
-				if (type->index == NULL) {
-					type->index = elmt;
+				if (index == NULL) {
+					index = elmt;
 				} else if (t != NULL) {
 					t->right = TypeTuple(t->right, elmt);
 					t = t->right;
 				} else {
-					t = TypeTuple(type->index, elmt);
-					type->index = t;
+					t = TypeTuple(index, elmt);
+					index = t;
 				}
 				NextIs(TOKEN_COMMA);
 			};
@@ -310,41 +411,31 @@ Type * ParseType3()
 		// If no dimension has been defined, use flexible array.
 		// This is possible only for constants now.
 
-		ifok {
-			if (type->index == NULL) {
-				type->index = ZERO;
-			}
-		}
+		if (index == NULL) index = ANY;
 
 		// Element STEP may be defined
 		ifok {
 			if (NextIs(TOKEN_STEP)) {
 				ExpectExpression(NULL);
 				ifok {
-					var = STACK[0];
-					st = IntFromCell(var);
-					if (st != NULL) {
-						type->step = IntN(st);
-					} else {
-						SyntaxError("Expected integer constant");
-					}
+					step = STACK[0];
+//					} else {
+//						SyntaxError("Expected integer constant");
+//					}
 				}
 			}
 		}
 
 		ifok {
 			if (NextIs(TOKEN_OF)) {
-				type->element = ParseSubtype();
+				item = ParseSubtype();
 			} else {
-				type->element = TypeByte();
+				item = TypeByte();
 			}
 		}
 
-		ifok {
-			if (type->step == 0) {
-				type->step = TypeSize(type->element);
-			}
-		}
+		type = NewArrayType(index, item);
+		SetArrayStep(type, step);
 
 	} else if (NextIs(TOKEN_ADR2)) {
 		elmt = NULL;

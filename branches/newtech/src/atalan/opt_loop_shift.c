@@ -183,7 +183,6 @@ Var * VarAddNMod(Var * left, BigInt * right, BigInt * modulo)
 		IntMod(&r2, &r, modulo);
 
 		var = IntCell(&r2);
-//		var = IntCellN((left->n + right) % modulo);
 		IntFree(&r2);
 		IntFree(&r);
 	}

@@ -271,8 +271,9 @@ void EmitInstr2(Instr * instr, char * str)
 	UInt8 format = 0;
 	char * s, c;
 	UInt32 n;
+	Var * step;
 	BigInt bn;
-	BigInt * pn;
+	Var * pn;
 	s = str;
 
 	if (instr->op == INSTR_LINE) {
@@ -295,6 +296,7 @@ void EmitInstr2(Instr * instr, char * str)
 					if (StrEqualPrefix(s, "count", 5)) {
 						VarCount(var, &bn);
 						EmitBigInt(&bn);
+						IntFree(&bn);
 						s+= 5;
 						continue;
 					} else if (StrEqualPrefix(s, "size", 4)) {
@@ -304,8 +306,8 @@ void EmitInstr2(Instr * instr, char * str)
 						continue;
 					} else if (StrEqualPrefix(s, "elemsize", 8) || StrEqualPrefix(s, "item.size", 9)) {
 						s += 8;
-						if (var->type->variant == TYPE_ARRAY) {
-							n = TypeSize(var->type->element);
+						if (VarIsArray(var)) {
+							n = TypeSize(ItemType(var->type));
 						} else {
 							n = 0;
 						}
@@ -313,21 +315,21 @@ void EmitInstr2(Instr * instr, char * str)
 						continue;
 					} if (StrEqualPrefix(s, "step", 4)) {
 						s += 4;
-						n = 1;
-						if (var->type->variant == TYPE_ARRAY) {
-							n = var->type->step;
+						step = ONE;
+						if (VarIsArray(var)) {
+							step = ArrayStep(var->type);
 						}
-						EmitInt(n);
+						EmitVar(step, 0);
 						continue;
 
 					} else if (StrEqualPrefix(s, "index.min", 9)) {
 						s += 9;
-						if (var->type->variant == TYPE_ARRAY) {
-							pn = &var->type->index->range.min;
+						if (VarIsArray(var)) {
+							pn = CellMin(IndexType(var->type));
 						} else {
-							pn = Int0();
+							pn = ZERO;
 						}
-						EmitBigInt(pn);
+						EmitVar(pn, 0);
 						continue;
 					}
 					s--;
@@ -527,7 +529,7 @@ void EmitProcedures()
 		if (var->mode != INSTR_TYPE && var->mode != INSTR_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
 			if (var->read > 0) {
 				MemEmptyVar(vardef);
-				vardef.op = INSTR_PROC;
+				vardef.op = INSTR_FN;
 				vardef.result = var;
 				EmitInstr(&vardef);
 	//			PrintProc(var);

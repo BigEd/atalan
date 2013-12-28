@@ -5,6 +5,7 @@ TODO:
 	- remove INT_TYPE range
 	- range should include resolution? (default is 1, different for floats etc.)
 	- remove NewRangeInt for NewRange (or Range?)
+	- remove TYPE_ARRAY
 
 	- we need two version of the Add - one that computes constants, one that uses variables too
 */
@@ -185,6 +186,7 @@ Bool NextCharIs(UInt8 chr);
 Bool NextIs(Token tok);
 Bool PeekNext(Token tok);
 Bool NextNoSpaceIs(Token tok);
+void NewBlock(Token end_token, Token stop_token);
 void EnterBlock();
 void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
@@ -217,7 +219,7 @@ extern char PLATFORM[64];
 
 typedef enum {
 	INSTR_NULL = 0,
-	INSTR_VOID,
+	INSTR_VOID,		// no value at all
 	INSTR_LET,		// var, val
 	INSTR_IF,
 
@@ -248,7 +250,7 @@ typedef enum {
 	INSTR_OR,
 
 	INSTR_ALLOC,
-	INSTR_PROC,
+	INSTR_FN,
 	INSTR_RETURN,
 	INSTR_ENDPROC,
 	INSTR_CALL,
@@ -308,6 +310,9 @@ typedef enum {
 	INSTR_EMPTY,			// No-value
 	INSTR_MATCH,		    // l(adr) = argument-no, r(var) = type that must match   name:type
 	INSTR_MATCH_VAL,
+	INSTR_ARRAY_TYPE,
+	INSTR_FN_TYPE,
+	INSTR_ANY,				// Represents any possible value. There is only one cell like this.
 	INSTR_CNT
 } InstrOp;
 
@@ -371,13 +376,13 @@ typedef struct ExpTag Exp;
 typedef struct InstrBlockTag InstrBlock;
 
 typedef struct VarTag Type;				// Type is special version of Cell
+typedef struct VarTag Cell;
 
 typedef enum {
 	TYPE_VOID = 0,
 	TYPE_INT,
 	TYPE_STRUCT,
 	TYPE_PROC,
-	TYPE_MACRO,
 	TYPE_STRING,
 	TYPE_ARRAY,
 	TYPE_LABEL,		// label in code (all labels share same type
@@ -387,8 +392,7 @@ typedef enum {
 	TYPE_UNDEFINED,
 	TYPE_SCOPE,
 	TYPE_TYPE,
-	TYPE_ANY,
-	TYPE_ARG		// type is argument
+	TYPE_ANY
 } TypeVariant;
 
 typedef struct {
@@ -443,6 +447,7 @@ typedef enum {
 	SUBMODE_ARG_OUT = 32,
 	SUBMODE_OUT_SEQUENCE = 64,
 	SUBMODE_PARAM    = 1024,
+	SUBMODE_MACRO    = 2048,
 
 	// General
 	SUBMODE_SYSTEM = 128,				// This is system variable (defined either by system or platform)
@@ -502,9 +507,7 @@ struct VarTag {
 	LineNo  line_no;		// line of number, on which the variable has been defined
 	LinePos line_pos;		// position on line at which the variable has been declared
 
-
 	Var  *  scope;			// scope, in which this variable has been declared
-	Var  *  next;			// next variable in chain (TODO: Should be removed)
 	Var  *  next_in_scope;  // in future, this will be replaced by 'next'
 	Var  *  subscope;		// first variable in subscope of this variable
 
@@ -526,7 +529,7 @@ struct VarTag {
 	// TODO: Replace value_nonempty just with flag VarDefined
 	union {	
 		BigInt  n;				    // INSTR_INT
-		InstrBlock * instr;		    // INSTR_ARRAY, INSTR_PROC  instructions for procedure or array initialization
+		InstrBlock * instr;		    // INSTR_ARRAY, INSTR_FN  instructions for procedure or array initialization
 		char * str;				    // INSTR_TEXT
 		Var * var;				    // INSTR_VAR
 		Var * r;
@@ -545,7 +548,7 @@ struct VarTag {
 					Type * element;
 					UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size.
 				};
-				// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left), TYPE_TYPE (uses only left)
+				// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left)
 				struct {
 					Type * left;
 					Type * right;
@@ -690,7 +693,6 @@ Type * TypeAlloc(TypeVariant variant);
 Type * TypeDerive(Type * base);
 Type * TypeCopy(Type * base);
 
-Type * TypeType(Type * restriction);
 Type * TypeByte();
 Type * TypeScope();
 Type * TypeTuple(Type * left, Type * right);
@@ -724,12 +726,13 @@ void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn);
 
 void TypeInfer(Var * proc);
 
-extern Var EMPTY;
-extern Type TINT;		// used for int constants
-extern Type TSTR;
 extern Type TLBL;
 extern Type * TUNDEFINED;
 
+#include "cell_int.h"
+#include "cell_array_type.h"
+#include "cell_fn_type.h"
+#include "cell_fn.h"
 
 /**********************************************
 
@@ -737,9 +740,8 @@ extern Type * TUNDEFINED;
 
 ***********************************************/
 
-extern Var * ZERO;
-extern Var * ONE;
-extern Var * MINUS_ONE;
+extern Var * ANY;
+extern Var * VOID;
 
 void VarInit();
 void InitCPU();
@@ -774,8 +776,6 @@ Type * CellType(Var * cell);
 
 void CellSetLocation(Var * cell, Var * file, LineNo line_no, LinePos line_pos);
 
-Var * IntCellN(long n);
-Var * IntCell(BigInt * n);
 
 Var * VarNewLabel(char * name);
 Var * FindOrAllocLabel(char * name);
@@ -802,17 +802,11 @@ Bool VarIsZeroNonzero(Var * var, Var ** p_zero, Var ** p_non_zero);
 
 Var * VarRuleArg(UInt8 i);
 
-Bool CellIsConst(Var * var);
-Bool CellRange(Var * var, Var ** p_min, Var ** p_max);
 
 Bool VarIsParam(Var * var);
-Bool VarIsType(Var * var);
-Bool CellIsIntConst(Var * var);
-BigInt * IntFromCell(Var * var);
 
 Var * VarNewVariant(Var * left, Var * right);
 
-Bool CellIsN(Var * var, Int32 n);
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
 Bool CellIsValue(Var * var);
@@ -822,7 +816,11 @@ Bool VarIsArrayElement(Var * var);
 Bool VarIsReg(Var * var);
 Var * VarReg(Var * var);
 Bool VarIsFixed(Var * var);
+
 Bool VarIsLocal(Var * var, Var * scope);
+Bool VarIsUsed(Var * var);
+
+
 Bool VarIsInArg(Var * var);
 Bool VarIsOutArg(Var * var);
 Bool VarIsArg(Var * var);
@@ -848,8 +846,6 @@ long VarParamCount(Var * var);
 
 void VarGenerateArrays();
 void VarToLabel(Var * var);
-
-Var * VarNewType(Type * type);
 
 Var * FirstArg(Var * proc, VarSubmode submode);
 Var * NextArg(Var * proc, Var * arg, VarSubmode submode);
@@ -882,6 +878,9 @@ Bool CellIsOp(Var * cell);
 Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp compare_op);
 Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max);
 Var * ResolveSequence(Var * cell);
+
+
+Cell * NewFn(Type * type, InstrBlock * instr);
 
 Var * VarEvalConst(Var * var);
 
@@ -1196,6 +1195,7 @@ void GenLetPos(Var * result, Var * arg1);
 #define INSTR_NON_CODE    2		// non-executable instruction generating data
 #define INSTR_OPTIONAL    4		// instruction must not be translated
 #define INSTR_OPERATOR    8
+#define INSTR_IS_TYPE     16    // type is always NON_CODE
 
 #define INSTR_COMMUTATIVE_OPERATOR (INSTR_OPERATOR + INSTR_COMMUTATIVE)
 
@@ -1261,8 +1261,7 @@ struct RuleArgTag {
 	};
 	RuleArg  * index;		        // pointer to index for array (NULL if there is no index)
 							        // Rule arg is allocated in this case
-							        // This type must be INSTR_MATCH or INSTR_VAR
-							        // Type of that variable must be TYPE_ARRAY
+							        // This type must be INSTR_MATCH or INSTR_VAR, variable must be array
 };
 
 struct RuleTag {
@@ -1350,6 +1349,7 @@ Type * ParseTypeInline();
 
 void ParseExpression(Var * result);
 void ParseExpressionType(Type * result_type);
+void ParseDefExpression();
 Bool ParseArg(Var ** p_var);
 
 #define STACK_LIMIT 100
@@ -1472,3 +1472,4 @@ extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap fro
 extern Bool  ASSERTS_OFF;		// do not generate asserts into output code
 
 #define OPTIMIZE_COLOR (GREEN+LIGHT)
+

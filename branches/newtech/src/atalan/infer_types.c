@@ -124,7 +124,7 @@ Result:
 		if (i->op == INSTR_LINE) continue;
 
 		if (i->op == INSTR_CALL) {
-			type = FindTypeCall(i->result, var);
+			type = FindTypeCall(i->arg1, var);
 			if (type != NULL) goto done;
 		}
 
@@ -296,6 +296,10 @@ Result:
 		break;
 
 	default:
+		if (var->type == NULL) {
+			return NULL;
+		}
+
 		if (var->type->variant == TYPE_PROC) {
 			type = var->type;
 		} else {

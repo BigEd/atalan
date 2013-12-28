@@ -21,7 +21,7 @@ char * TMP_NAME = "_";
 
 void VarSetType(Var * var, Type * type)
 {
-	if (type == NULL) type = &EMPTY;
+	if (type == NULL) type = VOID;
 	var->type = type;
 }
 
@@ -67,6 +67,31 @@ Bool VarIsTmp(Var * var)
 	return var->name == TMP_NAME;
 }
 
+Bool VarIsUsed(Var * var)
+{
+	if (var == NULL) return false;
+	ASSERT(var->mode == INSTR_VAR);
+	return var->read > 0 || var->write > 0;
+}
+
+Bool VarIsNamed(Var * var, char * name)
+{
+	return var != NULL && var->mode == INSTR_VAR && StrEqual(name, var->name);
+}
+
+Var * VarFindInStruct(Var * var, char * name)
+{
+	Var * found;
+	if (var == NULL) return NULL;
+	if (VarIsNamed(var, name)) return var;
+	if (var->mode == INSTR_TUPLE) {
+		found = VarFindInStruct(var->l, name);
+		if (found == NULL) found = VarFindInStruct(var->r, name);
+		return found;
+	}
+	return NULL;
+}
+
 Var * VarFind(Var * scope, char * name)
 /*
 Purpose:
@@ -75,14 +100,24 @@ Purpose:
 	If scope is NULL, only global variables will be searched.
 */
 {
-	Var * var;
+	Var * var = NULL;
 	if (scope != NULL) {
-		FOR_EACH_LOCAL(scope, var)
-			if (var->mode == INSTR_VAR && StrEqual(name, var->name)) return var;
-		NEXT_LOCAL
+
+		if (scope->mode == INSTR_FN) {			
+			var = VarFindInStruct(ArgType(scope->type), name);
+			if (var == NULL) {
+				var = VarFindInStruct(ResultType(scope->type), name);
+			}
+		}
+
+		if (var == NULL) {
+			FOR_EACH_LOCAL(scope, var)
+				if (VarIsNamed(var, name)) return var;
+			NEXT_LOCAL
+		}
 	}
 
-	return NULL;
+	return var;
 }
 
 GLOBAL char VAR_NAME[128];
@@ -126,4 +161,9 @@ Bool VarIdentical(Var * left, Var * right)
 	if (left == right) return true;
 
 	return false;
+}
+
+Bool VarIsArray(Var * var)
+{
+	return var->mode == INSTR_VAR && var->type != NULL && var->type->mode == INSTR_ARRAY_TYPE;
 }

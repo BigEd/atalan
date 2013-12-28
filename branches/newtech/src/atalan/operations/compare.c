@@ -47,9 +47,6 @@ Purpose:
 
 	if (type == master) return true;
 
-//	if (type == NULL) return true;
-//	if (type->variant == TYPE_UNDEFINED) return true;
-
 	if (type == NULL || master == NULL) return false;
 
 	if (VarIsRuleArg(type)) {
@@ -63,7 +60,21 @@ Purpose:
 			if (MACRO_ARG[j] == type) return true;
 		}
 		return false;
-//		type = MACRO_ARG[type->idx-1];
+	}
+
+	if (master->mode == INSTR_MATCH) {
+		if (VarIsRuleArg(master->l)) {
+			j = master->l->idx-1;
+			if (MACRO_ARG[j] == NULL) {
+				if (IsSubset(type, master->r)) {
+					MACRO_ARG[j] = type;
+					return true;
+				}
+			} else {
+				if (MACRO_ARG[j] == type) return true;
+			}
+			return false;			
+		}
 	}
 
 	// Type may be defined using name type. Use the parent then.
@@ -88,6 +99,14 @@ Purpose:
 
 	if (master->mode == INSTR_VAR) return IsSubset(type, master->type);
 	if (master->mode == INSTR_VARIANT) return IsSubset(type, master->l) || IsSubset(type, master->r);
+	if (master->mode == INSTR_TYPE && master->variant == TYPE_TYPE && master->possible_values != NULL) return IsSubset(type, master->possible_values);
+
+	if (type->mode == INSTR_ARRAY_TYPE) {
+		return master->mode == INSTR_ARRAY_TYPE 
+			&& IsSubset(IndexType(type), IndexType(master)) 
+			&& IsSubset(ItemType(type), ItemType(master));
+
+	}
 
 	if (type->mode == INSTR_TYPE) {
 		if (type->possible_values != NULL) return IsSubset(type->possible_values, master);
@@ -101,9 +120,6 @@ Purpose:
 				result = FirstArg(type, SUBMODE_ARG_OUT);
 				if (result == NULL) return false;		// this is function with no argument
 				return IsSubset(result, master);
-
-			case TYPE_ARRAY:
-				return IsSubset(type->index, master->index) && IsSubset(type->element, master->element);
 
 			default:
 				if (master->possible_values == NULL) return true;
@@ -120,52 +136,3 @@ Bool TypeIsEqual(Type * left, Type * right)
 {
 	return (left == right) || (IsSubset(left, right) && IsSubset(right, left));
 }
-
-Bool TypeMatches(Type * subset, Type * master)
-{
-	Var * var;
-	UInt8 idx;
-	UInt8 j;
-
-	if (master->variant == TYPE_ARG) {
-		j = master->arg_no-1;
-		if (MACRO_ARG[j] == NULL) {
-			if (TypeMatches(subset, master->arg_type)) {
-				MACRO_ARG[j] = TypeAlloc(TYPE_TYPE);
-				MACRO_ARG[j]->type = subset;
-				return true;
-			}
-		} else {
-			if (MACRO_ARG[j]->type == subset) return true;
-		}
-		return false;
-	}
-
-	if (subset->variant == master->variant) {
-		if (subset->variant == TYPE_TUPLE) {
-			return TypeMatches(subset->left, master->left) && TypeMatches(subset->right, master->right);
-		}
-	}
-
-	if (VarIsRuleArg(master)) {
-		idx = master->idx-1;
-		if (MACRO_ARG[idx] == NULL) {
-			var = VarNewType(subset);
-			MACRO_ARG[idx] = var;
-			return true;
-		} else {
-			var = MACRO_ARG[idx];
-			if (VarIsType(var)) {
-				master = var->type_value;
-			} else {
-				InternalError("Expected type var");
-			}
-		}
-	} else if (subset->variant == TYPE_ARRAY && master->variant == TYPE_ARRAY) {
-		return TypeMatches(subset->index, master->index) && TypeMatches(subset->element, master->element);
-	} else {
-		return IsSubset(subset, master);
-	}
-	return true;
-}
-

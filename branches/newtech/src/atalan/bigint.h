@@ -49,6 +49,7 @@ void IntAndN(BigInt * dest, UInt32 N);
 void IntOrN(BigInt * dest, UInt32 N);
 
 void PrintBigInt(BigInt * n);
+char * IntFormat(char * p, BigInt * n);
 
 void IntFree(BigInt * n);
 

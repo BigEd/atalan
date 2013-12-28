@@ -78,7 +78,7 @@ Purpose:
 	var = NewCell(INSTR_INT);
 	CellSetScope(var, &INT_VAR);
 
-	var->type = &TINT;						// In future, the type of the constant should be the constant itself (self reference)
+//	var->type = &TINT;						// In future, the type of the constant should be the constant itself (self reference)
 	IntSet(&var->n, n);
 
 	// Put the variable into hash
