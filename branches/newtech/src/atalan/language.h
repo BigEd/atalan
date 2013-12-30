@@ -733,6 +733,7 @@ extern Type * TUNDEFINED;
 #include "cell_array_type.h"
 #include "cell_fn_type.h"
 #include "cell_fn.h"
+#include "cell_tuple.h"
 
 /**********************************************
 

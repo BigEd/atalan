@@ -205,7 +205,7 @@ Bool CellIsEqual(Var * left, Var * right)
 	return false;
 }
 
-Int16 VarCompare(Var * left, Var * right)
+Int16 CellCompare(Var * left, Var * right)
 /*
 Purpose:
 	0    left == right
@@ -217,8 +217,8 @@ Purpose:
 	BigInt * l, * r;
 	if (left == right) return 0;
 	if (left == NULL || right == NULL) return 127;
-	if (left->mode == INSTR_VAR && left->adr != NULL) return VarCompare(left->adr, right);
-	if (right->mode == INSTR_VAR && right->adr != NULL) return VarCompare(left, right->adr);
+	if (left->mode == INSTR_VAR && left->adr != NULL) return CellCompare(left->adr, right);
+	if (right->mode == INSTR_VAR && right->adr != NULL) return CellCompare(left, right->adr);
 
 	// Try to compare as two integers
 	l = IntFromCell(left);
@@ -233,21 +233,27 @@ Purpose:
 	return 127;
 }
 
+Bool IsHigher(Var * left, Var * right)
+{
+	Int16 r = CellCompare(left, right);
+	return r == 1;
+}
+
 Bool IsHigherEq(Var * left, Var * right)
 {
-	Int16 r = VarCompare(left, right);
+	Int16 r = CellCompare(left, right);
 	return r == 0 || r == 1;
 }
 
 Bool IsLowerEq(Var * left, Var * right)
 {
-	Int16 r = VarCompare(left, right);
+	Int16 r = CellCompare(left, right);
 	return r == 0 || r == -1;
 }
 
 Bool CellIsLower(Var * left, Var * right)
 {
-	Int16 r = VarCompare(left, right);
+	Int16 r = CellCompare(left, right);
 	return r == -1;
 }
 
@@ -258,6 +264,7 @@ Var * CellOp(InstrOp op, Var * left, Var * right)
 	case INSTR_SUB: return Sub(left, right);
 	case INSTR_MUL: return Mul(left, right);
 	case INSTR_DIV: return DivInt(left, right);
+
 	default:
 		return NewOp(op, left, right);
 	}

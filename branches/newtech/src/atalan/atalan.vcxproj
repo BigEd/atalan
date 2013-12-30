@@ -94,6 +94,7 @@
     <ClCompile Include="cell_range.c" />
     <ClCompile Include="cell_sequence.c" />
     <ClCompile Include="cell_text.c" />
+    <ClCompile Include="cell_tuple.c" />
     <ClCompile Include="cell_type.c" />
     <ClCompile Include="cell_var.c" />
     <ClCompile Include="emit.c" />
@@ -134,6 +135,7 @@
     <ClInclude Include="cell_fn.h" />
     <ClInclude Include="cell_fn_type.h" />
     <ClInclude Include="cell_int.h" />
+    <ClInclude Include="cell_tuple.h" />
     <ClInclude Include="language.h" />
     <ClInclude Include="operations\arith.h" />
     <ClInclude Include="operations\bool.h" />

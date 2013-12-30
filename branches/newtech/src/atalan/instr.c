@@ -743,6 +743,8 @@ void PrintVar(Var * var)
 {
 	Type * type;
 
+	if (var == NULL) return;
+
 	if (var->mode == INSTR_DEREF) {
 		Print("@");
 		var = var->var;
@@ -799,6 +801,10 @@ void PrintVar(Var * var)
 			Print(":");
 			PrintVar(type);
 		}
+	} else if (var->mode == INSTR_VARIANT) {
+		PrintVar(var->l);
+		Print("|");
+		PrintVar(var->r);
 	} else {
 		PrintVar(var->adr);
 		Print(INSTR_INFO[var->mode].symbol);
@@ -883,11 +889,11 @@ void PrintInstrLine(UInt32 n)
 void PrintInferType(Type * type)
 {
 	UInt8 old_color;
-	old_color = PrintColor(BLUE);
+	old_color = PrintColor(COLOR_OPTIMIZE);
 	if (type == NULL) {
 		Print("???");
 	} else {
-		PrintType(type);
+		PrintVar(type);
 	}
 	PrintColor(old_color);
 }
@@ -909,30 +915,30 @@ void CodePrint(InstrBlock * blk, UInt32 flags)
 			
 			if (FlagOn(flags, PrintInferredTypes) && i->op != INSTR_LINE) {
 				Print("  ");
-				if (IS_INSTR_BRANCH(i->op)) {
-					Print("if ");
-				} else if (i->op == INSTR_CALL) {
-					Print("call ");
+				if (i->op == INSTR_LET) {
+					PrintInferType(i->type[0]);
+				} else if (i->op == INSTR_IF) {
+					Print("if "); PrintInferType(i->type[1]);
 				} else {
-					if (ii->arg_type[0] != TYPE_VOID && ii->arg_type[0] != TYPE_LABEL && ii->arg_type[0] != TYPE_PROC) {
-						PrintInferType(i->type[0]);
-						Print(" = ");
+					if (i->op == INSTR_CALL) {
+						Print("call ");
+					} else {
+						if (ii->arg_type[0] != TYPE_VOID && ii->arg_type[0] != TYPE_LABEL && ii->arg_type[0] != TYPE_PROC) {
+							PrintInferType(i->type[0]);
+							Print(" = ");
+						}
+					}
+					if (ii->arg_type[1] != TYPE_VOID) {
+						PrintInferType(i->type[1]);
+					}
+					if (ii->arg_type[2] != TYPE_VOID) {
+						Print(" "); Print(ii->symbol); Print(" ");
+						PrintInferType(i->type[2]);
+					}
+					if (IS_INSTR_BRANCH(i->op)) {
+						Print(" goto ");
 					}
 				}
-				if (ii->arg_type[1] != TYPE_VOID) {
-					PrintInferType(i->type[1]);
-				}
-				if (ii->arg_type[2] != TYPE_VOID) {
-					Print(" "); Print(ii->symbol); Print(" ");
-					PrintInferType(i->type[2]);
-				}
-				if (IS_INSTR_BRANCH(i->op)) {
-					Print(" goto ");
-				}
-//				if (ii->arg_type[1] == TYPE_LABEL || ii->arg_type[1] == TYPE_PROC) {
-//					PrintVar(i->arg1);
-//				}
-
 			}
 			PrintEOL();
 		}
