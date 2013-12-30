@@ -150,6 +150,9 @@ Var * VarUnion(Var * left, Var * right)
 	if (right == NULL) return left;
 	if (left == right) return left;
 
+	if (left->mode == INSTR_EMPTY) return right;
+	if (right->mode == INSTR_EMPTY) return left;
+
 	result = NULL;
 
 	if (right->mode == INSTR_INT || right->mode == INSTR_RANGE) {
@@ -382,8 +385,8 @@ Purpose:
 
 
 	// If any of the types is undefined, result is undefined
-	if (left->variant == TYPE_UNDEFINED) return left;
-	if (right->variant == TYPE_UNDEFINED) return right;
+	if (left->mode == INSTR_TYPE && left->variant == TYPE_UNDEFINED) return left;
+	if (right->mode == INSTR_TYPE && right->variant == TYPE_UNDEFINED) return right;
 
 	// If one of the types is sequence, make sure it is the left one
 	if (right->mode == INSTR_SEQUENCE) {

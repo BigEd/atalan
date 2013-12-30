@@ -241,6 +241,28 @@ done2:
 	return blk->type;
 }
 
+Var * Compare(InstrOp op, Var * left, Var * right)
+{
+	Int16 r;
+
+	if (op == INSTR_EQ || op == INSTR_GE || op == INSTR_LE) {
+		if (CellIsEqual(left, right)) return ONE;
+		if (op == INSTR_EQ) return ZERO;
+	}
+
+	r = CellCompare(left, right);
+
+	switch(op) {
+	case INSTR_GT:
+	case INSTR_GE:
+		if (r == 1) return ONE;
+		if (r == -1) return ZERO;
+		break;
+	}
+
+	return NULL;
+}
+
 Type * FindType(Loc * loc, Var * var, Bool report_errors)
 /*
 Purpose:
@@ -273,6 +295,14 @@ Result:
 		left = FindType(loc, var->adr, report_errors);
 		right = FindType(loc, var->var, report_errors);
 		type = TypeTuple(left, right);
+		break;
+
+	case INSTR_GE:
+		left = FindType(loc, var->l, report_errors);
+		right = FindType(loc, var->r, report_errors);
+		if (left != NULL && right != NULL) {
+			type = Compare(var->mode, left, right);
+		}
 		break;
 
 	case INSTR_ADD:
@@ -371,7 +401,7 @@ Result:
 		}
 	}
 
-	if (type != NULL && type->variant == TYPE_UNDEFINED) type = NULL;
+	if (type != NULL && type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) type = NULL;
 	return type;
 }
 
@@ -732,8 +762,8 @@ Purpose:
 	Var * var;
 	var = *p_var;
 	if (var != NULL && var->mode != INSTR_INT && !InVar(var)) {
-		if (type != NULL && type->variant == TYPE_INT && IntEq(&type->range.min, &type->range.max)) {
-			*p_var = IntCell(&type->range.min);
+		if (CellIsIntConst(type)) {
+			*p_var = type;
 		}
 	}
 }
@@ -745,21 +775,33 @@ Bool InstrInferType(Loc * loc, void * data)
 	Instr * i;
 	Type * tr, * ti;
 	InferData * d = (InferData *)data;
-	Bool taken, not_taken, not;
+//	Bool taken, not_taken, not;
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 1 && loc->n == 7) {
+	if (loc->blk->seq_no == 1 && loc->n == 5) {
 		Print("");
 	}
 
 	// Conditional jumps have special support
 	if (i->op == INSTR_IF) {
 		if (i->type[ARG1] == NULL) {
-			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
-			if (i->type[ARG1] != NULL) d->modified = true;
+			tr = i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
+			if (i->type[ARG1] != NULL) {
+				d->modified = true;
+
+				if (CellIsEqual(tr, ONE)) {
+					i->arg1 = ONE;
+					d->modified_blocks = true;
+				} else if (CellIsEqual(tr, ZERO)) {
+					i->arg2->write--;
+					InstrDelete(loc->blk, i);
+					d->modified_blocks = true;
+				}
+				return true;
+			}
 		}
-		ReplaceConst(&i->arg1, i->type[ARG1]);
+/*		ReplaceConst(&i->arg1, i->type[ARG1]);
 
 		if (i->type[ARG1] != NULL && !InVar(i->arg1)) {
 			taken = false;
@@ -767,7 +809,7 @@ Bool InstrInferType(Loc * loc, void * data)
 			not = false;
 			switch (i->op) {
 			case INSTR_NE:
-				not = true;
+					not = true;
 			case INSTR_EQ:
 				// We know for sure the condition is true, if both values are in fact same integer constants
 				taken = CellIsIntConst(i->type[ARG1]) && CellIsIntConst(i->type[ARG2]) && IntEq(MIN1, MIN2);
@@ -827,7 +869,7 @@ Bool InstrInferType(Loc * loc, void * data)
 				return true;
 			}
 		}
-
+*/
 	} else if ((i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction)))) {
 
 		// If the result of the instruction is array index, try to infer type of the index.
@@ -841,7 +883,7 @@ Bool InstrInferType(Loc * loc, void * data)
 		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
 			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
 			if (i->type[ARG1] != NULL) d->modified = true;
-		}
+				}
 
 		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
 			i->type[ARG2] = FindType(loc, i->arg2, d->final_pass);
@@ -1251,6 +1293,7 @@ Purpose:
 	ProcInstrEnum(proc, &InstrConstraints, &data);
 
 	if (Verbose(proc)) {
+		PrintHeader(2, proc->name);
 		PrintProcFlags(proc, PrintInferredTypes);
 	}
 
@@ -1312,5 +1355,6 @@ Purpose:
 
 	ReportUnusedVars(proc);
 	ReportAlwaysFalseAsserts(proc);
+
 
 }

@@ -9,3 +9,4 @@ Var * Mod(Var * l, Var * r);
 
 Var * CellOp(InstrOp op, Var * left, Var * right);
 
+Int16 CellCompare(Var * left, Var * right);

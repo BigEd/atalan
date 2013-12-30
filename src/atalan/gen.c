@@ -245,7 +245,9 @@ Purpose:
 
 	Var * arg, * arr, * l, * r;
 	UInt16 n;
+	Var * en;
 	InstrOp op;
+	Var * fn_type;
 
 	if (var == NULL) return NULL;
 
@@ -279,34 +281,45 @@ Purpose:
 			}
 		}
 	} else if (op == INSTR_TUPLE || FlagOn(INSTR_INFO[op].flags, INSTR_OPERATOR)) {
-		l = GenArg(macro, var->adr, args, locals);
-		r = GenArg(macro, var->var, args, locals);
+		l = GenArg(macro, var->l, args, locals);
+		r = GenArg(macro, var->r, args, locals);
 
-		if (l != var->adr || r != var->var) {			
+		if (l != var->l || r != var->r) {			
 			var = InstrEvalConst(op, l, r);
 			if (var == NULL) {
 				var = NewOp(op, l, r);
 			}
 		}
 
-	} else if (op == INSTR_VAR && VarIsArg(var)) {
+	} else if (op == INSTR_VAR) {
 
 		// Optimization for instruction rule
 		if (VarIsRuleArg(var)) {
 			return args[var->idx-1];
 		}
 
-		//TODO: Make more efficient mechanism for finding argument index
-		n = 0;
-		FOR_EACH_LOCAL(macro, arg)
-			if (VarIsArg(arg)) {
+		// If the variable is format arguments or result, return one of specified actual arguments
+
+		fn_type = macro->type->type;
+
+
+		if (fn_type->mode == INSTR_FN_TYPE) {
+			//TODO: Make more efficient mechanism for finding argument index
+			n = 0;
+			FOR_EACH_ITEM(en, arg, ArgType(fn_type))
 				if (arg == var) return args[n];
 				n++;
-			}
-		NEXT_LOCAL
+			NEXT_ITEM(en, arg)
 
+			FOR_EACH_ITEM(en, arg, ResultType(fn_type))
+				if (arg == var) return args[n];
+				n++;
+			NEXT_ITEM(en, arg)
+		}
+
+		goto ddd;
 	} else {
-
+ddd:
 		// This is local variable in macro
 		// All labels are local in macro
 		if (VarIsLocal(var, macro) || VarIsLabel(var)) {

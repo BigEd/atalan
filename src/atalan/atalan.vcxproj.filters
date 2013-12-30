@@ -155,6 +155,9 @@
     <ClCompile Include="cell_fn.c">
       <Filter>Source Files\cells</Filter>
     </ClCompile>
+    <ClCompile Include="cell_tuple.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">
@@ -188,6 +191,9 @@
       <Filter>Source Files\cells</Filter>
     </ClInclude>
     <ClInclude Include="cell_fn.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell_tuple.h">
       <Filter>Source Files\cells</Filter>
     </ClInclude>
   </ItemGroup>

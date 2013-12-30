@@ -4500,7 +4500,7 @@ Syntax: "return" arg*
 void ParseMacro(Var * macro)
 {
 	Var * args[32];
-	Var * arg, * var;
+	Var * arg, * var, * en;
 	UInt16 arg_cnt;
 	UInt16 in_cnt;
 
@@ -4508,12 +4508,12 @@ void ParseMacro(Var * macro)
 
 	arg_cnt = in_cnt;
 	// We must generate temporary variables for results and store them to expression stack
-	FOR_EACH_OUT_ARG(macro, arg)
+	FOR_EACH_ITEM(en, arg, ResultType(macro->type->type))
 		var = NewTempVar(arg->type);
 		args[arg_cnt] = var;
 		BufPush(var);
 		arg_cnt++;
-	NEXT_OUT_ARG
+	NEXT_ITEM(en, arg)
 
 	ifok {
 		GenMacro(macro, args);
