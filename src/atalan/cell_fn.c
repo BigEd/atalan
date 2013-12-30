@@ -27,3 +27,7 @@ Cell * NewFn(Type * type, InstrBlock * instr)
 	return var;
 }
 
+Bool IsFnVar(Var * var)
+{
+	return var != NULL && var->mode == INSTR_VAR && var->type->mode == INSTR_FN;
+}

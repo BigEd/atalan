@@ -77,13 +77,13 @@ Purpose:
 		if (un == left->adr) un = left; 	//TODO: Test the other half here
 //		if (un == right) return right;
 		if (un != NULL && un != left) {
-			un = NewOp(INSTR_VARIANT, un, left->var);
+			un = NewVariant(un, left->var);
 		} else {
 			un2 = VarUnion2(left->var, right, p_merged);
 			if (un2 == left->var) return left;
 			if (un2 == right) return right;
 			if (un2 != NULL) {
-				un = NewOp(INSTR_VARIANT, left->adr, un2);
+				un = NewVariant(left->adr, un2);
 			}
 		}
 	} else if (left->mode == INSTR_INT || left->mode == INSTR_RANGE) {
@@ -133,7 +133,7 @@ Purpose:
 		if (nv1 == NULL) return nv2;
 		if (nv2 == NULL) return nv1;
 		if (nv1 != var->adr || nv2 != var->var) {
-			return NewOp(INSTR_VARIANT, nv1, nv2);
+			return NewVariant(nv1, nv2);
 		}
 	} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 		nv1 = VarUnionRange(var, item);
@@ -168,7 +168,7 @@ Var * VarUnion(Var * left, Var * right)
 	}
 
 	if (result == NULL) {
-		result = VarNewVariant(left, right);
+		result = NewVariant(left, right);
 	}
 
 	return result;

@@ -6,7 +6,8 @@ Translator
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
 Translate compiler instructions to processor instructions by applying rewriting rules.
-
+Translator takes instruction after instruction in given procedure and tries to find suitable translation using
+rules defined for current CPU.
 */
 
 #include "language.h"
@@ -40,7 +41,7 @@ Rule specificity
 
 The rules are sorted by their specificity.
 The most specific rule is the first in the list, less specific rules follow.
-This ensures, that the more specific rules have bigger priority than less specific ones.
+This ensures, that the more specific rules have bigger priority than less specific ones and will be preffered when translating.
 
 Rule is more specific if it's arguments are more specific.
 
@@ -265,6 +266,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 {
 	Type * type = pattern->type;
 	Type * vtype = var->type;
+	Var * adr;	
 
 	// Pattern expects reference to array with one or more indices
 	if (pattern->index != NULL) {
@@ -284,11 +286,14 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 
 	// Pattern does not expect any index, but we have some, so there is no match
 	} else {
-		if (VarIsArrayElement(var)) return false;
+		adr = var;
+		if (var->mode == INSTR_VAR && VarIsAlias(var)) {
+			adr = var->adr;
+		}
+		if (VarIsArrayElement(adr)) return false;
 	}
 	if (type == NULL) return true;
 	return IsSubset(var, type);
-//	return VarMatchesType(var, type);
 }
 
 Bool VarIsOneOf(Var * var, Var * variants)
@@ -313,11 +318,17 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 	Var * pvar, * left, * right;
 	UInt8 arg_no;
 	InstrOp v;
+	Var * var;
 
 	if (pattern == NULL) return arg == NULL;
 
 	v = pattern->variant;
 	if (arg == NULL) return v == INSTR_NULL;
+
+	var = arg;
+	if (arg->mode == INSTR_VAR) {
+		if (VarIsAlias(arg)) var = arg->adr;
+	}
 
 	atype = arg->type;
 
@@ -375,11 +386,12 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 		return ArgMatch(pattern->arr, arg->adr, v);
 		break;
 
-	// <X>(<Y>)
+	// <X>#<Y>
 	case INSTR_ELEMENT:
-		if (arg->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, v)) return false;
-		return ArgMatch(pattern->arr, arg->adr, v); 
+		
+		if (var->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
+		if (!ArgMatch(pattern->index, var->var, v)) return false;
+		return ArgMatch(pattern->arr, var->adr, v);
 		break;
 
 	// const %A:type
@@ -396,9 +408,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 			if (pvar->mode == INSTR_TEXT) {
 				if (!StrEqual(pvar->str, arg->str)) return false;
 			} else if (pvar->mode == INSTR_INT) {
-//				if (pvar->value_nonempty) {
-					if (arg->mode != INSTR_INT || !IntEq(&pvar->n, &arg->n)) return false;
-//				}
+				if (arg->mode != INSTR_INT || !IntEq(&pvar->n, &arg->n)) return false;
 			}
 		} else {
 			if (pattern->var != NULL && !CellIsEqual(arg, pattern->var)) return false;
@@ -420,17 +430,6 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 		if (arg->mode != INSTR_DEREF) return false;
 		arg = arg->var;
 		if (!ArgMatch(pattern->arr, arg, v)) return false;
-		break;
-
-	// %A:type
-//	case INSTR_MATCH:
-//		// In Emit phase, we need to exactly differentiate between single variable and byte offset.
-//		if (arg->mode == INSTR_VAR || CellIsConst(arg) || (arg->mode == INSTR_BYTE && MATCH_MODE != PHASE_EMIT)) {
-//			if (parent_variant != INSTR_TUPLE && FlagOn(arg->submode, SUBMODE_REG)) return false; 
-//			if (!VarMatchesPattern(arg, pattern)) return false;
-//		} else {
-//			return false;
-//		}
 		break;
 
 	case INSTR_NULL:
@@ -629,20 +628,12 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	Type * type;
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
-/*
-	if (op == INSTR_LET && arg2 == NULL && FlagOn(INSTR_INFO[arg1->mode].flags, INSTR_OPERATOR)) {
-		op = arg1->mode; arg2 = arg1->r; arg1 = arg1->l;
-		if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
-	}
-*/
 
 	// It is not possible to translate the instruction directly.
 	// We will try to simplify the translated instruction by taking one of it's complex arguments
 	// and replacing it by simple variable.
 	// The variable will be assigned the value using LET instruction before it gets used in the instruction.
 	// We are thus replacing one instruction by set of two or more instructions.
-
-	// Try translate things like
 
 	has1 = has2 = has_r = false;
 

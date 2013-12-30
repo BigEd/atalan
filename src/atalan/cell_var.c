@@ -167,3 +167,9 @@ Bool VarIsArray(Var * var)
 {
 	return var->mode == INSTR_VAR && var->type != NULL && var->type->mode == INSTR_ARRAY_TYPE;
 }
+
+Bool VarIsAlias(Var * var)
+{
+	ASSERT(var->mode == INSTR_VAR);
+	return var->adr != NULL && !CellIsConst(var->adr);
+}

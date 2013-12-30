@@ -133,7 +133,7 @@ repeat:
 		if (op == INSTR_IF) {
 			label = i->arg2;
 			// Jumps to other procedures are handled in a special way, as these are not normal jumps.
-			if (label->type->variant != TYPE_PROC) {
+			if (label->type->mode != INSTR_FN) {
 				dst = label->instr;
 
 				if (IsGoto(i)) {

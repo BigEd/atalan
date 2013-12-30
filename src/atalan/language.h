@@ -805,7 +805,7 @@ Var * VarRuleArg(UInt8 i);
 
 Bool VarIsParam(Var * var);
 
-Var * VarNewVariant(Var * left, Var * right);
+Var * NewVariant(Var * left, Var * right);
 
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
@@ -816,6 +816,7 @@ Bool VarIsArrayElement(Var * var);
 Bool VarIsReg(Var * var);
 Var * VarReg(Var * var);
 Bool VarIsFixed(Var * var);
+Bool VarIsAlias(Var * var);
 
 Bool VarIsLocal(Var * var, Var * scope);
 Bool VarIsUsed(Var * var);
@@ -841,7 +842,6 @@ void VarLet(Var * var, Var * val);
 
 void VarResetRegUse();
 
-TypeVariant VarType(Var * var);
 long VarParamCount(Var * var);
 
 void VarGenerateArrays();
@@ -1471,5 +1471,5 @@ extern Var * MACRO_ASSERT;		// Assert procedure
 extern MemHeap VAR_HEAP;		// variable heap (or zero page heap), this is heap from which variables are preferably allocated
 extern Bool  ASSERTS_OFF;		// do not generate asserts into output code
 
-#define OPTIMIZE_COLOR (GREEN+LIGHT)
+#define COLOR_OPTIMIZE (GREEN+LIGHT)
 

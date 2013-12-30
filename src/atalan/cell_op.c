@@ -145,7 +145,7 @@ Var * VarNewBitElement(Var * arr, Var * idx)
 	return item;
 }
 
-Var * VarNewVariant(Var * left, Var * right)
+Var * NewVariant(Var * left, Var * right)
 {
 	if (left == NULL) return right;
 	if (right == NULL) return left;

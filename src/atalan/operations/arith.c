@@ -202,7 +202,6 @@ Bool CellIsEqual(Var * left, Var * right)
 			return CellIsEqual(left->adr, right->adr) && CellIsEqual(left->var, right->var);
 		}
 	}
-
 	return false;
 }
 

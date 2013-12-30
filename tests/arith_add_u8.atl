@@ -9,5 +9,5 @@ b' = 21
 
 c = a + b
 
-assert c = 52
+assert c = 51
 

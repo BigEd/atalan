@@ -259,7 +259,7 @@ Purpose:
 	res->src_i = NULL;
 }
 
-Bool VarIsAlias(Var * var, Var * alias)
+static Bool VarIsAliasOf(Var * var, Var * alias)
 /*
 Purpose:
 	Return true, if the two variables are alias for same memory location.
@@ -268,15 +268,15 @@ Purpose:
 {
 	if (var == NULL || alias == NULL) return false;
 	if (var == alias) return true;
-	if (var->adr != NULL && var->adr->mode == INSTR_VAR) if (VarIsAlias(var->adr, alias)) return true;
-	if (alias->adr != NULL &&  alias->adr->mode == INSTR_VAR) if (VarIsAlias(var, alias->adr)) return true;
+	if (var->adr != NULL && var->adr->mode == INSTR_VAR) if (VarIsAliasOf(var->adr, alias)) return true;
+	if (alias->adr != NULL &&  alias->adr->mode == INSTR_VAR) if (VarIsAliasOf(var, alias->adr)) return true;
 	return false;
 }
 
 Bool ResetVarDepRootFn(Var * var, void * data)
 {
 	Var * res = (Var *)data;
-	if (VarIsAlias(var, res)) {
+	if (VarIsAliasOf(var, res)) {
 		ExpFree(&var->dep);
 	}
 	return false;
@@ -872,7 +872,7 @@ retry:
 						} else {
 	delete_instr:
 							if (Verbose(proc)) {
-								color = PrintColor(OPTIMIZE_COLOR);
+								color = PrintColor(COLOR_OPTIMIZE);
 								PrintFmt("%ld#%ld Removing:", blk->seq_no, loc.n); InstrPrint(i);
 								PrintColor(color);
 							}
@@ -1004,7 +1004,7 @@ retry:
 
 					// We have evaluated the instruction, change it to LET <result>,r
 					if (r != NULL) {
-						if (VarIsAlias(i->result, r)) {
+						if (VarIsAliasOf(i->result, r)) {
 							goto delete_instr;
 						} else {
 							if (TransformInstr(&loc, INSTR_LET, i->result, r, NULL, "Const evaluation")) {
@@ -1230,7 +1230,7 @@ next:
 							//==== We have succeeded, replacing the register
 							
 							if (Verbose(proc)) {
-								color = PrintColor(OPTIMIZE_COLOR);
+								color = PrintColor(COLOR_OPTIMIZE);
 								PrintFmt("Merging %ld#%ld", blk->seq_no, n); InstrPrint(i);
 								PrintColor(color);
 							}

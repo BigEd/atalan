@@ -1,0 +1,9 @@
+a:array (0..99) of 0..99
+
+;?x#i ?a x = i
+
+for #i in a a#i = i
+
+assert a#0 = 0
+assert a#50 = 50
+assert a#99 = 99
