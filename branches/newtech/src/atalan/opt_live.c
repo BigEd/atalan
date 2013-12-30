@@ -424,7 +424,7 @@ Bool OptimizeLive(Var * proc)
 								// Test flags
 
 								if (Verbose(proc)) {
-									color = PrintColor(OPTIMIZE_COLOR);
+									color = PrintColor(COLOR_OPTIMIZE);
 									PrintFmt("Removing dead %ld#%ld:", blk->seq_no, n); InstrPrint(i);
 									PrintColor(color);
 								}

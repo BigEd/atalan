@@ -433,7 +433,7 @@ void AllocateVariables(Var * proc)
 
 	FOR_EACH_VAR(proc2)
 		type = proc2->type;
-		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
+		if (IsFnVar(proc2) && proc2->read > 0 && type->instr != NULL) {
 //			Print("%s -> %s", proc2->name, proc->name);
 			if (proc2 != proc && !ProcCallsProc(proc, proc2) && !ProcCallsProc(proc2, proc)) {
 //				if (/*StrEqual(proc->name, "copyblock") &&*/ StrEqual(proc->name, "drawmainscreen")) {
@@ -462,7 +462,7 @@ void AllocateVariables(Var * proc)
 //			Print("***");
 //		}
 
-		if (type != NULL && type->variant == TYPE_PROC && proc2->read > 0 && proc2->instr != NULL) {
+		if (IsFnVar(proc2) && proc2->read > 0 && type->instr != NULL) {
 			if (proc2 != proc && (FlagOn(proc2->flags, VarUsedInInterupt) || ProcCallsProc(proc, proc2) || ProcCallsProc(proc2, proc))) {
 //				if (StrEqual(proc->name, "drawmainscreen")) {
 //					HeapPrint(&heap);

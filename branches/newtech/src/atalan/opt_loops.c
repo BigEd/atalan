@@ -112,7 +112,7 @@ Purpose:
 			if (FlagOff(var->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG) 
 //			 && var->mode != INSTR_INT 
 			 && var->mode != INSTR_DEREF
-			 && var->type != NULL && var->type->variant != TYPE_PROC
+			 && !IsFnVar(var)
 			 && !VarIsLabel(var) 
 			 && !VarIsArray(var)
 			 && FlagOff(var->flags, VarLoopDependent)
@@ -847,7 +847,7 @@ void PrintInsert(Instr * i)
 {
 	UInt8 color;
 	if (G_VERBOSE) {
-		color = PrintColor(OPTIMIZE_COLOR);
+		color = PrintColor(COLOR_OPTIMIZE);
 		Print(" + | ");
 		EmitInstrInline(i);
 		PrintColor(color);
@@ -888,7 +888,7 @@ void PrintChange(Instr * i)
 {
 	UInt8 color;
 	if (G_VERBOSE) {
-		color = PrintColor(OPTIMIZE_COLOR);
+		color = PrintColor(COLOR_OPTIMIZE);
 		Print(" => "); EmitInstrInline(i);
 		PrintColor(color);
 	}
@@ -898,7 +898,7 @@ void PrintDelete()
 {
 	UInt8 color;
 	if (G_VERBOSE) {
-		color = PrintColor(OPTIMIZE_COLOR);
+		color = PrintColor(COLOR_OPTIMIZE);
 		Print(" => void"); PrintEOL();
 		PrintColor(color);
 	}
@@ -993,7 +993,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 		reg = top_reg;
 		if (Verbose(proc)) {
-			color = PrintColor(OPTIMIZE_COLOR);
+			color = PrintColor(COLOR_OPTIMIZE);
 			PrintFmt("*** Loop %d..%d\n", header->seq_no, end->seq_no);
 			Print("Var: "); PrintVarVal(top_var); PrintEOL();
 			Print("Register: "); PrintIntCellName(top_reg); PrintEOL();

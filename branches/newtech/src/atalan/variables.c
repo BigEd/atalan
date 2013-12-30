@@ -287,7 +287,8 @@ Bool VarIsStructElement(Var * var)
 Bool VarIsArrayElement(Var * var)
 {
 	Var * adr;
-	if (var == NULL || var->mode != INSTR_ELEMENT) return false;
+	if (var == NULL) return false;
+	if (var->mode != INSTR_ELEMENT) return false;
 	adr = var->adr;
 	if (adr->mode == INSTR_DEREF) return true;
 	return adr->type != NULL && VarIsArray(adr);
@@ -366,18 +367,6 @@ Var * VarProcScope()
 		if (s->mode == INSTR_VAR && s->type != NULL && s->type->mode == INSTR_FN) break;
 	}
 	return s;
-}
-
-TypeVariant VarType(Var * var)
-{
-	if (var == NULL) return TYPE_VOID;
-	if (var->mode == INSTR_INT) return TYPE_INT;
-	if (var->mode == INSTR_RANGE) return TYPE_INT;
-	if (var->mode == INSTR_TEXT) return TYPE_STRING;
-	if (var->mode == INSTR_TYPE) return var->variant;
-	if (var->mode == INSTR_VAR) return VarType(var->type);
-
-	return TYPE_VOID;
 }
 
 Bool VarIsLabel(Var * var)
@@ -651,10 +640,10 @@ Arguments:
 //				}
 			} else {
 				if (i->op != INSTR_LINE) {
-					if (VarType(i->arg1) == TYPE_PROC) {
+					if (i->arg1 != NULL && i->arg1->mode == INSTR_VAR && i->arg1->type->mode == INSTR_FN) {
 						ProcUse(i->arg1, flag | VarProcAddress);
 					}
-					if (VarType(i->arg2) == TYPE_PROC) {
+					if (i->arg2 != NULL && i->arg2->mode == INSTR_VAR && i->arg2->type->mode == INSTR_FN) {
 						ProcUse(i->arg2, flag | VarProcAddress);
 					}
 					label = i->result;

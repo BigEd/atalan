@@ -536,7 +536,7 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 		break;
 	
 	default:
-		if (right != NULL && right->variant == TYPE_INT) {
+		if (TypeIsInt2(right)) {
 
 			switch(op) {
 			case INSTR_XOR:
@@ -684,22 +684,23 @@ void CheckIndex(Loc * loc, Var * var)
 // Index may be simple, or it can be range
 {
 	Type * type;
-	Var * idx;
+	Var * idx, * idx_type;
 
 	if (VarIsArrayElement(var)) {
 		idx = var->var;
 		type = FindType(loc, var->var, true);
 		if (type != NULL) {
-			if (!IsSubset(type, var->adr->type->index)) {
-				if (type->variant == TYPE_INT) {
-					ErrArg(CellMax(type));
-					ErrArg(CellMin(type));
+			idx_type = IndexType(var->adr->type);
+			if (!IsSubset(type, idx_type)) {
+//				if (type->variant == TYPE_INT) {
+					ErrArg(CellMax(idx_type));
+//					ErrArg(CellMin(type));
 					ErrArg(var->adr);
-					LogicWarningLoc("Index of array [A] out of bounds.\nThe index range is [B]..[C].", loc);
-				} else {
-					ErrArg(var->adr);
-					LogicErrorLoc("Cannot infer type of index of array [A].", loc);
-				}
+					LogicWarningLoc("Index of array [A] out of bounds.\nThe index is [B].", loc);
+//				} else {
+//					ErrArg(var->adr);
+//					LogicErrorLoc("Cannot infer type of index of array [A].", loc);
+//				}
 			}
 		} else {
 			// failed to compute index, what does it means?
@@ -1170,7 +1171,7 @@ Purpose:
 	Type * type;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
+		if (var->mode == INSTR_VAR && FlagOn(var->submode, SUBMODE_USER_DEFINED) && var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
 			type = var->type;
 			if (type != NULL && type->variant == TYPE_LABEL) continue;
 			if (var->read == 0) {

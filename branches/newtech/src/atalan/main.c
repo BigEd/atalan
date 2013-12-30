@@ -122,7 +122,7 @@ Bool ArrayTranslateFn(Var * var, void * data)
 
 Bool ResetProcUse(Var * var, void * data) 
 {
-	if (var->type != NULL && var->type->variant == TYPE_PROC) {
+	if (IsFnVar(var)) {
 		var->read = 0;
 	}
 	return false;

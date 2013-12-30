@@ -242,8 +242,6 @@ void EmitVar(Var * var, UInt8 format)
 				// When parameter name is emmited, it is prefixed with PARAM_ prefix
 				if (VarIsParam(var)) {
 					EmitStr("PARAM_");
-					//			} else if (var->mode == INSTR_NAME && var->type != NULL && var->type->variant == TYPE_INT && var->type->owner != NULL) {		// Here owner is scope!
-					//				EmitIntCellName(var->type->owner);
 					EmitStr("__");
 				} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
 					EmitIntCellName(var->scope);
@@ -481,39 +479,26 @@ Purpose:
 */
 {
 	Var * var, * adr;
-	Instr instr;
 	Type * type;
 
 	FOR_EACH_VAR(var)
-		type = var->type;
+		if (var->mode == INSTR_VAR) {
+			type = var->type;
 
-		if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
-		if (VarIsReg(var)) continue;
+//			if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
+			if (VarIsReg(var)) continue;
 
-		adr = var->adr;
-		if ( (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
-		  || (CellIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
-		) {
+			adr = var->adr;
+			if ( (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
+			  || (CellIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
+			) {
 
-			if (adr != NULL && adr->mode == INSTR_INT && IntN(&adr->n) >= DATA_SEGMENT) {
-				continue;
+				if (adr != NULL && adr->mode == INSTR_INT && IntN(&adr->n) >= DATA_SEGMENT) {
+					continue;
+				}
+
+				EmitInstrOp(INSTR_VARDEF, var, adr, NULL);
 			}
-
-			instr.op = INSTR_VARDEF;
-			instr.result = var;
-			instr.arg1 = adr;
-			instr.arg2 = NULL;
-/*
-			if (adr->mode == INSTR_INT) {
-				ov = adr;				
-			} else if (var->mode == INSTR_VAR) {
-				ov = var;
-			} else {
-				ov = var->adr;
-			}
-			instr.arg1 = ov;
-*/
-			EmitInstr(&instr);
 		}
 	NEXT_VAR
 }

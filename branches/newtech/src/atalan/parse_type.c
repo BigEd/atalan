@@ -391,6 +391,7 @@ Type * ParseType3()
 		item = NULL;
 		step = NULL;
 
+
 		if (TOK == TOKEN_OPEN_P) {
 			EnterBlockWithStop(TOKEN_EQUAL);
 			while (OK && !NextIs(TOKEN_BLOCK_END)) {

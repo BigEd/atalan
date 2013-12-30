@@ -14,7 +14,7 @@ def green(text); colorize(text, "32"); end
 
 $tests_to_run = [
     "arith_add_u8", "arith_nested", "arith_addsub_u8", "arith_addsub_s8", "arith_addsub_s16", "arith_muldiv_u8",
-    "if_eq", "if_le_e", "if_le_h", "if_le_l", "if_lt", "if_ne_t", "if_ne_f"
+    "if_eq", "if_le_e", "if_le_h", "if_le_l", "if_lt", "if_ne_t", "if_ne_f", "for_range", "for_index", "for_item_index"
 	]
     
 $test_results = []

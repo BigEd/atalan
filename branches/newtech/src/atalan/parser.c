@@ -152,13 +152,7 @@ Purpose:
 Syntax:  var_name
 */
 {
-	Var * var = NULL;
-	if (EXP_EXTRA_SCOPE != NULL) {
-		var = VarFind(EXP_EXTRA_SCOPE, NAME);
-	} 
-	if (var == NULL) {
-		var = VarFind2(NAME);
-	}
+	Var * var = FindExpVar();
 	if (var == NULL) {
 		SyntaxError("Unknown variable");
 	} else {
@@ -1911,14 +1905,13 @@ Purpose:
 	GenLabel(label);
 }
 
-void ParseIf2(Bool negated, Var * result)
 /*
+void ParseIf2(Bool negated, Var * result)
 Purpose:
 	Parse conditional expression.
 	If result variable is specified, we parse expression assigning the result to this variable instead of commands.
 Syntax:
 	If: "if"|"unless" <commands> ["then"] <commands>  ["else" "if"|"unless" <cond>]* ["else" <commands>]
-*/
 {	
 	Var * cond, * label;
 	if (ParsingRule()) {
@@ -1987,7 +1980,8 @@ retry:
 	}
 	EndBlock();
 }
-
+*/
+/*
 void ParseRange(Var ** p_min, Var ** p_max)
 {
 	Type * type;
@@ -2040,35 +2034,22 @@ void ParseRange(Var ** p_min, Var ** p_max)
 	*p_min = min;
 	*p_max = max;
 }
-
-Type * TypeAllocRange(Var * min, Var * max)
-/*
-Purpose:
-	Create integer type, that will be able to contain range specified by the two variables.
 */
-{
-	Var * nmin, * nmax;
-	Type * type;
-
-	nmin = CellMin(min);
-	nmax = CellMax(max);
-	type = NewRange(min, max);
-	
-	return type;
-}
 
 void ParseFor()
 /*
 Syntax:
-	for: "for" <var> [":" <range>][in <array>] ["where" cond] ["until" cond | "while" cond]
+	for: ["for" <var>] [":" <range>][#<index>][in <array>] ["where" cond] ["until" cond | "while" cond]
 
 */
 {
 	Var * var, * where_t_label;
 	char name[256];
+	char idx_name[256];
 	Var * min, * max, * step, * arr, * idx;
 	Type * type;
 	InstrBlock * cond, * where_cond, * body;
+	LinePos idx_tok_pos;
 //	Int32 n, nmask;
 	LinePos token_pos;
 	BigInt * n, nmask;
@@ -2078,6 +2059,7 @@ Syntax:
 	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
 
+	*idx_name = 0;
 	EnterSubscope();
 
 	// Parse "for" part.
@@ -2086,8 +2068,24 @@ Syntax:
 
 		GenLine();
 
+		if (NextIs(TOKEN_HASH)) goto indexed;
+
 		if (LexId(name)) {
-			
+
+			if (NextIs(TOKEN_HASH)) {
+indexed:
+				idx_tok_pos = TOKEN_POS;
+				if (LexId(idx_name)) {
+					if (NextIs(TOKEN_IN)) {
+						goto parse_in;
+					} else {
+						SyntaxError("There should be in after index variable");
+					}
+				} else {
+					SyntaxError("Expected index variable name");
+				}
+			}
+
 			token_pos = TOKEN_POS;
 			// for i ":" <range>
 			if (NextIs(TOKEN_COLON)) {
@@ -2095,9 +2093,12 @@ Syntax:
 				var = NewVar(NULL, name, NULL);
 				CellSetLocation(var, SRC_FILE, LINE_NO, token_pos);
 
-				ParseRange(&min, &max);
+				ParseExpression(NULL);
+//				ParseRange(&min, &max);
 				ifok {
-					type = NewRange(min, max);
+					type = BufPop();
+					TypeLimits(type, &min, &max);
+//					type = NewRange(min, max);
 					ifok {
 
 						if (CellIsConst(min) && CellIsConst(max)) {
@@ -2112,22 +2113,24 @@ Syntax:
 			// One is local (unnamed) index variable that we use to iterate.
 			// The second is named as user specified and represents arr#index.
 			} else if (NextIs(TOKEN_IN)) {
+parse_in:
 				arr = ParseArray();
 				ifok {
-					if (arr->type->variant == TYPE_ARRAY) {
-						type = arr->type->index;
+					if (arr->type->mode == INSTR_ARRAY_TYPE) {
+						type = IndexType(arr->type);
 						TypeLimits(type, &min, &max);
 
-						idx = NewTempVar(type);						
-						var = NewVar(NULL, name, arr->type->element);
+						if (*idx_name != 0) {
+							idx = NewVar(NULL, idx_name, type);
+							CellSetLocation(idx, SRC_FILE, LINE_NO, idx_tok_pos);
+							SetFlagOn(idx->submode, SUBMODE_USER_DEFINED);
+						} else {
+							idx = NewTempVar(type);						
+						}
+						var = NewVar(NULL, name, ItemType(arr->type));
 						var->adr = VarNewElement(arr, idx);
 
-//						var->adr = arr;
-//						var->var = idx;
-						var->line_no = LINE_NO;
-						var->line_pos = token_pos;
-						var->file    = SRC_FILE;
-//						var->type    = arr->type->element;
+						CellSetLocation(var, SRC_FILE, LINE_NO, token_pos);
 						SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
 
@@ -2138,7 +2141,9 @@ Syntax:
 				
 			// for i (range is not specified, this is reference to global variable or type)
 			} else {
-				var = VarFind2(name);
+				SyntaxError("Expected : or in");
+
+/*				var = VarFind2(name);
 				if (var != NULL) {
 					if (var->mode == INSTR_VAR && var->type->variant == TYPE_INT) {
 						TypeLimits(var->type, &min, &max);
@@ -2148,7 +2153,8 @@ Syntax:
 				} else {
 					SyntaxError("$Loop variable not found");
 				}
-			}
+*/			}
+
 		} else {
 			SyntaxError("Expected loop variable name");
 		}
@@ -2417,6 +2423,7 @@ Arguments:
 	UInt16 bookmark;
 	UInt32 item_size;
 	Bool inexact_element;
+	BigInt * bi;
 
 	Var * element_type = NULL;
 
@@ -2481,10 +2488,10 @@ Arguments:
 
 		rep = 1;
 		if (NextIs(TOKEN_TIMES)) {
-
-			if (item->type->variant == TYPE_INT) {
-				//TODO: Check, thet repeat is not too big
-				rep = IntN(&item->n);
+			bi = IntFromCell(item);
+			if (bi != NULL) {
+				//TODO: Check, that repeat is not too big
+				rep = IntN(bi);
 			} else {
 				SyntaxError("repeat must be defined using integer");
 				break;
@@ -3257,7 +3264,7 @@ parsed:
 			}
 
 			if (type == NULL || type->mode != INSTR_TYPE || type->variant == TYPE_SCOPE) {
-				if (type == NULL || type->mode != INSTR_FN_TYPE) {
+				if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
 					ParseElements(vars[0]);
 				}
 //				type = TypeScope();
@@ -3392,7 +3399,6 @@ parsed:
 				// Array is initialized as list of constants.
 
 				if (type->mode == INSTR_ARRAY_TYPE) {
-//					ASSERT(type->index->variant == TYPE_INT);
 					var->var = ParseArrayC(var->type);			// Warning: The type variable may get modified according to match parsed constant
 
 				// Normal assignment

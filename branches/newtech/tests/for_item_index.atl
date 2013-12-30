@@ -1,0 +1,7 @@
+a:array (0..99) of 0..99
+
+for x#i in a  x = i
+
+assert a#0 = 0
+assert a#50 = 50
+assert a#99 = 99

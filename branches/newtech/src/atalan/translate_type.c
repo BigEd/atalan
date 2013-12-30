@@ -55,20 +55,16 @@ Purpose:
 	return type;
 }
 
-void TranslateTypes(Var * proc)
+void TranslateScope(Var * proc, Bool verbose)
 {
 	Var * var;
 	Type * type;
-	Bool verbose;
-
-	verbose = Verbose(proc);
-	if (verbose) {
-		PrintHeader(2, proc->name);
-		PrintProc(proc);
-	}
 
 	FOR_EACH_LOCAL(proc, var)
 		if (var->mode == INSTR_VAR) {
+
+			TranslateScope(var, verbose);
+
 			if (VarIsUsed(var)) {
 				type = var->type;
 				var->type = CpuType(type);
@@ -78,5 +74,18 @@ void TranslateTypes(Var * proc)
 				}
 			}
 		}
-	NEXT_LOCAL
+		NEXT_LOCAL
+}
+
+void TranslateTypes(Var * proc)
+{
+	Bool verbose;
+
+	verbose = Verbose(proc);
+	if (verbose) {
+		PrintHeader(2, proc->name);
+		PrintProc(proc);
+	}
+
+	TranslateScope(proc, verbose);
 }

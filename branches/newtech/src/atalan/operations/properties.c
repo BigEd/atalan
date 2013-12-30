@@ -177,8 +177,7 @@ void VarCount(Var * var, BigInt * cnt)
 	}
 	if (var->mode == INSTR_RANGE) {
 		VarRange(var, &min, &max);
-		IntSub(cnt, max, min);
-		IntAddN(cnt, 1);
+		IntRangeSize(cnt, min, max);
 	}
 }
 

@@ -748,7 +748,9 @@ void PrintVar(Var * var)
 		var = var->var;
 	}
 
-	if (var->mode == INSTR_ELEMENT) {
+	if (var->mode == INSTR_EMPTY) {
+		Print("()");
+	} else if (var->mode == INSTR_ELEMENT) {
 		PrintIntCellName(var->adr);
 		Print("(");
 		PrintVar(var->var);
