@@ -245,9 +245,16 @@ Var * Compare(InstrOp op, Var * left, Var * right)
 {
 	Int16 r;
 
+	// *** Type Assert (2)
+	// The test for type asserts is performed while inferring types.
+
+	if (op == INSTR_MATCH) {
+		if (CellIsEqual(left, right)) return ONE;
+		return ZERO;
+	}
+
 	if (op == INSTR_EQ || op == INSTR_GE || op == INSTR_LE) {
 		if (CellIsEqual(left, right)) return ONE;
-		if (op == INSTR_EQ) return ZERO;
 	}
 
 	r = CellCompare(left, right);
@@ -257,6 +264,11 @@ Var * Compare(InstrOp op, Var * left, Var * right)
 	case INSTR_GE:
 		if (r == 1) return ONE;
 		if (r == -1) return ZERO;
+		break;
+	case INSTR_LT:
+	case INSTR_LE:
+		if (r == 1) return ZERO;
+		if (r == -1) return ONE;
 		break;
 	}
 
@@ -286,18 +298,24 @@ Result:
 		break;
 
 	case INSTR_RANGE:
-		left = FindType(loc, var->adr, report_errors);
-		right = FindType(loc, var->var, report_errors);
+		left = FindType(loc, var->l, report_errors);
+		right = FindType(loc, var->r, report_errors);
 		type = NewRange(left, right);
 		break;
 		
 	case INSTR_TUPLE:
-		left = FindType(loc, var->adr, report_errors);
-		right = FindType(loc, var->var, report_errors);
+		left = FindType(loc, var->l, report_errors);
+		right = FindType(loc, var->r, report_errors);
 		type = TypeTuple(left, right);
 		break;
 
+	case INSTR_MATCH:
+	case INSTR_EQ:
+	case INSTR_NE:
 	case INSTR_GE:
+	case INSTR_GT:
+	case INSTR_LE:
+	case INSTR_LT:
 		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
 		if (left != NULL && right != NULL) {
@@ -779,7 +797,7 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 1 && loc->n == 5) {
+	if (loc->blk->seq_no == 2 && loc->n == 3) {
 		Print("");
 	}
 
@@ -794,7 +812,7 @@ Bool InstrInferType(Loc * loc, void * data)
 					i->arg1 = ONE;
 					d->modified_blocks = true;
 				} else if (CellIsEqual(tr, ZERO)) {
-					i->arg2->write--;
+					i->arg2->read--;
 					InstrDelete(loc->blk, i);
 					d->modified_blocks = true;
 				}
@@ -1049,7 +1067,7 @@ static Bool TypeInferLoops(Var * proc)
 /*
 Purpose:
 	Try to compute number of steps of every loop in the procedure.
-	If sucessfull, this information may be used to infer some more types.
+	If successful, this information may be used to infer some more types.
 */ {
 	InstrBlock * header;
 	Instr * i;
@@ -1144,6 +1162,7 @@ retry:
 		do {
 			data.modified = false;
 			data.modified_blocks = false;
+			PrintProc(proc);
 			ProcInstrEnum(proc, &InstrInferType, &data);
 			if (data.modified_blocks) {
 				GenerateBasicBlocks(proc);

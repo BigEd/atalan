@@ -1,0 +1,15 @@
+
+
+x = 10
+while x < 100
+    inc x
+    assert x:11..100
+			    
+assert x:100..100
+
+
+x = 3
+while x <= 23
+    inc x
+    
+assert x:24..24

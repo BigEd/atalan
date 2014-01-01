@@ -24,16 +24,16 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_LET,         "let", "<-", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_IF,          "iff",  "if", {TYPE_VOID, TYPE_ANY, TYPE_LABEL}, 0, NULL },			// if arg1 goto arg2
 
-	{ INSTR_EQ,        "eq", "=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_NE,        "ne", "<>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_LT,        "lt", "<=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_GE,        "ge", ">=", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_GT,        "gt", ">", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_LE,        "le", "<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_EQ,        "eq", "=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_NE,        "ne", "<>", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_LT,        "lt", "<=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_GE,        "ge", ">=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_GT,        "gt", ">", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_LE,        "le", "<", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_OVERFLOW,  "overflow", "over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_NOVERFLOW, "noverflow", "not over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_MATCH_TYPE,      "matchtype", ":", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_NMATCH_TYPE, "nmatchtype", "<>:", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_MATCH_TYPE,      "matchtype", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
+	{ INSTR_NMATCH_TYPE, "nmatchtype", "<>:", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
 
 	{ INSTR_PROLOGUE,    "prologue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
 	{ INSTR_EPILOGUE,    "epilogue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
@@ -105,7 +105,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_ARRAY,       "array", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Array constant
 	{ INSTR_SEQUENCE,     "sequence", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },	// Sequence
 	{ INSTR_EMPTY,        "()", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },		// Empty
-	{ INSTR_MATCH,        ":", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match x:type
+	{ INSTR_MATCH,        ":", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match x:type
 	{ INSTR_MATCH_VAL,        ":val", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match const x:type
 	{ INSTR_ARRAY_TYPE,   ":array", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
 	{ INSTR_FN_TYPE,   ":fn", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
@@ -920,6 +920,7 @@ void CodePrint(InstrBlock * blk, UInt32 flags)
 				} else if (i->op == INSTR_IF) {
 					Print("if "); PrintInferType(i->type[1]);
 				} else {
+/*
 					if (i->op == INSTR_CALL) {
 						Print("call ");
 					} else {
@@ -938,6 +939,7 @@ void CodePrint(InstrBlock * blk, UInt32 flags)
 					if (IS_INSTR_BRANCH(i->op)) {
 						Print(" goto ");
 					}
+*/
 				}
 			}
 			PrintEOL();

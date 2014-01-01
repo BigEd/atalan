@@ -1,0 +1,11 @@
+y = 1
+
+for x:0..7
+   inc y
+
+assert y:9..9
+
+;while x<10
+;	inc x
+;	y = y + 1
+    

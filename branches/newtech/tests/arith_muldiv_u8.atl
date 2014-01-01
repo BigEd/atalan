@@ -4,7 +4,7 @@ in  x@x'
 out y':0..32
 in  y@y'
 
-out z':0..7
+out z':1..7
 in  z@z'
 
 ;Multiplication

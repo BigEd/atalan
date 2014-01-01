@@ -52,8 +52,9 @@ def find_info(header)
 	puts header
 	puts ""
 	info.sort.each{|section_no, d| puts "#{section_no}. #{d[:text]}" }
-	  
+	puts ""	  
 end
 
 find_info("Register Arguments")
 find_info("Module parameters")
+find_info("Type Assert")

@@ -1327,6 +1327,20 @@ void ParseRel2()
 		ifok {
 			InstrBinary(op);
 		}
+
+	// Type guard
+
+	// *** Type Assert (1)
+	// We may assert the type inferencer deduced the correct type of a variable.
+	// This is done using ::assert var:type:: syntax.
+
+	// Type Assert is implemented using special INSTR_MATCH operator.
+
+	} else if (NextIs(TOKEN_COLON)) {
+		ParseTuple();
+		ifok {
+			InstrBinary(INSTR_MATCH);
+		}
 	}
 }
 
@@ -4624,6 +4638,7 @@ void ParseAssert()
 		Gen(INSTR_ASSERT_BEGIN, NULL, NULL, NULL);
 		BeginBlock(TOKEN_IF);		// begin if block		
 		G_BLOCK->not = true;
+
 		GenBegin();
 		bookmark = SetBookmark();
 //		ParseCondition();
@@ -4631,7 +4646,6 @@ void ParseAssert()
 		iferr return;
 
 		label =  VarNewTmpLabel();
-
 		Gen(INSTR_IF, NULL, cond, label);
 
 		cond_code = GenEnd();
