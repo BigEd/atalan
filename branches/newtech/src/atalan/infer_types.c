@@ -290,9 +290,8 @@ Result:
 
 	if (var == NULL) return NULL;
 
-	// Type of integer constants
-
 	switch(var->mode) {
+	case INSTR_TEXT:
 	case INSTR_INT:
 		type = var;
 		break;
@@ -330,8 +329,18 @@ Result:
 	case INSTR_MOD:
 		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
-		if (left != NULL && right != NULL) {
-			type = CellOp(var->mode, left, right);
+		if (right != NULL) {
+			if ((var->mode == INSTR_DIV || var->mode == INSTR_MOD) && IsSubset(ZERO, right)) {
+				if (report_errors) {
+					if (CellIsEqual(ZERO, right)) {
+						LogicErrorLoc("Division by zero.", loc);
+					} else {
+						LogicErrorLoc("Possible division by zero.", loc);
+					}
+				}
+			} else if (left != NULL) {
+				type = CellOp(var->mode, left, right);			
+			}
 		}
 		break;
 
@@ -1162,7 +1171,6 @@ retry:
 		do {
 			data.modified = false;
 			data.modified_blocks = false;
-			PrintProc(proc);
 			ProcInstrEnum(proc, &InstrInferType, &data);
 			if (data.modified_blocks) {
 				GenerateBasicBlocks(proc);
