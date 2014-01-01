@@ -1,0 +1,15 @@
+;Basic type inference
+
+in x:10..20
+y = x * 2
+
+assert y:20..40
+
+y = y + 5
+
+assert y:25..45
+
+z = y - 30       ;y = y - 30 Error
+
+assert z:-5..15
+

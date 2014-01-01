@@ -205,6 +205,26 @@ remove_block:
 
 }
 
+void UnlinkConditional(InstrBlock * blk, InstrBlock * from)
+{
+	InstrBlock * b;
+
+	ASSERT(from->cond_to == blk);
+	if (blk != NULL) {
+		if (blk->callers == from) {
+			blk->callers = blk->callers->next_caller;
+		} else {
+			for(b = blk->callers; b != NULL; b = b->next_caller) {
+				if (b->next_caller == from) {
+					b->next_caller = b->next_caller->next_caller;
+					break;
+				}
+			}
+		}
+		if (blk->label != NULL) blk->label->read--;
+	}
+}
+
 void GenerateBasicBlocks(Var * proc)
 /*
 Purpose:
@@ -545,6 +565,8 @@ void DeadCodeElimination(Var * proc)
 			if (blk->label == NULL || (blk->label->read == 0 && blk->label->write == 0)) {
 				//TODO: We should solve alignment using some other means (probably block, or label, should have alignment)
 				if (!DataBlock(blk)) {
+					if (blk->to != NULL) blk->to->from = NULL;
+					UnlinkConditional(blk->cond_to, blk);
 					prev_blk->next = blk->next;
 					InstrBlockFree(blk);
 					MemFree(blk);
