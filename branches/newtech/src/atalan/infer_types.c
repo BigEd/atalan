@@ -262,38 +262,35 @@ done2:
 	return blk->type;
 }
 
-Var * Compare(InstrOp op, Var * left, Var * right)
+Bool HoldsForAllItems(InstrOp op, Var * left, Var * right)
 {
-	Int16 r;
 
 	// *** Type Assert (2)
 	// The test for type asserts is performed while inferring types.
 
 	if (op == INSTR_MATCH) {
-		if (IsEqual(left, right)) return ONE;
-		return ZERO;
+		if (IsEqual(left, right)) return true;
+		return false;
 	}
-
-	if (op == INSTR_EQ || op == INSTR_GE || op == INSTR_LE) {
-		if (IsEqual(left, right)) return ONE;
-	}
-
-	r = CellCompare(left, right);
 
 	switch(op) {
 	case INSTR_GT:
-	case INSTR_GE:
-		if (r == 1) return ONE;
-		if (r == -1) return ZERO;
+		return IsHigher(CellMin(left), CellMax(right));
 		break;
+
+	case INSTR_GE:
+		return IsHigherEq(CellMin(left), CellMax(right));
+		break;
+
 	case INSTR_LT:
+		return IsLower(CellMax(left), CellMin(right));
+		break;
 	case INSTR_LE:
-		if (r == 1) return ZERO;
-		if (r == -1) return ONE;
+		return IsLowerEq(CellMax(left), CellMin(right));
 		break;
 	}
 
-	return NULL;
+	return false;
 }
 
 Type * FindType(Loc * loc, Var * var, Bool report_errors)
@@ -308,10 +305,12 @@ Result:
 	Type * arr_type;
 	Type * index_type;
 	Type * left, * right;
+	InstrOp op;
 
 	if (var == NULL) return NULL;
 
-	switch(var->mode) {
+	op = var->mode;
+	switch(op) {
 	case INSTR_TEXT:
 	case INSTR_INT:
 		type = var;
@@ -339,7 +338,11 @@ Result:
 		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
 		if (left != NULL && right != NULL) {
-			type = Compare(var->mode, left, right);
+			if (HoldsForAllItems(op, left, right)) {
+				type = ONE;
+			} else if (op != INSTR_MATCH && HoldsForAllItems(OpNot(op), left, right)) {
+				type = ZERO;
+			}
 		}
 		break;
 
@@ -384,6 +387,10 @@ Result:
 		break;
 
 	default:
+
+		// Type of input register is always it's type, as the value may change in any moment.
+		if (var->mode == INSTR_VAR && InVar(var)) return var->type;
+
 		if (var->type == NULL) {
 			return NULL;
 		}

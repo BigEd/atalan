@@ -197,16 +197,16 @@ Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 		if ( IsLowerEq(rmin, min) && IsHigherEq(rmax, max)) {
 			r = NULL;
 			// 1. <---(    )--->
-		} else if (CellIsLower(min, rmin) && CellIsLower(rmax, max)) {
+		} else if (IsLower(min, rmin) && IsLower(rmax, max)) {
 			r = TypeUnion(NewRangeOpenRight(min, rmin), NewRangeOpenLeft(rmax, max));
 			// 2. <------>  (     )
-		} else if (CellIsLower(max, rmin)) {
+		} else if (IsLower(max, rmin)) {
 			r = cell;
 			// 4.  (      )  <----->
-		} else if (CellIsLower(rmax,  min)) {
+		} else if (IsLower(rmax,  min)) {
 			r = cell;
 			// 3.  <---(     >   )
-		} else if (CellIsLower(min, rmin)) {
+		} else if (IsLower(min, rmin)) {
 			r = NewRangeOpenRight(min, rmin);
 			// 5.  (     <  )----->
 		} else if (IsHigherEq(rmax, min)) {

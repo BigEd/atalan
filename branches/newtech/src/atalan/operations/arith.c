@@ -251,7 +251,7 @@ Bool IsLowerEq(Var * left, Var * right)
 	return r == 0 || r == -1;
 }
 
-Bool CellIsLower(Var * left, Var * right)
+Bool IsLower(Var * left, Var * right)
 {
 	Int16 r = CellCompare(left, right);
 	return r == -1;
