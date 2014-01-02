@@ -311,7 +311,7 @@ Bool FlagIsDead(Var * var, Instr * i)
 			i2 = i->prev;
 			while (i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
 			if (i2 != NULL) {
-				if (CellIsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
+				if (IsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
 					return true;
 				}
 			}

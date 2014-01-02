@@ -180,14 +180,14 @@ Purpose:
 }
 
 
-Bool CellIsEqual(Var * left, Var * right)
+Bool IsEqual(Var * left, Var * right)
 {
 	BigInt * l, * r;
 
 	if (left == NULL || right == NULL) return false;
 	if (left == right) return true;
-	if (left->mode == INSTR_VAR && left->adr != NULL) return CellIsEqual(left->adr, right);
-	if (right->mode == INSTR_VAR && right->adr != NULL) return CellIsEqual(left, right->adr);
+	if (left->mode == INSTR_VAR && left->adr != NULL) return IsEqual(left->adr, right);
+	if (right->mode == INSTR_VAR && right->adr != NULL) return IsEqual(left, right->adr);
 
 	// Try to compare as two integers
 	l = IntFromCell(left);
@@ -199,7 +199,7 @@ Bool CellIsEqual(Var * left, Var * right)
 
 	if (left->mode == right->mode) {
 		if (left->mode == INSTR_TUPLE) {
-			return CellIsEqual(left->adr, right->adr) && CellIsEqual(left->var, right->var);
+			return IsEqual(left->adr, right->adr) && IsEqual(left->var, right->var);
 		}
 	}
 	return false;

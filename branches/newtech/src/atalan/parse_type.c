@@ -475,7 +475,7 @@ next:
 
 			min = BufPop();
 			if (min->mode == INSTR_RANGE) {
-				if (CellIsEqual(min->adr, min->var)) return min->adr;
+				if (IsEqual(min->adr, min->var)) return min->adr;
 				return min;
 			}
 
@@ -513,7 +513,7 @@ next:
 				max = var;		
 			}
 
-			if (CellIsEqual(min, max)) {
+			if (IsEqual(min, max)) {
 				type = min;
 				goto done;
 			} else {

@@ -169,7 +169,7 @@ Type * TypeGen(Type * t)
 
 Bool IsGoto(Instr * i)
 {
-	return i != NULL && i->op == INSTR_IF && CellIsEqual(i->arg1, ONE);
+	return i != NULL && i->op == INSTR_IF && IsEqual(i->arg1, ONE);
 }
 
 void InstrDecl(Instr * i)
@@ -251,22 +251,22 @@ Purpose:
 	eq = true;
 
 	if (eq && INSTR_INFO[i->op].arg_type[RESULT] != TYPE_VOID) {
-		eq = CellIsEqual(i->result, i2->result);
+		eq = IsEqual(i->result, i2->result);
 	}
 
 	// Arguments must be same
 
 	if (eq && INSTR_INFO[i->op].arg_type[ARG1] != TYPE_VOID) {
-		eq = CellIsEqual(i->arg1, i2->arg1);
+		eq = IsEqual(i->arg1, i2->arg1);
 	}
 
 	if (eq && INSTR_INFO[i->op].arg_type[ARG2] != TYPE_VOID) {
-		eq = CellIsEqual(i->arg2, i2->arg2);
+		eq = IsEqual(i->arg2, i2->arg2);
 	}
 
 	// Commutative instruction may be equivalent, if the arguments are switched
 	if (!eq && FlagOn(INSTR_INFO[i->op].flags, INSTR_COMMUTATIVE)) {
-		eq = CellIsEqual(i->arg1, i2->arg2) && CellIsEqual(i->arg2, i2->arg1);
+		eq = IsEqual(i->arg1, i2->arg2) && IsEqual(i->arg2, i2->arg1);
 	}
 	
 	return eq;

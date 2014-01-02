@@ -660,12 +660,12 @@ Purpose:
 
 			FOR_EACH_LOCAL(t, item)
 				if (CellIsIntConst(item)) {
-					if (CellIsEqual(item, ZERO)) {
+					if (IsEqual(item, ZERO)) {
 						zero = item;
 					} else {
 						if (non_zero != NULL) {
 							// There are two different non-zero constants!
-							if (!CellIsEqual(non_zero, item)) {
+							if (!IsEqual(non_zero, item)) {
 								zero = NULL;
 								break;
 							}
@@ -677,10 +677,10 @@ Purpose:
 			NEXT_LOCAL
 		// Variable is range. It may be either 0..1 or -1..0
 		} else {
-			if (CellIsEqual(CellMin(t), ZERO) && CellIsEqual(CellMax(t), ONE)) {
+			if (IsEqual(CellMin(t), ZERO) && IsEqual(CellMax(t), ONE)) {
 				zero = ZERO;
 				non_zero = ONE;
-			} else if (CellIsEqual(CellMin(t), MINUS_ONE) && CellIsEqual(CellMax(t), ZERO)) {
+			} else if (IsEqual(CellMin(t), MINUS_ONE) && IsEqual(CellMax(t), ZERO)) {
 				zero = ZERO;
 				non_zero = MINUS_ONE;
 			}
@@ -1036,7 +1036,7 @@ retry:
 						// If some register contains the value we need to set
 						for(regi = 0; regi < CPU->REG_CNT; regi++) {
 							r = CPU->REG[regi];
-							if (!CellIsEqual(r, i->arg1)) {
+							if (!IsEqual(r, i->arg1)) {
 								if (VarIsOffset(r, i->arg1, &diff)) {
 									is_zero = IntEqN(&diff, 0);
 									IntFree(&diff);
@@ -1106,7 +1106,7 @@ Purpose:
 			if (op == INSTR_EQ || op == INSTR_NE) {
 				arg1 = i->arg1;
 				arg2 = i->arg2;
-				if (!CellIsEqual(arg2, ZERO) && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
+				if (!IsEqual(arg2, ZERO) && VarIsZeroNonzero(arg1, &zero, &nonzero)) {
 					i->op = OpNot(i->op);
 					i->arg2 = zero;
 				}

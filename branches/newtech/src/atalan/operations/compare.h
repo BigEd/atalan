@@ -1,4 +1,4 @@
-Bool CellIsEqual(Var * left, Var * right);
+Bool IsEqual(Var * left, Var * right);
 Bool IsHigherEq(Var * left, Var * right);
 Bool IsLowerEq(Var * left, Var * right);
 Bool CellIsLower(Var * left, Var * right);

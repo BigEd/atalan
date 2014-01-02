@@ -261,7 +261,7 @@ Purpose:
 		return CellIsValue(var->possible_values);
 
 	case INSTR_RANGE:
-		return CellIsEqual(var->adr, var->var);
+		return IsEqual(var->adr, var->var);
 
 	case INSTR_VAR:
 		return TypeIsConst(var->type);
