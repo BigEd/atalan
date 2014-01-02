@@ -457,6 +457,7 @@ void GenerateInit()
 
 	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
 	type = TypeAlloc(TYPE_PROC);
+	ROOT_PROC.mode = INSTR_VAR;
 	ROOT_PROC.name = "root";
 	ROOT_PROC.idx  = 0;
 	ROOT_PROC.type = type;		//&ROOT_PROC_TYPE;

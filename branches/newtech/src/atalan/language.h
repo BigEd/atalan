@@ -231,23 +231,27 @@ typedef enum {
 	INSTR_LE,
 	INSTR_OVERFLOW,
 	INSTR_NOVERFLOW,
-	INSTR_MATCH_TYPE,
-	INSTR_NMATCH_TYPE,
 
-	INSTR_PROLOGUE, // 14
+	INSTR_ADD,     // 12
+	INSTR_SUB,     // 13
+	INSTR_MUL,     // 14
+	INSTR_DIV,     // 15
+	INSTR_MOD,     // 16
+	INSTR_SQRT,    // 17
+
+	INSTR_AND,	   // 18
+	INSTR_OR,      // 19
+	INSTR_XOR,     // 20
+	INSTR_NOT,     // 21
+
+	INSTR_ROL,		// 22 bitwise rotate right
+	INSTR_ROR,		// 23 bitwise rotate left
+
+	INSTR_PROLOGUE,			//-2-2
 	INSTR_EPILOGUE,
 	INSTR_EMIT,
 	INSTR_VARDEF,
 	INSTR_LABEL,
-
-	INSTR_ADD,     // 19
-	INSTR_SUB,     // 20
-	INSTR_MUL,     // 21
-	INSTR_DIV,     // 22
-	INSTR_SQRT,    // 23
-
-	INSTR_AND,
-	INSTR_OR,
 
 	INSTR_ALLOC,
 	INSTR_FN,
@@ -264,20 +268,13 @@ typedef enum {
 	INSTR_PTR,
 	INSTR_ARRAY_INDEX,		// generate index for array
 	INSTR_LET_ADR,
-	INSTR_ROL,				// bitwise rotate right
-	INSTR_ROR,				// bitwise rotate left
 	INSTR_DEBUG,
-	INSTR_MOD,
-	INSTR_XOR,
-	INSTR_NOT,
 	INSTR_ASSERT_BEGIN,
 	INSTR_ASSERT,
 	INSTR_ASSERT_END,
 
 	INSTR_LINE,				// reference line in the source code
 	INSTR_INCLUDE,
-	INSTR_MULA,				// templates for 8 - bit multiply 
-	INSTR_MULA16,           // templates for 8 - bit multiply 
 
 	INSTR_COMPILER,
 	INSTR_CODE_END,			// end of BLK segment and start of data segment
@@ -286,25 +283,21 @@ typedef enum {
 	INSTR_DECL,
 
 	// Following 'instructions' are used in expressions
-	INSTR_VAR,				// 59 Variable (may be argument, input, output, ...)
-	INSTR_INT,				// 60 Integer constant
-	INSTR_ELEMENT,			// 61 <array> <index>     access array or structure element (left operand is array, right is index)
-	INSTR_BYTE,				// 62 <var> <byte_index>  access byte of specified variable
-	INSTR_RANGE,			// 63 x..y  (l = x, r = y) Used for slice array references
-	INSTR_TUPLE,			// 64 INSTR_LIST <adr,var>  (var may be another tuple)
+	INSTR_VAR,				// 56 Variable (may be argument, input, output, ...)
+	INSTR_INT,				// 57 Integer constant
+	INSTR_ELEMENT,			// 58 <array> <index>     access array or structure element (left operand is array, right is index)
+	INSTR_BYTE,				// 59 <var> <byte_index>  access byte of specified variable
+	INSTR_RANGE,			// 60 x..y  (l = x, r = y) Used for slice array references
+	INSTR_TUPLE,			// 61 INSTR_LIST <adr,var>  (var may be another tuple)
 						    // Type of tuple may be undefined, or it may be structure of types of variables in tuple
-	INSTR_DEREF,			// 65 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
-	INSTR_FIELD,			// 66 access field of structure
-	INSTR_TYPE,				// 67
-	INSTR_SCOPE,			// 68
-//	INSTR_SRC_FILE,			//INSTR_SRC_FILE variable representing source file
-							// scope   FILE that includes (uses) this file
-							// name    filename
-							// n       parse state
-	INSTR_BIT,
-	INSTR_TEXT,				// text constant
-	INSTR_VARIANT,
-	INSTR_NAME,			// constant depending on type (array, procedure)
+	INSTR_DEREF,			// 62 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
+	INSTR_FIELD,			// 63 access field of structure
+	INSTR_TYPE,				// 64
+	INSTR_SCOPE,			// 65
+	INSTR_BIT,              // 66
+	INSTR_TEXT,				// 67 text constant
+	INSTR_VARIANT,          // 68
+	INSTR_NAME,			    // constant depending on type (array, procedure)  TODO: Remove
 	INSTR_ARRAY,			// array constant
 	INSTR_SEQUENCE,
 	INSTR_EMPTY,			// No-value

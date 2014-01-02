@@ -32,22 +32,26 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_LE,        "le", "<", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_OVERFLOW,  "overflow", "over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_NOVERFLOW, "noverflow", "not over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_MATCH_TYPE,      "matchtype", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_NMATCH_TYPE, "nmatchtype", "<>:", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
+
+	{ INSTR_ADD,         "add", "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_SUB,         "sub", "-", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_MUL,         "mul", "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_DIV,         "div", "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_MOD,         "mod", "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_SQRT,        "sqrt", "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_AND,         "and", "and", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_OR,          "or", "or", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_XOR,         "xor", "xor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
+	{ INSTR_NOT,         "not", "not", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+
+	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
+	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
 
 	{ INSTR_PROLOGUE,    "prologue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
 	{ INSTR_EPILOGUE,    "epilogue", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },
 	{ INSTR_EMIT,        "emit", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_VARDEF,      "vardef", "", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_LABEL,       "label", "label", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
-
-	{ INSTR_ADD,         "add", "+", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_SUB,         "sub", "-", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_MUL,         "mul", "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_DIV,         "div", "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_SQRT,        "sqrt", "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_AND,         "and", "bitand", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_OR,          "or", "bitor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 
 	{ INSTR_ALLOC,       "alloc", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_FN,        "proc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
@@ -65,12 +69,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_PTR,         "ptr", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
 	{ INSTR_ARRAY_INDEX, "arrindex", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },		// generate index for array
 	{ INSTR_LET_ADR,     "let_adr", "=@", {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, NULL },
-	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
-	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
 	{ INSTR_DEBUG,       "debug", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_MOD,         "mod", "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_XOR,         "xor", "bitxor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_NOT,         "not", "bitnot", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
 
 	{ INSTR_ASSERT_BEGIN,"assert_begin", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_ASSERT,      "assert", "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
@@ -78,8 +77,6 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 
 	{ INSTR_LINE,        "line", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },				// reference line in the source code
 	{ INSTR_INCLUDE,     "include", "", {TYPE_VOID, TYPE_STRING, TYPE_VOID}, 0, NULL },
-	{ INSTR_MULA,        "mula", "", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },				// templates for 8 - bit multiply 
-	{ INSTR_MULA16,      "mula16", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },           // templates for 8 - bit multiply 
 
 	{ INSTR_COMPILER,    "compiler", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },
 	{ INSTR_CODE_END,    "code_end", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, NULL },			// end of BLK segment and start of data segment
@@ -633,7 +630,7 @@ void PrintQuotedCellName(Var * var)
 void PrintVarVal(Var * var)
 {
 	UInt8 oc;
-
+	char * s;
 	if (var == NULL) return;
 
 	if (var->mode == INSTR_DEREF) {
@@ -679,7 +676,10 @@ void PrintVarVal(Var * var)
 				Print("(");
 				PrintVarVal(var->adr);
 				oc = PrintColor(GREEN+BLUE);
-				Print(INSTR_INFO[var->mode].symbol);
+				s = INSTR_INFO[var->mode].symbol;
+				if (*s>='a' && *s<='z') { Print(" "); }
+				Print(s);
+				if (*s>='a' && *s<='z') { Print(" "); }
 				PrintColor(oc);
 				PrintVarVal(var->var);
 				Print(")");
