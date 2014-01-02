@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
 	}
 	ProcessUsedProc(TranslateTypes);
 
-	ProcessUsedProc(OptimizeLoopShift);
+//	ProcessUsedProc(OptimizeLoopShift);
 
 	//***** Translation
 	if (Verbose(NULL)) {

@@ -127,7 +127,7 @@ void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
 	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processing.
 
-	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR || IS_INSTR_BRANCH(op)) {
+	if (op == INSTR_ADD || op == INSTR_MUL || op == INSTR_OR || op == INSTR_AND || op == INSTR_XOR) {
 		if (op != INSTR_OVERFLOW && op != INSTR_NOVERFLOW) {
 			if (CellIsConst(arg1)) {
 				var = arg1; arg1 = arg2; arg2 = var;

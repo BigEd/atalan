@@ -21,6 +21,8 @@ typedef struct {
 	Bool final_pass;
 } InferData;
 
+Type * FindType(Loc * loc, Var * var, Bool report_errors);
+
 Type * FindTypeCall(Var * proc, Var * var)
 /*
 Purpose:
@@ -34,12 +36,18 @@ Purpose:
 	return NULL;
 }
 
-Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
+Type * TypeRestrictBlk(Type * type, Var * var, Var * proc, InstrBlock * blk, Bool neg)
+/*
+Purpose:
+	Restrict type based on condition at the end of the specified block.
+*/
 {
 	Type * rt, * vt;
 	Instr * i;
 	InstrOp op;
 	Var * var2;
+	Var * l, * r;
+	Loc loc;
 
 	rt = type;
 
@@ -50,16 +58,22 @@ Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 	i = blk->last;
 	if (i == NULL) goto done;
 	op = i->op;
-	if (!IS_INSTR_BRANCH(i->op)) goto done;
+	if (op != INSTR_IF) goto done;
 
+	// Conditional argument must be relational
+	op = i->arg1->mode;
+	l = i->arg1->l;
+	r = i->arg1->r;
+
+	var2 = NULL;
 	// Select appropriate variable
-	if (i->arg1 == var) {
-		var2 = i->arg2;
-		vt = i->type[ARG2];
-	} else if (i->arg2 == var) {
-		var2 = i->arg1;
+	if (l == var) {
+		var2 = r;
+//		vt = i->type[ARG2];
+	} else if (r == var) {
+		var2 = l;
 		op = OpRelSwap(op);
-		vt = i->type[ARG1];
+//		vt = i->type[ARG1];
 	} else {
 		goto done;
 	}
@@ -69,8 +83,15 @@ Type * TypeRestrictBlk(Type * type, Var * var, InstrBlock * blk, Bool neg)
 		op = OpNot(op);
 	}
 
+	loc.proc = proc;
+	loc.blk = blk;
+	loc.i   = i;
+	loc.proc = NULL;
+
+	vt = FindType(&loc, var2, false);
+
 	//TODO: We may use the inferred type from instruction
-	if (vt == NULL) vt = var2->type;
+	if (vt == NULL && var2->mode == INSTR_VAR) vt = var2->type;
 
 	rt = TypeRestrictOp(type, vt, op);
 
@@ -206,9 +227,9 @@ sub1:
 				type = type2;
 				goto done;
 			}
-			type2 = TypeRestrictBlk(type2, var, blk->from, true);
+			type2 = TypeRestrictBlk(type2, var, loc->proc, blk->from, true);
 			type = VarUnion(type, type2);
-			type = TypeRestrictBlk(type, var, blk->from, true);
+			type = TypeRestrictBlk(type, var, loc->proc, blk->from, true);
 		}
 	}
 
@@ -227,9 +248,9 @@ sub1:
 				type = type2;
 				goto done;
 			}
-			type2 = TypeRestrictBlk(type2, var, caller, false);
+			type2 = TypeRestrictBlk(type2, var, loc->proc, caller, false);
 			type = VarUnion(type, type2);
-			type = TypeRestrictBlk(type, var, caller, false);
+			type = TypeRestrictBlk(type, var, loc->proc, caller, false);
 		}
 	}
 
@@ -807,16 +828,19 @@ Purpose:
 
 
 Bool InstrInferType(Loc * loc, void * data)
+/*
+Purpose:
+	Try to infer type of the specified instruction.
+*/
 {
 	Var * result;
 	Instr * i;
 	Type * tr, * ti;
 	InferData * d = (InferData *)data;
-//	Bool taken, not_taken, not;
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 3 && loc->n == 3) {
+	if (loc->blk->seq_no == 4 && loc->n == 3) {
 		Print("");
 	}
 
@@ -840,75 +864,6 @@ Bool InstrInferType(Loc * loc, void * data)
 				return true;
 			}
 		}
-/*		ReplaceConst(&i->arg1, i->type[ARG1]);
-
-		if (i->type[ARG1] != NULL && !InVar(i->arg1)) {
-			taken = false;
-			not_taken = false;
-			not = false;
-			switch (i->op) {
-			case INSTR_NE:
-					not = true;
-			case INSTR_EQ:
-				// We know for sure the condition is true, if both values are in fact same integer constants
-				taken = CellIsIntConst(i->type[ARG1]) && CellIsIntConst(i->type[ARG2]) && IntEq(MIN1, MIN2);
-				not_taken = IntLower(MAX1, MIN2) || IntHigher(MIN1, MAX2);
-				break;
-
-			case INSTR_GE:
-				not = true;
-			case INSTR_LT:
-				taken = IntLower(MAX1, MIN2);
-				not_taken = IntHigherEq(MIN1, MAX2);
-				break;
-
-			case INSTR_LE:
-				not = true;
-			case INSTR_GT:
-				taken = IntHigher(MIN1, MAX2);
-				not_taken = IntLowerEq(MAX1, MIN2);
-				break;
-			default:
-				break;
-
-			case INSTR_NMATCH_TYPE:
-				not = true;
-			case INSTR_MATCH_TYPE:
-				if (TypeIsComplete(i->type[ARG1]) && TypeIsComplete(i->type[ARG2])) {
-					if (TypeIsEqual(i->type[ARG1], i->type[ARG2])) {
-						taken = true;
-					} else {
-						not_taken = true;
-					}
-				}
-				break;
-			}
-
-			if (not) {
-				if (taken) {
-					not_taken = true;
-					taken = false;
-				} else if (not_taken) {
-					taken = true;
-					not_taken = false;
-				}
-			}
-
-			if (taken) {
-				// Change to goto
-//				i->op = INSTR_GOTO;
-//				i->arg1 = i->arg2 = NULL;
-				i->arg1 = ONE;
-				d->modified_blocks = true;
-				return true;
-			} else if (not_taken) {
-				i->result->write--;
-				InstrDelete(loc->blk, i);
-				d->modified_blocks = true;
-				return true;
-			}
-		}
-*/
 	} else if ((i->result != NULL && (i->type[RESULT] == NULL || FlagOn(i->flags, InstrRestriction)))) {
 
 		// If the result of the instruction is array index, try to infer type of the index.
@@ -1181,6 +1136,7 @@ retry:
 		// 2. Repeat this until no new result type was inferred
 		steps = 0;
 		do {
+			PrintProcFlags(proc, PrintInferredTypes);
 			data.modified = false;
 			data.modified_blocks = false;
 			ProcInstrEnum(proc, &InstrInferType, &data);

@@ -123,6 +123,8 @@ Purpose:
 	If the type represents continuous range, return it's limits.
 */
 {
+	*p_min = *p_max = NULL;
+
 	if (var == NULL) return false;
 	if (var->mode == INSTR_INT) {
 		*p_min = *p_max = var;

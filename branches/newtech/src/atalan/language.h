@@ -969,8 +969,9 @@ extern CPUType * CPU;
 
 ***********************************************************/
 
-#define IS_INSTR_BRANCH(x) ((x)>=INSTR_EQ && (x)<=INSTR_NMATCH_TYPE)
+#define IS_INSTR_BRANCH(x) ((x)==INSTR_IF)
 #define IS_INSTR_JUMP(x) ((x) == INSTR_IF)
+#define IS_RELATIONAL_OP(x) ((x)>=INSTR_EQ && (x)<= INSTR_NOVERFLOW)
 
 InstrOp OpNot(InstrOp op);
 InstrOp OpRelSwap(InstrOp op);
