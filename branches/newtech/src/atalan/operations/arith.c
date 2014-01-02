@@ -62,6 +62,9 @@ Var * Sub(Var * l, Var * r)
 	} else if (l->mode == INSTR_TUPLE) {
 		result = NewTuple(Sub(l->adr, r), Sub(l->var, r));
 	} else {
+		if (l->mode == INSTR_INT && r->mode == INSTR_RANGE) {
+			return NewRange(Sub(l, r->r), Sub(l, r->l));
+		}
 		il = IntFromCell(l);
 		ir = IntFromCell(r);
 
@@ -97,6 +100,8 @@ Var * Mul(Var * l, Var * r)
 	} else if (l->mode == INSTR_TUPLE) {
 		result = NewTuple(Mul(l->l, r), Mul(l->r, r));
 	} else {
+		if (r->mode == INSTR_RANGE) return Mul(r, l);
+
 		// Multiply two simple integers if possible
 		il = IntFromCell(l);
 		ir = IntFromCell(r);
