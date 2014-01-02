@@ -274,6 +274,16 @@ Bool HoldsForAllItems(InstrOp op, Var * left, Var * right)
 	}
 
 	switch(op) {
+	case INSTR_EQ:
+		if (CellIsIntConst(left) && CellIsIntConst(right)) {
+			return IsEqual(left, right);
+		}
+		break;
+
+	case INSTR_NE:
+		return IsHigher(CellMin(left), CellMax(right)) || IsLower(CellMax(left), CellMin(right));
+		break;
+
 	case INSTR_GT:
 		return IsHigher(CellMin(left), CellMax(right));
 		break;
@@ -847,7 +857,7 @@ Purpose:
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 4 && loc->n == 3) {
+	if (loc->blk->seq_no == 11 && loc->n == 4) {
 		Print("");
 	}
 

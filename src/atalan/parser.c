@@ -2118,7 +2118,7 @@ indexed:
 						if (CellIsConst(min) && CellIsConst(max)) {
 							SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 						}
-						var->type = type;
+//						var->type = type;
 					}
 				}
 				idx = var;
@@ -2345,9 +2345,10 @@ cond:
 					IntFree(&t1);
 					IntAnd(&t3, &t2, &nmask);
 					IntFree(&t2);
-					IntModify(&idx->type->range.max, &t3);		// set the computed limit value as max of the index variable
+//					IntModify(&idx->type->range.max, &t3);		// set the computed limit value as max of the index variable
 					max = IntCell(&t3);
 					IntFree(&t3);
+					idx->type = NewRange(min, max);
 					GenInternal(INSTR_IF, NULL, NewOp(INSTR_NE, idx, max), G_BLOCK->body_label);	//TODO: Overflow
 					goto var_done;
 				// 3. max & step are constant, we may detect, that overflow will not occur
