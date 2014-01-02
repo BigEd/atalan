@@ -625,8 +625,6 @@ Bool OptimizeMergeBranchCode(Var * proc)
 
 	LinkBlocks(proc);
 
-//	PrintProc(proc);
-
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 
 		// Test, that last instruction in all branches is same.

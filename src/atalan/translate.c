@@ -583,9 +583,9 @@ Bool InstrTranslate2(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		if (InstrTranslate(op, result, arg2, arg1, mode)) return true;
 
 	// Try opposite branch if this one is not implemented
-	} else if (IS_INSTR_BRANCH(op)) {
-		if (InstrTranslate(OpRelSwap(op), result, arg2, arg1, mode)) return true;
-	}
+	} //else if (IS_INSTR_BRANCH(op)) {
+//		if (InstrTranslate(OpRelSwap(op), result, arg2, arg1, mode)) return true;
+//	}
 
 	return false;
 }

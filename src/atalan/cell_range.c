@@ -33,7 +33,7 @@ Var * NewRangeOpenRight(Var * min, Var * max)
 
 Var * NewRangeOpenLeft(Var * min, Var * max)
 {
-	return NewRange(Sub(min, ONE), max);
+	return NewRange(Add(min, ONE), max);
 }
 
 Var * NewRangeInt(BigInt * min, BigInt * max)

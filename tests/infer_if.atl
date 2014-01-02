@@ -1,5 +1,4 @@
-in x:10..20
-
+﻿in x:10..20
 
 y = x * 2
 
@@ -10,7 +9,7 @@ if y > 30
 		    
 assert y:20..30
 
-if y <= 25 then y = 26
+if y ≤ 25 then y = 26
 
 assert y:26..30
 
