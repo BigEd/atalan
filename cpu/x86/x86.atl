@@ -69,6 +69,23 @@ rule %A:s32 = %B:s32 / %C:s32 ->
 	edax = edax / ecx
 	%A = eax
 
+; Bit operations
+
+rule %A:s32 = %B:s32 bitor %C:s32 ->
+	eax = %B
+	eax = eax bitor %C
+	%A = eax
+
+rule %A:s32 = %B:s32 bitand %C:s32 ->
+	eax = %B
+	eax = eax bitand %C
+	%A = eax
+
+rule %A:s32 = %B:s32 bitxor %C:s32 ->
+	eax = %B
+	eax = eax bitxor %C
+	%A = eax
+
 ; Conditional jumps
 
 rule if %A:s32 = %B:s32 goto %C ->
@@ -135,6 +152,10 @@ rule edax = eax * %C:s32 @ocszacp -> "   imul %C"
 rule edax = edax / %A@r @ocszacp -> "   idiv %A" 
 
 rule ocszacp = %A@r - %B:s32     -> "   cmp %A, %B" 
+
+rule %A@r = %A bitor %B:s32 @ocszacp -> "   or %A, %B"
+rule %A@r = %A bitand %B:s32 @ocszacp -> "   and %A, %B"
+rule %A@r = %A bitxor %B:s32 @ocszacp -> "   xor %A, %B"
 
 ;==== Conditional jumps
 ;---- common

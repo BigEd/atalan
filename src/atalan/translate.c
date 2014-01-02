@@ -592,6 +592,7 @@ Bool InstrTranslate2(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 void VarInitType(Var * var, Type * type)
 {
+	if (type == NULL) type = ANY;
 	MemEmpty(var, sizeof(Var));
 	var->mode = INSTR_VAR;
 	var->type = type;
