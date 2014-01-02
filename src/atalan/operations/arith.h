@@ -10,3 +10,9 @@ Var * Mod(Var * l, Var * r);
 Var * CellOp(InstrOp op, Var * left, Var * right);
 
 Int16 CellCompare(Var * left, Var * right);
+
+Bool IsHigher(Var * left, Var * right);
+Bool IsLower(Var * left, Var * right);
+Bool IsHigherEq(Var * left, Var * right);
+Bool IsLowerEq(Var * left, Var * right);
+

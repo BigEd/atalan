@@ -4,12 +4,11 @@ x = 5
 x' = x + 5
 x'' = x' + 5
 
-"[x] [x'] [x'']"
-assert "5 10 15"
+assert x = 5 
+assert x' = 10 
+assert x'' = 15
 
 '#' = x' + 34
 
-"['#']"
-
-assert "44"
+assert '#' = 44
 

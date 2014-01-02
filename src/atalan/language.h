@@ -283,20 +283,20 @@ typedef enum {
 	INSTR_DECL,
 
 	// Following 'instructions' are used in expressions
-	INSTR_VAR,				// 56 Variable (may be argument, input, output, ...)
-	INSTR_INT,				// 57 Integer constant
-	INSTR_ELEMENT,			// 58 <array> <index>     access array or structure element (left operand is array, right is index)
-	INSTR_BYTE,				// 59 <var> <byte_index>  access byte of specified variable
-	INSTR_RANGE,			// 60 x..y  (l = x, r = y) Used for slice array references
-	INSTR_TUPLE,			// 61 INSTR_LIST <adr,var>  (var may be another tuple)
+	INSTR_VAR,				// 55 Variable (may be argument, input, output, ...)
+	INSTR_INT,				// 56 Integer constant
+	INSTR_ELEMENT,			// 57 <array> <index>     access array or structure element (left operand is array, right is index)
+	INSTR_BYTE,				// 58 <var> <byte_index>  access byte of specified variable
+	INSTR_RANGE,			// 59 x..y  (l = x, r = y) Used for slice array references
+	INSTR_TUPLE,			// 60 INSTR_LIST <adr,var>  (var may be another tuple)
 						    // Type of tuple may be undefined, or it may be structure of types of variables in tuple
-	INSTR_DEREF,			// 62 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
-	INSTR_FIELD,			// 63 access field of structure
-	INSTR_TYPE,				// 64
-	INSTR_SCOPE,			// 65
-	INSTR_BIT,              // 66
-	INSTR_TEXT,				// 67 text constant
-	INSTR_VARIANT,          // 68
+	INSTR_DEREF,			// 61 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
+	INSTR_FIELD,			// 62 access field of structure
+	INSTR_TYPE,				// 63
+	INSTR_SCOPE,			// 64
+	INSTR_BIT,              // 65
+	INSTR_TEXT,				// 66 text constant
+	INSTR_VARIANT,          // 67
 	INSTR_NAME,			    // constant depending on type (array, procedure)  TODO: Remove
 	INSTR_ARRAY,			// array constant
 	INSTR_SEQUENCE,
