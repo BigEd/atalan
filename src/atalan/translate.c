@@ -306,10 +306,10 @@ Bool VarIsOneOf(Var * var, Var * variants)
 	}
 
 	while(o->mode == INSTR_TUPLE) {
-		if (CellIsEqual(var, o->adr)) return true;
+		if (IsEqual(var, o->adr)) return true;
 		o = o->var;
 	}
-	return CellIsEqual(var, o);
+	return IsEqual(var, o);
 }
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
@@ -411,7 +411,7 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 				if (arg->mode != INSTR_INT || !IntEq(&pvar->n, &arg->n)) return false;
 			}
 		} else {
-			if (pattern->var != NULL && !CellIsEqual(arg, pattern->var)) return false;
+			if (pattern->var != NULL && !IsEqual(arg, pattern->var)) return false;
 		}
 		break;
 

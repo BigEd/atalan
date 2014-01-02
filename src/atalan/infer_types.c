@@ -249,12 +249,12 @@ Var * Compare(InstrOp op, Var * left, Var * right)
 	// The test for type asserts is performed while inferring types.
 
 	if (op == INSTR_MATCH) {
-		if (CellIsEqual(left, right)) return ONE;
+		if (IsEqual(left, right)) return ONE;
 		return ZERO;
 	}
 
 	if (op == INSTR_EQ || op == INSTR_GE || op == INSTR_LE) {
-		if (CellIsEqual(left, right)) return ONE;
+		if (IsEqual(left, right)) return ONE;
 	}
 
 	r = CellCompare(left, right);
@@ -322,25 +322,35 @@ Result:
 		}
 		break;
 
-	case INSTR_ADD:
-	case INSTR_SUB:
-	case INSTR_MUL:
 	case INSTR_DIV:
 	case INSTR_MOD:
-		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
 		if (right != NULL) {
-			if ((var->mode == INSTR_DIV || var->mode == INSTR_MOD) && IsSubset(ZERO, right)) {
+			// Error is reported, when the compiler deduces, that there is a possibility of dividing by zero.
+			if (IsSubset(ZERO, right)) {
 				if (report_errors) {
-					if (CellIsEqual(ZERO, right)) {
+					if (IsEqual(ZERO, right)) {
 						LogicErrorLoc("Division by zero.", loc);
 					} else {
 						LogicErrorLoc("Possible division by zero.", loc);
 					}
 				}
-			} else if (left != NULL) {
-				type = CellOp(var->mode, left, right);			
+			} else {
+				left = FindType(loc, var->l, report_errors);
+				if (left != NULL) {
+					type = CellOp(var->mode, left, right);
+				}
 			}
+		}
+		break;
+
+	case INSTR_ADD:
+	case INSTR_SUB:
+	case INSTR_MUL:
+		left = FindType(loc, var->l, report_errors);
+		right = FindType(loc, var->r, report_errors);
+		if (left != NULL && right != NULL) {
+			type = CellOp(var->mode, left, right);			
 		}
 		break;
 
@@ -370,7 +380,7 @@ Result:
 			MarkBlockAsUnprocessed(loc->proc->instr);
 			index_type = NULL;
 			if (VarIsArrayElement(var)) {
-				index_type = FindType(loc, var->var, false);
+				index_type = FindType(loc, var->r, false);
 			}
 			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
@@ -380,10 +390,10 @@ Result:
 				if (var->mode == INSTR_ELEMENT) {
 					arr_type = var->adr->type;
 					if (VarIsArrayElement(var)) {
-						type = arr_type->element;
+						type = ItemType(arr_type);
 					//Using address to access array element
 					} else if (arr_type->variant == TYPE_ADR) {
-						if (arr_type->element->variant == TYPE_ARRAY) {
+						if (ItemType(arr_type)->variant == TYPE_ARRAY) {
 							// adr of array of type
 							type = arr_type->element->element;
 						} else {
@@ -394,7 +404,7 @@ Result:
 			}
 
 			// Let-adr instruction generates address of specified variable.
-			// The address will be valied even in case the variable has not been initialized yet, therefore
+			// The address will be valid even in case the variable has not been initialized yet, therefore
 			// we will not report 'uninitialized variable'.
 			if (loc->i->op == INSTR_LET_ADR) {
 				type = TypeAdrOf(type);
@@ -806,21 +816,23 @@ Bool InstrInferType(Loc * loc, void * data)
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 2 && loc->n == 3) {
+	if (loc->blk->seq_no == 3 && loc->n == 3) {
 		Print("");
 	}
 
-	// Conditional jumps have special support
+	// Conditional jumps have special support.
+	// We simplify the code if the result of comparison in the condition is constant.
+
 	if (i->op == INSTR_IF) {
 		if (i->type[ARG1] == NULL) {
 			tr = i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
 			if (i->type[ARG1] != NULL) {
 				d->modified = true;
 
-				if (CellIsEqual(tr, ONE)) {
+				if (IsEqual(tr, ONE)) {
 					i->arg1 = ONE;
 					d->modified_blocks = true;
-				} else if (CellIsEqual(tr, ZERO)) {
+				} else if (IsEqual(tr, ZERO)) {
 					i->arg2->read--;
 					InstrDelete(loc->blk, i);
 					d->modified_blocks = true;

@@ -57,7 +57,7 @@ Purpose:
 	if (var != NULL) {
 		if (var->mode == INSTR_ELEMENT) {
 			var_idx = var->var;
-			if (CellIsEqual(var_idx, idx)) {
+			if (IsEqual(var_idx, idx)) {
 				idx = NewOp(INSTR_SUB, idx, IntCell(shift));
 				*p_var = VarNewElement(var->adr, idx);
 				return true;
@@ -137,7 +137,7 @@ Bool VarShiftIsPossible(InstrBlock * head, InstrBlock * loop_end, Var * var, Big
 	for(blk = head; blk != loop_end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LINE) continue;
-			if (CellIsEqual(i->result, var) || CellIsEqual(i->arg1, var) || CellIsEqual(i->arg2, var)) {
+			if (IsEqual(i->result, var) || IsEqual(i->arg1, var) || IsEqual(i->arg2, var)) {
 				if (IS_INSTR_BRANCH(i->op) && CellIsConst(i->arg2) || CellIsConst(i->arg1)) {
 					// this is comparison against constant, that's possible
 				}  else {
@@ -197,9 +197,9 @@ void LoopShift(InstrBlock * head, InstrBlock * loop_end, Var * var, BigInt * shi
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LINE) continue;
 			if (IS_INSTR_BRANCH(i->op)) {
-				if (CellIsEqual(i->arg1, var)) {
+				if (IsEqual(i->arg1, var)) {
 					i->arg2 = VarAddNMod(i->arg2, shift, top);
-				} else if (CellIsEqual(i->arg2, var)) {
+				} else if (IsEqual(i->arg2, var)) {
 					i->arg1 = VarAddNMod(i->arg1, shift, top);
 				}
 			} else {
@@ -262,7 +262,7 @@ void OptimizeLoopShift(Var * proc)
 						}
 
 						if (i != NULL) {
-							if (i->op == INSTR_LET && CellIsEqual(i->result, loop_var)) {
+							if (i->op == INSTR_LET && IsEqual(i->result, loop_var)) {
 								if (CellIsIntConst(i->arg1)) {
 									init_i = i;
 								}
