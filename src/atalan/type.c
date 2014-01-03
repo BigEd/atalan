@@ -111,7 +111,7 @@ Purpose:
 	c = var->type;
 	ASSERT(c->mode == INSTR_INT);
 	
-	type->possible_values = VarUnion(type->possible_values, var->type);
+	type->possible_values = Union(type->possible_values, var->type);
 }
 
 

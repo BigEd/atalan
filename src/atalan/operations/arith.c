@@ -18,7 +18,13 @@ Var * Add(Var * l, Var * r)
 
 	if (r == NULL || l == NULL) return NULL;
 
-	if (l->mode == INSTR_RANGE) {
+	if (l->mode == INSTR_SEQUENCE) {
+		if (r->mode == INSTR_SEQUENCE) {
+			//TODO: How do we add two sequences?
+		} else {
+			result = NewSequence(Add(l->seq.init,r), l->seq.step, l->seq.op, Add(l->seq.limit, r), l->seq.compare_op);
+		}
+	} else if (l->mode == INSTR_RANGE) {
 		if (r->mode == INSTR_RANGE) {
 			result = NewRange(Add(l->l, r->l), Add(l->r, r->r));
 		} else {
@@ -27,7 +33,7 @@ Var * Add(Var * l, Var * r)
 	} else if (l->mode == INSTR_TUPLE) {
 		result = NewTuple(Add(l->adr, r), Add(l->var, r));
 	} else {
-		if (r->mode == INSTR_RANGE || r->mode == INSTR_TUPLE) {
+		if (r->mode == INSTR_RANGE || r->mode == INSTR_TUPLE || r->mode == INSTR_SEQUENCE) {
 			result = Add(r, l);
 		} else {
 			// Try to add the cells as integers
@@ -38,10 +44,11 @@ Var * Add(Var * l, Var * r)
 				IntAdd(&ii, il, ir);
 				result = IntCell(&ii);
 				IntFree(&ii);
-			} else {
-				result = NewOp(INSTR_ADD, l, r);
 			}
 		}
+	}
+	if (result == NULL) {
+		result = NewOp(INSTR_ADD, l, r);
 	}
 	return result;
 }
@@ -205,6 +212,19 @@ Bool IsEqual(Var * left, Var * right)
 	if (left->mode == right->mode) {
 		if (left->mode == INSTR_TUPLE) {
 			return IsEqual(left->adr, right->adr) && IsEqual(left->var, right->var);
+		} else if (left->mode == INSTR_SEQUENCE) {
+			if (IsEqual(left->seq.init, right->seq.init) && IsEqual(left->seq.step, right->seq.step) && left->seq.op == right->seq.op) {
+				if (left->seq.compare_op == right->seq.compare_op && IsEqual(left->seq.limit, right->seq.limit)) return true;
+
+				//TODO: We should compute steps in a better way
+				if (left->seq.op == INSTR_ADD) {
+					if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
+						if (IsEqual(Sub(left->seq.limit, left->seq.step), right->seq.limit)) return true;
+					} else if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
+						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
+					}
+				}
+			}
 		}
 	}
 	return false;

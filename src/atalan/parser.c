@@ -1175,6 +1175,44 @@ Bool ParseRelOp(InstrOp * pOp)
 	return true;
 }
 
+void ParseSequence()
+{
+	Var * var[3];
+	UInt16 var_cnt;
+	Var * limit, * step, * seq;
+
+	InstrOp step_op = INSTR_VOID;
+
+	var_cnt = 0;
+	ifok {
+		do {		
+			ParseOperand();
+			var[var_cnt] = BufPop();
+			var_cnt++;
+			if (!NextIs(TOKEN_COMMA)) break;
+			if (NextIs(TOKEN_DOTDOT)) {
+				NextIs(TOKEN_COMMA);
+				ParseOperand();
+				limit = BufPop();					
+				break;
+			}
+			iferr break;
+		} while(var_cnt<3);
+
+		if (var_cnt == 1) {
+			step = ONE;
+			step_op = INSTR_ADD;
+		} else {
+			SyntaxError("Multiple variables in sequence not supported yet.");
+		}
+
+		ifok {
+			seq = NewSequence(var[0], step, step_op, limit, INSTR_LE);
+			BufPush(seq);
+		}
+	}
+}
+
 void ParseUnary()
 {
 	Var * var;
@@ -1199,6 +1237,8 @@ void ParseUnary()
 		ParseOperand();
 		var = BufPop();
 		BufPush(NewRange(Sub(ZERO, var), var));
+	} else if (NextIs(TOKEN_SEQUENCE)) {
+		ParseSequence();
 	} else {
 		ParseOperand();
 	}
@@ -1919,141 +1959,10 @@ Purpose:
 	GenLabel(label);
 }
 
-/*
-void ParseIf2(Bool negated, Var * result)
-Purpose:
-	Parse conditional expression.
-	If result variable is specified, we parse expression assigning the result to this variable instead of commands.
-Syntax:
-	If: "if"|"unless" <commands> ["then"] <commands>  ["else" "if"|"unless" <cond>]* ["else" <commands>]
-{	
-	Var * cond, * label;
-	if (ParsingRule()) {
-		ParseExpression(NULL);
-		cond = BufPop();
-		if (NextIs(TOKEN_GOTO)) {
-			ParseLabel(&label);
-			Gen(INSTR_IF, NULL, cond, label);
-			return;
-		} else {
-			SyntaxError("Expected goto");
-		}
-	}
-
-	BeginBlock(TOKEN_IF);		// begin if block
-retry:
-	G_BLOCK->not = negated;
-	ParseCondition();
-	iferr return;
-
-	// If condition referenced true label (which is not necessary, if it didn't contain AND or OR),
-	// generate it here
-
-	if (G_BLOCK->t_label != NULL) {
-		GenLabel(G_BLOCK->t_label);
-	}
-
-	// There may be optional THEN after IF
-	NextIs(TOKEN_THEN);
-
-	ParseBlock(TOKEN_ELSE, result);
-
-	if (NextIs(TOKEN_ELSE)) {
-			
-		// End current branch with jump after the end of if
-		if (G_BLOCK->loop_label == NULL) {
-			G_BLOCK->loop_label = VarNewTmpLabel();
-		}
-		GenGoto(G_BLOCK->loop_label);
-		GenLabel(G_BLOCK->f_label);			// previous branch will jump here
-
-		// else if
-		if (NextIs(TOKEN_IF)) {
-			G_BLOCK->f_label = NULL;		// expression will generate new labels if necessary
-			G_BLOCK->t_label = NULL;
-			negated = false;
-			goto retry;
-		// else unless
- 		} else if (NextIs(TOKEN_UNLESS)) {
-			G_BLOCK->f_label = NULL;		// expression will generate new labels if necessary
-			G_BLOCK->t_label = NULL;
-			negated = true;
-			goto retry;
-		// else
-		} else {
-			ParseBlock(TOKEN_VOID, result);
-		}
-	// No else
-	} else {
-		GenLabel(G_BLOCK->f_label);
-	}
-
-	// This is complete end of 'IF'
-	if (G_BLOCK->loop_label != NULL) {
-		GenLabel(G_BLOCK->loop_label);
-	}
-	EndBlock();
-}
-*/
-/*
-void ParseRange(Var ** p_min, Var ** p_max)
-{
-	Type * type;
-	Var * min, * max;
-	Bookmark bmk;
-
-	min = NULL; max = NULL;
-	type = NULL;
-	bmk = SetBookmark();
-
-	ParseExpression(NULL);
-
-	min = STACK[0];
-	if (min->mode == INSTR_RANGE) {
-		*p_min = min->adr;
-		*p_max = min->var;
-		return;
-	}
-
-	if (NextIs(TOKEN_DOTDOT)) {
-		ParseExpression(NULL);
-		max = STACK[0];
-	} else {
-		// If there are multiple values on stack, we may use the second value as loop maximal value
-		if (TOP > 1) {
-			max = STACK[1];
-		} else {
-			if (min->mode == INSTR_INT) {
-				max = min;
-				min = ZERO;
-			} else {
-				if (min->mode == INSTR_TYPE) {
-					type = min->type;
-				} else if (min->mode == INSTR_VAR) {
-					type = min->type;
-				}
-		
-				if (min->type->variant == TYPE_TYPE) {
-					type = min->type_value;
-				}
-
-				if (type->variant != TYPE_INT) {
-					SyntaxErrorBmk("^Expected integer type or variable", bmk);
-				} else {
-					TypeLimits(type, &min, &max);
-				}
-			}
-		}
-	}
-	*p_min = min;
-	*p_max = max;
-}
-*/
-
 void ParseFor()
 /*
 Syntax:
-	for: ["for" <var>] [":" <range>][#<index>][in <array>] ["where" cond] ["until" cond | "while" cond]
+	for: ["for" <var> [":" <range>][#<index>][in <array>] ["where" where_cond]] ["until" cond | "while" cond]
 
 */
 {
@@ -2062,13 +1971,16 @@ Syntax:
 	char idx_name[256];
 	Var * min, * max, * step, * arr, * idx;
 	Type * type;
-	InstrBlock * cond, * where_cond, * body;
+	Var * where_cond;
+	InstrBlock * cond_code, * where_cond_code, * body;
 	LinePos idx_tok_pos;
 //	Int32 n, nmask;
 	LinePos token_pos;
 	BigInt * n, nmask;
 	BigInt t1, t2, t3;
 	Bool higher;
+	Var * cond;
+	Var * body_label = VarNewTmpLabel();
 
 	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
@@ -2079,9 +1991,7 @@ Syntax:
 	// Parse "for" part.
 	// We may also call this function when the loop begins just with "while" or "until".
 	if (NextIs(TOKEN_FOR)) {
-
 		GenLine();
-
 		if (NextIs(TOKEN_HASH)) goto indexed;
 
 		if (LexId(name)) {
@@ -2156,18 +2066,7 @@ parse_in:
 			// for i (range is not specified, this is reference to global variable or type)
 			} else {
 				SyntaxError("Expected : or in");
-
-/*				var = VarFind2(name);
-				if (var != NULL) {
-					if (var->mode == INSTR_VAR && var->type->variant == TYPE_INT) {
-						TypeLimits(var->type, &min, &max);
-					} else {
-						SyntaxError("$Loop variable must be integer");
-					}
-				} else {
-					SyntaxError("$Loop variable not found");
-				}
-*/			}
+			}
 
 		} else {
 			SyntaxError("Expected loop variable name");
@@ -2192,34 +2091,46 @@ parse_in:
 
 	// WHERE can be used only if there was FOR
 
-	if (var != NULL) {
-		if (NextIs(TOKEN_WHERE)) {
+	if (NextIs(TOKEN_WHERE)) {
+		if (var != NULL) {
 			G_BLOCK->f_label = G_BLOCK->loop_label;
 			GenBegin();
-			ParseCondition();
+			where_cond = ParseCondExpression();
+//			ParseCondition();
 			if (G_BLOCK->t_label != NULL) {
 				GenLabel(G_BLOCK->t_label);
 				G_BLOCK->t_label = NULL;
 			}
 
-			where_cond = GenEnd();
+			where_cond_code = GenEnd();
 			G_BLOCK->f_label = NULL;
 			iferr goto done;
+		} else {
+			SyntaxError("Where can only be used together with loop variable");
 		}
 	}
 
 	if (NextIs(TOKEN_UNTIL)) {
 		G_BLOCK->not = true;
-		goto cond;
+		goto cond_parse;
 	} else if (NextIs(TOKEN_WHILE)) {
-cond:
+cond_parse:
 
 		GenBegin();
-		ParseCondition();
-		if (G_BLOCK->t_label != NULL) {
-			GenLabel(G_BLOCK->t_label);
+		GenLine();
+		cond = ParseCondExpression();
+		if (!G_BLOCK->not) cond = Not(cond);
+
+		if (G_BLOCK->f_label == NULL) {
+			G_BLOCK->f_label = VarNewTmpLabel();
 		}
-		cond = GenEnd();
+
+		GenInternal(INSTR_IF, NULL, cond, G_BLOCK->f_label);
+
+//		if (G_BLOCK->t_label != NULL) {
+//			GenLabel(G_BLOCK->t_label);
+//		}
+		cond_code = GenEnd();
 
 		iferr goto done;
 	}
@@ -2261,6 +2172,7 @@ cond:
 	// Parse body
 
 	GenBegin();
+	GenLine();
 	ParseCommandBlock();
 	body = GenEnd();
 	iferr return;
@@ -2278,15 +2190,15 @@ cond:
 
 	// Body consists of where_cond & body
 
-	G_BLOCK->body_label = VarNewTmpLabel();
+	G_BLOCK->body_label = body_label;
 	GenLabel(G_BLOCK->body_label);
 
 	if (cond != NULL && var != NULL) {
-		GenBlock(cond);
+		GenBlock(cond_code);
 	}
 
 	if (where_cond != NULL) {
-		GenBlock(where_cond);
+		GenBlock(where_cond_code);
 	}
 
 	GenBlock(body);
@@ -2300,7 +2212,7 @@ cond:
 		if (where_cond == NULL) {
 			GenLabel(G_BLOCK->loop_label);
 		}
-		GenBlock(cond);
+		GenBlock(cond_code);
 //		if (var == NULL) {
 			GenGoto(G_BLOCK->body_label);
 //		}
@@ -2526,7 +2438,7 @@ Arguments:
 				}
 
 				if (!inexact_element) {
-					element_type = VarUnion(element_type, item);
+					element_type = Union(element_type, item);
 				}
 
 			}

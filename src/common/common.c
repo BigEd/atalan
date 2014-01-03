@@ -237,6 +237,13 @@ void PrintCleanup()
 #endif
 }
 
+void SystemInit()
+{
+#ifdef __Windows__
+	SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+}
+
 void PrintLog(FILE * file)
 {
 	if (G_PRINT_LOG != NULL) {

@@ -297,9 +297,9 @@ typedef enum {
 	INSTR_BIT,              // 65
 	INSTR_TEXT,				// 66 text constant
 	INSTR_VARIANT,          // 67
-	INSTR_NAME,			    // constant depending on type (array, procedure)  TODO: Remove
-	INSTR_ARRAY,			// array constant
-	INSTR_SEQUENCE,
+	INSTR_NAME,			    // 68 constant depending on type (array, procedure)  TODO: Remove
+	INSTR_ARRAY,			// 69 array constant
+	INSTR_SEQUENCE,         // 70
 	INSTR_EMPTY,			// No-value
 	INSTR_MATCH,		    // l(adr) = argument-no, r(var) = type that must match   name:type
 	INSTR_MATCH_VAL,
@@ -389,9 +389,9 @@ typedef enum {
 } TypeVariant;
 
 typedef struct {
+	Type * init;		// initial value of the step
 	InstrOp op;			// step_type INSTR_ADD, INSTR_SUB, INSTR_MUL, INSTR_DIV, ...
 	Type * step;		// type of argument (step value)
-	Type * init;		// initial value of the step
 	InstrOp compare_op;
 	Type * limit;		// limit value of step (for ADD, MUL this is top value, for SUB, DIV this is bottom value)
 } TypeSequence;
@@ -584,7 +584,7 @@ subscope - fields defining the type properties (for example index variable for a
 /*
 
 Variable address
-================
+----------------
 
 Address of variable may be:
 
