@@ -151,7 +151,9 @@ int main(int argc, char *argv[])
 
 	PHASE = PHASE_PARSE;
 
+	SystemInit();
 	PrintInit();
+
 
 //#ifdef DEBUG
 //	HeapUnitTest();

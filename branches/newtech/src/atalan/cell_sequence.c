@@ -45,15 +45,15 @@ Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max)
 
 				// If the comparison is exact, we know the sequence stops even in case of IFNE
 				// In other case, the sequence is infinite, as the condition does not 'catch' any value of sequence
-				if (op == INSTR_NE && CellIsIntConst(type->seq.step) && CellIsIntConst(type->seq.init) && CellIsIntConst(type->seq.limit) && max_over == 0) {
+				if (op == INSTR_NE && CellIsIntConst(type->seq.step) && CellIsIntConst(type->seq.init) && CellIsIntConst(type->seq.limit) && IsEqual(max_over, ZERO)) {
 					limit = Sub(limit, step);  // compared value will not be part of the sequence
 				} else if (op == INSTR_LE) {
 				} else if (op == INSTR_LT) {
 
 					// We only make the limit smaller, if the step is constant
-					if (step == step_min) {
+					if (IsEqual(step, step_min)) {
 						limit = Add(Mul(DivInt(Sub(Sub(limit, init), ONE), step_min), step_min), init);
-						max_over = 0;
+						max_over = ZERO;
 					}
 				} else {
 					goto done;

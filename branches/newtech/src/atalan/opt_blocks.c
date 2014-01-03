@@ -320,25 +320,6 @@ Purpose:
 }
 
 /*
-============================
-Optimization: Optimize jumps
-============================
-
-Optimize jumps.
-
-1. Sequence like:
-
-::::::::::::::::::::::
-ifeq x,y,l2
-jmp l1
-l2@
-::::::::::::::::::::::::
-
-will be translated to
-
-::::::::::::::::::::::
-ifne x,y,l1
-::::::::::::::::::::::
 
 ===============================
 Optimization: Remove zero jumps
@@ -376,10 +357,14 @@ Bool InstrRelSwap(Instr * i)
 	Rule * rule;
 	InstrOp op;
 	Var * arg2, * nonzero;
-	op = OpNot(i->op);
-	arg2 = i->arg2;
+	Var * rel, * neg;
 
-	rule = InstrRule2(op, i->result, i->arg1, i->arg2);
+	rel = i->arg1;
+	neg = Not(rel);
+//	op = OpNot(rel->op);
+	arg2 = rel->r;
+
+	rule = InstrRule2(INSTR_IF, NULL, neg, i->arg2);
 
 	if (rule == NULL) {
 		op = i->op;
@@ -396,9 +381,8 @@ Bool InstrRelSwap(Instr * i)
 	if (rule == NULL) return false;
 
 	i->rule = rule;
-	i->op = op;
-	i->arg2 = arg2;
-
+	i->arg1 = neg;
+	
 	return true;
 }
 
@@ -441,9 +425,9 @@ void OptimizeJumps(Var * proc)
 
 			/*
 
-			===================================
-			Optimization: Dead code elimination
-			===================================
+			================================================
+			Optimization: Invert negative conditional jumps.
+			================================================
 
 			Invert negative conditional jumps.
 			:::::::::::::::::::::
@@ -469,7 +453,7 @@ void OptimizeJumps(Var * proc)
 			&&  cond_i->op == INSTR_IF) {
 				if (InstrRelSwap(cond_i)) {
 					cond_i->arg2 = i->arg2;
-					blk->cond_to = i->result->instr;
+					blk->cond_to = i->arg2->instr;
 
 					InstrBlockFree(blk_to);
 				}

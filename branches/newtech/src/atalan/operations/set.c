@@ -142,9 +142,9 @@ Purpose:
 	return var;
 }
 
-Var * VarUnion(Var * left, Var * right)
+Var * Union(Var * left, Var * right)
 {
-	Var * result, * rl, * rr;
+	Var * result, * rl, * rr, * t;
 
 	if (left == NULL) return right;
 	if (right == NULL) return left;
@@ -152,6 +152,44 @@ Var * VarUnion(Var * left, Var * right)
 
 	if (left->mode == INSTR_EMPTY) return right;
 	if (right->mode == INSTR_EMPTY) return left;
+
+	// If one of the types is sequence, make sure it is the left one
+	if (right->mode == INSTR_SEQUENCE) {
+		t = left;
+		left = right;
+		right = t;
+	}
+
+	// Sequence union
+	if (left->mode == INSTR_SEQUENCE) {
+
+		// Sequence & sequence
+		if (right->mode == INSTR_SEQUENCE) {
+
+			// same operator
+			if (right->seq.op == left->seq.op) {
+				return NewSequence(
+					Union(left->seq.init, right->seq.init),
+					Union(left->seq.step, right->seq.step),
+					right->seq.op,
+					NULL,
+					INSTR_NULL
+					);
+			}
+
+			// Step is on the left side
+
+		} else if (CellIsIntConst(right)) {
+			if (left->seq.init == NULL) {
+				return NewSequence(right, left->seq.step, left->seq.op, left->seq.limit, left->seq.compare_op);
+			} else {
+				rl = ResolveSequence(left);
+				if (rl != NULL) {
+					return Union(rl, right);
+				}
+			}
+		}
+	}
 
 	result = NULL;
 
@@ -167,7 +205,7 @@ Var * VarUnion(Var * left, Var * right)
 		if (left == NULL) return right;
 
 	} else if (right->mode == INSTR_VARIANT) {
-		result = VarUnion(right, left);
+		result = Union(right, left);
 	}
 
 	if (result == NULL) {
@@ -177,12 +215,14 @@ Var * VarUnion(Var * left, Var * right)
 	return result;
 }
 
-//////////////////////////// CellRestrict ////////////////////////////////
-
 Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 {
 	Type * r = cell;
 	Var * min, * max;
+
+	if (cell->mode == INSTR_SEQUENCE) {
+		TODO("Restrict range");
+	}
 
 	if (CellRange(cell, &min, &max)) {
 
@@ -198,7 +238,7 @@ Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 			r = NULL;
 			// 1. <---(    )--->
 		} else if (IsLower(min, rmin) && IsLower(rmax, max)) {
-			r = TypeUnion(NewRangeOpenRight(min, rmin), NewRangeOpenLeft(rmax, max));
+			r = Union(NewRangeOpenRight(min, rmin), NewRangeOpenLeft(rmax, max));
 			// 2. <------>  (     )
 		} else if (IsLower(max, rmin)) {
 			r = cell;
@@ -215,7 +255,7 @@ Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 	} else {
 		switch(cell->mode) {
 		case INSTR_TUPLE:
-			r = TypeUnion(RemoveRange(cell->left, rmin, rmax), RemoveRange(cell->right, rmin, rmax));
+			r = Union(RemoveRange(cell->left, rmin, rmax), RemoveRange(cell->right, rmin, rmax));
 			break;
 		case INSTR_VAR:
 			r = RemoveRange(cell->type, rmin, rmax);
@@ -232,7 +272,7 @@ Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 }
 
 
-Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
+Type * Restrict(Type * type, Type * restriction, InstrOp op)
 {
 	Type * rt, * left, * right;
 //	BigInt init, step;
@@ -245,16 +285,18 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 
 	// For variant type, we apply both variants as restrictions and use union of them.
 	if (restriction->mode == INSTR_VARIANT) {
-		left = TypeRestrictOp(type, restriction->l, op);
-		right = TypeRestrictOp(type, restriction->r, op);
-		rt = TypeUnion(left, right);
+		left = Restrict(type, restriction->l, op);
+		right = Restrict(type, restriction->r, op);
+		rt = Union(left, right);
 		goto done;
 	}
 
 	// Compute minimal and maximal value defined by restriction.
 	// If the value is not known, extreme value is returned.
-//	IntSet(&min, TypeMin(restriction));
-//	IntSet(&max, TypeMax(restriction));
+
+	if (type->mode == INSTR_SEQUENCE) {
+		left = NULL;
+	}
 
 	switch(op) {
 	case INSTR_LE:
@@ -264,9 +306,21 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 		}
 		break;
 	case INSTR_LT:
-		max = CellMax(restriction);
-		if (max != NULL) {
-			rt = RemoveRange(type, max, NULL);
+		if (type->mode == INSTR_SEQUENCE) {
+			if (type->seq.compare_op == INSTR_VOID) {
+				rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+			} else if (type->seq.compare_op == INSTR_LT) {
+				if (IsLower(restriction, type->seq.limit)) {
+					rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+				}
+			} else {
+				ASSERT("Unexpected");
+			}
+		} else {
+			max = CellMax(restriction);
+			if (max != NULL) {
+				rt = RemoveRange(type, max, NULL);
+			}
 		}
 		break;
 	case INSTR_GE:
@@ -283,11 +337,25 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 		break;
 
 	case INSTR_NE:
-		rt = CellIntersection(type, restriction);		//TODO: This seems wrong.
+		if (type->mode == INSTR_SEQUENCE) {
+			if (type->seq.compare_op == INSTR_VOID) {
+				rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+			} else if (type->seq.compare_op == INSTR_NE) {
+				if (IsEqual(restriction, type->seq.limit)) {
+					rt = type;
+				} else if (type->seq.op == INSTR_ADD && IsEqual(type->seq.step, ONE) && IsLower(restriction, type->seq.limit)) {
+					rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+				}
+			} else {
+				ASSERT("Unexpected");
+			}
+		} else {
+			rt = Intersection(type, restriction);		//TODO: This seems wrong.
+		}
 		break;
 
 	case INSTR_EQ:
-		rt = CellIntersection(restriction, type);
+		rt = Intersection(restriction, type);
 		break;
 	}
 
@@ -340,12 +408,12 @@ Type * TypeRestrictOp(Type * type, Type * restriction, InstrOp op)
 			switch(op) {
 
 			case INSTR_NE:
-				rt = CellIntersection(type, restriction);
+				rt = Intersection(type, restriction);
 				break;
 
 			// For Eq, resulting type is the range of source variable
 			case INSTR_EQ:
-				rt = CellIntersection(restriction, type);
+				rt = Intersection(restriction, type);
 				break;
 
 //			case INSTR_LE: IntAdd(&min, IntMax(&min, &max), Int1()); IntSetMax(&max); break;	// remove anything bigger than 
@@ -368,7 +436,7 @@ done:
 }
 
 
-Type * CellIntersection(Type * cell, Type * restriction)
+Type * Intersection(Type * cell, Type * restriction)
 {
 	Type * r = cell;
 	Var * rmin, * rmax;
@@ -380,13 +448,13 @@ Type * CellIntersection(Type * cell, Type * restriction)
 	} else {
 		switch(restriction->mode) {
 		case INSTR_TUPLE:
-			r = TypeUnion(CellIntersection(cell, restriction->left), CellIntersection(cell, restriction->right));
+			r = Union(Intersection(cell, restriction->left), Intersection(cell, restriction->right));
 			break;
 		case INSTR_TYPE:
-			r = CellIntersection(cell, restriction->possible_values);
+			r = Intersection(cell, restriction->possible_values);
 			break;
 		case INSTR_VAR:
-			r = CellIntersection(cell, restriction->type);
+			r = Intersection(cell, restriction->type);
 			break;
 		default:
 			TODO("Unsupported restriction");
@@ -399,12 +467,12 @@ Type * CellIntersection(Type * cell, Type * restriction)
 
 /////////////////////////////// Union ////////////////////////////////
 
-Type * TypeUnion(Type * left, Type * right)
 /*
+Type * TypeUnion(Type * left, Type * right)
 Purpose:
 	Combine types so, that resulting type may contain values from left or from the right type.
 	This may be used when a variable is initialized in multiple code branches.
-*/
+
 {
 	Type * type = NULL, * t;
 	BigInt * min, * max;
@@ -466,14 +534,6 @@ Purpose:
 			if (type != NULL) {
 				return TypeUnion(type, right);
 			}
-/*
-			if (left->seq.op == INSTR_ADD && left->seq.step->range.min >=0) {
-				type = TypeAlloc(TYPE_INT);
-				type->range.max = INT_MAX;
-				type->range.min = right->range.min;
-				return type;
-			}
-*/
 		}
 	}
 
@@ -510,9 +570,5 @@ Purpose:
 	}
 	return type;
 }
+*/
 
-/******************************************************************************************
-
-IsSubset
-
-*******************************************************************************************/

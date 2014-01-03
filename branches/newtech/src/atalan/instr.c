@@ -460,8 +460,6 @@ Result:
 
 	if (n1 != NULL && (arg2 == NULL || n2 != NULL)) {
 		
-//		if (arg1->type == NULL || arg1->type->variant != TYPE_INT) return NULL;
-
 		switch(op) {
 			case INSTR_SQRT:
 				if (IntHigherEq(n1, Int0())) {
@@ -677,9 +675,10 @@ void PrintVarVal(Var * var)
 				PrintVarVal(var->adr);
 				oc = PrintColor(GREEN+BLUE);
 				s = INSTR_INFO[var->mode].symbol;
-				if (*s>='a' && *s<='z') { Print(" "); }
+				Print(" ");
 				Print(s);
-				if (*s>='a' && *s<='z') { Print(" "); }
+				Print(" ");
+				//if (*s>='a' && *s<='z') { Print(" "); }
 				PrintColor(oc);
 				PrintVarVal(var->var);
 				Print(")");
@@ -994,7 +993,9 @@ Purpose:
 */
 {
 	if (i == NULL || i->result == NULL) return false;
-	return VarModifiesVar(i->result, i->arg1) || VarModifiesVar(i->result, i->arg2);
+	return VarUsesVar(i->arg1, i->result) || VarUsesVar(i->arg2, i->result);
+
+//	return VarModifiesVar(i->result, i->arg1) || VarModifiesVar(i->result, i->arg2);
 }
 
 

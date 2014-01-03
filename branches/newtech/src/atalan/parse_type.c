@@ -347,7 +347,11 @@ Type * ParseType3()
 	Var * index, * item, * step;
 
 	//# "type" restrict_type
-	if (NextIs(TOKEN_TYPE2)) {
+
+	if (NextIs(TOKEN_SEQUENCE)) {
+		ParseExpression(NULL);
+		index = BufPop();
+	} else if (NextIs(TOKEN_TYPE2)) {
 		variant_type = ParseType2(INSTR_VAR);
 		type = TypeAlloc(TYPE_TYPE);
 		type->possible_values = variant_type;

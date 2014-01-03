@@ -93,7 +93,7 @@ Purpose:
 	//TODO: We may use the inferred type from instruction
 	if (vt == NULL && var2->mode == INSTR_VAR) vt = var2->type;
 
-	rt = TypeRestrictOp(type, vt, op);
+	rt = Restrict(type, vt, op);
 
 done:
 	return rt;
@@ -115,9 +115,11 @@ Result:
 {
 	Instr * i;
 	InstrBlock * caller;
-	Type * type, * type2, * old_type;
+	Type * type, * type2, * old_type, * arg_type;
 	Var * var2;
 	UInt16 caller_count;
+	InstrOp op;
+	Loc loc2;
 
 	if (blk == NULL) return NULL;
 
@@ -161,11 +163,15 @@ Result:
 			if (i == loc->i) {
 				looped = true;
 				if (InstrIsSelfReferencing(i)) {
-
-					if (!VarIdentical(i->arg2, i->result)) {
-						var2 = i->arg2;
-						if (i->type[ARG2] != NULL) {
-							type = NewSequence(NULL, i->type[ARG2], i->op, NULL, INSTR_VOID);
+					op = i->arg1->mode;
+					var2 = i->arg1->r;
+					if (VarIdentical(i->arg1->l, var) && !VarIdentical(var2, var)) {
+						loc2.proc = loc->proc;
+						loc2.blk  = blk;
+						loc2.i    = i;
+						arg_type = FindType(&loc2, var2, false);
+						if (arg_type != NULL) {
+							type = NewSequence(NULL, arg_type, op, NULL, INSTR_VOID);
 							goto sub1;		//continue;
 						}
 					}
@@ -223,12 +229,12 @@ sub1:
 
 		// This is just speed optimization, if the type is undefined, we do not need to continue processing
 		if (type2 != NULL) {
-			if (type2->variant == TYPE_UNDEFINED) {
+			if (type2->mode == INSTR_TYPE && type2->variant == TYPE_UNDEFINED) {
 				type = type2;
 				goto done;
 			}
 			type2 = TypeRestrictBlk(type2, var, loc->proc, blk->from, true);
-			type = VarUnion(type, type2);
+			type = Union(type, type2);
 			type = TypeRestrictBlk(type, var, loc->proc, blk->from, true);
 		}
 	}
@@ -244,12 +250,12 @@ sub1:
 		g_fb_level--;
 #endif
 		if (type2 != NULL) {
-			if (type2->variant == TYPE_UNDEFINED) {
+			if (type2->mode == INSTR_TYPE && type2->variant == TYPE_UNDEFINED) {
 				type = type2;
 				goto done;
 			}
 			type2 = TypeRestrictBlk(type2, var, loc->proc, caller, false);
-			type = VarUnion(type, type2);
+			type = Union(type, type2);
 			type = TypeRestrictBlk(type, var, loc->proc, caller, false);
 		}
 	}
@@ -323,6 +329,7 @@ Result:
 	switch(op) {
 	case INSTR_TEXT:
 	case INSTR_INT:
+	case INSTR_SEQUENCE:
 		type = var;
 		break;
 
@@ -405,8 +412,8 @@ Result:
 			return NULL;
 		}
 
-		if (var->type->variant == TYPE_PROC) {
-			type = var->type;
+		if (var->mode == INSTR_VAR && var->type->mode == INSTR_FN) {
+			type = var->type->type;
 		} else {
 
 #ifdef TRACE_INFER
@@ -423,7 +430,7 @@ Result:
 			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
 			// Type has not been specified in previous code
-			if (type->variant == TYPE_UNDEFINED) {
+			if (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) {
 
 				if (var->mode == INSTR_ELEMENT) {
 					arr_type = var->adr->type;
@@ -452,7 +459,7 @@ Result:
 				// User will be asked to specify the type for the variable.
 				// It also means, we may be using undefined variable!
 
-				if (type->variant == TYPE_UNDEFINED) {
+				if (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) {
 
 					if (report_errors) {
 						// Argument to let adr 
@@ -544,7 +551,7 @@ Result:
 	// In other case, this would be use of undefined variable, that is however handled elsewhere.
 	
 	if (blk->from == NULL && blk->callers == NULL) {
-		type = CellIntersection(var->type, restriction);
+		type = Intersection(var->type, restriction);
 		if (type != var->type) {
 			var->type = type;
 			modified = true;
@@ -814,11 +821,6 @@ void CheckIndex(Loc * loc, Var * var)
 
 }
 
-#define MIN1 TypeMin(i->type[ARG1])
-#define MAX1 TypeMax(i->type[ARG1])
-#define MIN2 TypeMin(i->type[ARG2])
-#define MAX2 TypeMax(i->type[ARG2])
-
 Bool TypeIsComplete(Type * type)
 {
 	if (type == NULL) return false;
@@ -857,8 +859,8 @@ Purpose:
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 11 && loc->n == 4) {
-		Print("");
+	if (loc->blk->seq_no == 3 && loc->n == 2) {
+		result = NULL;
 	}
 
 	// Conditional jumps have special support.
@@ -866,8 +868,9 @@ Purpose:
 
 	if (i->op == INSTR_IF) {
 		if (i->type[ARG1] == NULL) {
-			tr = i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
-			if (i->type[ARG1] != NULL) {
+			tr = FindType(loc, i->arg1, d->final_pass);
+			if (tr != NULL) {
+				i->type[ARG1] = tr;
 				d->modified = true;
 
 				if (IsEqual(tr, ONE)) {
@@ -892,9 +895,12 @@ Purpose:
 		}
 
 		if (i->arg1 != NULL && i->type[ARG1] == NULL) {
-			i->type[ARG1] = FindType(loc, i->arg1, d->final_pass);
-			if (i->type[ARG1] != NULL) d->modified = true;
-				}
+			tr = FindType(loc, i->arg1, d->final_pass);
+			if (tr != NULL) {
+				i->type[ARG1] = tr;
+				d->modified = true;
+			}
+		}
 
 		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
 			i->type[ARG2] = FindType(loc, i->arg2, d->final_pass);
@@ -1227,7 +1233,7 @@ Purpose:
 	FOR_EACH_LOCAL(proc, var)
 		if (var->mode == INSTR_VAR && FlagOn(var->submode, SUBMODE_USER_DEFINED) && var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
 			type = var->type;
-			if (type != NULL && type->variant == TYPE_LABEL) continue;
+			if (type != NULL && type->mode == INSTR_TYPE && type->variant == TYPE_LABEL) continue;
 			if (var->read == 0) {
 				ErrArg(var);
 				if (var->write == 0) {
@@ -1257,6 +1263,15 @@ void ReportAlwaysFalseAsserts(Var * proc)
 		for(i = loc.blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_ASSERT_BEGIN) {
 				assert_begin = true;
+
+			// *** Type Assert (3)
+			// If the assert is not resolved while inferring, error is reported.
+
+			} else if (i->op == INSTR_IF && i->arg1->mode == INSTR_MATCH) {
+				if (assert_begin) {
+					loc.i = i;
+					LogicErrorLoc("Type Assert does not hold.", &loc);
+				}
 			} else if (i->op == INSTR_ASSERT) {
 				if (assert_begin) {
 					loc.i = i;
@@ -1325,7 +1340,7 @@ Purpose:
 				tr = i->type[RESULT];
 				if (VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
 					if (tr != NULL && !(tr->mode == INSTR_TYPE && tr->variant == TYPE_UNDEFINED) && FlagOff(i->flags, InstrRestriction)) {
-						var->type = VarUnion(var->type, i->type[RESULT]);
+						var->type = Union(var->type, i->type[RESULT]);
 					} else {
 
 						// For temporary variable, there is no reason to define 

@@ -18,6 +18,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include <math.h>
 #include <stdio.h>
 
+void SystemInit();
 
 // Basic types
 

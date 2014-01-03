@@ -38,6 +38,14 @@ Var * CellMin(Var * v)
 	case INSTR_TYPE:
 		return CellMin(v->possible_values);
 
+	case INSTR_SEQUENCE:
+		if (v->seq.op == INSTR_ADD || v->seq.op == INSTR_MUL) {
+			return v->seq.init;
+		} else {
+			return v->seq.limit;
+		}
+		break;
+
 	default:
 		TODO("Unknown variable.")
 			return NULL;
@@ -68,29 +76,19 @@ Var * CellMax(Var * v)
 	case INSTR_TYPE:
 		return CellMax(v->possible_values);
 
+	case INSTR_SEQUENCE:
+		if (v->seq.op == INSTR_ADD || v->seq.op == INSTR_MUL) {
+			return v->seq.limit;
+		} else {
+			return v->seq.init;
+		}
+		break;
+
 	default:
 		TODO("Unknown variable.")
 			return NULL;
 	}
 
-}
-
-BigInt * TypeMin(Type * type)
-{
-	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			return &type->range.min;
-		} else if (type->mode == INSTR_SEQUENCE) {
-			switch(type->seq.op) {
-			case INSTR_ADD:
-			case INSTR_MUL:
-				return TypeMin(type->seq.init);
-			default:
-				break;
-			}
-		}
-	}
-	return &LIM_MIN;
 }
 
 BigInt * TypeMax(Type * type)
