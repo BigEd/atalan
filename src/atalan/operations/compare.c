@@ -42,7 +42,6 @@ Purpose:
 {
 	Var * smin, * smax;
 	Var * mmin, * mmax;
-	Var * result;
 	UInt8 j;
 
 	if (type == master) return true;
@@ -116,10 +115,6 @@ Purpose:
 			if (type->variant != master->variant) return false;
 
 			switch(type->variant) {
-			case TYPE_PROC:
-				result = FirstArg(type, SUBMODE_ARG_OUT);
-				if (result == NULL) return false;		// this is function with no argument
-				return IsSubset(result, master);
 
 			default:
 				if (master->possible_values == NULL) return true;

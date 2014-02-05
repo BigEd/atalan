@@ -5,7 +5,7 @@
 
 system:
 	cpu: type
-	interrupt: type proc
+	interrupt: type fn -> ()
 
 ;===
 ;CPU

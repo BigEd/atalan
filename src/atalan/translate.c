@@ -12,7 +12,7 @@ rules defined for current CPU.
 
 #include "language.h"
 
-GLOBAL Var * RULE_PROC;						// This procedure is used to represent macro used when translating rule
+GLOBAL Var * RULE_FN_TYPE;						// This procedure is used to represent macro used when translating rule
 GLOBAL Bool INSTR_MATCH_BREAK;
 
 GLOBAL Var * MACRO_ARG_VAR[MACRO_ARG_CNT];		// Set of variables representing macro arguments
@@ -224,7 +224,7 @@ Purpose:
 	Test, if the variable is rule argument.
 */
 {
-	return var->scope == RULE_PROC;
+	return var->scope == RULE_FN_TYPE;
 }
 
 void EmptyRuleArgs()
@@ -630,6 +630,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 	if (InstrTranslate2(op, result, arg1, arg2, mode)) return true;
 
+
 	// It is not possible to translate the instruction directly.
 	// We will try to simplify the translated instruction by taking one of it's complex arguments
 	// and replacing it by simple variable.
@@ -645,9 +646,10 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 		// Let r = (x * 4) - y
 		if (CellIsOp(a_l)) {
-			type = TUNDEFINED; if (result != NULL) type = result->type;
-			if (type == TUNDEFINED) if (a_l->l->mode == INSTR_VAR) type = a_l->l->type;
-			if (type == TUNDEFINED) if (a_l->r->mode == INSTR_VAR) type = a_l->r->type;
+			//TODO: Infer the type.
+			type = ANY; if (result != NULL) type = result->type;
+			if (type == ANY) if (a_l->l->mode == INSTR_VAR) type = a_l->l->type;
+			if (type == ANY) if (a_l->r->mode == INSTR_VAR) type = a_l->r->type;
 			VarInitType(&tmp1, type);
 			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
 				has1 = true;
@@ -664,9 +666,9 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		// Let r = x - (y * 2)
 
 		if (CellIsOp(a_r)) {
-			type = TUNDEFINED; if (result != NULL) type = result->type;
-			if (type == TUNDEFINED) if (a_r->l->mode == INSTR_VAR) type = a_r->l->type;
-			if (type == TUNDEFINED) if (a_r->r->mode == INSTR_VAR) type = a_r->r->type;
+			type = ANY; if (result != NULL) type = result->type;
+			if (type == ANY) if (a_r->l->mode == INSTR_VAR) type = a_r->l->type;
+			if (type == ANY) if (a_r->r->mode == INSTR_VAR) type = a_r->r->type;
 			VarInitType(&tmp2, type);
 			if (InstrTranslate3(INSTR_LET, &tmp2, a_r, NULL, mode | TEST_ONLY)) {
 				has2 = true;
@@ -806,11 +808,13 @@ Purpose:
 */
 {
 	Instr * i, * first_i, * next_i;
-	InstrBlock * blk;
+	InstrBlock * first_blk, * blk;
 	UInt8 step = 0;
 	Bool in_assert;
 	UInt8 color;
 	Loc loc;
+
+	if (!IsFnImplemented(proc->type)) return;
 
 	loc.proc = proc;
 	VERBOSE_NOW = false;
@@ -819,9 +823,11 @@ Purpose:
 		PrintHeader(2, VarName(proc));
 	}
 
+	first_blk = proc->type->instr;
+
 	// As first step, we translate all variables stored on register addresses to actual registers
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = first_blk; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_LINE) continue;
 			i->result = VarReg(i->result);
@@ -837,7 +843,7 @@ Purpose:
 
 	in_assert = false;
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = first_blk; blk != NULL; blk = blk->next) {
 
 		if (Verbose(proc)) {
 			PrintBlockHeader(blk);
@@ -903,11 +909,11 @@ void TranslateInit()
 
 	// Create RULE procedure and allocate it's arguments
 
-	type = TypeAlloc(TYPE_PROC);
-	RULE_PROC = NewTempVar(type);
+	type = NewFnType(VOID, VOID);
+	RULE_FN_TYPE = NewTempVar(type);
 
 	for(i=0; i<MACRO_ARG_CNT; i++) {
-		var = NewVarWithIndex(RULE_PROC, NULL, i+1, NULL);
+		var = NewVarWithIndex(RULE_FN_TYPE, NULL, i+1, NULL);
 		var->submode = SUBMODE_ARG_IN;
 		MACRO_ARG_VAR[i] = var;
 	}

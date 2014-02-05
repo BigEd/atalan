@@ -86,7 +86,7 @@ typedef enum {
 	TOKEN_UNLESS,
 	TOKEN_THEN,
 	TOKEN_ELSE,
-	TOKEN_PROC,
+	TOKEN_FN,
 	TOKEN_RULE,
 	TOKEN_MACRO,
 	TOKEN_AND,
@@ -158,7 +158,7 @@ struct ParseStateTag {
 };
 
 typedef struct {
-	BigInt   n;
+//	BigInt   n;
 //	FILE * f;
 	Bool   ignore_keywords;
 } Lexer;
@@ -192,6 +192,7 @@ void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
 
 Bool LexInt(Var ** p_i);
+Bool LexNum(Var ** p_i);
 Bool LexId(char * p_name);
 Bool LexString(char * p_str);
 
@@ -306,6 +307,9 @@ typedef enum {
 	INSTR_ARRAY_TYPE,
 	INSTR_FN_TYPE,
 	INSTR_ANY,				// Represents any possible value. There is only one cell like this.
+
+	INSTR_USES,				// Extern instruction declares use of variable inside function
+	                        // it can have either left side maning the instruction is written or arg1 meaning the variable is read
 	INSTR_CNT
 } InstrOp;
 
@@ -375,7 +379,6 @@ typedef enum {
 	TYPE_VOID = 0,
 	TYPE_INT,
 	TYPE_STRUCT,
-	TYPE_PROC,
 	TYPE_STRING,
 	TYPE_ARRAY,
 	TYPE_LABEL,		// label in code (all labels share same type
@@ -720,7 +723,6 @@ void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn);
 void TypeInfer(Var * proc);
 
 extern Type TLBL;
-extern Type * TUNDEFINED;
 
 #include "cell_int.h"
 #include "cell_array_type.h"
@@ -734,8 +736,8 @@ extern Type * TUNDEFINED;
 
 ***********************************************/
 
-extern Var * ANY;
-extern Var * VOID;
+extern Var * ANY;			// any possible value (for type, this can also mean undefined)
+extern Var * VOID;			// no value
 
 void VarInit();
 void InitCPU();
@@ -873,8 +875,6 @@ Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp 
 Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max);
 Var * ResolveSequence(Var * cell);
 
-
-Cell * NewFn(Type * type, InstrBlock * instr);
 
 Var * VarEvalConst(Var * var);
 
@@ -1213,39 +1213,8 @@ void TranslateTypes(Var * proc);
 
 ***********************************************************/
 
-extern Var * RULE_PROC;
-/*
-typedef enum {
-	INSTR_NULL,	// INSTR_VOID
-	INSTR_ANY = 0,	// INSTR_ANY	// any argument    INSTR_MATCH with INSTR_ANY (or NULL) as type   ANY is unnecessary (same as INSTR_NULL)
+extern Var * RULE_FN_TYPE;
 
-	INSTR_MATCH,	// INSTR_MATCH	    // (type) variable of specified type                          %A:type
-	INSTR_MATCH_VAL,		// INSTR_MATCH_VAL	// (type) constant value matching specified type              const %A:type
-	INSTR_ARG,		// argument (type of argument is defined, may be NULL)                            %A
-
-	INSTR_VAR,	// INSTR_VAR (could be INSTR_INT too)    // (var)  actual variable (typically used for register)
-
-	//---- clear
-
-	INSTR_VARIANT,	// INSTR_VARIANT   (var) one of specified variants (variants are specified as TUPLE variable) => INSTR_MATCH with type = INSTR_VARIANT
-	INSTR_DEREF,		// INSTR_DEREF    dereference of variable (dereferenced type is always adr)
-
-	INSTR_ELEMENT,	// INSTR_ELEMENT	// array element - var defines pattern for array, index defines pattern for index
-	INSTR_TUPLE,		// INSTR_TUPLE
-	INSTR_RANGE,		// INSTR_RANGE
-	INSTR_BYTE,		// INSTR_BYTE
-	INSTR_BIT,		// INSTR_BIT
-	INSTR_SUB,
-	INSTR_ADD,
-	INSTR_MUL,
-	INSTR_DIV,
-	INSTR_AND,
-	INSTR_OR,
-	INSTR_XOR
-
-
-} InstrOp;
-*/
 struct RuleArgTag {
 	InstrOp variant;
 	UInt8          arg_no;		// argument index (1..26)  used for variable & const

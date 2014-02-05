@@ -27,6 +27,7 @@ Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp 
 Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max)
 {
 	Var * init, * step, * limit, * max_over, * step_min;
+	Var * size;
 	InstrOp op;
 
 	*p_min = * p_max = NULL;
@@ -39,8 +40,8 @@ Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max)
 			limit = CellMax(type->seq.limit);
 
 			if (type->seq.op == INSTR_ADD) {
-				
-				max_over = Mod(Sub(limit, init), step);
+				size = Sub(limit, init);
+				max_over = Mod(size, step);
 				op = type->seq.compare_op;
 
 				// If the comparison is exact, we know the sequence stops even in case of IFNE
@@ -51,8 +52,8 @@ Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max)
 				} else if (op == INSTR_LT) {
 
 					// We only make the limit smaller, if the step is constant
-					if (IsEqual(step, step_min)) {
-						limit = Add(Mul(DivInt(Sub(Sub(limit, init), ONE), step_min), step_min), init);
+					if (CellIsIntConst(step)) {
+						limit = Add(Mul(DivInt(Sub(size, ONE), step_min), step_min), init);
 						max_over = ZERO;
 					}
 				} else {
@@ -61,6 +62,25 @@ Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max)
 
 				*p_min = init;
 				*p_max = Add(limit, max_over);
+				return true;
+			} else if (type->seq.op == INSTR_SUB) {
+				// init >= limit  (we go down from init o limit)
+				size = Sub(init, limit);
+				max_over = Mod(size, step);
+				op = type->seq.compare_op;
+				switch(op) {
+				case INSTR_GE:
+					break;
+				case INSTR_GT:
+					if (CellIsIntConst(step)) {
+						limit = Add(limit, step_min);
+					}
+					break;
+				default:
+					goto done;
+				}
+				*p_min = limit;
+				*p_max = Add(init, max_over);
 				return true;
 			}
 		}

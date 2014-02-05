@@ -6,6 +6,7 @@ Var * Sub(Var * l, Var * r);
 Var * Mul(Var * l, Var * r);
 Var * DivInt(Var * l, Var * r);
 Var * Mod(Var * l, Var * r);
+Var * Div(Var * l, Var * r);
 
 Var * CellOp(InstrOp op, Var * left, Var * right);
 

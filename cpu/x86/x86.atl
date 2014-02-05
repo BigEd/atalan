@@ -183,15 +183,23 @@ rule if s ≠ o goto %A          -> "   jl  %A"   ;<
 rule if s = o or z = 0 goto %A -> "   jg  %A"   ;>
 rule if s ≠ o or z = 1 goto %A -> "   jle %A"   ;<=
 
-rule if 1 goto %A ->  "  jmp %A"
+rule if 1 goto %A ->  "   jmp %A"
 
 ;==== Procedures
 rule call %A -> "   call %A"  
-rule return  -> "   ret"
+rule return %A -> "   ret"
 
+rule proc %A     -> "%A  proc"
+rule endproc %A  -> "%A  endp" 
 ;Printing
 
-system.print:proc @x86.eax @x86.ebx @x86.ecx @x86.edx @x86.ebp
+system.print:fn -> ()
+	instr 
+		uses eax
+		uses ebx 
+		uses ecx
+		uses edx 
+		uses ebp
 
 system.print_scr:macro -> () 
     instr call system.print

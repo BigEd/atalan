@@ -18,21 +18,28 @@ Var * Add(Var * l, Var * r)
 
 	if (r == NULL || l == NULL) return NULL;
 
-	if (l->mode == INSTR_SEQUENCE) {
+	switch(l->mode) {
+	case INSTR_SEQUENCE:
 		if (r->mode == INSTR_SEQUENCE) {
 			//TODO: How do we add two sequences?
 		} else {
 			result = NewSequence(Add(l->seq.init,r), l->seq.step, l->seq.op, Add(l->seq.limit, r), l->seq.compare_op);
 		}
-	} else if (l->mode == INSTR_RANGE) {
+		break;
+
+	case INSTR_RANGE:
 		if (r->mode == INSTR_RANGE) {
 			result = NewRange(Add(l->l, r->l), Add(l->r, r->r));
 		} else {
 			result = NewRange(Add(l->l, r), Add(l->r, r));
 		}
-	} else if (l->mode == INSTR_TUPLE) {
+		break;
+
+	case INSTR_TUPLE:
 		result = NewTuple(Add(l->adr, r), Add(l->var, r));
-	} else {
+		break;
+
+	default:
 		if (r->mode == INSTR_RANGE || r->mode == INSTR_TUPLE || r->mode == INSTR_SEQUENCE) {
 			result = Add(r, l);
 		} else {
@@ -47,6 +54,7 @@ Var * Add(Var * l, Var * r)
 			}
 		}
 	}
+
 	if (result == NULL) {
 		result = NewOp(INSTR_ADD, l, r);
 	}
@@ -60,7 +68,13 @@ Var * Sub(Var * l, Var * r)
 
 	if (r == NULL || l == NULL) return NULL;
 
-	if (l->mode == INSTR_RANGE) {
+	if (l->mode == INSTR_SEQUENCE) {
+		if (r->mode == INSTR_SEQUENCE) {
+			//TODO: How do we add two sequences?
+		} else {
+			result = NewSequence(Sub(l->seq.init,r), l->seq.step, l->seq.op, Sub(l->seq.limit, r), l->seq.compare_op);
+		}
+	} else if (l->mode == INSTR_RANGE) {
 		if (r->mode == INSTR_RANGE) {
 			result = NewRange(Sub(l->l, r->r), Sub(l->r, r->l));
 		} else {
@@ -106,6 +120,18 @@ Var * Mul(Var * l, Var * r)
 		}
 	} else if (l->mode == INSTR_TUPLE) {
 		result = NewTuple(Mul(l->l, r), Mul(l->r, r));
+	} else if (l->mode == INSTR_DIV) {
+		m1 = Mul(l->l, r);
+		m2 = l->r;
+		//TODO: Find Biggest common divisor
+		if (m1->mode == INSTR_INT && m2->mode == INSTR_INT) {
+			m3 = DivInt(m1, m2);
+			m4 = Mul(m3, m2);
+			if (IsEqual(m4, m1)) {
+				return m3;
+			}
+		}
+		result = NewOp(INSTR_DIV, m1, m2);
 	} else {
 		if (r->mode == INSTR_RANGE) return Mul(r, l);
 
@@ -160,6 +186,33 @@ Purpose:
 			result = NewOp(INSTR_DIV, l, r);
 		}
 	}
+	return result;
+}
+
+Var * Div(Var * l, Var * r)
+{
+	Var * result;
+	BigInt * il, * ir, ii, ii2;
+
+	if (IsEqual(r, ONE)) return l;
+
+	// If both values are integer and L is divisible by R, perform the division directly
+	il = IntFromCell(l);
+	ir = IntFromCell(r);
+
+	if (il != NULL && ir != NULL) {
+		IntDiv(&ii, il, ir);
+		IntMul(&ii2, &ii, ir);
+
+		if (IntEq(&ii2, il)) {
+			result = IntCell(&ii);
+		}
+		IntFree(&ii);
+		IntFree(&ii2);
+		return result;
+	}
+
+	result = NewOp(INSTR_DIV, l, r);
 	return result;
 }
 
@@ -221,6 +274,12 @@ Bool IsEqual(Var * left, Var * right)
 					if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
 						if (IsEqual(Sub(left->seq.limit, left->seq.step), right->seq.limit)) return true;
 					} else if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
+						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
+					}
+				} else if (left->seq.op == INSTR_SUB) {
+					if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
+						if (IsEqual(Add(left->seq.limit, left->seq.step), right->seq.limit)) return true;
+					} else if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
 						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
 					}
 				}

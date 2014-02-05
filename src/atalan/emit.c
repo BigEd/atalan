@@ -436,7 +436,7 @@ Bool EmitProc(Var * proc)
 	Bool result = true;
 	InstrBlock * blk;
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = proc->type->instr; blk != NULL; blk = blk->next) {
 
 		// If block is labeled, Emit label instruction
 		if (blk->label != NULL) {
@@ -449,7 +449,7 @@ Bool EmitProc(Var * proc)
 		//TODO: RETURN should be part of procedure
 		if (blk->to == NULL && (blk->last == NULL || !IsGoto(blk->last))) {
 			if (proc != &ROOT_PROC) {
-				EmitInstrOp(INSTR_RETURN, proc, NULL, NULL);
+				EmitInstrOp(INSTR_RETURN, NULL, proc, NULL);
 			}
 		}
 	}
@@ -506,16 +506,14 @@ Purpose:
 void EmitProcedures()
 {
 	Var * var;
-	Type * type;
 	Instr vardef;
 
 	FOR_EACH_VAR(var)
-		type = var->type;
-		if (var->mode != INSTR_TYPE && var->mode != INSTR_ELEMENT && type != NULL && var->instr != NULL && type->variant == TYPE_PROC) {
+		if (IsFnVar(var) && IsFnImplemented(var->type)) {
 			if (var->read > 0) {
 				MemEmptyVar(vardef);
 				vardef.op = INSTR_FN;
-				vardef.result = var;
+				vardef.arg1 = var;
 				EmitInstr(&vardef);
 	//			PrintProc(var);
 				EmitProc(var);

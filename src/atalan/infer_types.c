@@ -26,13 +26,17 @@ Type * FindType(Loc * loc, Var * var, Bool report_errors);
 Type * FindTypeCall(Var * proc, Var * var)
 /*
 Purpose:
-	Find type of variable.
+	Find type of return argument of procedure.
 */
 {
-	Var * arg;
-	FOR_EACH_OUT_ARG(proc, arg)
+	Var * arg, * en;
+	Cell * fn_type = proc->type->type;
+	ASSERT(fn_type->mode == INSTR_FN_TYPE);
+
+	FOR_EACH_ITEM(en, arg, ResultType(fn_type))
 		if (arg == var) return arg->type;
-	NEXT_OUT_ARG
+	NEXT_ITEM(en, arg)
+
 	return NULL;
 }
 
@@ -175,13 +179,13 @@ Result:
 							goto sub1;		//continue;
 						}
 					}
-					type = TUNDEFINED;	// we are not able to deduct the type of the instruction now
+					type = ANY;	// we are not able to deduct the type of the instruction now
 					goto done;
 				}
 			}
 
-//			if (type == NULL || FlagOn(i->flags, InstrRestriction)) type = TUNDEFINED;
-			type = TUNDEFINED;
+//			if (type == NULL || FlagOn(i->flags, InstrRestriction)) type = ANY;
+			type = ANY;
 sub1:
 			#ifdef TRACE_INFER
 				PrintRepeat("  ", g_fb_level); Print("instr:"); PrintType(type); Print("\n");
@@ -210,7 +214,7 @@ sub1:
 			type = var->type;
 		} else {
 			undefined++;
-			type = TUNDEFINED;
+			type = ANY;
 		}
 	}
 
@@ -309,6 +313,17 @@ Bool HoldsForAllItems(InstrOp op, Var * left, Var * right)
 	return false;
 }
 
+Bool CellIsConst2(Cell * c)
+{
+	if (c == NULL) return false;
+	switch(c->mode) {
+		case INSTR_INT: return true;
+		case INSTR_VOID: return true;
+		case INSTR_RANGE: return c->l->mode == INSTR_INT && c->r->mode == INSTR_INT;
+	}
+	return false;
+}
+
 Type * FindType(Loc * loc, Var * var, Bool report_errors)
 /*
 Purpose:
@@ -345,13 +360,22 @@ Result:
 		type = TypeTuple(left, right);
 		break;
 
-	case INSTR_MATCH:
 	case INSTR_EQ:
+		if (CellIsConst2(var->l) && CellIsConst2(var->r)) {
+			if (IsEqual(var->l, var->r)) {
+				type = ONE;
+			} else {
+				type = ZERO;
+			}
+		}
+
+	case INSTR_MATCH:		
 	case INSTR_NE:
 	case INSTR_GE:
 	case INSTR_GT:
 	case INSTR_LE:
 	case INSTR_LT:
+
 		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
 		if (left != NULL && right != NULL) {
@@ -528,7 +552,7 @@ Result:
 				if (InstrIsSelfReferencing(i)) {
 					looped = true;
 
-					type = TUNDEFINED;	// we are not able to deduct the type of the instruction now
+					type = ANY;	// we are not able to deduct the type of the instruction now
 					goto done;
 				}
 			}
@@ -551,7 +575,7 @@ Result:
 	// In other case, this would be use of undefined variable, that is however handled elsewhere.
 	
 	if (blk->from == NULL && blk->callers == NULL) {
-		type = Intersection(var->type, restriction);
+		type = Remove(var->type, restriction);
 		if (type != var->type) {
 			var->type = type;
 			modified = true;
@@ -644,7 +668,7 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 
 	case INSTR_LO:
 	case INSTR_HI:
-		rt = TypeByte();		//NewRangeInt(0, 255);
+		rt = TypeByte();
 		break;
 	
 	default:
@@ -859,7 +883,7 @@ Purpose:
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 3 && loc->n == 2) {
+	if (loc->blk->seq_no == 1 && loc->n == 6) {
 		result = NULL;
 	}
 
@@ -998,28 +1022,37 @@ Bool InstrInitInfer(Loc * loc, void * data)
 	return false;
 }
 
-Bool LoopSteps(Instr * i, BigInt * min_steps, BigInt * max_steps)
+Bool LoopSteps(Loc * loc, Cell ** p_min_steps, Cell ** p_max_steps)
 /*
 Purpose:
 	Compute number of steps performed by loop depending on loop instruction.
 */
 {
-	Type * type;
-	BigInt min_span, max_span;
+	Cell * min_span, * max_span;
+	Var * l, * r;
+	Instr * i = loc->i;
+	Cell * step_min, * step_max, * init_min, * init_max, * limit_min, * limit_max;
 
-	// Compute number of repeats for this loop (returned as integer type)
-	if (i->type[ARG1] != NULL && i->type[ARG2] != NULL) {
-		type = i->type[ARG1];
-		if (type->mode == INSTR_SEQUENCE) {
-			if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init) && TypeIsInt(type->seq.limit)) {
+	*p_min_steps = *p_max_steps = NULL;
 
-				max_span = (type->seq.limit->range.max - type->seq.init->range.min) + 1;
-				min_span = (type->seq.limit->range.min - type->seq.init->range.max) + 1;
+	if (IS_RELATIONAL_OP(i->arg1->mode)) {
 
-				if (type->seq.op == INSTR_ADD) {
-					*min_steps = min_span / type->seq.step->range.max;
-					*max_steps = max_span / type->seq.step->range.min;
-					return true;
+		l = FindType(loc, i->arg1->l, false);
+		r = FindType(loc, i->arg1->r, false);
+
+		// Compute number of repeats for this loop (returned as integer type)
+		if (l != NULL && r != NULL) {
+			if (l->mode == INSTR_SEQUENCE) {
+				if (CellRange(l->seq.step, &step_min, &step_max) && CellRange(l->seq.init, &init_min, &init_max) && CellRange(l->seq.limit, &limit_min, &limit_max)) {
+
+					max_span = Sub(limit_max, init_min);
+					min_span = Sub(limit_min, init_max);
+
+					if (l->seq.op == INSTR_ADD) {
+						*p_min_steps = DivInt(min_span, step_max);
+						*p_max_steps = DivInt(max_span, step_min);
+						return true;
+					}
 				}
 			}
 		}
@@ -1027,14 +1060,14 @@ Purpose:
 	return false;
 }
 
-Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, BigInt min_steps, BigInt max_steps)
+Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, Cell * min_steps, Cell * max_steps)
 {
 	Bool modified = false;
 	Loc loc;
 	InstrBlock * stop = end->next;
 	Instr * i;
 	Type * type;
-	BigInt stop_min, stop_max;
+	Cell * init_min, * init_max, * step_min, * step_max, * limit_min, * limit_max;
 
 	loc.proc = proc;
 	loc.blk  = header;
@@ -1043,16 +1076,16 @@ Bool UseLoop(Var * proc, InstrBlock * header, InstrBlock * end, BigInt min_steps
 			i = loc.i;
 			type = i->type[RESULT];
 			if (type != NULL && type->mode == INSTR_SEQUENCE) {
-				if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init) && type->seq.limit == NULL) {
+				if (CellRange(type->seq.step, &step_min, &step_max) && CellRange(type->seq.init, &init_min, &init_max) && type->seq.limit == NULL) {
 					if (type->seq.op == INSTR_ADD) {
-						stop_min = type->seq.init->range.min + ((min_steps - 1) * type->seq.step->range.min);
-						stop_max = type->seq.init->range.max + ((max_steps - 1) * type->seq.step->range.max);
-						i->type[RESULT] = NewRangeInt(&stop_min, &stop_max);
+						// One step has been already added to the type of the result of the operation. That's why we subtract the ONE.
+						limit_min = Add(init_min, Mul(Sub(min_steps, ONE), step_min));
+						limit_max = Add(init_max, Mul(Sub(max_steps, ONE), step_max));
+						i->type[RESULT] = NewRange(limit_min, limit_max);
 						modified = true;
 					} else if (type->seq.op == INSTR_SUB) {
-//						stop_max = type->seq.init->range.max - ((min_steps - 1) * type->seq.step->range.min);
-						stop_min = type->seq.init->range.min - ((max_steps - 1) * type->seq.step->range.max);
-						i->type[RESULT] = NewRangeInt(&stop_min, &type->seq.init->range.max);
+//						stop_min = type->seq.init->range.min - ((max_steps - 1) * type->seq.step->range.max);
+//						i->type[RESULT] = NewRangeInt(&stop_min, &type->seq.init->range.max);
 						modified = true;
 					}
 				}
@@ -1070,12 +1103,14 @@ Purpose:
 */ {
 	InstrBlock * header;
 	Instr * i;
-	BigInt min_steps, max_steps;
+	Cell * min_steps, * max_steps;
 
 	Bool modified = false;
 	Loc loc;
+	Loc loc2;
 
 	loc.proc = proc;
+	loc2.proc = proc;
 
 	MarkLoops(proc);
 	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
@@ -1100,12 +1135,16 @@ Purpose:
 			if (i == NULL && loc.blk->callers == NULL && loc.blk->from != NULL) {
 				i = LastInstr(loc.blk->from);
 				if (i != NULL && IS_INSTR_BRANCH(i->op)) {
-					if (LoopSteps(i, &min_steps, &max_steps)) {
+					loc2.blk = loc.blk;
+					loc2.i = i;
+					if (LoopSteps(&loc2, &min_steps, &max_steps)) {
 					}
 				}
 			} else if (i != NULL && IS_INSTR_BRANCH(i->op)) {
 //				InstrPrint(i);
-				if (LoopSteps(i, &min_steps, &max_steps)) {
+				loc2.blk = loc.blk;
+				loc2.i = i;
+				if (LoopSteps(&loc2, &min_steps, &max_steps)) {
 					// we have the number of steps of this loop
 					modified = UseLoop(proc, header, loc.blk, min_steps, max_steps);
 				}
@@ -1257,6 +1296,9 @@ void ReportAlwaysFalseAsserts(Var * proc)
 	Bool assert_begin;
 	Instr * i;
 	Loc loc;
+	Var * var;
+
+	loc.proc = proc;
 
 	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
 		assert_begin = false;
@@ -1270,7 +1312,9 @@ void ReportAlwaysFalseAsserts(Var * proc)
 			} else if (i->op == INSTR_IF && i->arg1->mode == INSTR_MATCH) {
 				if (assert_begin) {
 					loc.i = i;
-					LogicErrorLoc("Type Assert does not hold.", &loc);
+					var = FindType(&loc, i->arg1->l, false);
+					ErrArg(var);
+					LogicErrorLoc("Type Assert does not hold. The inferred type is [A].", &loc);
 				}
 			} else if (i->op == INSTR_ASSERT) {
 				if (assert_begin) {

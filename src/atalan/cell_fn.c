@@ -31,3 +31,9 @@ Bool IsFnVar(Var * var)
 {
 	return var != NULL && var->mode == INSTR_VAR && var->type->mode == INSTR_FN;
 }
+
+Bool IsFnImplemented(Var * fn_cell)
+{
+	ASSERT(fn_cell->mode == INSTR_FN);
+	return fn_cell->instr != NULL && fn_cell->instr->first != NULL && fn_cell->instr->first->op != INSTR_USES;
+}

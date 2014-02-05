@@ -341,12 +341,6 @@ Var * VarFindScope2(Var * scope, char * name)
 	for (s = scope; s != NULL; s = s->scope) {
 		var = VarFind(s, name);
 		if (var != NULL) break;
-/*		// For procedures whose type has been defined using predefined type, try to find arguments from this type
-		if (s->type->variant == TYPE_PROC && s->type != NULL) {			// ??????
-			var = VarFind(s->type, name);
-			if (var != NULL) break;
-		}
-*/
 	}
 	return var;
 }
@@ -508,7 +502,7 @@ void VarResetUse()
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->mode != INSTR_VAR || var->type->variant != TYPE_PROC) {
+		if (var->mode != INSTR_VAR || var->type->mode != INSTR_FN) {
 			var->read = 0;
 			var->write = 0;
 			var->flags = var->flags & (~(VarUninitialized|VarLoop|VarLoopDependent));
@@ -865,7 +859,7 @@ Var * FirstArg(Var * proc, VarSubmode submode)
 		// procedure itself.
 		if (proc->type->variant == TYPE_ADR) {
 			proc = proc->type->element;
-		} else if (proc->type->variant == TYPE_PROC) {
+		} else {
 			proc = proc->type;
 		}
 	}

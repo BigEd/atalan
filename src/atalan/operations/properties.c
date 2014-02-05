@@ -28,6 +28,7 @@ Var * CellMin(Var * v)
 	case INSTR_RANGE:
 		return v->adr;
 
+	case INSTR_VARIANT:
 	case INSTR_TUPLE:
 		l = CellMin(v->adr); r = CellMin(v->var);
 		return IsLowerEq(l, r)?l:r;
@@ -64,6 +65,7 @@ Var * CellMax(Var * v)
 	case INSTR_RANGE:
 		return v->var;
 
+	case INSTR_VARIANT:
 	case INSTR_TUPLE:
 		l = CellMax(v->adr); r = CellMax(v->var);
 		return IsHigherEq(l, r)?l:r;

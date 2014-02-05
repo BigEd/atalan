@@ -903,7 +903,7 @@ void ReportSimilarNames(char * name)
 					scope = v->scope;
 					while(scope != NULL && scope->name == NULL) scope = scope->scope;
 					if (scope != NULL) {
-						if (scope->type->variant == TYPE_PROC) {
+						if (scope->type->mode == INSTR_FN) {
 							Print("  in procedure '"); 
 						} else if (scope->type->variant == TYPE_SCOPE) {
 							Print("  in scope '"); 
@@ -933,6 +933,7 @@ void ParseOperand()
 	UInt8 arg_no;
 	Type * type;
 	UInt32 arg_cnt;
+	Var * en;
 
 	type_match = false;
 
@@ -981,7 +982,7 @@ void ParseOperand()
 			var = VarRuleArg(arg_no-1);
 			goto indices;
 
-		} else if (LexInt(&var)) {
+		} else if (LexNum(&var)) {
 		} else if (TOK == TOKEN_ID) {
 
 			var = FindExpVar();
@@ -993,7 +994,7 @@ void ParseOperand()
 
 				// Out-only variables may not be in expressions unless this is destination expression
 				if (!EXP_IS_DESTINATION && !EXP_IS_REF) {
-					if (var->type->variant != TYPE_PROC && OutVar(var) && !InVar(var)) {
+					if (var->type->mode != INSTR_FN && OutVar(var) && !InVar(var)) {
 						ErrArg(var);
 						LogicError("Variable [A] may be only written", 0);
 					}
@@ -1021,6 +1022,8 @@ void ParseOperand()
 				// programmer has defined it.
 
 				var = NewVar(NULL, NAME, ANY);
+				SetFlagOn(var->submode, SUBMODE_FRESH);
+
 				goto indices;
 
 			} else {
@@ -1030,7 +1033,7 @@ void ParseOperand()
 
 no_id:
 			// Procedure call
-			if (var->type->mode == INSTR_FN || (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)) {
+			if (var->type->mode == INSTR_FN /*|| (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)*/) {
 				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
 					// this is address of procedure
 				} else {
@@ -1048,7 +1051,9 @@ no_id:
 					// This prevents trashing the value in register by some following computation.
 
 					arg_cnt = 0;
-					FOR_EACH_OUT_ARG(proc, arg)
+
+					FOR_EACH_ITEM(en, arg, ResultType(var->type->type))
+
 						var = arg;
 						if (VarIsReg(arg)) {
 							var = NewTempVar(arg->type);
@@ -1056,7 +1061,7 @@ no_id:
 						}
 						BufPush(var);		
 						arg_cnt++;
-					NEXT_OUT_ARG
+					NEXT_ITEM(en, arg)
 
 					if (arg_cnt == 0) {
 						SyntaxError("PROC does not return any result");
@@ -1132,6 +1137,21 @@ retry_indices:
 			return;
 		}
 
+		if (NextIs(TOKEN_COLON)) {
+			if (var != NULL) {
+				if (FlagOn(var->submode, SUBMODE_FRESH)) {
+					ParseExpression(NULL);
+					ifok {
+						var->type = BufPop();
+					}
+				} else {
+					SyntaxError("Type redefinition is not allowed.");
+				}
+			} else {
+				SyntaxError("There must be variable name to the left of double colon.");
+			}
+		}
+
 		// Assign address
 		if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
 			//TODO: Check type of the adress
@@ -1180,34 +1200,75 @@ void ParseSequence()
 	Var * var[3];
 	UInt16 var_cnt;
 	Var * limit, * step, * seq;
+	Var * step2, * geom_step;
 
 	InstrOp step_op = INSTR_VOID;
+	InstrOp compare_op = INSTR_VOID;
 
+	limit = NULL; step = NULL;
 	var_cnt = 0;
 	ifok {
 		do {		
+			if (TOK == TOKEN_DOTDOT) break;
 			ParseOperand();
 			var[var_cnt] = BufPop();
 			var_cnt++;
 			if (!NextIs(TOKEN_COMMA)) break;
-			if (NextIs(TOKEN_DOTDOT)) {
-				NextIs(TOKEN_COMMA);
-				ParseOperand();
-				limit = BufPop();					
-				break;
-			}
 			iferr break;
 		} while(var_cnt<3);
 
-		if (var_cnt == 1) {
-			step = ONE;
-			step_op = INSTR_ADD;
+		if (NextIs(TOKEN_DOTDOT)) {
+			if (!NextIs(TOKEN_COMMA)) {
+				SyntaxError("Expected comma before sequence limit");
+				return;
+			}
+			ParseOperand();
+			limit = BufPop();
+			ifok {
+				step = ONE;
+				step_op = INSTR_ADD;
+				compare_op = INSTR_LE;
+				
+				if (var_cnt >= 1) {
+					if (IsLower(limit, var[0])) {
+						step_op = INSTR_SUB;
+						compare_op = INSTR_GE;
+					}
+				}
+
+				if (var_cnt >= 2) {
+					if (step_op == INSTR_ADD) {
+						step = Sub(var[1], var[0]);
+						if (IsLowerEq(step, ZERO)) {
+							SyntaxError("Invalid sequence.");
+						}
+					} else {
+						step_op = INSTR_SUB;
+						compare_op = INSTR_GE;
+						step = Sub(var[0], var[1]);
+					}
+				}
+
+				if (var_cnt == 3) {
+					if (step_op == INSTR_ADD) {
+						step2 = Sub(var[2], var[1]);
+						geom_step = Div(step2, step);
+						step = geom_step;
+						step_op = INSTR_MUL;
+					}
+				}
+				
+				if (var_cnt > 3) {
+					SyntaxError("Multiple variables in sequence not supported yet.");
+				}
+			}
+
 		} else {
-			SyntaxError("Multiple variables in sequence not supported yet.");
+			SyntaxError("Expected .. in sequence definition");
 		}
 
 		ifok {
-			seq = NewSequence(var[0], step, step_op, limit, INSTR_LE);
+			seq = NewSequence(var[0], step, step_op, limit, compare_op);
 			BufPush(seq);
 		}
 	}
@@ -1466,7 +1527,7 @@ Result:
 	state.parentheses = EXP_PARENTHESES;
 
 	RESULT_TYPE = result_type;
-	EXP_TYPE.variant = TYPE_UNDEFINED;
+	EXP_TYPE.mode = INSTR_ANY;
 	EXP_PARENTHESES = 0;
 
 	ParseExpRoot();
@@ -1481,7 +1542,7 @@ void ParseExpressionType(Type * result_type)
 {
 	RESULT_TYPE = result_type;
 	TOP = 0;
-	EXP_TYPE.variant = TYPE_UNDEFINED;
+	EXP_TYPE.mode = INSTR_ANY;
 	ParseExpRoot();
 }
 
@@ -1525,7 +1586,7 @@ If result mode is INSTR_INT, no code is to be generated.
 		}
 	}
 	TOP = 0;
-	EXP_TYPE.variant = TYPE_UNDEFINED;
+	EXP_TYPE.mode = INSTR_ANY;
 	EXP_PARENTHESES = 0;
 	ParseExpRoot();
 
@@ -1535,7 +1596,7 @@ If result mode is INSTR_INT, no code is to be generated.
 	// parsing is correct.
 
 	ifok {
-		if (EXP_TYPE.variant == TYPE_UNDEFINED) {
+		if (EXP_TYPE.mode == INSTR_ANY) {
 			if (TOP > 0) {
 //				TypeLet(&EXP_TYPE, STACK[0]);
 			}
@@ -2741,12 +2802,12 @@ Bool VarIsImplemented(Var * var)
 
 	if (var->mode == INSTR_FN || var->mode == INSTR_FN_TYPE) return true;
 
-	v = var->type->variant;
-
 	// If the variable has no type, it will not be used in instruction,
 	// so it is considered implemented.
 
-	if (v == TYPE_UNDEFINED) return true;
+	if (var->mode == INSTR_ANY) return true;
+
+	v = var->type->variant;
 
 	// Type declarations do not need to be implemented
 	// (we think of them as being implemented by compiler).
@@ -2879,11 +2940,11 @@ Purpose:
 
 	for(blk = code; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
-			var = i->result;
 			if (i->op == INSTR_CALL) {
 				if (FlagOn(var->submode, SUBMODE_OUT)) return true;
 			} else if (i->op == INSTR_LINE) {
 			} else {
+				var = i->result;
 				if (var != NULL) {
 					if (OutVar(var) || !VarIsLocal(var, scope)) return true;
 				}
@@ -3016,7 +3077,7 @@ Purpose:
 	UInt8 arg_no;
 	BigInt ib;
 
-	type = TUNDEFINED;
+	type = ANY;
 	is_assign = false;
 	existed   = true;
 	global_scope = false;
@@ -3185,18 +3246,20 @@ parsed:
 			bookmark = SetBookmark();
 			type = ParseType2(mode);
 
-			// CPU is defined as object with CPU type
-			if (CPU_TYPE != NULL && type == CPU_TYPE) {
-				CPU->SCOPE = var;
-			}
-
-			if (type == NULL || type->mode != INSTR_TYPE || type->variant == TYPE_SCOPE) {
-				if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
-					ParseElements(vars[0]);
+			ifok {
+				// CPU is defined as object with CPU type
+				if (CPU_TYPE != NULL && type == CPU_TYPE) {
+					CPU->SCOPE = var;
 				}
-//				type = TypeScope();
+
+				if (type == NULL || type->mode != INSTR_TYPE || type->variant == TYPE_SCOPE) {
+					if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
+						ParseElements(vars[0]);
+					}
+	//				type = TypeScope();
+				}
+				if (type == NULL) type = TypeScope();
 			}
-			if (type == NULL) type = TypeScope();
 
 			ReturnScope(scope);
 		}
@@ -3218,7 +3281,7 @@ parsed:
 
 			var->mode = mode;
 			SetFlagOff(var->submode, SUBMODE_FRESH);
-			if (type->variant != TYPE_UNDEFINED) {
+			if (type->mode != INSTR_ANY) {
 				var->type = type;
 				SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
@@ -3272,7 +3335,7 @@ parsed:
 				}
 			}
 		} else {
-			if (type->variant != TYPE_UNDEFINED) {
+			if (type->mode != INSTR_ANY) {
 				ErrArg(var);
 				SyntaxErrorBmk("Variable [A] already defined", bookmark);
 			}
@@ -4743,7 +4806,7 @@ void ParseInit()
 {
 	MemEmptyVar(G_BLOCKS);
 	G_BLOCK = &G_BLOCKS[0];
-	G_BLOCK->command = TOKEN_PROC;
+	G_BLOCK->command = TOKEN_FN;
 	USE_PARSE = false;
 	EXP_EXTRA_SCOPE = NULL;
 	OP_LINE_POS = 0;
