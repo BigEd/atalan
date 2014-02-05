@@ -172,8 +172,8 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 				}
 
 				// Output variable name
-				if (var->mode == INSTR_INT) {
-					PrintBigInt(&var->n);
+				if (var->mode != INSTR_VAR) {
+					PrintVar(var); //PrintBigInt(&var->n);
 				} else {
 					PrintQuotedCellName(var);
 				}

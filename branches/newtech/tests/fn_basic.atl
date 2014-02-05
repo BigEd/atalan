@@ -1,0 +1,19 @@
+;Basic function definition 
+;Type of result (z) should be inferred as 0..255
+
+;We must use fn keyword, othewise it must not be possible to parse arguments without a type.
+
+;We are calling the function twice to prevent automatic inlining.
+;TODO: Inline function if all arguments are constant.
+
+add2: fn x:0..128, y:0..127 -> z:0..255
+   z = x + y
+   
+a = add2 54, 13
+
+assert a = 67
+
+b = add2 21, 8
+
+assert b = 29
+

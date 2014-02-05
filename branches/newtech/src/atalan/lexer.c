@@ -70,6 +70,8 @@ GLOBAL static BlockStyle LEXBLK[64];		// Lexer blocks (indent, parentheses, line
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
 GLOBAL char NAME2[256];
+GLOBAL BigInt NUMERATOR;
+GLOBAL BigInt DENOMINATOR;
 
 void PrintLex()
 {
@@ -374,7 +376,20 @@ Bool LexInt(Var ** p_i)
 	*p_i = NULL;
 	ifok {
 		if (TOK == TOKEN_INT) {
-			*p_i = IntCell(&LEX.n);
+			*p_i = IntCell(&NUMERATOR);
+			NextToken();
+			return true;
+		}
+	}
+	return false;
+}
+
+Bool LexNum(Var ** p_i)
+{
+	*p_i = NULL;
+	ifok {
+		if (TOK == TOKEN_INT) {
+			*p_i = Div(IntCell(&NUMERATOR), IntCell(&DENOMINATOR));
 			NextToken();
 			return true;
 		}
@@ -393,7 +408,7 @@ Bool LexId(char * p_name)
 }
 
 static char * keywords[KEYWORD_COUNT] = {
-	"goto", "if", "unless", "then", "else", "proc", "rule", "macro", "and", "or", "not", "sqrt",
+	"goto", "if", "unless", "then", "else", "fn", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "param", "instr", "times", "adr", "debug", "mod", "bitnot", "bitand", "bitor", "bitxor", "struct", "use", "ref", "step", "return",
 	"scope", "sequence", "assert", "either", "string"
@@ -574,7 +589,8 @@ retry:
 
 	// $fdab  hex number
 	} else if (c == '$') {
-		LEX.n = 0;
+		IntInit(&NUMERATOR, 0);
+		IntInit(&DENOMINATOR, 1);
 		do {
 			c = LINE[LINE_POS++];
 			if (isdigit(c)) {
@@ -589,14 +605,15 @@ retry:
 				LINE_POS--;
 				break;
 			}
-			LEX.n *= 16;
-			LEX.n += n;
+			IntMulN(&NUMERATOR, 16);
+			IntAddN(&NUMERATOR, n);
 		} while(true);
 		TOK = TOKEN_INT;
 
 	// %10  bin number
 	} else if (c == '%' && (LINE[LINE_POS]=='0' || LINE[LINE_POS]=='1')) {
-		LEX.n = 0;
+		IntInit(&NUMERATOR, 0);
+		IntInit(&DENOMINATOR, 1);
 		do {
 			c = LINE[LINE_POS++];
 			if (c == '0' || c == '1') {
@@ -607,23 +624,36 @@ retry:
 				LINE_POS--;
 				break;
 			}
-			LEX.n *= 2;
-			LEX.n += n;
+			IntMulN(&NUMERATOR, 2);
+			IntAddN(&NUMERATOR, n);
 		} while(true);
 		TOK = TOKEN_INT;
 		
 	// Decimal number
 	} else if (isdigit(c)) {
-		IntInit(&LEX.n, 0);
+		IntInit(&NUMERATOR, 0);
+		IntInit(&DENOMINATOR, 1);
 		while (isdigit(c) || c == '\'') {
 			if (c != '\'') {
-				IntMulN(&LEX.n, 10);
-				IntAddN(&LEX.n, c - '0');
+				IntMulN(&NUMERATOR, 10);
+				IntAddN(&NUMERATOR, c - '0');
 			}
 			c = LINE[LINE_POS++];
 		}
-		LINE_POS--;
 		TOK = TOKEN_INT;
+
+		if (c == '.' && isdigit(LINE[LINE_POS])) {
+			c = LINE[LINE_POS++];
+			while (isdigit(c) || c == '\'') {
+				if (c != '\'') {
+					IntMulN(&NUMERATOR, 10);
+					IntAddN(&NUMERATOR, c - '0');
+					IntMulN(&DENOMINATOR, 10);
+				}
+				c = LINE[LINE_POS++];
+			}
+		}
+		LINE_POS--;
 
 	// String
 	// String may contain subexpressions in []

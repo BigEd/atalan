@@ -62,10 +62,12 @@ Bool ProcessUsedProcFn(Var * var, void * data)
 	Type * type;
 	ProcFn process_fn;
 
-	type = var->type;
-	if (type != NULL && type->variant == TYPE_PROC && var->read > 0 && var->instr != NULL) {
-		process_fn = (ProcFn)data;
-		process_fn(var);
+	if (var->mode == INSTR_VAR) {
+		type = var->type;
+		if (type != NULL && type->mode == INSTR_FN && var->read > 0 && type->instr != NULL) {
+			process_fn = (ProcFn)data;
+			process_fn(var);
+		}
 	}
 	return false;
 }

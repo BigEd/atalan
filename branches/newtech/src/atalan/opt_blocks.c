@@ -537,7 +537,7 @@ void DeadCodeElimination(Var * proc)
 
 	// 1. First block of procedure is not dead, as it is an entry point to the procedure.
 
-	prev_blk = proc->instr;
+	prev_blk = proc->type->instr;
 	if (prev_blk != NULL) blk = prev_blk->next;
 
 	while (blk != NULL) {

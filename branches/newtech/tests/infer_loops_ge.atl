@@ -1,0 +1,6 @@
+﻿x = 100
+while x ≥ 11
+    dec x
+    assert x:sequence 99,..,10
+			               
+assert x:10..10

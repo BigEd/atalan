@@ -26,10 +26,10 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 
 	{ INSTR_EQ,        "eq", "=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 	{ INSTR_NE,        "ne", "<>", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_LT,        "lt", "<=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_LT,        "lt", "<", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_GE,        "ge", ">=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_GT,        "gt", ">", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_LE,        "le", "<", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
+	{ INSTR_LE,        "le", "<=", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_OVERFLOW,  "overflow", "over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_NOVERFLOW, "noverflow", "not over", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
@@ -54,10 +54,10 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_LABEL,       "label", "label", {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, NULL },
 
 	{ INSTR_ALLOC,       "alloc", "", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },
-	{ INSTR_FN,        "proc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_RETURN,      "return", "return", {TYPE_PROC, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_ENDPROC,     "endproc", "", {TYPE_ANY, TYPE_VOID, TYPE_VOID}, 0, NULL },
-	{ INSTR_CALL,        "call", "", {TYPE_VOID, TYPE_PROC, TYPE_VOID}, 0, NULL },
+	{ INSTR_FN,          "proc", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_RETURN,      "return", "return", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_ENDPROC,     "endproc", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_CALL,        "call", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },
 	{ INSTR_VAR_ARG,     "var_arg", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_NON_CODE, NULL },
 
 	{ INSTR_DATA,        "data", "", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, NULL },
@@ -106,7 +106,8 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_MATCH_VAL,        ":val", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },		    // Match const x:type
 	{ INSTR_ARRAY_TYPE,   ":array", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
 	{ INSTR_FN_TYPE,   ":fn", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
-	{ INSTR_ANY,          "", "?", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_IS_TYPE, 0 }
+	{ INSTR_ANY,          "", "?", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_IS_TYPE, 0 },
+	{ INSTR_USES,      "uses", "?", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, 0 }
 
 };
 
@@ -766,7 +767,16 @@ void PrintVar(Var * var)
 		PrintBigInt(&var->n);
 		return;
 	} else if (var->mode == INSTR_SEQUENCE) {
-		Print("seq "); PrintVar(var->seq.init); Print(" + "); PrintVar(var->seq.step);
+		Print("sequence "); PrintVar(var->seq.init); 
+		if (var->seq.op == INSTR_ADD) {
+			if (!IsEqual(var->seq.step, ONE)) {
+			}
+			Print(",..,");
+			if (var->seq.compare_op != INSTR_LE) {
+				Print(INSTR_INFO[var->seq.compare_op].symbol);
+			}
+			PrintVar(var->seq.limit);
+		}
 
 	} else if (var->mode == INSTR_ARRAY_TYPE) {
 		Print("array (");
@@ -918,27 +928,6 @@ void CodePrint(InstrBlock * blk, UInt32 flags)
 					PrintInferType(i->type[0]);
 				} else if (i->op == INSTR_IF) {
 					Print("if "); PrintInferType(i->type[1]);
-				} else {
-/*
-					if (i->op == INSTR_CALL) {
-						Print("call ");
-					} else {
-						if (ii->arg_type[0] != TYPE_VOID && ii->arg_type[0] != TYPE_LABEL && ii->arg_type[0] != TYPE_PROC) {
-							PrintInferType(i->type[0]);
-							Print(" = ");
-						}
-					}
-					if (ii->arg_type[1] != TYPE_VOID) {
-						PrintInferType(i->type[1]);
-					}
-					if (ii->arg_type[2] != TYPE_VOID) {
-						Print(" "); Print(ii->symbol); Print(" ");
-						PrintInferType(i->type[2]);
-					}
-					if (IS_INSTR_BRANCH(i->op)) {
-						Print(" goto ");
-					}
-*/
 				}
 			}
 			PrintEOL();
@@ -955,7 +944,7 @@ void PrintProc(Var * proc)
 
 void PrintProcFlags(Var * proc, UInt32 flags)
 {
-	CodePrint(proc->instr, flags);
+	CodePrint(proc->type->instr, flags);
 }
 
 

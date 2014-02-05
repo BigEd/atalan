@@ -176,7 +176,7 @@ Var * ParseFnType()
 
 Type * ParseIntType()
 {
-	Type * type = TUNDEFINED;
+	Type * type = ANY;
 	Var * var;
 	Bookmark bookmark;
 	UInt8 arg_no = 0;
@@ -348,10 +348,11 @@ Type * ParseType3()
 
 	//# "type" restrict_type
 
-	if (NextIs(TOKEN_SEQUENCE)) {
-		ParseExpression(NULL);
-		index = BufPop();
-	} else if (NextIs(TOKEN_TYPE2)) {
+//	if (NextIs(TOKEN_SEQUENCE)) {
+//		ParseExpression(NULL);
+//		index = BufPop();
+//	} else 
+	if (NextIs(TOKEN_TYPE2)) {
 		variant_type = ParseType2(INSTR_VAR);
 		type = TypeAlloc(TYPE_TYPE);
 		type->possible_values = variant_type;
@@ -365,10 +366,9 @@ Type * ParseType3()
 			type = ParseConstList(type);
 		}
 
-	//# "proc" args
-	} else if (NextIs(TOKEN_PROC)) {
-		type = TypeAlloc(TYPE_PROC);
-		ParseArgList(SUBMODE_ARG_IN, type);
+	//# "fn" args
+	} else if (NextIs(TOKEN_FN)) {
+		type = ParseFnType();
 		ifok {
 			ProcTypeFinalize(type);
 		}
@@ -549,9 +549,11 @@ const_list:
 	// First thing in the block must be an identifier, so we try to open the block with this in mind.
 	// We try to parse constants only for integer types (in future, we may try other numeric or string types)
 
-	if (type != NULL && type->variant == TYPE_INT && !type->is_enum) {
-		if (TOK != TOKEN_OR) {
-			type = ParseConstList(type);
+	ifok {
+		if (type != NULL && type->variant == TYPE_INT && !type->is_enum) {
+			if (TOK != TOKEN_OR) {
+				type = ParseConstList(type);
+			}
 		}
 	}
 done:

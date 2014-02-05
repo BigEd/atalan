@@ -95,10 +95,11 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end)
 
 Bool VarUseProcFn(Var * proc, void * data)
 {
-	Var * var;
-	if (proc->type != NULL && proc->type->variant == TYPE_PROC && proc->read > 0) {
-		if (proc->instr != NULL) {
-			InstrVarUse(proc->instr, NULL);
+//	Var * var;
+	if (IsFnVar(proc) && proc->read > 0) {
+//		if (proc->type->instr != NULL) {
+			InstrVarUse(proc->type->instr, NULL);
+/*
 		} else {
 			// Procedure that has no defined body can still define variables and arguments it uses.
 			// We must mark these variables as used, if the procedure is used.
@@ -106,6 +107,7 @@ Bool VarUseProcFn(Var * proc, void * data)
 				VarIncRead(var);
 			NEXT_LOCAL
 		}
+*/
 	}
 	return false;
 }

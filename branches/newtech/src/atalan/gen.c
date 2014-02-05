@@ -453,15 +453,11 @@ Argument:
 void GenerateInit()
 {
 
-	Type * type;
-
 	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
-	type = TypeAlloc(TYPE_PROC);
 	ROOT_PROC.mode = INSTR_VAR;
 	ROOT_PROC.name = "root";
 	ROOT_PROC.idx  = 0;
-	ROOT_PROC.type = type;		//&ROOT_PROC_TYPE;
-	ROOT_PROC.instr = NULL;
+	ROOT_PROC.type = NewFn(NewFnType(VOID, VOID), NULL);
 
 	// Initialize procedure used to evaluate rules and it's arguments (A-Z)
 
@@ -475,6 +471,7 @@ void GenerateInit()
 	GenBegin();
 	IBLOCK_STACK_SIZE = 0;
 
+	ROOT_PROC.type->instr = BLK;
 	CURRENT_LINE_NO = 0;
 
 	RuleSetInit(&GEN_RULES);

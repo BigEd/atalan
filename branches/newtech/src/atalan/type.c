@@ -15,7 +15,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 GLOBAL Type TLBL;
 GLOBAL Var * TBYTE;		//0..255
 GLOBAL Type TSCOPE;
-GLOBAL Type * TUNDEFINED;
 
 void TypeMark(Type * type)
 {
@@ -161,9 +160,6 @@ Purpose:
 void TypeInit()
 {
 
-	TUNDEFINED = NewCell(INSTR_TYPE);
-	TUNDEFINED->variant = TYPE_UNDEFINED;
-
 	TBYTE = NewRange(ZERO, IntCellN(255));
 
 	TLBL.mode    = INSTR_TYPE;
@@ -216,10 +212,6 @@ void PrintType(Type * type)
 	case TYPE_ADR:
 		Print("adr of ");
 		PrintType(type->element);
-		break;
-
-	case TYPE_PROC:
-		Print("proc");
 		break;
 
 	case TYPE_VARIANT:

@@ -276,7 +276,8 @@ Type * Restrict(Type * type, Type * restriction, InstrOp op)
 {
 	Type * rt, * left, * right;
 //	BigInt init, step;
-	Var * min, * max;
+	Var * min, * max, * slimit;
+	InstrOp sop;
 
 	// If no restriction is defined, the type is returned unrestricted
 	if (restriction == NULL || restriction->mode == INSTR_EMPTY) return type;	// restriction->variant == TYPE_UNDEFINED)
@@ -295,21 +296,40 @@ Type * Restrict(Type * type, Type * restriction, InstrOp op)
 	// If the value is not known, extreme value is returned.
 
 	if (type->mode == INSTR_SEQUENCE) {
-		left = NULL;
+		sop = type->seq.compare_op;
+		slimit = type->seq.limit;
+		if (op != INSTR_MATCH) {
+			if (sop == INSTR_VOID) {
+				rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+				return rt;
+			// Restriction is the same as current sequence restriction
+			} else if (sop == op && IsEqual(restriction, type->seq.limit)) {
+				return type;
+			}
+		}
 	}
 
 	switch(op) {
 	case INSTR_LE:
-		max = CellMax(restriction);
-		if (max != NULL) {
-			rt = RemoveRange(type, Add(max, ONE), NULL);
+		if (type->mode == INSTR_SEQUENCE) {
+			if (type->seq.compare_op == INSTR_LT) {
+				if (IsLower(restriction, type->seq.limit)) {
+					rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
+				}
+			} else {
+				ASSERT("Unexpected");
+			}
+		} else {
+			max = CellMax(restriction);
+			if (max != NULL) {
+				rt = RemoveRange(type, Add(max, ONE), NULL);
+			}
 		}
 		break;
+
 	case INSTR_LT:
 		if (type->mode == INSTR_SEQUENCE) {
-			if (type->seq.compare_op == INSTR_VOID) {
-				rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
-			} else if (type->seq.compare_op == INSTR_LT) {
+			if (type->seq.compare_op == INSTR_LT) {
 				if (IsLower(restriction, type->seq.limit)) {
 					rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
 				}
@@ -338,9 +358,7 @@ Type * Restrict(Type * type, Type * restriction, InstrOp op)
 
 	case INSTR_NE:
 		if (type->mode == INSTR_SEQUENCE) {
-			if (type->seq.compare_op == INSTR_VOID) {
-				rt = NewSequence(type->seq.init, type->seq.step, type->seq.op, restriction, op);
-			} else if (type->seq.compare_op == INSTR_NE) {
+			if (type->seq.compare_op == INSTR_NE) {
 				if (IsEqual(restriction, type->seq.limit)) {
 					rt = type;
 				} else if (type->seq.op == INSTR_ADD && IsEqual(type->seq.step, ONE) && IsLower(restriction, type->seq.limit)) {
@@ -350,93 +368,23 @@ Type * Restrict(Type * type, Type * restriction, InstrOp op)
 				ASSERT("Unexpected");
 			}
 		} else {
-			rt = Intersection(type, restriction);		//TODO: This seems wrong.
+			rt = Remove(type, restriction);
 		}
 		break;
 
 	case INSTR_EQ:
-		rt = Intersection(restriction, type);
+		rt = Remove(restriction, type);
 		break;
 	}
 
-/*
-	if (type != NULL) {
-		if (type->mode == INSTR_SEQUENCE) {
-			switch(op) {
-			case INSTR_NE:
-				if (type->seq.compare_op != op) {
-					type->seq.compare_op = op;
-					type->seq.limit = max;
-					type = ResolveSequence(type);			// type =
-				}
-				break;
-			case INSTR_LT:
-				max--;
-				//continue to IFLE
-			case INSTR_LE:
-				if (TypeIsInt(type->seq.step) && TypeIsInt(type->seq.init)) {
-					init = type->seq.init->range.min;
-					step = type->seq.step->range.max;			// maximal step
-					if (type->seq.op == INSTR_ADD) {
-//						IntAdd(&ib, &max, &step);
-//						rt = NewRangeInt(&init, &ib);	// we may overstep maximal value by step
-//						IntFree(&ib);
-					}
-				} else {
-					if (type->seq.compare_op != op) {
-						type->seq.compare_op = op;
-						type->seq.limit = max;
-					}
-				}
-				break;
-			case INSTR_GT:
-				break;
-
-			case INSTR_GE:
-				break;
-
-			case INSTR_MATCH_TYPE:
-			case INSTR_NMATCH_TYPE:
-				break;
-			default:
-				ASSERT(false);	// unknown operator
-			}
-
-		} else if (type->variant == TYPE_INT) {
-
-			rt = NULL;
-			switch(op) {
-
-			case INSTR_NE:
-				rt = Intersection(type, restriction);
-				break;
-
-			// For Eq, resulting type is the range of source variable
-			case INSTR_EQ:
-				rt = Intersection(restriction, type);
-				break;
-
-//			case INSTR_LE: IntAdd(&min, IntMax(&min, &max), Int1()); IntSetMax(&max); break;	// remove anything bigger than 
-//			case INSTR_LT: IntSet(&min, IntMax(&min, &max)); IntSetMax(&max); break;
-//			case INSTR_GE: IntSetMin(&min); IntSub(&max, IntMin(&min, &max), Int1()); break;
-//			case INSTR_GT: IntSetMin(&min); IntSet(&max, IntMin(&min, &max)); break;
-
-			default: ;
-			}
-
-			if (rt == NULL) {
-				rt = RemoveRange(type, min, max);
-			}
-		}
-//		IntFree(&min); IntFree(&max);
-	}
-*/
 done:
 	return rt;
 }
 
 
-Type * Intersection(Type * cell, Type * restriction)
+//TODO: Should be named SetDifference
+
+Type * Remove(Type * cell, Type * restriction)
 {
 	Type * r = cell;
 	Var * rmin, * rmax;
@@ -448,13 +396,13 @@ Type * Intersection(Type * cell, Type * restriction)
 	} else {
 		switch(restriction->mode) {
 		case INSTR_TUPLE:
-			r = Union(Intersection(cell, restriction->left), Intersection(cell, restriction->right));
+			r = Union(Remove(cell, restriction->left), Remove(cell, restriction->right));
 			break;
 		case INSTR_TYPE:
-			r = Intersection(cell, restriction->possible_values);
+			r = Remove(cell, restriction->possible_values);
 			break;
 		case INSTR_VAR:
-			r = Intersection(cell, restriction->type);
+			r = Remove(cell, restriction->type);
 			break;
 		default:
 			TODO("Unsupported restriction");
@@ -464,111 +412,3 @@ Type * Intersection(Type * cell, Type * restriction)
 
 	return r;
 }
-
-/////////////////////////////// Union ////////////////////////////////
-
-/*
-Type * TypeUnion(Type * left, Type * right)
-Purpose:
-	Combine types so, that resulting type may contain values from left or from the right type.
-	This may be used when a variable is initialized in multiple code branches.
-
-{
-	Type * type = NULL, * t;
-	BigInt * min, * max;
-
-	if (left == right) return left;
-
-	// Make sure, that if there is NON-NULL type, it is the left one
-	if (left == NULL) {
-		left = right;
-		right = NULL;
-	}
-
-	// In case there is only one type or no type, return the one type or NULL
-	if (right == NULL) return left;
-
-	// When making union with empty value, return the nonempty one)
-
-	if (left->mode == INSTR_EMPTY) return right;
-	if (right->mode == INSTR_EMPTY) return left;
-
-
-	// If any of the types is undefined, result is undefined
-	if (left->mode == INSTR_TYPE && left->variant == TYPE_UNDEFINED) return left;
-	if (right->mode == INSTR_TYPE && right->variant == TYPE_UNDEFINED) return right;
-
-	// If one of the types is sequence, make sure it is the left one
-	if (right->mode == INSTR_SEQUENCE) {
-		t = left;
-		left = right;
-		right = t;
-	}
-
-	if (left->mode == INSTR_SEQUENCE) {
-
-		// Sequence & sequence
-		if (right->mode == INSTR_SEQUENCE) {
-
-			// same operator
-			if (right->seq.op == left->seq.op) {
-				return NewSequence(
-					TypeUnion(left->seq.init, right->seq.init),
-					TypeUnion(left->seq.step, right->seq.step),
-					right->seq.op,
-					NULL,
-					INSTR_NULL
-					);
-			}
-
-		// Step is on the left side
-
-		} else if (right->variant == TYPE_INT) {
-			if (left->seq.init == NULL) {
-				type = TypeCopy(left);
-				type->seq.init = right;
-				return type;
-			}
-
-			type = ResolveSequence(left);
-			if (type != NULL) {
-				return TypeUnion(type, right);
-			}
-		}
-	}
-
-	if (right == NULL) return right;
-
-	switch (left->variant) {
-	case TYPE_INT:
-		if (right->variant == TYPE_INT) {
-			if (IntHigherEq(&left->range.max, &right->range.min) || IntHigherEq(&right->range.max, &left->range.min)) {
-				min = IntMin(&left->range.min, &right->range.min);
-				max = IntMax(&left->range.max, &right->range.max); //&right->range.max; if ( left->range.max > max) max =  left->range.max;
-				if (IntEq(&left->range.min, min) && IntEq(&left->range.max, max)) {
-					type = left;
-				} else if (IntEq(&left->range.min, min) && IntEq(&left->range.max, max)) {
-					type = right;
-				} else {
-					type = NewRangeInt(min, max);
-				}
-			}
-		}
-		break;
-	case TYPE_VARIANT:
-		if (IsSubset(right, left->left) || IsSubset(right, left->right)) return left;
-		break;
-	default:
-		break;
-	}
-
-	// Default case is VARIANT type
-	if (type == NULL) {
-		type = TypeAlloc(TYPE_VARIANT);
-		type->left  = left;
-		type->right = right;
-	}
-	return type;
-}
-*/
-
