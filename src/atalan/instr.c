@@ -1005,7 +1005,7 @@ Bool ProcInstrEnum(Var * proc, Bool (*fn)(Loc * loc, void * data), void * data)
 
 	loc.proc = proc;
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = FnVarInstr(proc); blk != NULL; blk = blk->next) {
 		loc.blk = blk;
 		loc.n = 1;
 		for(i = blk->first; i != NULL; i = next_i) {

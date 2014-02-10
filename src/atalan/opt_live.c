@@ -218,7 +218,7 @@ done:
 void MarkProcLive(Var * proc)
 {
 	//TODO: We should actually step through the code, as procedure may access and modify global variables
-	Var * var;
+	Var * en, * var;
 
 	FOR_EACH_LOCAL(proc, var)
 		if (FlagOff(var->submode, SUBMODE_ARG_IN | SUBMODE_ARG_OUT)) {
@@ -228,7 +228,7 @@ void MarkProcLive(Var * proc)
 
 	FOR_EACH_OUT_ARG(proc, var)
 		VarMarkDead(var);
-	NEXT_LOCAL
+	NEXT_OUT_ARG(var)
 
 	// Procedure may use same variable both for input and output (for example using aliasing)
 	// a:proc >x@_a <y@_a
@@ -236,7 +236,7 @@ void MarkProcLive(Var * proc)
 
 	FOR_EACH_IN_ARG(proc, var)
 		VarMarkLive(var);
-	NEXT_LOCAL
+	NEXT_IN_ARG(var)
 }
 
 void VarMarkNextUse(Var * var, Instr * i)
@@ -330,7 +330,7 @@ Bool OptimizeLive(Var * proc)
 	Bool modified = false;
 	InstrBlock * blk;
 	Instr * i;
-	Var * var, * result;
+	Var * en, * var, * result;
 	UInt32 n = 0, blk_n = 0;
 	InstrOp op;
 	Loc loc;
@@ -394,7 +394,7 @@ Bool OptimizeLive(Var * proc)
 		if (blk->to == NULL) {
 			FOR_EACH_OUT_ARG(proc, var)
 				VarMarkLive(var);
-			NEXT_OUT_ARG
+			NEXT_OUT_ARG(var)
 		}
 
 		n = InstrBlockInstrCount(blk);

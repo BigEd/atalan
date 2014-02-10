@@ -153,7 +153,7 @@ Purpose:
 		if (blk->to == NULL && blk->cond_to == NULL) {
 			for (n=0; n<count; n++) {
 				var = VarSetItem(&info->vars, n)->key;
-				if (VarIsOutArg(var) || !VarIsLocal(proc, var)) {
+				if (VarIsOutArg(proc, var) || !VarIsLocal(proc, var)) {
 					set[n] = VarLive;
 				}
 			}

@@ -135,7 +135,7 @@ Purpose:
 	variable assignment analysis, the procedure call is single instruction.
 */
 {
-	Var * var;
+	Var * var, * en;
 	if (proc->instr == NULL) {
 
 		// Local instructions used by procedure (not in or out arguments)
@@ -147,7 +147,7 @@ Purpose:
 
 		FOR_EACH_OUT_ARG(proc, var)
 			VarAllocVar(info, var, live, 0);
-		NEXT_LOCAL
+		NEXT_OUT_ARG(var)
 
 		// Procedure may use same variable both for input and output (for example using aliasing)
 		// a:proc >x@_a <y@_a
@@ -155,7 +155,7 @@ Purpose:
 
 		FOR_EACH_IN_ARG(proc, var)
 			VarAllocVar(info, var, live, 1);
-		NEXT_LOCAL
+		NEXT_IN_ARG(var)
 
 	} else {
 	}
@@ -253,7 +253,7 @@ Purpose:
 	info.last_block = (LiveSet)MemAllocEmpty(count);
 	for(i=0; i<count; i++) {
 		var = VarSetItem(&info.vars, i)->key;
-		if (VarIsOutArg(var)) {
+		if (VarIsOutArg(proc, var)) {
 			VarAllocVar(&info, var, info.last_block, 1);
 		}
 	}

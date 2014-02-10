@@ -143,6 +143,8 @@ rule %A@r = %B:s32 -> "   mov %A, %B"
 rule %A:s32 = %B@r -> "   mov %A, %B"	
 rule %A@r = %A + 1 @oszacp -> "   inc %A"   
 rule %A@r = %A + %B:s32 @ocszacp -> "   add %A, %B"
+rule %A@r = %A + %B@r @ocszacp -> "   add %A, %B"
+
 rule %A@r = %A - %B:s32 @ocszacp -> "   sub %A, %B"
 
 rule %A@r = %A@r * %C:s32 @ocszacp -> "   imul %A, %C" 

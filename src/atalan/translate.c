@@ -823,7 +823,7 @@ Purpose:
 		PrintHeader(2, VarName(proc));
 	}
 
-	first_blk = proc->type->instr;
+	first_blk = FnVarInstr(proc);
 
 	// As first step, we translate all variables stored on register addresses to actual registers
 

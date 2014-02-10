@@ -591,7 +591,7 @@ void ProcValuesUseLocal(Var * proc)
 	Var * var;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (!VarIsInArg(var)) {
+		if (!VarIsInArg(proc, var)) {
 			ResetValue(var);
 			ResetVarDep(var);
 			ResetVarDepRoot(var);

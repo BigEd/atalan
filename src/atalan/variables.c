@@ -824,6 +824,16 @@ Purpose:
 */
 {
 	Var * reg;
+	Var * l_reg, * r_reg;
+
+	if (var == NULL) return NULL;
+
+	if (FlagOn(INSTR_INFO[var->mode].flags, INSTR_OPERATOR)) {
+		l_reg = VarReg(var->l);
+		r_reg = VarReg(var->r);
+		if (l_reg != var->l || r_reg != var->r) return NewOp(var->mode, l_reg, r_reg);
+		return var;
+	}
 
 	reg = var;
 	while(reg != NULL && reg->mode == INSTR_VAR) {
@@ -842,38 +852,6 @@ Bool VarIsLocal(Var * var, Var * scope)
 	}
 	return false;
 }
-
-Var * NextArg(Var * proc, Var * arg, VarSubmode submode)
-{
-	Var * var = arg->next_in_scope;
-	while(var != NULL && (var->mode != INSTR_VAR || var->scope != arg->scope || FlagOff(var->submode, submode))) var = var->next_in_scope;
-	return var;
-}
-
-Var * FirstArg(Var * proc, VarSubmode submode)
-{
-	Var * var;
-
-	if (proc->mode == INSTR_VAR) {
-		// We may call the procedure using address stored in a variable, but we need to parse the arguments using
-		// procedure itself.
-		if (proc->type->variant == TYPE_ADR) {
-			proc = proc->type->element;
-		} else {
-			proc = proc->type;
-		}
-	}
-
-	// If this procedure type is defined using shared definition, use the definition to find the arguments
-
-//	if (owner != NULL && owner != proc) {
-//		proc = owner;
-//	}
-	var = proc->subscope;
-	while(var != NULL && (var->mode != INSTR_VAR || var->scope != proc || FlagOff(var->submode, submode))) var = var->next_in_scope;
-	return var;
-}
-
 
 Var * VarField(Var * var, char * fld_name)
 /*
@@ -962,16 +940,6 @@ Purpose:
 		}
 
 	}
-}
-
-Bool VarIsInArg(Var * var)
-{
-	return FlagOn(var->submode, SUBMODE_ARG_IN);
-}
-
-Bool VarIsOutArg(Var * var)
-{
-	return FlagOn(var->submode, SUBMODE_ARG_OUT);
 }
 
 Bool VarIsArg(Var * var)

@@ -50,9 +50,6 @@
     <ClCompile Include="errors.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="type_proc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="translate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
