@@ -3,3 +3,5 @@
 
 Var * FirstItem(Var ** p_en, Var * list);
 Var * NextItem(Var ** p_en);
+
+Bool ContainsItem(Var * tuple, Var * item);

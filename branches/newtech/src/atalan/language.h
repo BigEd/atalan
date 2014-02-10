@@ -716,10 +716,6 @@ void PrintType(Type * type);
 
 //--- Proc type
 
-void ProcTypeFinalize(Type * proc);
-typedef Bool (*VarFilter)(Var * var);
-void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn);
-
 void TypeInfer(Var * proc);
 
 extern Type TLBL;
@@ -818,8 +814,6 @@ Bool VarIsLocal(Var * var, Var * scope);
 Bool VarIsUsed(Var * var);
 
 
-Bool VarIsInArg(Var * var);
-Bool VarIsOutArg(Var * var);
 Bool VarIsArg(Var * var);
 
 Bool VarIsRuleArg(Var * var);
@@ -842,9 +836,6 @@ long VarParamCount(Var * var);
 
 void VarGenerateArrays();
 void VarToLabel(Var * var);
-
-Var * FirstArg(Var * proc, VarSubmode submode);
-Var * NextArg(Var * proc, Var * arg, VarSubmode submode);
 
 Var * VarNewElement(Var * arr, Var * idx);
 Var * VarNewByteElement(Var * arr, Var * idx);
@@ -885,14 +876,6 @@ void VarEmitAlloc();
 #define FOR_EACH_LOCAL(SCOPE, VAR) 	for(VAR = (SCOPE)->subscope; VAR != NULL; VAR = VAR->next_in_scope) {
 #define NEXT_LOCAL }
 
-#define FOR_EACH_ARG(SCOPE, VAR, MODE) 	for(VAR = FirstArg(SCOPE, MODE); VAR != NULL; VAR = NextArg(SCOPE, VAR, MODE)) {
-#define NEXT_ARG }
-
-#define FOR_EACH_IN_ARG(SCOPE, VAR) 	FOR_EACH_ARG(SCOPE, VAR, SUBMODE_ARG_IN)
-#define NEXT_IN_ARG }
-
-#define FOR_EACH_OUT_ARG(SCOPE, VAR) 	FOR_EACH_ARG(SCOPE, VAR, SUBMODE_ARG_OUT)
-#define NEXT_OUT_ARG }
 
 void PrintVar(Var * var);
 void PrintIntCellName(Var * var);

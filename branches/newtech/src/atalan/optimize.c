@@ -351,6 +351,21 @@ Inline expansion replaces call to a procedure by actual body of the procedure.
 
 */
 
+void InlineArgs(Var * proc, Var * args)
+{
+	Var * en, * var, * arg;
+
+	FOR_EACH_ITEM(en, arg, args)
+		if (arg->adr == NULL) {
+			var = NewVarInScope(proc, arg->type);
+		} else {
+			var = arg->adr;
+		}
+		BufPush(var);
+		ProcReplaceVar(proc, arg, var);
+	NEXT_ITEM(en, arg)
+}
+
 void OptimizeProcInline(Var * proc)
 /*
 Purpose:
@@ -359,7 +374,7 @@ Purpose:
 {
 	Instr * i;	//, * next;
 	InstrBlock * blk;
-	Var * subproc, * var, * arg;
+	Var * subproc;
 
 	for(blk = proc->instr; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
@@ -371,16 +386,9 @@ Purpose:
 
 					if (subproc->instr != NULL) {
 						BufEmpty();
-
-						FOR_EACH_ARG(subproc, arg, SUBMODE_ARG_IN+SUBMODE_ARG_OUT)
-							if (arg->adr == NULL) {
-								var = NewVarInScope(proc, arg->type);
-							} else {
-								var = arg->adr;
-							}
-							BufPush(var);
-							ProcReplaceVar(proc, arg, var);
-						NEXT_ARG
+						
+						InlineArgs(proc, ArgType(proc->type->type));
+						InlineArgs(proc, ResultType(proc->type->type));
 
 						InScope(proc);
 						GenSetDestination(blk, i);

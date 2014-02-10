@@ -36,3 +36,11 @@ Var * NextItem(Var ** p_en)
 	return item;
 }
 
+Bool ContainsItem(Var * tuple, Var * item)
+{
+	Var * en, * var;
+
+	FOR_EACH_ITEM(en, var, tuple)
+		if (var == item) return true;
+	NEXT_ITEM(en, var)
+}

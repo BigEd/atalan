@@ -37,3 +37,31 @@ Bool IsFnImplemented(Var * fn_cell)
 	ASSERT(fn_cell->mode == INSTR_FN);
 	return fn_cell->instr != NULL && fn_cell->instr->first != NULL && fn_cell->instr->first->op != INSTR_USES;
 }
+
+InstrBlock * FnVarInstr(Var * proc)
+{
+	ASSERT(proc->mode == INSTR_VAR);
+	ASSERT(proc->type->mode == INSTR_FN);
+	return proc->type->instr;
+}
+
+Bool VarIsInArg(Var * fn_var, Var * var)
+{
+	Var * fn;
+	ASSERT(fn_var->mode == INSTR_VAR);
+	fn = fn_var->type;
+	ASSERT(fn->mode == INSTR_FN);
+
+	return ContainsItem(ArgType(fn->type), var);
+}
+
+Bool VarIsOutArg(Var * fn_var, Var * var)
+{
+	Var * fn;
+	ASSERT(fn_var->mode == INSTR_VAR);
+	fn = fn_var->type;
+	ASSERT(fn->mode == INSTR_FN);
+
+	return ContainsItem(ResultType(fn->type), var);
+}
+

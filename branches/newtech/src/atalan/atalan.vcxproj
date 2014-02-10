@@ -125,7 +125,6 @@
     <ClCompile Include="translate.c" />
     <ClCompile Include="translate_type.c" />
     <ClCompile Include="type.c" />
-    <ClCompile Include="type_proc.c" />
     <ClCompile Include="variables.c" />
     <ClCompile Include="var_set.c" />
   </ItemGroup>

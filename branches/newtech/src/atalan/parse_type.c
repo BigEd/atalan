@@ -105,7 +105,7 @@ Var * ParseStruct(Token end_token)
 			} else {
 				type = ANY;
 			}
-			var = NewVar(NO_SCOPE, NAME2, type);
+			var = NewVar(NULL, NAME2, type);
 		} else {
 			SyntaxError("Expected item name");
 		}
@@ -153,6 +153,8 @@ Var * ParseFnType()
 	}
 
 	type = NewFnType(arg, result);
+	
+	FnTypeFinalize(type);
 
 	fn = NewFn(type, NULL);
 	fn->scope = SCOPE;
@@ -369,9 +371,6 @@ Type * ParseType3()
 	//# "fn" args
 	} else if (NextIs(TOKEN_FN)) {
 		type = ParseFnType();
-		ifok {
-			ProcTypeFinalize(type);
-		}
 	//# "macro" args
 	} else if (NextIs(TOKEN_MACRO)) {
 

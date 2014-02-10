@@ -210,7 +210,7 @@ sub1:
 	if (blk->from == NULL && blk->callers == NULL) {
 		// If we are at the beginning of the procedure and this is an input argument, we can use the type of variable as an argument.
 		// Input register variables are considered defined here too.
-		if (VarIsInArg(var) || InVar(var)) {
+		if (VarIsInArg(loc->proc, var) || InVar(var)) {
 			type = var->type;
 		} else {
 			undefined++;
@@ -883,7 +883,7 @@ Purpose:
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 1 && loc->n == 6) {
+	if (loc->blk->seq_no == 1 && loc->n == 2) {
 		result = NULL;
 	}
 
@@ -1340,6 +1340,8 @@ Purpose:
 	InferData data;
 	UInt32 n;
 
+	if (!IsFnImplemented(proc->type)) return;
+
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 
 	if (Verbose(proc)) {
@@ -1373,7 +1375,7 @@ Purpose:
 	// - Check array indexes (this may already lead to argument inference algorithm)
 
 	loc.proc = proc;
-	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
+	for(loc.blk = FnVarInstr(proc); loc.blk != NULL; loc.blk = loc.blk->next) {
 		for(n = 1, loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next, n++) {
 			i = loc.i;
 

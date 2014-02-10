@@ -95,14 +95,16 @@ Purpose:
 
 void LinkBlocks(Var * proc)
 {
-	InstrBlock * nb, * blk, * dst, * prev_blk;
+	InstrBlock * nb, * blk, * dst, * prev_blk, * first_blk;
 	Instr * i;
 	InstrOp op;
 	Var * label;
 	UInt32 n;
 
 repeat:
-	for(blk = proc->instr, n=1; blk != NULL; blk = blk->next, n++) {
+
+	first_blk = proc->type->instr;
+	for(blk = first_blk, n=1; blk != NULL; blk = blk->next, n++) {
 		blk->to      = NULL;
 		blk->cond_to = NULL;
 		blk->callers = NULL;
@@ -113,7 +115,7 @@ repeat:
 
 	// Create caller lists for blocks for goto and if instructions
 
-	for(nb = proc->instr; nb != NULL; nb = nb->next) {
+	for(nb = first_blk; nb != NULL; nb = nb->next) {
 
 		op = INSTR_VOID;
 		i = nb->last;
@@ -150,7 +152,7 @@ repeat:
 	// Remove empty blocks
 
 	prev_blk = NULL;
-	blk = proc->instr;
+	blk = first_blk;
 	while(blk != NULL) {
 
 		// Basic block merging
@@ -240,7 +242,7 @@ Purpose:
 //	Print("************* Before Blocks **************\n");
 //	PrintProc(proc);
 
-	blk = proc->instr;
+	blk = proc->type->instr;
 	while(blk != NULL) {
 		next_blk = blk->next;
 		nb = blk;

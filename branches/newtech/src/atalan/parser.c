@@ -2910,11 +2910,11 @@ dot:
 	return adr;
 }
 
-void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
+void InsertRegisterArgumentSpill(Var * proc, Var * args, VarSubmode submode, Instr * i)
 {
-	Var * arg, * tmp;
+	Var * en, * arg, * tmp;
 
-	FOR_EACH_ARG(proc, arg, submode)
+	FOR_EACH_ITEM(en, arg, args)
 		if (VarIsReg(arg)) {
 			tmp = NewVarInScope(proc, arg->type);
 			ProcReplaceVar(proc, arg, tmp);
@@ -2925,7 +2925,7 @@ void InsertRegisterArgumentSpill(Var * proc, VarSubmode submode, Instr * i)
 				InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
 			}
 		}
-	}
+	NEXT_ITEM(en, arg)
 }
 
 Bool CodeHasSideEffects(Var * scope, InstrBlock * code)
@@ -2978,13 +2978,6 @@ void ParseMacroBody(Var * proc)
 		SetFlagOn(proc->submode, SUBMODE_OUT);
 	}
 	ReturnScope(scope);
-}
-
-void ParseProcBody(Var * proc)
-{
-	ParseMacroBody(proc);
-
-//	if (Verbose(proc)) PrintProc(proc);
 
 	// *** Register Arguments (2)
 	// As the first thing in a procedure, we must spill all arguments that are passed in registers
@@ -2993,16 +2986,14 @@ void ParseProcBody(Var * proc)
 	// In the body of the procedure, we must use these local variables instead of register arguments.
 	// Optimizer will later remove unnecessary spills.
 
-	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_IN, proc->instr->first);
+	InsertRegisterArgumentSpill(proc, ArgType(proc->type->type), SUBMODE_ARG_IN, proc->type->instr->first);
 
 	// *** Register Arguments (3)
 	// At the end of a procedure, we load all values of output register arguments to appropriate registers.
 	// To that moment, local variables are used to keep the values of output arguments, so we have
 	// the registers available for use in the procedure body.
 
-	InsertRegisterArgumentSpill(proc, SUBMODE_ARG_OUT, NULL);
-
-//	if (Verbose(proc)) PrintProc(proc);
+	InsertRegisterArgumentSpill(proc, ResultType(proc->type->type), SUBMODE_ARG_OUT, NULL);
 
 }
 
@@ -4355,7 +4346,6 @@ Arguments:
 	TOP = 0;		// Currently ExpressionParser sets the TOP to 0, so we must do it too.
 	                // In future, we may need to solve it in a better way (ExpressionParser should not do it).
 	first = idx = TOP;
-//	arg = FirstArg(proc, submode);
 	arg_enum = arg = arg_type;
 	if (arg->mode == INSTR_TUPLE) {
 		arg = arg_enum->l;
