@@ -2042,6 +2042,8 @@ Syntax:
 	Bool higher;
 	Var * cond;
 	Var * body_label = VarNewTmpLabel();
+	Bool cond_first = false;
+
 
 	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
@@ -2244,8 +2246,12 @@ cond_parse:
 		GenInternal(INSTR_LET, idx, min, NULL);
 	}
 
+	if (cond != NULL || (min != NULL && !CellIsIntConst(min)) || (max != NULL && !CellIsIntConst(max))) {
+		cond_first = true;
+	}
+
 	// Loop with condition, but without variable
-	if (cond != NULL && var == NULL) {
+	if (cond_first) {
 		GenGoto(G_BLOCK->loop_label);
 	}
 
@@ -2340,16 +2346,19 @@ cond_parse:
 		}
 
 		// If step is 1, it is not necessary to test the overflow
-		if (step->mode != INSTR_INT || !IntEq(&step->n, Int1())) {
+		if (!IsEqual(step, ONE)) {
 			GenInternal(INSTR_OVERFLOW, G_BLOCK->f_label, NULL, NULL);
 		}
 no_overflow:
 
+		if (cond_first) {
+			GenLabel(G_BLOCK->loop_label);
+		}
 		// We use > comparison as in the case step is <> 1, it may step over the limit without touching it.
 		// Also user may modify the index variable (although this should be probably discouraged when for is used).
 
-//		GenInternal(INSTR_LE, G_BLOCK->body_label, var, max);
-		GenInternal(INSTR_GE, G_BLOCK->body_label, max, idx);
+		GenInternal(INSTR_IF, NULL, NewOp(INSTR_GE, max, idx), G_BLOCK->body_label);	//TODO: Overflow
+//		GenInternal(INSTR_GE, G_BLOCK->body_label, max, idx);
 	}
 var_done:
 
@@ -3953,10 +3962,26 @@ RuleArg * ParseRuleRel()
 	return arg;
 }
 
+RuleArg * ParseRuleNot()
+{
+	RuleArg * arg;
+	Bool n = false;
+	if (PARSING_CONDITION) {
+		if (NextIs(TOKEN_NOT)) {
+			n = true;
+		}
+	}
+	arg = ParseRuleRel();
+	if (n) {
+		arg = NewOpRule(INSTR_NOT, arg, NULL);
+	}
+	return arg;
+}
+
 RuleArg * ParseRuleAnd()
 {
 	RuleArg * arg;
-	arg = ParseRuleRel();
+	arg = ParseRuleNot();
 	if (PARSING_CONDITION) {
 		if (NextIs(TOKEN_AND)) {
 			arg = NewOpRule(INSTR_AND, arg, ParseRuleRel());

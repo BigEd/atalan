@@ -43,4 +43,6 @@ Bool ContainsItem(Var * tuple, Var * item)
 	FOR_EACH_ITEM(en, var, tuple)
 		if (var == item) return true;
 	NEXT_ITEM(en, var)
+
+	return false;
 }

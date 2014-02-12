@@ -1,6 +1,5 @@
 /*
 TODO:
-	- do sequence to separate Cell INSTR_SEQUENCE (kill TYPE_SEQUENCE)
 	- remove INSTR_NAME
 	- remove INT_TYPE range
 	- range should include resolution? (default is 1, different for floats etc.)

@@ -454,7 +454,7 @@ Result:
 			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
 			// Type has not been specified in previous code
-			if (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) {
+			if (type == NULL || (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED)) {
 
 				if (var->mode == INSTR_ELEMENT) {
 					arr_type = var->adr->type;
@@ -483,7 +483,7 @@ Result:
 				// User will be asked to specify the type for the variable.
 				// It also means, we may be using undefined variable!
 
-				if (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) {
+				if (type == NULL || (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED)) {
 
 					if (report_errors) {
 						// Argument to let adr 
@@ -617,7 +617,7 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 		}
 	}
 }
-
+/*
 Bool TypeBitMask(Type * type, UInt32 * p_bit_size)
 {
 	UInt32 max_bits;
@@ -656,9 +656,9 @@ Type * BitType(InstrOp op, Type * left, Type * right)
 
 	return rt;
 }
-
+*/
 Type * TypeEval(InstrOp op, Type * left, Type * right);
-
+/*
 Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 {
 	Type * rt = NULL;
@@ -687,49 +687,7 @@ Type * IntTypeEval(InstrOp op, Type * left, Type * right)
 	}
 	return rt;
 }
-
-Type * SeqTypeEval(InstrOp op, Type * left, Type * right)
-{
-	Type * rt = NULL;
-//	RangeTransform r_fn;
-
-	if (right->variant == TYPE_INT) {
-		switch(op) {
-		case INSTR_SUB:
-		case INSTR_ADD:
-			if (left->seq.init != NULL) {
-				rt = NewSequence(
-					TypeEval(op, left->seq.init, right),
-					left->seq.step,
-					left->seq.op,
-					left->seq.limit,
-					left->seq.compare_op
-					);
-			}
-			break;
-		}
-	}
-	//TODO: Only if there is same operation and step
-	return rt;
-}
-
-
-Type * AdrTypeEval(InstrOp op, Type * left, Type * right)
-{
-	Type * rt = NULL;
-
-	switch(op) {
-
-	case INSTR_LO:
-	case INSTR_HI:
-		rt = TypeByte();
-		break;
-		default:
-		break;
-	}
-	return rt;
-}
-
+*/
 Type * TypeEval(InstrOp op, Type * left, Type * right)
 {
 	Type * rt = NULL;
@@ -745,21 +703,6 @@ Type * TypeEval(InstrOp op, Type * left, Type * right)
 		} else {
 
 			rt = CellOp(op, left, right);
-/*
-			switch(left->variant) {
-			case TYPE_INT:
-				rt = IntTypeEval(op, left, right);
-				break;
-			case TYPE_SEQUENCE:
-				rt = SeqTypeEval(op, left, right);
-				break;
-			case TYPE_ADR:
-				rt = AdrTypeEval(op, left, right);
-				break;
-			default:
-				ASSERT("Unknown type eval.");
-			}
-*/
 		}
 	}
 

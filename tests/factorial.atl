@@ -1,4 +1,4 @@
-fact: proc n:0..8 -> result:1..40320 =
+fact: fn n:0..8 -> result:1..40320
     result = 1
     for i:2..n result = result * i
 

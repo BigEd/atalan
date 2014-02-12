@@ -38,11 +38,11 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_MUL,         "mul", "*", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 	{ INSTR_DIV,         "div", "/", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
 	{ INSTR_MOD,         "mod", "mod", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL },
-	{ INSTR_SQRT,        "sqrt", "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_SQRT,        "sqrt", "sqrt", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, INSTR_OPERATOR, NULL },
 	{ INSTR_AND,         "and", "and", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 	{ INSTR_OR,          "or", "or", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
 	{ INSTR_XOR,         "xor", "xor", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, NULL },
-	{ INSTR_NOT,         "not", "not", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, NULL },
+	{ INSTR_NOT,         "not", "not", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, INSTR_OPERATOR, NULL },
 
 	{ INSTR_ROL,         "rotl", "<<", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate right
 	{ INSTR_ROR,         "rotr", ">>", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, NULL },				// bitwise rotate left
