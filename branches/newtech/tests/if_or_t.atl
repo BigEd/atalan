@@ -1,0 +1,7 @@
+a = 0
+x = 7
+
+if x = 7 or x = 5 then a = 1
+
+assert a = 1
+ 

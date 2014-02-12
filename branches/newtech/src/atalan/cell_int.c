@@ -34,6 +34,7 @@ Bool CellIsIntConst(Var * var)
 		var->mode == INSTR_INT 
 		|| (var->mode == INSTR_RANGE && IsEqual(var->l, var->r)) 
 		|| (var->mode == INSTR_TYPE && CellIsIntConst(var->possible_values))
+		|| (var->mode == INSTR_VAR && CellIsIntConst(var->type))
 		);
 }
 

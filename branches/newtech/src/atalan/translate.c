@@ -587,6 +587,9 @@ Bool InstrTranslate2(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 //		if (InstrTranslate(OpRelSwap(op), result, arg2, arg1, mode)) return true;
 //	}
 
+	else if (op == INSTR_IF && arg1->mode == INSTR_NOT && IS_RELATIONAL_OP(arg1->l->mode)) {
+		if (InstrTranslate(op, result, NewOp(OpNot(arg1->l->mode), arg1->l->l, arg1->l->r), arg2, mode)) return true;
+	}
 	return false;
 }
 
