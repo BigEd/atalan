@@ -453,7 +453,7 @@ Bool OptimizeLive(Var * proc)
 			//===== Mark arguments as live (used)
 
 			// For procedure call, we mark as live variable all variables used in that procedure
-			if (IsGoto(i)) {
+			if (IsGoto(i) && i->arg2->mode == INSTR_VAR && i->arg2->type->mode == INSTR_FN) {
 				MarkProcLive(i->arg2);
 				VarMarkLive(i->arg2);
 			} else if (i->op == INSTR_CALL) {

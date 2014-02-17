@@ -1145,7 +1145,18 @@ retry_indices:
 						var->type = BufPop();
 					}
 				} else {
-					SyntaxError("Type redefinition is not allowed.");
+					// *** Type Assert (1)
+					// We may assert the type inferencer deduced the correct type of a variable.
+					// This is done using ::assert var:type:: syntax.
+
+					// Type Assert is implemented using special INSTR_MATCH operator.
+
+					if (PARSING_CONDITION) {
+						ParseExpression(NULL);
+						var = NewOp(INSTR_MATCH, var, BufPop());
+					} else {
+						SyntaxError("Type redefinition is not allowed.");
+					}
 				}
 			} else {
 				SyntaxError("There must be variable name to the left of double colon.");
@@ -1428,20 +1439,6 @@ void ParseRel2()
 		ifok {
 			InstrBinary(op);
 		}
-
-	// Type guard
-
-	// *** Type Assert (1)
-	// We may assert the type inferencer deduced the correct type of a variable.
-	// This is done using ::assert var:type:: syntax.
-
-	// Type Assert is implemented using special INSTR_MATCH operator.
-
-	} else if (NextIs(TOKEN_COLON)) {
-		ParseTuple();
-		ifok {
-			InstrBinary(INSTR_MATCH);
-		}
 	}
 }
 
@@ -1458,11 +1455,15 @@ void ParseLogAnd()
 
 void ParseLogOr()
 {
+	InstrOp op = INSTR_OR;
+	if (NextOpIs(TOKEN_EITHER)) {
+		op = INSTR_XOR;
+	}
 	ParseLogAnd();
 	while(NextOpIs(TOKEN_OR)) {
 		ParseLogAnd();
 		ifok {
-			InstrBinary(INSTR_OR);
+			InstrBinary(op);
 		}
 	}
 }
@@ -1690,9 +1691,9 @@ void ExpectExpression(Var * result)
 	}
 }
 
-Bool  G_NOT;
+//Bool  G_NOT;
 
-void ParseCondition();
+//void ParseCondition();
 
 GLOBAL Block   G_BLOCKS[100];
 GLOBAL Block * G_BLOCK;
@@ -1750,216 +1751,6 @@ void EndBlock()
 	G_BLOCK--;
 }
 
-void ParseCondParenthesis()
-{
-	EnterBlock();
-	ParseCondition();
-	if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
-}
-
-void GenRel(InstrOp op, Var * left, Var * right)
-{
-	if (!G_BLOCK->not) op = OpNot(op);
-
-	if (G_BLOCK->f_label == NULL) {
-		G_BLOCK->f_label = VarNewTmpLabel();
-	}
-	Gen(op, G_BLOCK->f_label, left, right);
-}
-
-
-void ParseRel()
-/*
-	relop: "=" | "<>" | "<" | "<=" | ">" | ">="
-	rel:  <exp> <relop> <exp> [<relop> <exp>]*
-*/
-{
-	Var * left, * right;
-	InstrOp op;
-	Type * type;
-
-	if (TOK == TOKEN_OPEN_P) {
-		ParseCondParenthesis();
-	} else {
-		ParseExpression(NULL);
-		ifok {
-			left = STACK[0];
-
-			// var <relop> var [<relop> var]
-			if (ParseRelOp(&op)) {
-				do {
-
-					// For normal operation, we jump to false label when the condition does NOT apply
-					// For example for if:
-					// if <cond>
-					//     <block>
-					//
-					// must skip the <block>.			
-
-					ParseExpression(left);
-					right = STACK[0];
-					ifok {
-						GenRel(op, left, right);
-						left = right;
-					}
-				} while (ParseRelOp(&op));
-
-			// Type guard
-			} else if (NextIs(TOKEN_COLON)) {
-
-				type = ParseType();
-				right = NewCell(INSTR_TYPE);
-				right->type = type;
-				GenRel(INSTR_TYPE, left, right);
-
-			// No relation operator follows the expression, this must be test of boolean variable
-			} else {
-
-				right = VarFindAssociatedConst(left, "true");
-				if (right != NULL) {
-					op = INSTR_EQ;
-				} else {
-					right = VarFindAssociatedConst(left, "false");
-					if (right != NULL) op = INSTR_NE;
-				}
-				if (op != INSTR_VOID) {
-					GenRel(op, left, right);
-				} else {
-					SyntaxError("variable is not of boolean type");
-				}
-			}
-		}
-	}
-}
-
-void ParseNot()
-{
-
-	Bool not = false;
-	while (NextIs(TOKEN_NOT)) not = !not;
-
-	if (not) {
-		not = G_BLOCK->not;
-		G_BLOCK->not = !not;
-		ParseRel();
-		G_BLOCK->not = not;
-	} else {
-		ParseRel();
-	}
-}
-
-void ParseAnd()
-{
-	// if x <> 2 and x <> 3 and x <> 4 then "x"
-	//
-	// should be translated as
-	//
-	// if x <> 2
-	//    if x <> 3
-	//       if x <> 4
-	//          "x" 
-	Token tok;
-
-retry:
-	ParseNot();
-
-	tok = TOKEN_AND;
-	if (G_BLOCK->not) tok = TOKEN_OR;
-
-	if ((!G_BLOCK->not && NextIs(TOKEN_AND)) || (G_BLOCK->not && NextIs(TOKEN_OR))) {
-		if (G_BLOCK->t_label != NULL) {
-			GenLabel(G_BLOCK->t_label);
-			G_BLOCK->t_label = NULL;
-		}
-		goto retry;
-	}
-}
-
-void SimpleIf(InstrOp op, Var * result, Var * arg1, Var * arg2)
-{
-	BeginBlock(TOKEN_IF);
-	ParseAnd();
-	if (G_BLOCK->t_label != NULL) {
-		GenLabel(G_BLOCK->t_label);
-	}
-	Gen(op, result, arg1, arg2);
-	if (G_BLOCK->f_label != NULL) {
-		GenLabel(G_BLOCK->f_label);
-	}
-	EndBlock();
-}
-
-void ParseCondition()
-{
-	// if x=1 or x=2 or x=3 then "x"
-	//
-	// should be translated as
-	//
-	//   if x = 1 goto body
-	//   if x = 2 goto body
-	//   if x = 3 goto body
-	//   goto exit
-	//body@
-	//   "[x]"
-	//exit@
-	//
-	//
-	// 1. Because of normal if, the first condiion gets translated like:
-	//
-	//   if not x = 1 goto f1		(false)
-	//   "[x]"
-	//f1@
-	//
-	// 2. We need to invert the condition back:
-	//
-	//   if not x = 1 goto f1		(false)
-	//   goto @body
-	//@f1
-	Var * tmp;
-	Var * body_label = NULL;
-	Token tok;
-	if (NextIs(TOKEN_EITHER)) {
-		tmp = NewTempVar(NewRange(ZERO, ONE));
-		GenLet(tmp, ZERO);
-		SimpleIf(INSTR_LET, tmp, ONE, NULL); 
-		if (NextIs(TOKEN_OR)) {
-			SimpleIf(INSTR_XOR, tmp, tmp, ONE);
-		}
-		GenRel(INSTR_EQ, tmp, ONE);
-
-	} else {	
-retry:
-		ParseAnd();
-		// If the condition is negated (either using NOT or UNTIL), meaning of AND and OR is switched
-
-		tok = TOKEN_OR;
-		if (G_BLOCK->not) tok = TOKEN_AND;
-
-		if (NextIs(tok)) {
-
-			// If the condition was more complex and generated true label,
-			// the true label would point to this jump
-
-			if (G_BLOCK->t_label != NULL) {
-				GenLabel(G_BLOCK->t_label);
-				G_BLOCK->t_label = NULL;
-			}
-
-			if (body_label == NULL) body_label = VarNewTmpLabel();
-
-			GenGoto(body_label);
-
-			if (G_BLOCK->f_label != NULL) {
-				GenLabel(G_BLOCK->f_label);
-				G_BLOCK->f_label = NULL;
-			}
-			goto retry;
-		}
-		GenLabel(body_label);
-	}
-
-}
-
 void ParseLabel(Var ** p_label)
 {
 // Labels are global in procedure
@@ -1999,7 +1790,7 @@ Purpose:
 	"IF" cond ["THEN"] commands ["ELSE IF" <cond> ["THEN"] commands]* ["ELSE"] commands
 */
 {
-	Var * cond, * label, * neg;
+	Var * cond, * label, * neg, * else_label;
 	
 	cond = ParseCondExpression();
 
@@ -2010,14 +1801,24 @@ Purpose:
 		return;
 	}
 
-	neg = Not(cond);
+	if (!negated) neg = Not(cond);
 	label =  VarNewTmpLabel();
 	// There may be optional THEN
 	NextIs(TOKEN_THEN);
 
 	Gen(INSTR_IF, NULL, neg, label);
 	ParseBlock(TOKEN_ELSE, NULL);
-	GenLabel(label);
+
+	// "ELSE"
+	if (NextIs(TOKEN_ELSE)) {
+		else_label = VarNewTmpLabel();
+		GenGoto(else_label);
+		GenLabel(label);
+		ParseBlock(TOKEN_VOID, NULL);
+		GenLabel(else_label);
+	} else {
+		GenLabel(label);
+	}
 }
 
 void ParseFor()
@@ -3287,7 +3088,7 @@ parsed:
 
 				// Definition of named constant assigned to type (name:xxx = 34)
 				if (var->mode == INSTR_NAME && FlagOff(submode, SUBMODE_PARAM)) {
-					if (var->type->variant != TYPE_UNDEFINED) {
+					if (var->type->mode != INSTR_ANY) {
 						TypeAddConst(var->type, var);
 					}
 				} else {
@@ -3806,7 +3607,8 @@ RuleArg *  ParseSimpleRuleArg(Bool from_deref)
 		arg->arg_no  = ParseArgNo();
 
 	} else if (NextIs(TOKEN_OPEN_P)) {
-		arg = ParseRuleRange();
+//		arg = ParseRuleRange();
+		arg = ParseRuleArg2();
 		if (OK && !NextIs(TOKEN_CLOSE_P)) {
 			SyntaxError("expected closing brace");
 		}
@@ -3993,10 +3795,14 @@ RuleArg * ParseRuleAnd()
 RuleArg * ParseRuleOr()
 {
 	RuleArg * arg;
+	InstrOp op = INSTR_OR;
+	if (NextIs(TOKEN_EITHER)) {
+		op = INSTR_XOR;
+	}
 	arg = ParseRuleAnd();
 	if (PARSING_CONDITION) {
 		if (NextIs(TOKEN_OR)) {
-			arg = NewOpRule(INSTR_OR, arg, ParseRuleAnd());
+			arg = NewOpRule(op, arg, ParseRuleAnd());
 		}
 	}
 	return arg;

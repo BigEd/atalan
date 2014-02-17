@@ -280,7 +280,7 @@ Type * Restrict(Type * type, Type * restriction, InstrOp op)
 	InstrOp sop;
 
 	// If no restriction is defined, the type is returned unrestricted
-	if (restriction == NULL || restriction->mode == INSTR_EMPTY) return type;	// restriction->variant == TYPE_UNDEFINED)
+	if (restriction == NULL || restriction->mode == INSTR_EMPTY) return type;
 
 	rt = type;
 
@@ -389,7 +389,7 @@ Type * Remove(Type * cell, Type * restriction)
 	Type * r = cell;
 	Var * rmin, * rmax;
 
-	if (restriction == NULL || restriction->variant == TYPE_UNDEFINED) return r;
+	if (restriction == NULL || restriction->mode == INSTR_EMPTY) return r;
 
 	if (CellRange(restriction, &rmin, &rmax)) {
 		r = RemoveRange(cell, rmin, rmax);

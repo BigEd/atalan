@@ -215,9 +215,9 @@ void GenGoto(Var * label)
 void GenLabel(Var * var)
 {
 	if (var != NULL) {
-		if (var->type->variant == TYPE_UNDEFINED) {
-			VarToLabel(var);
-		}
+//		if (var->type->variant == TYPE_UNDEFINED) {
+//			VarToLabel(var);
+//		}
 		GenInternal(INSTR_LABEL, var, NULL, NULL);
 	}
 }

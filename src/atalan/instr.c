@@ -630,8 +630,10 @@ void PrintVarVal(Var * var)
 {
 	UInt8 oc;
 	char * s;
+	InstrInfo * ii;
 	if (var == NULL) return;
 
+	ii = &INSTR_INFO[var->mode];
 	if (var->mode == INSTR_DEREF) {
 		Print("@");
 		var = var->var;
@@ -672,17 +674,27 @@ void PrintVarVal(Var * var)
 			} else if (var->mode == INSTR_TEXT) {
 				Print("'"); Print(var->str); Print("'");
 			} else {
-				Print("(");
-				PrintVarVal(var->adr);
-				oc = PrintColor(GREEN+BLUE);
-				s = INSTR_INFO[var->mode].symbol;
-				Print(" ");
-				Print(s);
-				Print(" ");
-				//if (*s>='a' && *s<='z') { Print(" "); }
-				PrintColor(oc);
-				PrintVarVal(var->var);
-				Print(")");
+				s = ii->symbol;
+
+				// Unary operator
+				if (ii->arg_type[2] == TYPE_VOID) {
+					oc = PrintColor(GREEN+BLUE);
+					Print(s);
+					Print(" ");
+					PrintColor(oc);
+					PrintVarVal(var->l);
+				} else {
+					Print("(");
+					PrintVarVal(var->adr);
+					oc = PrintColor(GREEN+BLUE);
+					Print(" ");
+					Print(s);
+					Print(" ");
+					//if (*s>='a' && *s<='z') { Print(" "); }
+					PrintColor(oc);
+					PrintVarVal(var->var);
+					Print(")");
+				}
 			}
 		}
 	} else {

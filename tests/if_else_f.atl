@@ -1,0 +1,10 @@
+in x:0..100
+out x'@x
+x' = 5
+
+if x = 1
+	y = 5
+else
+	y = 9
+	
+assert y = 9

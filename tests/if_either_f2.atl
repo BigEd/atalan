@@ -1,0 +1,8 @@
+a = 0
+x = 7
+y = 9
+
+if either x = 5 or y = 6 then a = 1
+
+assert a = 0
+ 

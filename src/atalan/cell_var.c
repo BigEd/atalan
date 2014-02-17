@@ -137,11 +137,11 @@ Purpose:
 	return VAR_NAME;
 }
 
-Var * VarFindTypeVariant(char * name, TypeVariant type_variant)
+Var * VarFindLabel(char * name)
 {
 	Var * var;
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_VAR && StrEqual(name, var->name) && (type_variant == TYPE_UNDEFINED || (var->type != NULL && var->type->mode == INSTR_TYPE && var->type->variant == type_variant))) break;
+		if (var->mode == INSTR_VAR && StrEqual(name, var->name) && (var->type != NULL && var->type->mode == INSTR_TYPE && var->type->variant == TYPE_LABEL)) break;
 	NEXT_VAR
 	return var;
 }

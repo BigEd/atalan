@@ -56,7 +56,7 @@ Purpose:
 	rt = type;
 
 	// 1. Undefined type may not be restricted
-	if (type == NULL || type->variant == TYPE_UNDEFINED) goto done;
+	if (type == NULL || type->mode == INSTR_ANY) goto done;
 
 	if (blk == NULL) goto done;
 	i = blk->last;
@@ -112,9 +112,9 @@ Result:
 	NULL             Specified variable is not modified in this block (or any block that jumps to this block).
 	                 This may happen for example for loops, where the variable is not modified in the loop.
                      When NULL is combined with other type, result is the non-null type.
-	TYPE_UNDEFINED   Undefined type means, that the type is somehow modified, but we do not know exactly how.
+	ANY              Undefined type means, that the type is somehow modified, but we do not know exactly how.
 	                 (We cannot infer the type).
-					 When UNDEFINED type is combined with any other type, result is UNDEFINED type.
+					 When ANY type is combined with any other type, result is ANY type.
 */
 {
 	Instr * i;
@@ -233,7 +233,7 @@ sub1:
 
 		// This is just speed optimization, if the type is undefined, we do not need to continue processing
 		if (type2 != NULL) {
-			if (type2->mode == INSTR_TYPE && type2->variant == TYPE_UNDEFINED) {
+			if (type2->mode == INSTR_ANY) {
 				type = type2;
 				goto done;
 			}
@@ -254,7 +254,7 @@ sub1:
 		g_fb_level--;
 #endif
 		if (type2 != NULL) {
-			if (type2->mode == INSTR_TYPE && type2->variant == TYPE_UNDEFINED) {
+			if (type2->mode == INSTR_ANY) {
 				type = type2;
 				goto done;
 			}
@@ -454,7 +454,7 @@ Result:
 			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
 			// Type has not been specified in previous code
-			if (type == NULL || (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED)) {
+			if (type == NULL || type->mode == INSTR_ANY) {
 
 				if (var->mode == INSTR_ELEMENT) {
 					arr_type = var->adr->type;
@@ -483,7 +483,7 @@ Result:
 				// User will be asked to specify the type for the variable.
 				// It also means, we may be using undefined variable!
 
-				if (type == NULL || (type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED)) {
+				if (type == NULL || type->mode == INSTR_ANY) {
 
 					if (report_errors) {
 						// Argument to let adr 
@@ -507,7 +507,7 @@ Result:
 		}
 	}
 
-	if (type != NULL && type->mode == INSTR_TYPE && type->variant == TYPE_UNDEFINED) type = NULL;
+	if (type != NULL && type->mode == INSTR_ANY) type = NULL;
 	return type;
 }
 
@@ -558,7 +558,7 @@ Result:
 			}
 
 			type = i->type[RESULT];
-			if (type == NULL || type->variant == TYPE_UNDEFINED) {
+			if (type == NULL || type->mode == INSTR_ANY) {
 				i->type[RESTRICTION] = restriction;
 				SetFlagOn(i->flags, InstrRestriction);
 				modified = true;
@@ -609,7 +609,7 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 		if (idx->mode == INSTR_VAR || idx->mode == INSTR_INT) {
 			ti = FindType(loc, idx, d->final_pass);
 			// Type of the index is undefined, this is restriction
-			if (ti == NULL || ti->variant == TYPE_UNDEFINED) {
+			if (ti == NULL || ti->mode == INSTR_ANY) {
 				if (PropagateConstraint(loc, idx, var->adr->type->index, loc->blk, loc->i)) {
 					d->modified = true;
 				}
@@ -826,7 +826,7 @@ Purpose:
 
 	i = loc->i;
 
-	if (loc->blk->seq_no == 1 && loc->n == 2) {
+	if (loc->blk->seq_no == 2 && loc->n == 1) {
 		result = NULL;
 	}
 
@@ -1328,7 +1328,7 @@ Purpose:
 			if (var != NULL && !VarIsLabel(var) && !VarIsArrayElement(var) && !VarIsArray(var)) {
 				tr = i->type[RESULT];
 				if (VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
-					if (tr != NULL && !(tr->mode == INSTR_TYPE && tr->variant == TYPE_UNDEFINED) && FlagOff(i->flags, InstrRestriction)) {
+					if (tr != NULL && tr->mode != INSTR_ANY && FlagOff(i->flags, InstrRestriction)) {
 						var->type = Union(var->type, i->type[RESULT]);
 					} else {
 
