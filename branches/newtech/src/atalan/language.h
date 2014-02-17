@@ -1,5 +1,6 @@
 /*
 TODO:
+	- remove ParseIntType
 	- remove INSTR_NAME
 	- remove INT_TYPE range
 	- range should include resolution? (default is 1, different for floats etc.)
@@ -384,7 +385,6 @@ typedef enum {
 	TYPE_ADR,		// address (or reference)
 	TYPE_VARIANT,
 	TYPE_TUPLE,
-	TYPE_UNDEFINED,
 	TYPE_SCOPE,
 	TYPE_TYPE,
 	TYPE_ANY
@@ -778,7 +778,7 @@ Var * VarFind(Var * scope, char * name);
 Var * VarFind(Var * scope, char * name);
 Var * VarFindScope2(Var * scope, char * name);
 Var * VarFind2(char * name);
-Var * VarFindTypeVariant(char * name, TypeVariant type_variant);
+Var * VarFindLabel(char * name);
 
 //===== Variables
 

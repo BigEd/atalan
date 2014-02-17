@@ -395,7 +395,7 @@ Arguments:
 						
 					}
 				} else {
-					ASSERT(rule->cycles > 0);
+//					ASSERT(rule->cycles > 0);
 					if (i->rule->cycles >= rule->cycles) {
 						q -= i->rule->cycles;			// we remove the current instruction
 						q += rule->cycles;              // and add new instruction

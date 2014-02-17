@@ -648,7 +648,7 @@ Arguments:
 							loc.i   = i;
 							bmk = SetBookmarkLine(&loc);
 
-							var = VarFindTypeVariant(label->name, TYPE_LABEL);
+							var = VarFindLabel(label->name);
 							if (var != NULL) {
 								ErrArg(var);
 								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								

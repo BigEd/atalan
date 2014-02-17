@@ -191,7 +191,7 @@ Purpose:
 
 Var * Div(Var * l, Var * r)
 {
-	Var * result;
+	Var * result = NULL;
 	BigInt * il, * ir, ii, ii2;
 
 	if (IsEqual(r, ONE)) return l;
@@ -209,10 +209,11 @@ Var * Div(Var * l, Var * r)
 		}
 		IntFree(&ii);
 		IntFree(&ii2);
-		return result;
 	}
 
-	result = NewOp(INSTR_DIV, l, r);
+	if (result == NULL) {
+		result = NewOp(INSTR_DIV, l, r);
+	}
 	return result;
 }
 
