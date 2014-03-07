@@ -1188,6 +1188,7 @@ typedef struct {
 extern InstrInfo INSTR_INFO[INSTR_CNT];
 
 void TranslateTypes(Var * proc);
+void TranslateTypes2(Var * proc, Bool always);
 
 /***********************************************************
 
@@ -1220,6 +1221,7 @@ struct RuleTag {
 	InstrBlock * to;
 	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
 	UInt8 cycles;			// How many cycles the instruction uses.
+	Var * fn;			// function used for this rule. This fn will contain local variables of the rule.
 };
 
 
@@ -1239,6 +1241,7 @@ typedef struct {
 void RuleSetInit(RuleSet * ruleset);
 void RuleSetAddRule(RuleSet * ruleset, Rule * rule);
 Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2);
+void TranslateRules();
 
 void GenMatchedRule(Rule * rule);
 

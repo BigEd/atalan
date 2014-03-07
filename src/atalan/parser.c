@@ -53,6 +53,8 @@ Bool    PARSING_RULE = false;
 Bool    PARSING_PATTERN = false;
 Bool    PARSING_CONDITION = false;
 
+Var * RULE_FN_VAR = NULL;
+
 // Is modified as the expression gets generated
 
 void ParseExpRoot();
@@ -3866,7 +3868,7 @@ void ParseRule()
 	char buf[255];
 	char *s, *d, c;
 	Bool macro_rule = false;
-	Var * n;
+	Var * n, * scope, * fn;
 
 	rule = MemAllocStruct(Rule);
 	rule->line_no = LINE_NO;
@@ -3965,6 +3967,15 @@ void ParseRule()
 
 	if (NextIs(TOKEN_RIGHT_ARROW)) {
 
+		if (RULE_FN_VAR == NULL) {
+			fn = NewFn(RULE_FN_TYPE->type, NULL);
+			fn->submode |= SUBMODE_MACRO;
+			RULE_FN_VAR = NewTempVar(fn);
+		}
+
+//		rule->fn = NewFn(RULE_FN_TYPE->type, NULL);
+//		rule->fn->submode |= SUBMODE_MACRO;
+
 		if (NextIs(TOKEN_MACRO)) {
 			macro_rule = true;
 			GenBegin();
@@ -4002,9 +4013,21 @@ void ParseRule()
 		} else {
 			GenBegin();
 			EXP_EXTRA_SCOPE = CPU->SCOPE;
+			scope = InScope(RULE_FN_VAR);
 			ParseCommandBlock();
+			ReturnScope(scope);
+
+			if (RULE_FN_VAR->subscope != NULL) {
+				rule->fn = RULE_FN_VAR;
+				RULE_FN_VAR = NULL;
+			}
 			EXP_EXTRA_SCOPE = NULL;
 			rule->to = GenEnd();
+			if (rule->fn != NULL) {
+				rule->fn->line_no = rule->line_no;
+				rule->fn->file = rule->file;
+				rule->fn->type->instr = rule->to;
+			}
 		}
 	} else {
 		SyntaxError("Expected ->.");

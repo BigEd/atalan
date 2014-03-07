@@ -833,7 +833,7 @@ Purpose:
 	// Conditional jumps have special support.
 	// We simplify the code if the result of comparison in the condition is constant.
 
-	if (i->op == INSTR_IF) {
+	if (i->op == INSTR_IF && !IsGoto(i)) {
 		if (i->type[ARG1] == NULL) {
 			tr = FindType(loc, i->arg1, d->final_pass);
 			if (tr != NULL) {
@@ -1269,6 +1269,18 @@ void ReportAlwaysFalseAsserts(Var * proc)
 	}
 }
 
+void PrintProcHeader(UInt8  level, Var * proc)
+{
+	if (Verbose(proc)) {
+		if (proc->file != NULL) {
+			PrintHeader(level, "%s (%s:%d)", VarName(proc), proc->file->name, proc->line_no);
+		} else {
+			PrintHeader(level, "%s", VarName(proc));
+		}
+		PrintProc(proc);
+	}
+}
+
 void TypeInfer(Var * proc)
 /*
 Purpose:
@@ -1286,12 +1298,9 @@ Purpose:
 	if (!IsFnImplemented(proc->type)) return;
 
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
+	PrintProcHeader(2, proc);
 
-	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
-		PrintProc(proc);
-	}
-
+	GenerateBasicBlocks(proc);
 	TypeDeduce(proc);
 
 	data.modified = false;
@@ -1371,6 +1380,5 @@ Purpose:
 
 	ReportUnusedVars(proc);
 	ReportAlwaysFalseAsserts(proc);
-
 
 }

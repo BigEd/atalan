@@ -651,7 +651,7 @@ Arguments:
 							var = VarFindLabel(label->name);
 							if (var != NULL) {
 								ErrArg(var);
-								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);								
+								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);
 							} else {
 								SyntaxErrorBmk("Label [A] is undefined", bmk);
 							}
