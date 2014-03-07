@@ -215,9 +215,6 @@ void GenGoto(Var * label)
 void GenLabel(Var * var)
 {
 	if (var != NULL) {
-//		if (var->type->variant == TYPE_UNDEFINED) {
-//			VarToLabel(var);
-//		}
 		GenInternal(INSTR_LABEL, var, NULL, NULL);
 	}
 }
@@ -354,6 +351,9 @@ Purpose:
 	GenMacro(macro, args);
 }
 
+#define FOR_EACH_INSTR(I, BLK) for(I = BLK->first; I != NULL; I = I->next) {
+#define NEXT_INSTR }
+
 void GenMacro(Var * macro, Var ** args)
 /*
 Purpose:
@@ -374,78 +374,89 @@ Argument:
 	ASSERT(macro->mode == INSTR_VAR);
 	ASSERT(macro->type->mode == INSTR_FN);
 
-	blk = macro->type->instr;
+	
 //	blk = macro->instr;
-	if (blk == NULL) return;
+//	if (blk == NULL) return;
 
 	VarSetInit(&locals);
 
-	for(i = blk->first; i != NULL; i = i->next) {
-		op = i->op;
-		local_result = false;
+	for(blk = macro->type->instr; blk != NULL; blk = blk->next) {
 
-		// In case, we are generating variable (means we are inlining a procedure), generate lines too
-		if (op == INSTR_LINE) {
-			if (!IsMacro(macro->type)) {
-				InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
-				i2 = INSTR->prev;
-				i2->result    = i->result;
-				i2->line_no   = i->line_no;
-				i2->line      = StrAlloc(i->line);
-			}
+		if (blk->label != NULL) {
+			arg1 = GenArg(macro, blk->label, args, &locals);
+			GenLabel(arg1);
+		}
 
-		// Macro may contain NOP instruction, we do not generate it to result
-		} else if (op != INSTR_VOID) {
+		FOR_EACH_INSTR(i, blk)
+			op = i->op;
+			local_result = false;
 
-			result = i->result;
-			if (result != NULL) {
-				// %Z variable is used as forced local argument.
-				local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
-				if (!local_result) {
-					result = GenArg(macro, result, args, &locals);
+			// In case, we are generating variable (means we are inlining a procedure), generate lines too
+			if (op == INSTR_LINE) {
+				if (!IsMacro(macro->type)) {
+					InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
+					i2 = INSTR->prev;
+					i2->result    = i->result;
+					i2->line_no   = i->line_no;
+					i2->line      = StrAlloc(i->line);
 				}
-			}
-			arg1 = GenArg(macro, i->arg1, args, &locals);
-			arg2 = GenArg(macro, i->arg2, args, &locals);
 
-			arg1 = VarEvalConst(arg1);
-			arg2 = VarEvalConst(arg2);
+			// Macro may contain NOP instruction, we do not generate it to result
+			} else if (op != INSTR_VOID) {
 
-			// Try to evaluate constant instruction to prevent generating excess instructions.
-
-			r = InstrEvalConst(op, arg1, arg2);
-			if (r != NULL) {
-				op = INSTR_LET; arg1 = r; arg2 = NULL;
-			}
-
-			// There can be temporary variable, which didn't get type, because macro argument type
-			// was not known. We should derive types in a better way, but this hack
-			// should suffice for now.
-
-			if (result != NULL && result->type == NULL) result->type = arg1->type;
-
-			// If we are setting the value to local variable, do not generate instruction
-
-			if (local_result) {
-				if (op == INSTR_LET) {
-					args[25] = arg1;
-				} else {
-					SyntaxError("failed to evaluate constant");
+				if (op == INSTR_LABEL) {
+					op = INSTR_LABEL;
 				}
-			} else {
-				if (PHASE == PHASE_TRANSLATE) {
-//					if (result->mode == INSTR_VAR && StrEqual(result->name, "eadx")) {
-//						Print("x");
-//					}
-					if (!InstrTranslate3(op, result, arg1, arg2, 0)) {
-						SyntaxError("Translation for instruction not found");
+				result = i->result;
+				if (result != NULL) {
+					// %Z variable is used as forced local argument.
+					local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
+					if (!local_result) {
+						result = GenArg(macro, result, args, &locals);
+					}
+				}
+				arg1 = GenArg(macro, i->arg1, args, &locals);
+				arg2 = GenArg(macro, i->arg2, args, &locals);
+
+				arg1 = VarEvalConst(arg1);
+				arg2 = VarEvalConst(arg2);
+
+				// Try to evaluate constant instruction to prevent generating excess instructions.
+
+				r = InstrEvalConst(op, arg1, arg2);
+				if (r != NULL) {
+					op = INSTR_LET; arg1 = r; arg2 = NULL;
+				}
+
+				// There can be temporary variable, which didn't get type, because macro argument type
+				// was not known. We should derive types in a better way, but this hack
+				// should suffice for now.
+
+				if (result != NULL && result->type == NULL) result->type = arg1->type;
+
+				// If we are setting the value to local variable, do not generate instruction
+
+				if (local_result) {
+					if (op == INSTR_LET) {
+						args[25] = arg1;
+					} else {
+						SyntaxError("failed to evaluate constant");
 					}
 				} else {
-					GenInternal(op, result, arg1, arg2);
+					if (PHASE == PHASE_TRANSLATE) {
+	//					if (result->mode == INSTR_VAR && StrEqual(result->name, "eadx")) {
+	//						Print("x");
+	//					}
+						if (!InstrTranslate3(op, result, arg1, arg2, 0)) {
+							SyntaxError("Translation for instruction not found");
+						}
+					} else {
+						GenInternal(op, result, arg1, arg2);
+					}
 				}
-			}
 
-		}
+			}
+		NEXT_INSTR
 	}
 	VarSetCleanup(&locals);
 }

@@ -23,7 +23,6 @@ are necessarily executed exactly once, in order.
 
 #include "language.h"
 
-
 InstrBlock * SplitBlock(InstrBlock * block, Instr * i)
 /*
 Purpose:
@@ -135,9 +134,11 @@ repeat:
 		if (op == INSTR_IF) {
 			label = i->arg2;
 			// Jumps to other procedures are handled in a special way, as these are not normal jumps.
-			if (label->type->mode != INSTR_FN) {
+			if (label->type->mode != INSTR_FN && !VarIsRuleArg(label)) {
 				dst = label->instr;
-
+				if (dst == NULL) {
+					InternalError("Label has no block.");
+				}
 				if (IsGoto(i)) {
 					nb->to = dst;
 				} else {

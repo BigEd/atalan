@@ -166,6 +166,23 @@ Purpose:
 	}
 }
 
+void RuleSetTranslate(RuleSet * ruleset)
+{
+	Rule * rule;
+	UInt16 i;
+	if (Verbose(NULL)) {
+		PrintHeader(1, "Translate Rules");
+	}
+	for(i=0; i<INSTR_CNT;i++) {
+		for(rule = ruleset->rules[i]; rule != NULL; rule = rule->next) {
+			if (rule->fn != NULL && rule->fn->type->instr != NULL) {
+				TypeInfer(rule->fn);
+				TranslateTypes2(rule->fn, true);
+			}
+		}
+	}
+}
+
 /***********************************************
 
   Rules garbage collector
@@ -902,6 +919,11 @@ next:
 		}
 	
 	} // block
+}
+
+void TranslateRules()
+{
+	RuleSetTranslate(&TRANSLATE_RULES);
 }
 
 void TranslateInit()

@@ -55,7 +55,7 @@ Purpose:
 	return type;
 }
 
-void TranslateScope(Var * proc, Bool verbose)
+void TranslateScope(Var * proc, Bool verbose, Bool always)
 {
 	Var * var;
 	Type * type;
@@ -63,9 +63,9 @@ void TranslateScope(Var * proc, Bool verbose)
 	FOR_EACH_LOCAL(proc, var)
 		if (var->mode == INSTR_VAR) {
 
-			TranslateScope(var, verbose);
+			TranslateScope(var, verbose, always);
 
-			if (VarIsUsed(var)) {
+			if (always || VarIsUsed(var)) {
 				type = var->type;
 				var->type = CpuType(type);
 				if (verbose) {
@@ -77,7 +77,7 @@ void TranslateScope(Var * proc, Bool verbose)
 		NEXT_LOCAL
 }
 
-void TranslateTypes(Var * proc)
+void TranslateTypes2(Var * proc, Bool always)
 {
 	Bool verbose;
 
@@ -87,5 +87,10 @@ void TranslateTypes(Var * proc)
 		PrintProc(proc);
 	}
 
-	TranslateScope(proc, verbose);
+	TranslateScope(proc, verbose, always);
+}
+
+void TranslateTypes(Var * proc)
+{
+	TranslateTypes2(proc, false);
 }
