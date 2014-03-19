@@ -308,6 +308,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 			adr = var->adr;
 		}
 		if (VarIsArrayElement(adr)) return false;
+		if (adr->mode == INSTR_TUPLE) return false;
 	}
 	if (type == NULL) return true;
 	return IsSubset(var, type);
@@ -347,7 +348,9 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 		if (VarIsAlias(arg)) var = arg->adr;
 	}
 
-	atype = arg->type;
+	atype = NULL;
+	if (arg->mode == INSTR_VAR) atype = arg->type;
+//	atype = arg->type;
 
 	// If this is rule argument and it has been previously set, it must match exactly
 
@@ -438,8 +441,8 @@ static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
 
 	case INSTR_MATCH:
 //		if (arg->mode != INSTR_VAR) return false;
-		if (FlagOn(arg->submode, SUBMODE_REG)) return false;
-		if (parent_variant != INSTR_BYTE && !VarMatchesPattern(arg, pattern)) return false;
+		if (FlagOn(var->submode, SUBMODE_REG)) return false;
+		if (parent_variant != INSTR_BYTE && !VarMatchesPattern(var, pattern)) return false;
 		break;
 	
 	// @%A
@@ -674,7 +677,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
 				has1 = true;
 			}
-		} else if (a_l->mode == INSTR_ELEMENT) {
+		} else if (a_l->mode == INSTR_ITEM) {
 			type = ItemType(a_l->l->type);
 			VarInitType(&tmp1, type);
 			if (InstrTranslate3(INSTR_LET, &tmp1, a_l, NULL, mode | TEST_ONLY)) {
@@ -685,10 +688,18 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 		// Let r = x - (y * 2)
 
+		while (VarIsAlias(a_r)) a_r = a_r->adr;
+
 		if (CellIsOp(a_r)) {
 			type = ANY; if (result != NULL) type = result->type;
 			if (type == ANY) if (a_r->l->mode == INSTR_VAR) type = a_r->l->type;
 			if (type == ANY) if (a_r->r->mode == INSTR_VAR) type = a_r->r->type;
+			VarInitType(&tmp2, type);
+			if (InstrTranslate3(INSTR_LET, &tmp2, a_r, NULL, mode | TEST_ONLY)) {
+				has2 = true;
+			}
+		} else if (a_r->mode == INSTR_ITEM) {
+			type = ItemType(a_r->l->type);
 			VarInitType(&tmp2, type);
 			if (InstrTranslate3(INSTR_LET, &tmp2, a_r, NULL, mode | TEST_ONLY)) {
 				has2 = true;
@@ -702,8 +713,9 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 			}
 
 			if (has2) {
-				a_r = NewTempVar(tmp2.type);
-				InstrTranslate3(INSTR_LET, a_r, arg1->r, NULL, GENERATE);
+				a = NewTempVar(tmp2.type);
+				InstrTranslate3(INSTR_LET, a, a_r, NULL, GENERATE);
+				a_r = a;
 			}
 
 			if (has1 || has2) {
@@ -716,16 +728,19 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	// First we perform simple test detecting, if one of the arguments is more complex, then what we will
 	// use for replacing it (simple variable).
 
+	while (VarIsAlias(result)) result = result->adr;
+	while (VarIsAlias(arg1)) arg1 = arg1->adr;
+
 	has_r = (result != NULL && result->mode != INSTR_VAR);
 	has1 = (arg1 != NULL && arg1->mode != INSTR_VAR);
 	has2 = (arg2 != NULL && arg2->mode != INSTR_VAR);
 
-	if (has_r) { VarInitType(&tmp_r, result->type); }
-	if (has1)  { VarInitType(&tmp1, arg1->type); }
-	if (has2)  { VarInitType(&tmp2, arg2->type); }
+	if (has_r) { VarInitType(&tmp_r, CpuType(CellType(result))); }
+	if (has1)  { VarInitType(&tmp1, CellType(arg1)); }
+	if (has2)  { VarInitType(&tmp2, CellType(arg2)); }
 
 	if (result != NULL) {
-		result_type = result->type;
+		result_type = CpuType(CellType(result));
 	}
 
 	if (has1) {
@@ -749,7 +764,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	}
 
 	if (has_r) {
-		if (op == INSTR_LET && arg1->mode == INSTR_VAR && TypeIsEqual(arg1->type, tmp_r.type)) {
+		if (op == INSTR_LET && result->mode == INSTR_VAR && arg1->mode == INSTR_VAR && TypeIsEqual(arg1->type, tmp_r.type)) {
 			has_r = false;
 		} else {
 			has_r = InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, mode | TEST_ONLY);

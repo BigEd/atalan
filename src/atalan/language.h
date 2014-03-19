@@ -1132,6 +1132,7 @@ extern InstrInfo INSTR_INFO[INSTR_CNT];
 
 void TranslateTypes(Var * proc);
 void TranslateTypes2(Var * proc, Bool always);
+Type * CpuType(Type * type);
 
 /***********************************************************
 

@@ -227,6 +227,8 @@ Purpose:
 
 Type * CellType(Var * cell)
 {
+	Var * a;
+
 	if (cell == NULL) return VOID;
 	if (cell->mode == INSTR_VAR) {
 		return cell->type;
@@ -236,6 +238,10 @@ Type * CellType(Var * cell)
 		return cell;
 	} else if (FlagOn(INSTR_INFO[cell->mode].flags, INSTR_OPERATOR)) {
 		return CellOp(cell->mode, CellType(cell->l), CellType(cell->r));
+	} else if (cell->mode == INSTR_ITEM) {
+		a = cell->l;
+		if (a->mode == INSTR_VAR) a = a->type;		
+		return ItemType(a);
 	}
 	return NULL;
 }
