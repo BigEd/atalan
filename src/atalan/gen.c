@@ -258,7 +258,7 @@ Purpose:
 		if (arg != var->var) {
 			var = VarNewDeref(arg);
 		}
-	} else if (op == INSTR_ELEMENT || op == INSTR_BYTE || op == INSTR_BIT) {
+	} else if (op == INSTR_ITEM || op == INSTR_ELEMENT || op == INSTR_BYTE || op == INSTR_BIT) {
 
 		arr = GenArg(macro, var->adr, args, locals);
 
@@ -268,7 +268,9 @@ Purpose:
 			arg = GenArg(macro, var->var, args, locals);	// index
 
 			if (arr != var->adr || arg != var->var) {
-				if (op == INSTR_ELEMENT) {
+				if (op == INSTR_ITEM) {
+					var = NewItem(arr, arg);
+				} else if (op == INSTR_ELEMENT) {
 					var = VarNewElement(arr, arg);
 				} else if (op == INSTR_BYTE) {
 					var = VarNewByteElement(arr, arg);

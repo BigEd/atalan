@@ -217,13 +217,13 @@ void EmitVar(Var * var, UInt8 format)
 //			EmitStr(var->name);
 //		} else 
 		if (var->mode == INSTR_ELEMENT) {
-			if (VarIsStructElement(var)) {
-				EmitVar(var->adr, format);
-				EmitStr("+");
-				EmitVar(var->var, format);
-			} else {
-				InternalError("don't know how to emit array element");
-			}
+//			if (VarIsStructElement(var)) {
+//				EmitVar(var->adr, format);
+//				EmitStr("+");
+//				EmitVar(var->var, format);
+//			} else {
+				InternalError("don't know how to emit element");
+//			}
 		} else if (var->mode == INSTR_DEREF) {
 			EmitVar(var->var, format);
 		} else if (var->mode == INSTR_BYTE) {

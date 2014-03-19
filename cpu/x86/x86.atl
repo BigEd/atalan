@@ -121,18 +121,18 @@ rule if %A:s32 < %B:s32 goto %C ->
 ;One dimensional s32 array
 rule alloc %A:array(%B:0..$ffffffff) of s32    -> "   %A  sdword %B.count dup (?)"
 
-rule %A:s32 = %B:arr_s32(%C:s32) ->
+rule %A:s32 = %B:arr_s32 # %C:s32 ->
 	ebx = %C
 	eax = %B#ebx
 	%A = eax 
 
-rule %B:arr_s32(%C:s32) = %A:s32 ->
+rule %B:arr_s32 # %C:s32 = %A:s32 ->
 	eax = %A
 	ebx = %C
 	%B#ebx = eax
 
-rule %A@r = %B:arr_s32(%C@r) -> "   mov %A, %B[%C*4]"
-rule %B:arr_s32(%C@r) = %A@r -> "   mov %B[%C*4], %A"
+rule %A@r = %B:arr_s32 # %C@r -> "   mov %A, %B[%C*4]"
+rule %B:arr_s32 # %C@r = %A@r -> "   mov %B[%C*4], %A"
 			
 ;############### CPU rules
 

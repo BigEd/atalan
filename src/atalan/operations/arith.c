@@ -116,7 +116,10 @@ Var * Mul(Var * l, Var * r)
 			m4 = Mul(l->r, r->r);
 			result = NewRange(Min4(m1,m2,m3,m4), Max4(m1,m2,m3,m4));
 		} else {
-			result = NewRange(Mul(l->l, r), Mul(l->r, r));
+			// Power has higher priority than multiplication and it leads to unnecessary 'spaghetti' expression to distribute it
+			if (r->mode != INSTR_POWER) {
+				result = NewRange(Mul(l->l, r), Mul(l->r, r));
+			}
 		}
 	} else if (l->mode == INSTR_TUPLE) {
 		result = NewTuple(Mul(l->l, r), Mul(l->r, r));
@@ -143,9 +146,11 @@ Var * Mul(Var * l, Var * r)
 			IntMul(&ii, il, ir);
 			result = IntCell(&ii);
 			IntFree(&ii);
-		} else {
-			result = NewOp(INSTR_MUL, l, r);
 		}
+	}
+
+	if (result == NULL) {
+		result = NewOp(INSTR_MUL, l, r);
 	}
 	return result;
 }
@@ -245,6 +250,35 @@ Purpose:
 	return result;
 }
 
+Var * Power(Var * l, Var * r)
+{
+	Var * result = NULL;
+	BigInt * il, * ir, ii, ii2;
+
+	il = IntFromCell(l);
+	ir = IntFromCell(r);
+	if (il != NULL && ir != NULL) {		
+		if (IntEqN(ir, 0)) {
+			result = ONE;
+		} else if (IntHigherN(ir, 0)) {
+			IntSet(&ii, il);
+			IntSet(&ii2, ir);
+
+			while (!IntEqN(&ii2, 0)) {
+				IntMul(&ii, &ii, il);
+				IntSubN(&ii2, 1);
+			}
+			result = IntCell(&ii);
+			IntFree(&ii);
+			IntFree(&ii2);
+		}
+	}
+
+	if (result == NULL) {
+		result = NewOp(INSTR_POWER, l, r);
+	}
+	return result;
+}
 
 Bool IsEqual(Var * left, Var * right)
 {
@@ -349,7 +383,7 @@ Var * CellOp(InstrOp op, Var * left, Var * right)
 	case INSTR_SUB: return Sub(left, right);
 	case INSTR_MUL: return Mul(left, right);
 	case INSTR_DIV: return DivInt(left, right);
-
+	case INSTR_POWER: return Power(left, right);
 	default:
 		return NewOp(op, left, right);
 	}

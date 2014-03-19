@@ -411,7 +411,7 @@ static char * keywords[KEYWORD_COUNT] = {
 	"goto", "if", "unless", "then", "else", "fn", "rule", "macro", "and", "or", "not", "sqrt",
 	"while", "until", "where", "const", "enum", "array", "type", "file", "lo", "hi", "of",
 	"for", "in", "out", "param", "instr", "times", "adr", "debug", "mod", "bitnot", "bitand", "bitor", "bitxor", "struct", "use", "ref", "step", "return",
-	"scope", "sequence", "assert", "either", "string"
+	"sequence", "assert", "either", "string"
 	
 };
 

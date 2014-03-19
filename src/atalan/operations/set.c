@@ -255,7 +255,7 @@ Type * RemoveRange(Type * cell, Var * rmin, Var * rmax)
 	} else {
 		switch(cell->mode) {
 		case INSTR_TUPLE:
-			r = Union(RemoveRange(cell->left, rmin, rmax), RemoveRange(cell->right, rmin, rmax));
+			r = Union(RemoveRange(cell->l, rmin, rmax), RemoveRange(cell->r, rmin, rmax));
 			break;
 		case INSTR_VAR:
 			r = RemoveRange(cell->type, rmin, rmax);
@@ -396,7 +396,7 @@ Type * Remove(Type * cell, Type * restriction)
 	} else {
 		switch(restriction->mode) {
 		case INSTR_TUPLE:
-			r = Union(Remove(cell, restriction->left), Remove(cell, restriction->right));
+			r = Union(Remove(cell, restriction->l), Remove(cell, restriction->r));
 			break;
 		case INSTR_TYPE:
 			r = Remove(cell, restriction->possible_values);

@@ -47,6 +47,7 @@ void IntDivN(BigInt * dest, Int32 N);
 void IntAddN(BigInt * dest, Int32 N);
 void IntAndN(BigInt * dest, UInt32 N);
 void IntOrN(BigInt * dest, UInt32 N);
+void IntSubN(BigInt * dest, Int32 N);
 
 void PrintBigInt(BigInt * n);
 char * IntFormat(char * p, BigInt * n);

@@ -970,7 +970,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 
 			reg = CPU->REG[regi];
 			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input/output registers
-			if (reg->type->range.max == 1) continue;						// exclude flag registers
+//			if (!reg->type->range.max == 1) continue;						// exclude flag registers
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
 			if (reg->var != NULL) continue;
 

@@ -12,64 +12,6 @@ UInt8 ParseArgNo();
 
 Bool PARSE_INLINE;
 
-void ParseArgList(VarSubmode mode, Type * to_type)
-/*
-Purpose:
-	Parse block with list of arguments.
-	  [">" | "<"] assign
-	Arguments are added to current context with submode SUBMODE_ARG_*.
-
-	This method is used when parsing procedure or macro argument declaration or structure declaration.
-*/
-{
-	VarSubmode submode = SUBMODE_EMPTY;
-	Var * var, * adr;
-	Bool out_part = false;
-
- 	EnterBlockWithStop(TOKEN_EQUAL);			// TOKEN_EQUAL
-
-	while (OK && !NextIs(TOKEN_BLOCK_END)) {
-
-		if (!out_part && NextIs(TOKEN_RIGHT_ARROW)) {
-			out_part = true;
-		}
-
-		submode = mode;
-
-		if (out_part) {
-			submode = SUBMODE_ARG_OUT;
-		} else {
-
-			if (NextIs(TOKEN_LOWER)) {
-				submode = SUBMODE_ARG_IN;
-			}
-			if (NextIs(TOKEN_HIGHER)) {
-				submode = SUBMODE_ARG_OUT;
-			}
-		}
-
-		// Variables preceded by @ define local variables used in the procedure.
-		if (NextIs(TOKEN_ADR)) {
-			adr = ParseVariable();
-			ifok {
-				var = NewVarInScope(adr->type, to_type);
-				var->adr  = adr;
-				NextIs(TOKEN_EOL);
-				continue;
-			}
-		}
-
-		if (TOK == TOKEN_ID) {
-			ParseAssign(INSTR_VAR, submode, to_type);
-			NextIs(TOKEN_COMMA);
-			NextIs(TOKEN_EOL);
-		} else {
-			SyntaxError("Expected variable name");
-		}
-	}
-}
-
-
 /*
       TUPLE
       /   \
@@ -81,7 +23,7 @@ Purpose:
 
 */
 
-Var * ParseStruct(Token end_token)
+static Var * ParseStruct(Token end_token)
 {
 	Var * list = NULL;
 	Var * var, * type;
@@ -206,16 +148,16 @@ Type * ParseIntType()
 		} else if (var->mode == INSTR_TYPE || var->mode == INSTR_VAR) {
 			type = var->type;
 
-			if (type->mode == INSTR_TYPE) {
-				if (type->variant == TYPE_TYPE) {
-					type = var->type_value;
-					SetFlagOn(var->submode, SUBMODE_USED_AS_TYPE);
-				}
+//			if (type->mode == INSTR_TYPE) {
+//				if (type->variant == TYPE_TYPE) {
+//					type = var->type_value;
+//					SetFlagOn(var->submode, SUBMODE_USED_AS_TYPE);
+//				}
 
-				if (type->variant != TYPE_INT) {
-					SyntaxErrorBmk("Expected integer type", bookmark);
-				}
-			}
+//				if (type->variant != TYPE_INT) {
+//					SyntaxErrorBmk("Expected integer type", bookmark);
+//				}
+//			}
 			goto done;
 		} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 			type = var;
@@ -379,11 +321,6 @@ Type * ParseType3()
 			SetFlagOn(type->submode, SUBMODE_MACRO);
 		}
 
-	// Struct
-	} else if (NextIs(TOKEN_STRUCT)) {
-		type = TypeAlloc(TYPE_STRUCT);
-		ParseArgList(SUBMODE_EMPTY, type);
-
 	// String
 	} else if (NextIs(TOKEN_STRING_TYPE)) {
 		type = TypeAlloc(TYPE_STRING);
@@ -402,10 +339,10 @@ Type * ParseType3()
 				if (index == NULL) {
 					index = elmt;
 				} else if (t != NULL) {
-					t->right = TypeTuple(t->right, elmt);
-					t = t->right;
+					t->r = NewTuple(t->r, elmt);
+					t = t->r;
 				} else {
-					t = TypeTuple(index, elmt);
+					t = NewTuple(index, elmt);
 					index = t;
 				}
 				NextIs(TOKEN_COMMA);
@@ -558,13 +495,12 @@ const_list:
 done:
 	ifok {
 		if (variant_type != NULL) {
-			variant_type->right = type;
+			variant_type->r = type;
 			type = variant_type;
 		}
 
 		if (NextIs(TOKEN_OR)) {
-			variant_type = TypeAlloc(TYPE_VARIANT);
-			variant_type->left = type;
+			variant_type = NewVariant(type, NULL);
 			goto next;
 		}
 	}
