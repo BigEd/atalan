@@ -193,7 +193,7 @@ void RuleArgMarkNonGarbage(RuleArg * rule)
 {
 	if (rule != NULL) {
 		if (rule->variant == INSTR_MATCH || rule->variant == INSTR_MATCH_VAL) {
-			TypeMark(rule->type);
+			//TypeMark(rule->type);
 		} else if (rule->variant == INSTR_TUPLE || rule->variant == INSTR_DEREF) {
 			RuleArgMarkNonGarbage(rule->arr);
 		}
@@ -855,11 +855,6 @@ Purpose:
 			i->arg2   = VarReg(i->arg2);
 		}
 	}
-
-	// We perform as many translation steps as necessary
-	// Some translation rules may use other translation rules, so more than one step may be necessary.
-	// Translation ends either when there has not been any modification in last step or after
-	// defined number of steps (to prevent infinite loop in case of invalid set of translation rules).
 
 	in_assert = false;
 

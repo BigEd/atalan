@@ -443,7 +443,7 @@ Syntax:
 	} else if (NextCharIs('#')) {
 		item = ParseArrayItem(arr);
 		ifok {
-			var = VarNewElement(arr, item);
+			var = NewItem(arr, item);
 		}
 	}
 	return var;
@@ -484,32 +484,17 @@ Syntax:
 	}
 	
 	if (idx == NULL) {
-		if (arr->type->mode == INSTR_TYPE && arr->type->variant == TYPE_STRUCT) {
-			NextIs(TOKEN_DOT);
-			if (TOK == TOKEN_ID) {
-				item = VarFind(arr->type, NAME);
-				if (item != NULL) {
-					idx = VarNewElement(arr, item);
-				} else {
-					SyntaxError("Structure does not contain member with name [$]");
-				}
-	//			NextToken();
-			} else {
-				SyntaxError("Expected structure member identifier after '.'");
-			}
-		} else {
-			if (NextIs(TOKEN_DOT)) {
-				ASSERT(TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD);
-				item = VarFind(arr, NAME);
-				if (item == NULL) {
-					item = NewVar(arr, NAME, NULL);
-					SetFlagOn(item->submode, SUBMODE_FRESH);
-					CellSetLocation(item, SRC_FILE, LINE_NO, TOKEN_POS);
-					NextToken();
-					return item;
+		if (NextIs(TOKEN_DOT)) {
+			ASSERT(TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD);
+			item = VarFind(arr, NAME);
+			if (item == NULL) {
+				item = NewVar(arr, NAME, NULL);
+				SetFlagOn(item->submode, SUBMODE_FRESH);
+				CellSetLocation(item, SRC_FILE, LINE_NO, TOKEN_POS);
+				NextToken();
+				return item;
 //TODO: Check nonexistent element
 //					SyntaxError("Variable [A] does not contain member [$]");
-				}
 			}
 		}
 	}
@@ -545,12 +530,10 @@ Var * ParseArrayIdx(Type * atype)
 
 		if (tv == TYPE_ARRAY) {
 			idx_type = t = atype->index;
-			if (t->variant == TYPE_TUPLE) idx_type = t->left;
+			if (t->mode == INSTR_TUPLE) idx_type = t->l;
 		} else if (tv == TYPE_ADR) {
 			TODO("Better implementation");
 //			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
-		} else if (tv == TYPE_SCOPE) {
-			idx_type = NULL;
 		} /*else {
 			// This is default case for accessing bytes of variable
 			// It should be replaced by x$0 x$1 syntax in the future.
@@ -623,10 +606,10 @@ Var * ParseArrayIdx(Type * atype)
 			// (idx1, (idx2, idx3))
 
 			idx_type = NULL;
-			if (t->variant == TYPE_TUPLE) {
-				idx_type = t = t->right;
-				if (t->variant == TYPE_TUPLE) {
-					idx_type = t->left;
+			if (t->mode == INSTR_TUPLE) {
+				idx_type = t = t->r;
+				if (t->mode == INSTR_TUPLE) {
+					idx_type = t->l;
 				}
 			}
 
@@ -640,6 +623,7 @@ Var * ParseArrayIdx(Type * atype)
 				SyntaxError("Too many indexes specified");
 			}
 		}
+
 
 	}
 done:
@@ -679,12 +663,10 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 
 		if (tv == TYPE_ARRAY) {
 			idx_type = t = atype->index;
-			if (t->variant == TYPE_TUPLE) idx_type = t->left;
+			if (t->mode == INSTR_TUPLE) idx_type = t->l;
 		} else if (tv == TYPE_ADR) {
 			TODO("Better implementation");
 //			idx_type = &TINT;		// Access to n-th element of an  array specified by address. In this case, the size of index is not bound.
-		} else if (tv == TYPE_SCOPE) {
-			idx_type = NULL;
 		}
 	} //else {
 //		idx_type = NULL;
@@ -753,10 +735,10 @@ Syntax: arr "#" idx | arr "(" idx ")" | arr "()"
 
 			if (t != NULL) {
 				idx_type = NULL;
-				if (t->variant == TYPE_TUPLE) {
-					idx_type = t = t->right;
-					if (t->variant == TYPE_TUPLE) {
-						idx_type = t->left;
+				if (t->mode == INSTR_TUPLE) {
+					idx_type = t = t->r;
+					if (t->mode == INSTR_TUPLE) {
+						idx_type = t->l;
 					}
 				}
 			}
@@ -780,17 +762,10 @@ done:
 	ifok {
 		if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");
 	}
-/*
-	if (tv == TYPE_SCOPE) {
-		// scope(idx).array
-		if (NextIs(TOKEN_DOT)) {
-		}
-	}
-*/
 	TOP = top;
 
 done_idx:
-	item = VarNewElement(arr, idx);
+	item = NewItem(arr, idx);
 
 	return item;
 }
@@ -907,7 +882,7 @@ void ReportSimilarNames(char * name)
 					if (scope != NULL) {
 						if (scope->type->mode == INSTR_FN) {
 							Print("  in procedure '"); 
-						} else if (scope->type->variant == TYPE_SCOPE) {
+						} else if (scope->type->mode == INSTR_VOID) {
 							Print("  in scope '"); 
 						}
 						Print(scope->name); Print("'");
@@ -925,6 +900,48 @@ void ReportSimilarNames(char * name)
 	}
 	PrintColor(color);
 
+}
+
+Var * ParseStructExp()
+{
+	// None of the standard expression were there, this may be indented parentheses
+	Var * item, * var = NULL, * last = NULL;
+
+	if (TOK != TOKEN_EOL) return NULL;
+
+	EnterBlock();			// TOKEN_EQUAL
+
+/*
+      TUPLE
+      /   \
+	 V1   TUPLE
+	      /   \	    
+		 V2  TUPLE
+		      /  \
+			 V3  V4
+
+*/
+
+	while (OK && !NextIs(TOKEN_BLOCK_END)) {
+		ParseDefExpression();
+		item = BufPop();
+		ifok {			
+			if (var == NULL) {
+				var = item;
+			} else if (last == NULL) {
+				var = last = NewTuple(var, item);
+			} else {
+				item = NewTuple(last->r, item);
+				last->r = item;
+				last = item;
+			}
+		}
+		if (NextIs(TOKEN_EOL)) {
+			item = NULL;
+//			SyntaxError("Expected EOL");
+		}
+	};
+	return var;
 }
 
 void ParseOperand()
@@ -986,7 +1003,6 @@ void ParseOperand()
 
 		} else if (LexNum(&var)) {
 		} else if (TOK == TOKEN_ID) {
-
 			var = FindExpVar();
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
@@ -1093,38 +1109,33 @@ retry_indices:
 						NextToken();
 					}
 				} else {
-					if (var->type->variant == TYPE_STRUCT || var->mode == INSTR_ELEMENT) {
-						var = ParseStructElement(var);
-						goto retry_indices;
-					} else {
-						if (TOK == TOKEN_ID) {
-							item = VarFind(var, NAME);
-							// If the item is not part of variable scope, try to find it in type
-							if (item == NULL) {
-								item = VarFind(var->type, NAME);
-								if (item != NULL) {
-									// If the found item is array, we use the variable as an index to the array
-									if (item->type->variant == TYPE_ARRAY) {
-										item = VarNewElement(item, var);
-									}
+					if (TOK == TOKEN_ID) {
+						item = VarFind(var, NAME);
+						// If the item is not part of variable scope, try to find it in type
+						if (item == NULL) {
+							item = VarFind(var->type, NAME);
+							if (item != NULL) {
+								// If the found item is array, we use the variable as an index to the array
+								if (item->type->variant == TYPE_ARRAY) {
+									item = VarNewElement(item, var);
 								}
 							}
-
-							// If the element has not been found, try to match some built-in elements
-
-							if (item == NULL) {
-								item = VarField(var, NAME);
-							}
-
-							if (item != NULL) {
-								var = item;
-								goto indices;	//NextToken();
-							} else {
-								SyntaxError("$unknown item");
-							}
-						} else {
-							SyntaxError("variable name expected after .");
 						}
+
+						// If the element has not been found, try to match some built-in elements
+
+						if (item == NULL) {
+							item = VarField(var, NAME);
+						}
+
+						if (item != NULL) {
+							var = item;
+							goto indices;	//NextToken();
+						} else {
+							SyntaxError("$unknown item");
+						}
+					} else {
+						SyntaxError("variable name expected after .");
 					}
 				}
 
@@ -1134,8 +1145,22 @@ retry_indices:
 				item = ParseArrayElement(var);
 				var = item;
 				goto retry_indices;
-			}
+			}		
 		} else {
+
+			if (EXP_DEFINES_VARS) {
+				var = ParseType3();
+				if (var != NULL) {
+					BufPush(var);
+					return;
+				}
+			}
+
+			var = ParseStructExp();
+			if (var != NULL) {
+				BufPush(var);
+				return;
+			}
 			return;
 		}
 
@@ -1318,24 +1343,37 @@ void ParseUnary()
 	}
 }
 
-void ParseMulDiv()
+void ParsePower()
 {
 	ParseUnary();
 retry:
-	if (NextOpIs(TOKEN_MUL)) {
+	if (NextOpIs(TOKEN_POWER)) {
 		ParseUnary();
+		ifok {
+			InstrBinary(INSTR_POWER);
+		}
+		goto retry;
+	}
+}
+
+void ParseMulDiv()
+{
+	ParsePower();
+retry:
+	if (NextOpIs(TOKEN_MUL) || NextOpIs(TOKEN_MUL2)) {
+		ParsePower();
 		ifok {
 			InstrBinary(INSTR_MUL);
 		}
 		goto retry;
 	} else if (NextOpIs(TOKEN_DIV)) {
-		ParseUnary();
+		ParsePower();
 		ifok {
 			InstrBinary(INSTR_DIV);
 		}
 		goto retry;
 	}  else if (NextOpIs(TOKEN_MOD)) {
-		ParseUnary();
+		ParsePower();
 		ifok {
 			InstrBinary(INSTR_MOD);
 		}
@@ -1551,9 +1589,10 @@ void ParseExpressionType(Type * result_type)
 
 void ParseDefExpression()
 {
+	Bool prev = EXP_DEFINES_VARS;
 	EXP_DEFINES_VARS = true;
 	ParseExpression(NULL);
-	EXP_DEFINES_VARS = false;
+	EXP_DEFINES_VARS = prev;
 }
 
 void ParseExpression(Var * result)
@@ -1918,7 +1957,7 @@ parse_in:
 							idx = NewTempVar(type);						
 						}
 						var = NewVar(NULL, name, ItemType(arr->type));
-						var->adr = VarNewElement(arr, idx);
+						var->adr = NewItem(arr, idx);
 
 						CellSetLocation(var, SRC_FILE, LINE_NO, token_pos);
 						SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
@@ -2459,7 +2498,7 @@ Var * ParseArrayC(Type * type)
 	var = NewArray(type, NULL);
 
 //	type = var->type;
-	flexible = type->index->range.flexible;
+	flexible = true;	//type->index->range.flexible;
 
 	elem_type = type->element;
 
@@ -2490,7 +2529,7 @@ Var * ParseArrayC(Type * type)
 	}
 
 	if (flexible) {
-		type->index->range.max = size-1;
+//		type->index->range.max = size-1;
 	}
 
 	ASSERT(var->mode == INSTR_ARRAY);
@@ -2568,10 +2607,9 @@ Var * VarRangeSize(BigInt * min, BigInt * max)
 	IntFree(&bi);
 	return var;
 }
-
+/*
 void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 {
-	UInt32 size;
 	Type * dim1, * dim2;
 
 
@@ -2580,9 +2618,9 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 	if (type->variant == TYPE_ARRAY) {
 		dim1 = type->index;
 		dim2 = NULL;
-		if (dim1->variant == TYPE_TUPLE) {
-			dim2 = dim1->right;
-			dim1 = dim1->left;
+		if (dim1->mode == INSTR_TUPLE) {
+			dim2 = dim1->r;
+			dim1 = dim1->l;
 		}
 		*p_dim1 = VarRangeSize(&dim1->range.min, &dim1->range.max);
 
@@ -2596,16 +2634,15 @@ void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2)
 				*p_dim2 = VarRangeSize(&dim1->range.min, &dim1->range.max);
 			}
 		}
-	} else if (type->variant == TYPE_STRUCT) {
-		size = TypeSize(type);
-		*p_dim1 = IntCellN(size);
-	}
+	}// else if (type->variant == TYPE_STRUCT) {
+//		size = TypeSize(type);
+//		*p_dim1 = IntCellN(size);
+//	}
 }
-
+*/
 Bool VarIsImplemented(Var * var)
 {
 	Rule * rule;
-	Instr i;
 	TypeVariant v;
 
 	if (CellIsConst(var)) return true;
@@ -2628,15 +2665,16 @@ Bool VarIsImplemented(Var * var)
 
 	// Macros and procedures are considered imp
 
-	if (v == TYPE_LABEL || v == TYPE_SCOPE || v == TYPE_TYPE) return true;
+	if (v == TYPE_LABEL || v == TYPE_TYPE) return true;
 
 	// Register variables are considered implemented.
 //	if (var->adr != NULL && var->adr->scope == CPU_SCOPE) return true;
 
 
 	//TODO: We do not want to use array size
-	ArraySize(var->type, &i.arg1, &i.arg2);
-	rule = InstrRule2(INSTR_ALLOC, var, i.arg1, i.arg2);
+//	ArraySize(var->type, &i.arg1, &i.arg2);
+//	rule = InstrRule2(INSTR_ALLOC, var, i.arg1, i.arg2);
+	rule = InstrRule2(INSTR_ALLOC, var, NULL, NULL);
 	if (rule != NULL) return true;
 
 	rule = TranslateRule(INSTR_DECL, NULL, var, NULL);
@@ -3028,44 +3066,28 @@ parsed:
 			}
 		}
 
+		is_assign = true;
 
-		// Scope
-		if (NextIs(TOKEN_SCOPE)) {
-			mode = INSTR_SCOPE;
-			type = TypeScope();
-			is_assign = true;
+		// Parsing may create new constants, arguments etc. so we must enter subscope, to assign the
+		// type elements to this variable
+		scope = InScope(vars[0]);
+		bookmark = SetBookmark();
+		type = ParseType2(mode);
 
-			// If this is definition of CPU, immediately remember it
-//			if (StrEqual(var->name, "CPU")) {
-//				CPU->SCOPE = var;
-//			}
-
-		} else {
-			is_assign = true;
-
-			// Parsing may create new constants, arguments etc. so we must enter subscope, to assign the
-			// type elements to this variable
-			scope = InScope(vars[0]);
-			bookmark = SetBookmark();
-			type = ParseType2(mode);
-
-			ifok {
-				// CPU is defined as object with CPU type
-				if (CPU_TYPE != NULL && type == CPU_TYPE) {
-					CPU->SCOPE = var;
-				}
-
-				if (type == NULL || type->mode != INSTR_TYPE || type->variant == TYPE_SCOPE) {
-					if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
-						ParseElements(vars[0]);
-					}
-	//				type = TypeScope();
-				}
-				if (type == NULL) type = TypeScope();
+		ifok {
+			// CPU is defined as object with CPU type
+			if (CPU_TYPE != NULL && type == CPU_TYPE) {
+				CPU->SCOPE = var;
 			}
 
-			ReturnScope(scope);
+			if (type == NULL || type->mode != INSTR_TYPE) {
+				if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
+					ParseElements(vars[0]);
+				}
+			}
 		}
+
+		ReturnScope(scope);
 	}
 
 	// Set the parsed type to all new variables (we do this, even if a type was not parsed)
@@ -3096,16 +3118,16 @@ parsed:
 				} else {
 					if (!VarIsImplemented(var)) {
 						// If this is array of structure, convert the variable to structure of arrays
-						if (var->type->variant == TYPE_ARRAY && var->type->element->variant == TYPE_STRUCT) {
-							VarArrayOfStructToStructOfArrays(var);
+//						if (var->type->variant == TYPE_ARRAY && var->type->element->variant == TYPE_STRUCT) {
+//							VarArrayOfStructToStructOfArrays(var);
 							//TODO: Error if subelement not supported
-						} else {
+//						} else {
 							if (*PLATFORM != 0) {
 //								LogicError("Type not supported by platform", bookmark);
 							} else {
 //								SyntaxError("Platform has not been specified");
 							}
-						}
+//						}
 					}
 				}
 			// If type has not been defined, but this is alias, use type of the aliased variable
@@ -3155,7 +3177,10 @@ parsed:
 
 		for(j = 0; j<cnt; j++) {
 			var = vars[j];
-			type = var->type;
+			type = ANY;
+			if (var->mode == INSTR_VAR) {
+				type = var->type;
+			}
 
 			ErrArgClear();
 			ErrArg(var);
@@ -3175,17 +3200,6 @@ parsed:
 			if (type->mode == INSTR_FN_TYPE) {
 				// if (macro)
 				ParseMacroBody(var);
-				// else if
-				//ParseProcBody(var);
-				// endif
-//			} else if (typev == TYPE_SCOPE) {
-//				scope = InScope(var);
-//				ParseCommandBlock();
-//				ReturnScope(scope);
-//			} else if (type->mode == INSTR_TYPE) {
-//				scope = InScope(var);
-//				var->type_value = ParseType2(INSTR_VAR);
-//				ReturnScope(scope);
 			} else {
 
 				// Initialization of array
@@ -3638,11 +3652,16 @@ RuleArg *  ParseRuleUnary()
 
 RuleArg *  ParseRuleElement()
 {
+	Bool with_open_p;
 	RuleArg * idx, * idx2;
 	RuleArg * arg = ParseRuleUnary();
 retry:
-	if (NextIs(TOKEN_OPEN_P)) {
-
+	if (NextIs(TOKEN_HASH)) {
+		with_open_p = NextIs(TOKEN_OPEN_P);
+		goto indexes;
+	} else if (NextIs(TOKEN_OPEN_P)) {
+		with_open_p = true;
+indexes:
 		// Parse indexes (there can be comma separated list of indexes)
 		idx = NULL;
 		do {
@@ -3654,9 +3673,9 @@ retry:
 
 		} while(NextIs(TOKEN_COMMA));
 
-		arg = NewOpRule(INSTR_ELEMENT, arg, idx);
+		arg = NewOpRule(INSTR_ITEM, arg, idx);
 
-		if (OK && !NextIs(TOKEN_CLOSE_P)) {
+		if (OK && with_open_p && !NextIs(TOKEN_CLOSE_P)) {
 			SyntaxError("expected closing brace");
 		}
 		goto retry;
@@ -3669,7 +3688,7 @@ RuleArg *  ParseRuleMulDiv()
 {
 	RuleArg * arg = ParseRuleElement();
 retry:
-	if (NextIs(TOKEN_MUL)) {
+	if (NextIs(TOKEN_MUL) || NextIs(TOKEN_MUL2)) {
 		arg = NewOpRule(INSTR_MUL, arg, ParseRuleElement());
 		goto retry;
 	} else if (NextIs(TOKEN_DIV)) {
@@ -4056,7 +4075,7 @@ Var * VarSize(Var * var)
 		}
 	} else {
 		if (var->type->variant == TYPE_ARRAY) {			
-			size = VarRangeSize(&var->type->index->range.min, &var->type->index->range.max);
+//			size = VarRangeSize(&var->type->index->range.min, &var->type->index->range.max);
 		}
 	}
 	return size;

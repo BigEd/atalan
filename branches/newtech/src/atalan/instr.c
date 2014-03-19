@@ -86,12 +86,12 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 
 	{ INSTR_VAR,         "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Variable (may be argument, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, input, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, output, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, ...)
 	{ INSTR_INT,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			// Integer constant
-	{ INSTR_ELEMENT,     "", "#", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <array> <index>     access array or structure element (left operand is array, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, right is index)
+	{ INSTR_ELEMENT,     "", ".", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <array> <index>     access array or structure element (left operand is array, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, right is index)
 	{ INSTR_BYTE,        "", "$", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// <var> <byte_index>  access byte of specified variable
 	{ INSTR_RANGE,       "", "..", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// x..y  (l = x, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, r = y) Used for slice array references
 	{ INSTR_TUPLE,       "", ",", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, NULL },			// { INSTR_LIST <adr, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },var>  (var may be another tuple)
 	{ INSTR_DEREF,       "", "@", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// dereference an address (var contains reference to dereferenced adr variable, "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL }, type is type in [adr of type]. Byte if untyped adr is used.
-	{ INSTR_FIELD,       "", ".", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// access field of structure
+	{ INSTR_ITEM,       "", "#", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, NULL },			// access field of structure
 	{ INSTR_TYPE,        "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	{ INSTR_SCOPE,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },
 	//	{ INSTR_SRC_FILE,    "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, NULL },			//{ INSTR_SRC_FILE variable representing source file
@@ -107,7 +107,8 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 	{ INSTR_ARRAY_TYPE,   ":array", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
 	{ INSTR_FN_TYPE,   ":fn", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, 0 },
 	{ INSTR_ANY,          "", "?", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_IS_TYPE, 0 },
-	{ INSTR_USES,      "uses", "?", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, 0 }
+	{ INSTR_USES,      "uses", "?", {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, 0 },
+	{ INSTR_POWER,         "power", "^", {TYPE_ANY, TYPE_ANY, TYPE_ANY}, INSTR_OPERATOR, NULL }
 
 };
 
@@ -644,7 +645,7 @@ void PrintVarVal(Var * var)
 			Print("#"); PrintInt(var->idx-1);
 		} else if (var->mode == INSTR_ELEMENT) {
 			PrintVarVal(var->adr);
-			if (var->adr->type->variant == TYPE_STRUCT) {
+			if (var->adr->mode == INSTR_TUPLE) {
 				Print(".");
 				PrintCellNameNoScope(var->var);
 			} else {

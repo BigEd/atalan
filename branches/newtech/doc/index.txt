@@ -19,13 +19,13 @@ systems should be straightforward).
 Warning!
 ========
 
-When I say Atalan is a work in progress, I mean it. There are bugs, features
+When I say Atalan is work in progress, I mean it. There are bugs, features
 may go missing or appear erratically, semantics may evolve. I shape the Atalan according to my needs
 and ideas about ideal (or at least good) programming language. Some of the Atalan
 features are highly experimental (for example type inferencer or rule driven translation). 
 
 If you are looking for a stable development tool and have no desire to be involved
-in the development of the programming language, you have to look somewhere else.
+in the development of a programming language, you have to look somewhere else.
 If you feel adventurous, you are most welcome to come and play with Atalan.
 
  

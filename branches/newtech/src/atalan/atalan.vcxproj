@@ -88,6 +88,7 @@
     <ClCompile Include="cell_array.c" />
     <ClCompile Include="cell_fn.c" />
     <ClCompile Include="cell_fn_type.c" />
+    <ClCompile Include="cell_item.c" />
     <ClCompile Include="cell_module.c" />
     <ClCompile Include="cell_int.c" />
     <ClCompile Include="cell_op.c" />
@@ -134,7 +135,10 @@
     <ClInclude Include="cell_fn.h" />
     <ClInclude Include="cell_fn_type.h" />
     <ClInclude Include="cell_int.h" />
+    <ClInclude Include="cell_item.h" />
+    <ClInclude Include="cell_range.h" />
     <ClInclude Include="cell_tuple.h" />
+    <ClInclude Include="errors.h" />
     <ClInclude Include="language.h" />
     <ClInclude Include="operations\arith.h" />
     <ClInclude Include="operations\bool.h" />

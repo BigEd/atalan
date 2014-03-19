@@ -1,0 +1,11 @@
+;This test represens basics for floating point support in Atalan.
+
+;We define some floating point types.
+
+bcd: type ±9999999999 × 10 ^ (-64..63)
+single: type ±16777215 × 2 ^ (-128..127)
+
+;Now declare variable using that type.
+
+s1:single
+s2:single

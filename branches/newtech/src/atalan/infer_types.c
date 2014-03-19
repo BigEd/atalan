@@ -357,7 +357,7 @@ Result:
 	case INSTR_TUPLE:
 		left = FindType(loc, var->l, report_errors);
 		right = FindType(loc, var->r, report_errors);
-		type = TypeTuple(left, right);
+		type = NewTuple(left, right);
 		break;
 
 	case INSTR_EQ:
@@ -904,6 +904,7 @@ Purpose:
 
 				if (!IsSubset(tr, ti)) {
 					if (d->final_pass) {
+/*
 						if (tr->variant == TYPE_INT && ti->variant == TYPE_INT) {
 							ErrArg(result);
 							ErrArg(IntCell(&ti->range.max));
@@ -918,6 +919,9 @@ Purpose:
 						} else {
 							LogicWarningLoc("Value does not fit into variable", loc);								
 						}
+*/
+						LogicWarningLoc("Value does not fit into variable", loc);								
+
 					}
 				}
 			}

@@ -93,29 +93,6 @@ Var * CellMax(Var * v)
 
 }
 
-BigInt * TypeMax(Type * type)
-{
-	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			return &type->range.max;
-		} else if (type->mode == INSTR_SEQUENCE) {
-			switch(type->seq.op) {
-			case INSTR_SUB:
-			case INSTR_DIV:
-			case INSTR_MOD:
-				return TypeMax(type->seq.init);
-			case INSTR_ADD:
-				if (CellIsN(type->seq.step, 1)) {
-					return TypeMax(type->seq.limit);
-				}
-			default:
-				break;
-			}
-
-		}
-	}
-	return &LIM_MAX;
-}
 
 Bool CellRange(Var * var, Var ** p_min, Var ** p_max)
 /*
@@ -222,18 +199,16 @@ void ArrayItemCount(Type * index, BigInt * dest)
 	if (index == NULL) {
 		IntInit(dest, 0);
 	} else if (index->variant == TYPE_INT) {
-		IntRangeSize(dest, &index->range.min, &index->range.max);
-	} else if (index->variant == TYPE_TUPLE) {
-		ArrayItemCount(index->left, &bi1);
-		ArrayItemCount(index->right, &bi2);
+//		IntRangeSize(dest, &index->range.min, &index->range.max);
+	} else if (index->mode == INSTR_TUPLE) {
+		ArrayItemCount(index->l, &bi1);
+		ArrayItemCount(index->r, &bi2);
 		IntMul(dest, &bi1, &bi2);
 		IntFree(&bi1); IntFree(&bi2);
 	} else {
 		IntInit(dest, 0);
 	}
 }
-
-UInt32 TypeStructSize(Var * var);
 
 UInt32 TypeSize(Type * type)
 /*
@@ -248,53 +223,39 @@ Purpose:
 	size = 0;
 	if (type != NULL) {
 
-		VarRange(type, &min, &max);
-		if (min != NULL && max != NULL) {
-			size = IntByteSize(max);
-			sizen = IntByteSize(min);
-			if (size < sizen) size = sizen;
-			return size;
-		}
-
 		switch(type->mode) {
-
-		case INSTR_ARRAY_TYPE:
-			ArrayItemCount(IndexType(type), &bi);
-			size = TypeSize(ItemType(type)) * IntN(&bi);
-			IntFree(&bi);
+		case INSTR_TUPLE:
+			size = TypeSize(type->l) + TypeSize(type->r);
 			break;
 
 		case INSTR_TYPE:
+			switch(type->mode) {
 
-			switch(type->variant) {
-			case TYPE_ADR:
-				size = TypeAdrSize();
+			case INSTR_ARRAY_TYPE:
+				ArrayItemCount(IndexType(type), &bi);
+				size = TypeSize(ItemType(type)) * IntN(&bi);
+				IntFree(&bi);
 				break;
 
-			case TYPE_STRUCT:
-				size = TypeStructSize(type);
-				break;
+			case INSTR_TYPE:
 
-			default: break;
+				switch(type->variant) {
+				case TYPE_ADR:
+					size = TypeAdrSize();
+					break;
+
+				default: break;
+				}
+				break;
+			}
+		default:
+			VarRange(type, &min, &max);
+			if (min != NULL && max != NULL) {
+				size = IntByteSize(max);
+				sizen = IntByteSize(min);
+				if (size < sizen) size = sizen;
 			}
 		}
 	}
 	return size;
 }
-
-UInt32 TypeStructSize(Var * var)
-/*
-Purpose:
-	Compute size of structure variable in bytes.
-*/
-{
-	UInt32 size = 0;
-	Var * item;
-	FOR_EACH_LOCAL(var, item)
-		if (item->mode == INSTR_VAR) {
-			size += TypeSize(item->type);
-		}
-	NEXT_LOCAL
-	return size;
-}
-

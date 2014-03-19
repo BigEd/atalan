@@ -130,14 +130,6 @@ Bool ResetProcUse(Var * var, void * data)
 	return false;
 }
 
-Bool StructProcessFn(Var * var, void * data)
-{
-	if (var->mode == INSTR_TYPE && var->variant == TYPE_STRUCT) {
-		TypeStructAssignOffsets(var);
-	}
-	return false;
-}
-
 int main(int argc, char *argv[])
 {
 	Var * var, * data;
@@ -441,9 +433,6 @@ int main(int argc, char *argv[])
 	}
 
 	VarUse();
-
-	//==== Assign offsets to structure items
-	ForEachCell(&StructProcessFn, NULL);
 
 	//==== Assign addresses to variables
 

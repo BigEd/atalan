@@ -4,4 +4,5 @@
 Var * FirstItem(Var ** p_en, Var * list);
 Var * NextItem(Var ** p_en);
 
+Var * NewTuple(Var * left, Var * right);
 Bool ContainsItem(Var * tuple, Var * item);

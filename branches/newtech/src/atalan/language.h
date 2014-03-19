@@ -8,6 +8,12 @@ TODO:
 	- remove TYPE_ARRAY
 
 	- we need two version of the Add - one that computes constants, one that uses variables too
+
+	Array
+
+	- use INSTR_ITEM instead of INSTR_ELEMENT (INSTR_ELEMENT will be INSTR_FIELD)
+	- 
+
 */
 
 #include "../common/common.h"
@@ -71,11 +77,13 @@ typedef enum {
 	TOKEN_PLUS = '+',
 	TOKEN_MINUS = '-',
 	TOKEN_MUL = '*',
+	TOKEN_MUL2 = 215, // ×
 	TOKEN_DIV = '/',
 	TOKEN_DOT = '.',
 	TOKEN_HASH = '#',
 	TOKEN_DOLLAR = '$',
 	TOKEN_PLUSMINUS = 177,		// ±
+	TOKEN_POWER = '^',
 	TOKEN_BYTE_INDEX = TOKEN_DOLLAR,
 
 	// Keyword tokens
@@ -122,7 +130,6 @@ typedef enum {
 	TOKEN_REF,
 	TOKEN_STEP,
 	TOKEN_RETURN,
-	TOKEN_SCOPE,
 	TOKEN_SEQUENCE,
 	TOKEN_ASSERT,
 	TOKEN_EITHER,
@@ -292,7 +299,7 @@ typedef enum {
 	INSTR_TUPLE,			// 60 INSTR_LIST <adr,var>  (var may be another tuple)
 						    // Type of tuple may be undefined, or it may be structure of types of variables in tuple
 	INSTR_DEREF,			// 61 dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
-	INSTR_FIELD,			// 62 access field of structure
+	INSTR_ITEM,				// 62 access element in array
 	INSTR_TYPE,				// 63
 	INSTR_SCOPE,			// 64
 	INSTR_BIT,              // 65
@@ -310,38 +317,12 @@ typedef enum {
 
 	INSTR_USES,				// Extern instruction declares use of variable inside function
 	                        // it can have either left side maning the instruction is written or arg1 meaning the variable is read
+	INSTR_POWER,
 	INSTR_CNT
 } InstrOp;
 
+#include "errors.h"
 
-/*********************************************************
-
-  Error reporting
-
-**********************************************************/
-
-extern UInt32 ERROR_CNT;
-extern UInt32 LOGIC_ERROR_CNT;
-
-void ErrArgClear();
-void ErrArg(Var * var);
-void SyntaxErrorBmk(char * text, Bookmark bookmark);
-void SyntaxError(char * text);
-void LogicWarning(char * text, Bookmark bookmark);
-void LogicWarningLoc(char * text, Loc * loc);
-void LogicError(char * text, Bookmark bookmark);
-void LogicErrorLoc(char * text, Loc * loc);
-void InternalError(char * text, ...);
-void InternalErrorLoc(char * text, Loc * loc);
-void Warning(char * text);
-void EndErrorReport();
-
-void InitErrors();
-
-void PlatformError(char * text);
-#define OK  (TOK != TOKEN_ERROR)
-#define ifok if (OK)
-#define iferr if (TOK == TOKEN_ERROR)
 
 /*********************************************************
 
@@ -378,14 +359,10 @@ typedef struct VarTag Cell;
 typedef enum {
 	TYPE_VOID = 0,
 	TYPE_INT,
-	TYPE_STRUCT,
 	TYPE_STRING,
 	TYPE_ARRAY,
 	TYPE_LABEL,		// label in code (all labels share same type
 	TYPE_ADR,		// address (or reference)
-	TYPE_VARIANT,
-	TYPE_TUPLE,
-	TYPE_SCOPE,
 	TYPE_TYPE,
 	TYPE_ANY
 } TypeVariant;
@@ -409,11 +386,6 @@ Integer Limits
 #define INTLIMIT_MAX 2147483647L
 
 // min + N * mul  (<max)
-typedef struct {
-	Bool flexible;		// range has been fixed by user
-	BigInt min;
-	BigInt max;
-} Range;
 
 
 #define MACRO_ARG_CNT 26
@@ -520,40 +492,22 @@ struct VarTag {
 	Var * m;
 	};
 
-//	int     value_nonempty;
-	// TODO: Replace value_nonempty just with flag VarDefined
 	union {	
 		BigInt  n;				    // INSTR_INT
 		InstrBlock * instr;		    // INSTR_ARRAY, INSTR_FN  instructions for procedure or array initialization
 		char * str;				    // INSTR_TEXT
 		Var * var;				    // INSTR_VAR
 		Var * r;
-		Type * type_value;			// TODO: Remove
+		TypeSequence seq;
 		struct {					// INSTR_TYPE
 			TypeVariant  variant;	// int, struct, proc, array
-			Bool         flexible;	// (read: inferenced)
 			Bool         is_enum;	// INSTR_INT  is enum
 			Var *        possible_values;	// for each type, there can be possible set of value defined
-			union {
-				// TYPE_INT
-				Range range;
-				// TYPE_ARRAY, TYPE_ADR
-				struct {
-					Type * index;
-					Type * element;
-					UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size.
-				};
-				// TYPE_TUPLE, TYPE_VARIANT, TYPE_ADR (uses only left)
-				struct {
-					Type * left;
-					Type * right;
-				};
-
-				struct {
-					UInt8 arg_no;
-					Type * arg_type;
-				};
-				TypeSequence seq;
+			// TYPE_ARRAY, TYPE_ADR
+			struct {
+				Type * index;
+				Type * element;
+				UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size, but can be bigger.
 			};
 		};
 	};
@@ -689,8 +643,6 @@ Type * TypeDerive(Type * base);
 Type * TypeCopy(Type * base);
 
 Type * TypeByte();
-Type * TypeScope();
-Type * TypeTuple(Type * left, Type * right);
 Type * TypeArray(Type * index, Type * element);
 
 Type * TypeAdrOf(Type * element);
@@ -709,8 +661,6 @@ Bool CellIsIntConst(Type * type);
 UInt32 TypeAdrSize();
 UInt32 TypeStructAssignOffsets(Type * type);
 
-void ArraySize(Type * type, Var ** p_dim1, Var ** p_dim2);
-
 void PrintType(Type * type);
 
 //--- Proc type
@@ -724,6 +674,8 @@ extern Type TLBL;
 #include "cell_fn_type.h"
 #include "cell_fn.h"
 #include "cell_tuple.h"
+#include "cell_range.h"
+#include "cell_item.h"
 
 /**********************************************
 
@@ -846,17 +798,8 @@ Var * VarNewDeref(Var * var);
 Var * TextCell(char * str);
 void VarInitStr(Var * var, char * str);
 
-//===== Range
 
-Var * NewRange(Var * min, Var * max);
-Var * NewRangeOpenRight(Var * min, Var * max);
-Var * NewRangeOpenLeft(Var * min, Var * max);
-Var * NewRangeInt(BigInt * min, BigInt * max);
-Var * NewRangeIntN(Int32 min, Int32 max);
-Var * NewBitRange(UInt32 bit_count);
-
-//===== Tuple
-Var * NewTuple(Var * left, Var * right);
+//===== Op
 Var * NewOp(InstrOp op, Var * left, Var * right);
 Bool CellIsOp(Var * cell);
 
@@ -1263,7 +1206,6 @@ Rule * TranslateRule(InstrOp op, Var * result, Var * arg1, Var * arg2);
 // Garbage collector
 
 void RulesGarbageCollect();
-void TypeMark(Type * type);
 
 /*************************************************************
 
@@ -1293,6 +1235,7 @@ void BufEmpty();
 void BufPush(Var * var);
 Var * BufPop();
 
+Type * ParseType3();
 Type * ParseType2(InstrOp mode);
 Type * ParseTypeInline();
 

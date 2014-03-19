@@ -46,3 +46,20 @@ Bool ContainsItem(Var * tuple, Var * item)
 
 	return false;
 }
+
+Var * NewTuple(Var * left, Var * right)
+/*
+Purpose:
+	Create new tuple from the two variables.
+	If the right variable is NULL, left is returned.
+*/
+{
+	Var * var;
+
+	if (right == NULL) return left;
+	if (left == NULL) return right;
+
+	var = NewOp(INSTR_TUPLE, left, right);
+
+	return var;
+}

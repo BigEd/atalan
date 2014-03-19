@@ -59,7 +59,7 @@ Purpose:
 			var_idx = var->var;
 			if (IsEqual(var_idx, idx)) {
 				idx = NewOp(INSTR_SUB, idx, IntCell(shift));
-				*p_var = VarNewElement(var->adr, idx);
+				*p_var = NewItem(var->adr, idx);
 				return true;
 			} else if (var_idx->mode == INSTR_SUB) {
 			} else if (var_idx->mode == INSTR_ADD) {
@@ -280,9 +280,9 @@ void OptimizeLoopShift(Var * proc)
 						}
 
 						// Compute the difference (we compute difference up to 256 - zero overflow)
-						
+												
 						IntInit(&top, 256);
-						IntSub(&shift, &top, TypeMax(type));
+						IntSub(&shift, &top, IntFromCell(CellMax(type)));
 
 						if (init_i != NULL && VarShiftIsPossible(header, loc.blk->next, loop_var, &shift)) {
 							LoopShift(header, loc.blk->next, loop_var, &shift, &top);

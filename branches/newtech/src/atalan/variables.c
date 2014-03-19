@@ -181,7 +181,7 @@ void EnterSubscope()
 {
 	Var * var;
 	SCOPE_IDX++;
-	var = NewVarWithIndex(SCOPE, SCOPE_NAME, SCOPE_IDX, TypeScope());
+	var = NewVarWithIndex(SCOPE, SCOPE_NAME, SCOPE_IDX, VOID);
 	SCOPE = var;
 }
 
@@ -281,7 +281,7 @@ Bool CellIsConst(Var * var)
 
 Bool VarIsStructElement(Var * var)
 {
-	return var->adr->type->variant == TYPE_STRUCT;
+	return var->adr->mode == INSTR_TUPLE;
 }
 
 Bool VarIsArrayElement(Var * var)
@@ -365,7 +365,7 @@ Var * VarProcScope()
 
 Bool VarIsLabel(Var * var)
 {
-	return var->mode == INSTR_VAR && var->type->variant == TYPE_LABEL;
+	return var != NULL && var->mode == INSTR_VAR && var->type->variant == TYPE_LABEL;
 }
 
 Bool IsVirtual(Var * cell)
@@ -379,7 +379,7 @@ Bool IsVirtual(Var * cell)
 	 || VarIsRuleArg(cell)
 	 || type->mode == INSTR_FN
 	 || type->mode == INSTR_NULL
-	 || (type->mode == INSTR_TYPE && (type->variant == TYPE_LABEL || type->variant == TYPE_SCOPE || (type->variant == TYPE_TYPE && type->possible_values == NULL)))
+	 || (type->mode == INSTR_TYPE && (type->variant == TYPE_LABEL || (type->variant == TYPE_TYPE && type->possible_values == NULL)))
 	 || (type->mode == INSTR_VAR && IsVirtual(type));
 
 
@@ -641,7 +641,7 @@ Arguments:
 						ProcUse(i->arg2, flag | VarProcAddress);
 					}
 					label = i->result;
-					if (label != NULL && label->type->variant == TYPE_LABEL) {
+					if (VarIsLabel(label)) {
 						if (FlagOff(label->flags, VarLabelDefined)) {
 
 							loc.blk = blk;

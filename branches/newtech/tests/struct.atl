@@ -1,0 +1,12 @@
+;This is the simplest case, defining a simple variable with fields x,y.
+
+;To define a type, it is necessary to use type keyword 
+
+point: type
+	x: 0..100
+	y: 0..100
+
+p1:point
+
+;p1 = 10,20
+

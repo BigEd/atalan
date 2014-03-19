@@ -191,6 +191,11 @@ void IntAddN(BigInt * dest, Int32 N)
 	*dest = *dest + N;
 }
 
+void IntSubN(BigInt * dest, Int32 N)
+{
+	*dest = *dest - N;
+}
+
 void IntAndN(BigInt * dest, UInt32 N)
 {
 	*dest = *dest & N;

@@ -14,18 +14,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 GLOBAL Type TLBL;
 GLOBAL Var * TBYTE;		//0..255
-GLOBAL Type TSCOPE;
 
-void TypeMark(Type * type)
-{
-	if (type != NULL) {
-		TypeMark(type->type);
-		if (type->variant == TYPE_VARIANT || type->variant == TYPE_TUPLE) {
-			TypeMark(type->left);
-			TypeMark(type->right);
-		}
-	}
-}
 /*
 void TypeGarbageCollect()
 {
@@ -60,7 +49,6 @@ Type * TypeAlloc(TypeVariant variant)
 	type->submode = 0;
 	type->type = NULL;
 	type->variant = variant;
-	type->flexible = false;
 	return type;
 }
 
@@ -125,38 +113,6 @@ Var * TypeByte()
 	return TBYTE;
 }
 
-Type * TypeScope()
-{
-	return &TSCOPE;
-}
-
-Type * TypeTuple(Type * left, Type * right)
-{
-	Type * type = TypeAlloc(TYPE_TUPLE);
-	type->left  = left;
-	type->right = right;
-	return type;
-}
-
-UInt32 TypeStructAssignOffsets(Type * type)
-/*
-Purpose:
-	Assign offsets to elements of structure.
-*/
-{
-	UInt32 offset = 0;
-	Var * item;
-	FOR_EACH_LOCAL(type, item)
-		if (item->mode == INSTR_VAR) {
-			if (item->adr == NULL) {
-				item->adr = IntCellN(offset);
-				offset += TypeSize(item->type);
-			}
-		}
-	NEXT_LOCAL
-	return offset;			// offset now contains total size of structure
-}
-
 void TypeInit()
 {
 
@@ -164,13 +120,9 @@ void TypeInit()
 
 	TLBL.mode    = INSTR_TYPE;
 	TLBL.variant = TYPE_LABEL;
-	TLBL.range.min = -(long)2147483648L;
-	TLBL.range.max = 2147483647L;
+//	TLBL.range.min = -(long)2147483648L;
+//	TLBL.range.max = 2147483647L;
 	TLBL.type     = NULL;
-
-	TSCOPE.mode    = INSTR_TYPE;
-	TSCOPE.variant = TYPE_SCOPE;
-	TSCOPE.type   = NULL;
 
 }
 
@@ -188,13 +140,13 @@ Bool TypeIsInt(Type * type)
 void PrintTypeNoBrace(Type * type)
 {
 	if (type == NULL) { Print("NULL"); return; }
-	switch(type->variant) {
-	case TYPE_TUPLE:
-		PrintType(type->left); Print(" ,"); PrintType(type->right);
-		break;
-	default:
+//	switch(type->variant) {
+//	case TYPE_TUPLE:
+//		PrintType(type->left); Print(" ,"); PrintType(type->right);
+//		break;
+//	default:
 		PrintType(type);
-	}
+//	}
 }
 
 void PrintType(Type * type)
@@ -212,14 +164,6 @@ void PrintType(Type * type)
 	case TYPE_ADR:
 		Print("adr of ");
 		PrintType(type->element);
-		break;
-
-	case TYPE_VARIANT:
-		PrintType(type->left); Print(" | "); PrintType(type->right);
-		break;
-
-	case TYPE_TUPLE:
-		Print("("); PrintTypeNoBrace(type); Print(")");
 		break;
 
 		default:

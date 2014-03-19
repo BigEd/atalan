@@ -147,15 +147,18 @@ Purpose:
 	Type must be integer type defining a range or variant type which has two subtypes.
 */
 {
+	Var * min, * max;
 	BigInt sz;
 	if (type != NULL) {
-		if (type->variant == TYPE_INT) {
-			IntRangeSize(&sz, &type->range.min, &type->range.max);
-			HeapAddBlock(heap, IntN(&type->range.min), IntN(&sz));
-			IntFree(&sz);
-		} else if (type->variant == TYPE_VARIANT) {
-			HeapAddType(heap, type->left);
-			HeapAddType(heap, type->right);
+		if (type->mode == INSTR_RANGE) {			
+			if (CellRange(type, &min, &max)) {
+				IntRangeSize(&sz, IntFromCell(min), IntFromCell(max));
+				HeapAddBlock(heap, IntN(IntFromCell(min)), IntN(&sz));
+				IntFree(&sz);
+			}
+		} else if (type->mode == INSTR_VARIANT) {
+			HeapAddType(heap, type->l);
+			HeapAddType(heap, type->r);
 		}
 	}
 }

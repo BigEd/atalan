@@ -33,27 +33,6 @@ Argument:
 	return NULL;
 }
 
-Var * NewTuple(Var * left, Var * right)
-/*
-Purpose:
-	Create new tuple from the two variables.
-	If the right variable is NULL, left is returned.
-*/
-{
-	Var * var;
-
-	if (right == NULL) return left;
-	if (left == NULL) return right;
-
-	var = VarFindOp(INSTR_TUPLE, left, right, NULL);
-	if (var == NULL) {
-		var = NewCell(INSTR_TUPLE);
-		var->type = TypeTuple(left->type, right->type);
-		var->l = left;
-		var->r = right;
-	}
-	return var;
-}
 
 Var * VarNewDeref(Var * adr)
 {
@@ -89,24 +68,6 @@ Argument:
 	item->l    = l;
 	item->m    = NULL;
 	item->type = NULL;
-
-	// Type of array element variable is type of array element
-	// We may attempt to address individual bytes of non-array variable as an array
-	// in such case the type of the element is byte.
-
-/*
-	if (l->type != NULL) {
-		if (l->type->variant == TYPE_ARRAY) {
-			item->type = l->type->element;
-		} else if (l->type->variant == TYPE_STRUCT) {
-			item->type = r->type;
-			item->submode |= (r->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
-		} else {
-			item->type = TypeByte();
-		}
-	} else {
-	}
-*/
 
 	// If the right is in, out or register, whole operation is the same
 	item->var  = r;
