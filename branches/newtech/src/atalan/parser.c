@@ -4431,7 +4431,7 @@ void AssertVar(Var * var)
 
 	// Array access will be reported using syntax array#index = value.
 
-	} else if (var->mode == INSTR_ELEMENT) {
+	} else if (var->mode == INSTR_ITEM) {
 		StrCopy(p, var->l->name); p += StrLen(var->l->name);
 		*p++ = '#';
 		if (var->r->mode == INSTR_INT) {

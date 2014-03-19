@@ -50,7 +50,7 @@ Input:
 		VarMarkLive(var->var);
 
 	// If this is array access variable, mark indices as live (used)
-	} if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
+	} if (var->mode == INSTR_ITEM || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
 
 		if (var->adr->mode == INSTR_DEREF) {
 			VarMarkLive(var->adr);
@@ -89,7 +89,7 @@ Input:
 
 		// Each element, which has this variable as an array is marked same
 		FOR_EACH_VAR(var2)
-			if (var2->mode == INSTR_ELEMENT || var2->mode == INSTR_BYTE || var2->mode == INSTR_BIT) {
+			if (var2->mode == INSTR_ITEM || var2->mode == INSTR_BYTE || var2->mode == INSTR_BIT) {
 				if (var2->adr == var) {
 					var2->flags = (var2->flags & ~VarLive) | state;
 				}
@@ -127,8 +127,8 @@ Purpose:
 */
 {
 	if (var != NULL && test_var != NULL) {
-		if (test_var->mode == INSTR_ELEMENT || test_var->mode == INSTR_BYTE) {
-			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+		if (test_var->mode == INSTR_ITEM || test_var->mode == INSTR_BYTE) {
+			if (var->mode == INSTR_ITEM || var->mode == INSTR_BYTE) {
 				// This is the same array and the index of the variable is the same
 				if (var->adr == test_var->adr) {
 					if (var->var->mode != INSTR_INT || test_var->var->mode != INSTR_INT || IntEq(&var->var->n, &test_var->var->n)) return true;
@@ -170,7 +170,7 @@ Purpose:
 			if (VarUsesVar(i->arg2, var)) { res1 = 1; goto done; }
 		}
 
-		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+		if (var->mode == INSTR_ITEM || var->mode == INSTR_BYTE) {
 			if (VarMayUseVar(i->arg1, var) || VarMayUseVar(i->arg2, var)) { res1 = 1; goto done; }
 		}
 
@@ -187,7 +187,7 @@ Purpose:
 
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
-				if (var->mode == INSTR_ELEMENT) {
+				if (var->mode == INSTR_ITEM) {
 					if (var->adr == i->arg1->adr) { res1 = 1; goto done; }
 				}
 			}

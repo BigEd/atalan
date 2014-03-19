@@ -212,7 +212,7 @@ system.assert:macro -> ()
 rule data const %A:0..255 -> "   DB %A"
 rule var_arg %A:string    -> "   DB %A.size,'%A'"
 rule var_arg %A:s32       -> "   DB 132" "   DD %A"
-rule var_arg %A:arr_s32(const %B) -> "   DB 132" "   DD %A+4*%B"
+rule var_arg %A:arr_s32 # const %B -> "   DB 132" "   DD %A+4*%B"
 
 ;rule var_arg %A:u8      -> "   DB 129" "   DW %A"
 ;rule var_arg %A:u16     -> "   DB 130" "   DW %A"
