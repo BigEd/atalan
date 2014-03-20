@@ -77,13 +77,13 @@ typedef enum {
 	TOKEN_PLUS = '+',
 	TOKEN_MINUS = '-',
 	TOKEN_MUL = '*',
-	TOKEN_MUL2 = 215, // ×
 	TOKEN_DIV = '/',
 	TOKEN_DOT = '.',
 	TOKEN_HASH = '#',
 	TOKEN_DOLLAR = '$',
 	TOKEN_PLUSMINUS = 177,		// ±
 	TOKEN_POWER = '^',
+//	TOKEN_MUL2 = 215, // × = 215
 	TOKEN_BYTE_INDEX = TOKEN_DOLLAR,
 
 	// Keyword tokens
@@ -124,6 +124,7 @@ typedef enum {
 	TOKEN_BITNOT,
 	TOKEN_BITAND,
 	TOKEN_BITOR,
+	TOKEN_MUL2, // × = 215
 	TOKEN_BITXOR,
 	TOKEN_STRUCT,
 	TOKEN_USE,
