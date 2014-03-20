@@ -158,6 +158,9 @@
     <ClCompile Include="cell_item.c">
       <Filter>Source Files\cells</Filter>
     </ClCompile>
+    <ClCompile Include="simmilar_names.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">

@@ -1229,6 +1229,8 @@ void ParseInit();
 Bool Parse(char * name, Bool main_file, Bool parse_options);
 void ProcCheck(Var * proc);
 
+void ReportSimilarNames(char * name);
+
 Bool ParsingSystem();
 Bool ParsingRule();
 Bool ParsingPattern();
