@@ -148,6 +148,7 @@ int main(int argc, char *argv[])
 	SystemInit();
 	PrintInit();
 
+	ASSERT(TOKEN_MUL2 == 215);
 
 //#ifdef DEBUG
 //	HeapUnitTest();

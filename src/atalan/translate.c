@@ -331,6 +331,12 @@ Bool VarIsOneOf(Var * var, Var * variants)
 }
 
 static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
+/*
+Purpose:
+	Match argument against pattern.
+	Argument should not be unaliased to allow matching against actual name.
+	Other matches that match structural identity should whowever ork with unaliased cells.
+*/
 {
 	Type * atype;
 	Var * pvar, * left, * right;
