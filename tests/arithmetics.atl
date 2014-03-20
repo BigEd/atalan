@@ -8,8 +8,8 @@
 ;===== Unsigned arithmetics
 
 ;7-bit unsigned variables 
-out u7w1@10, u7w2@11:0..100
-in  u7r1@10, u7r2@11:0..100
+out u7w1, u7w2:0..100
+in  u7r1@u7w1, u7r2@u7w2:0..100
 
 out u8w1:0..255
 in  u8r1@u8w1:0..255
@@ -18,11 +18,11 @@ in out u8:0..255
 
 ;2-byte unsigned variables
 
-out u11w1@200, u11w2@202:0..5000
-in  u11r1@200, u11r2@202:0..5000
+out u11w1, u11w2:0..5000
+in  u11r1@u11w1, u11r2@u11w2:0..5000
 
-out s14w1@207, s14w2@209:-8192..8191
-in  s14r1@207, s14r2@209:-8192..8191
+out s14w1, s14w2:-8192..8191
+in  s14r1@s14w1, s14r2@s14w2:-8192..8191
 
 in out u16:0..65535
 in out s16:-32768..32767
@@ -54,11 +54,11 @@ assert u16 = 1433
 
 ;**** Signed arithmetics
 
-out s6w1@204, s6w2@205:-64..63
-in  s6r1@204, s6r2@205:-64..63
+out s6w1, s6w2:-64..63
+in  s6r1@s6w1, s6r2@s6w2:-64..63
 
-out s8w1@206, s8w2:-128..127
-in  s8r1@206, s8r2@s8w2:-128..127
+out s8w1, s8w2:-128..127
+in  s8r1@s8w1, s8r2@s8w2:-128..127
 
 in out s8:-128..127
 
