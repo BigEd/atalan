@@ -9,7 +9,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 Cell * NewFnType(Type * arg, Type * result)
 {
@@ -50,7 +50,7 @@ Purpose:
 			return true;
 		}
 	} else if (var->mode == INSTR_TUPLE) {
-		return VarUseReg(var->adr) || VarUseReg(var->var);
+		return VarUseReg(var->l) || VarUseReg(var->r);
 	}
 	return false;
 }
@@ -74,7 +74,7 @@ Purpose:
 			reg_size = VarByteSize(reg);
 			if (reg_size < byte_size) continue;		// exclude registers with different size
 			if (OutVar(reg) || InVar(reg)) continue;			// out registers can not be used to replace variables
-			if (reg->var != NULL) continue;
+//			if (reg->var != NULL) continue;
 			if (reg_size < used_reg_size) {
 				used_reg = reg;
 				used_reg_size = reg_size;
@@ -115,13 +115,13 @@ Purpose:
 
 	VarResetRegUse();
 	FOR_EACH_ITEM(en, arg, args)
-		VarUseReg(arg->adr);
+		VarUseReg(VarAdr(arg));
 	NEXT_ITEM(en, arg)
 
 	// 2. Try to assign registers to variables
 
 	FOR_EACH_ITEM(en, arg, args)
-		if (arg->adr == NULL) {
+		if (VarAdr(arg) == NULL) {
 			var_size = VarByteSize(arg);
 			if (var_size != 0) {
 				// Try to find free register
@@ -142,7 +142,7 @@ Purpose:
 						}
 					}
 				}
-				arg->adr = reg;		// if we failed to assign, this is NULL anyways
+				VarSetAdr(arg, reg);		// if we failed to assign, this is NULL anyways
 			}
 		}
 	NEXT_ITEM(en, arg)

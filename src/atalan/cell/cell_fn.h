@@ -14,7 +14,8 @@ Bool IsFnImplemented(Var * fn_cell);
 typedef Bool (*VarFilter)(Var * var);
 void ProcLocalVars(Var * proc, VarSet * set, VarFilter filter_fn);
 
-InstrBlock * FnVarInstr(Var * proc);
+InstrBlock * FnVarCode(Var * proc);
+void FnSetCode(Cell * fn, InstrBlock * code);
 
 Bool VarIsInArg(Var * fn_var, Var * var);
 Bool VarIsOutArg(Var * fn_var, Var * var);

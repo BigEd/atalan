@@ -11,7 +11,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 Bool CellIsOp(Var * cell)
 {
@@ -38,14 +38,14 @@ Var * VarNewDeref(Var * adr)
 {
 	Var * var;
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_DEREF && var->var == adr) return var;
+		if (var->mode == INSTR_DEREF && var->l == adr) return var;
 	NEXT_VAR
 
 	var = NewCell(INSTR_DEREF);
-	var->var = adr;
-	if (adr->type != NULL && adr->type->variant == TYPE_ADR) {
-		var->type = adr->type->element;
-	}
+	var->l = adr;
+//	if (adr->type != NULL && adr->type->variant == TYPE_ADR) {
+//		var->type = adr->type->element;
+//	}
 	return var;
 }
 
@@ -70,7 +70,7 @@ Argument:
 	item->type = NULL;
 
 	// If the right is in, out or register, whole operation is the same
-	item->var  = r;
+	item->r  = r;
 
 	// If this is element from in or out variable, it is in or out too
 	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
@@ -112,4 +112,28 @@ Var * NewVariant(Var * left, Var * right)
 	if (right == NULL) return left;
 	if (right == left) return left;
 	return NewOp(INSTR_VARIANT, left, right);
+}
+
+void PrintBinaryOp(Cell * cell)
+/*
+Purpose:
+	Used to implement printing for binary operators.
+*/
+{
+	PrintCell(cell->l);
+	PrintChar(' ');
+	Print(INSTR_INFO[cell->mode].symbol);
+	PrintChar(' ');
+	PrintCell(cell->r);
+}
+
+void PrintUnaryOp(Cell * cell)
+/*
+Purpose:
+	Used to implement printing for binary operators.
+*/
+{
+	Print(INSTR_INFO[cell->mode].symbol);
+	PrintChar(' ');
+	PrintCell(cell->l);
 }

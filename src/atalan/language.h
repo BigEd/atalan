@@ -2,7 +2,7 @@
 TODO:
 	- remove ParseIntType
 	- remove INSTR_NAME
-	- remove INT_TYPE range
+	- remove INSTR_SCOPE
 	- range should include resolution? (default is 1, different for floats etc.)
 	- remove NewRangeInt for NewRange (or Range?)
 	- remove TYPE_ARRAY
@@ -19,16 +19,21 @@ TODO:
 #include "../common/common.h"
 #include "bigint.h"
 
-typedef struct VarTag Var;
+typedef struct CellTag Var;
+typedef struct CellTag Type;				// Type is special version of Cell
+typedef struct CellTag Cell;
 typedef struct LocTag Loc;
 typedef struct VarSetTag VarSet;
 typedef struct RuleTag Rule;
 typedef struct RuleArgTag RuleArg;
+typedef struct SrcLineTag SrcLine;
 
 #define COLOR_ERROR (RED+LIGHT)
 #define COLOR_WARNING (RED+GREEN+LIGHT)
 #define COLOR_LINE_POS (RED+GREEN+BLUE)
 #define COLOR_HINTS  (RED+GREEN+BLUE)
+
+#include "lexer.h"
 
 Bool Verbose(Var * proc);
 
@@ -46,11 +51,6 @@ extern CompilerPhase PHASE;
  Lexer
 
 *************************************************************/
-
-typedef UInt16 LineNo;   
-typedef UInt16 LinePos;  // 0 based position of character on line
-
-#define UNDEFINED_LINE_POS 65535
 
 typedef enum {
 	TOKEN_VOID = -2,
@@ -153,9 +153,9 @@ typedef struct ParseStateTag ParseState;
 
 struct ParseStateTag {
 	ParseState * parent;
-	FILE * file;
-	char * line;
-	char * prev_line;
+	Cell * file;
+	SrcLine * line;
+	SrcLine * prev_line;
 	LineNo line_no;
 	LinePos line_len;
 	LinePos line_pos;
@@ -171,9 +171,6 @@ typedef struct {
 	Bool   ignore_keywords;
 } Lexer;
 
-Bool SrcOpen(char * name, Bool parse_options);
-void SrcClose();
-FILE * FindFile(char * name, char * ext, char * path);
 
 extern Var * MODULES;
 
@@ -186,25 +183,19 @@ void NextToken();
 void NextStringToken();
 void ExpectToken(Token tok);
 
-typedef UInt16 Bookmark;
-Bookmark SetBookmark();
-
 Bool Spaces();
 Bool NextCharIs(UInt8 chr);
 Bool NextIs(Token tok);
-Bool PeekNext(Token tok);
 Bool NextNoSpaceIs(Token tok);
 void NewBlock(Token end_token, Token stop_token);
 void EnterBlock();
 void EnterBlockWithStop(Token stop_token);
 void ExitBlock();
 
-Bool LexInt(Var ** p_i);
-Bool LexNum(Var ** p_i);
-Bool LexId(char * p_name);
-Bool LexString(char * p_str);
 
-void LexerInit();
+void LexInit();
+
+Cell * ParseFn(Bool as_macro);
 
 #define MAX_LINE_LEN 32767
 
@@ -212,25 +203,26 @@ extern Lexer LEX;
 extern Token TOK;
 extern Token TOK_NO_SPACES;				// if the current token was not preceded by whitespaces, it is copied here
 
-extern FILE * F;
-extern char   LINE[MAX_LINE_LEN+2];		// we reserve one extra byte for terminating EOL, one for 0
+//extern FILE * F;
+//extern char   LINE[MAX_LINE_LEN+2];		// we reserve one extra byte for terminating EOL, one for 0
 extern LineNo  LINE_NO;
 extern UInt16  LINE_LEN;
 extern UInt16  LINE_POS;
 extern UInt16  TOKEN_POS;
-extern char * PREV_LINE;
+//extern char * PREV_LINE;
 extern Var *  SRC_FILE;					// current source file
 extern char PROJECT_DIR[MAX_PATH_LEN];
 extern char SYSTEM_DIR[MAX_PATH_LEN];
 char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
 char FILENAME[MAX_PATH_LEN];
+
 extern char PLATFORM[64];
 
 typedef enum {
 	INSTR_NULL = 0,
 	INSTR_VOID,		// no value at all
 	INSTR_LET,		// var, val
-	INSTR_IF,
+	INSTR_IF,		// condition, jump
 
 	INSTR_EQ,		// 4 must be even!!!.
 	INSTR_NE,       // 5
@@ -256,17 +248,17 @@ typedef enum {
 	INSTR_ROL,		// 22 bitwise rotate right
 	INSTR_ROR,		// 23 bitwise rotate left
 
-	INSTR_PROLOGUE,			//-2-2
-	INSTR_EPILOGUE,
+	INSTR_PROLOGUE,	//24
+	INSTR_EPILOGUE, //25
 	INSTR_EMIT,
 	INSTR_VARDEF,
 	INSTR_LABEL,
 
-	INSTR_ALLOC,
-	INSTR_FN,
+	INSTR_ALLOC,  //29
+	INSTR_FN,     //30
 	INSTR_RETURN,
 	INSTR_ENDPROC,
-	INSTR_CALL,
+	INSTR_CALL,   //33
 	INSTR_VAR_ARG,
 	INSTR_DATA,
 	INSTR_FILE,
@@ -282,7 +274,7 @@ typedef enum {
 	INSTR_ASSERT,
 	INSTR_ASSERT_END,
 
-	INSTR_LINE,				// reference line in the source code
+	INSTR_LINE2,			// reference line in the source code
 	INSTR_INCLUDE,
 
 	INSTR_COMPILER,
@@ -294,7 +286,7 @@ typedef enum {
 	// Following 'instructions' are used in expressions
 	INSTR_VAR,				// 55 Variable (may be argument, input, output, ...)
 	INSTR_INT,				// 56 Integer constant
-	INSTR_ELEMENT,			// 57 <array> <index>     access array or structure element (left operand is array, right is index)
+	INSTR_ELEMENT,			// 57 <array> <index>     access structure element (left operand is array, right is name)
 	INSTR_BYTE,				// 58 <var> <byte_index>  access byte of specified variable
 	INSTR_RANGE,			// 59 x..y  (l = x, r = y) Used for slice array references
 	INSTR_TUPLE,			// 60 INSTR_LIST <adr,var>  (var may be another tuple)
@@ -311,15 +303,19 @@ typedef enum {
 	INSTR_SEQUENCE,         // 70
 	INSTR_EMPTY,			// No-value
 	INSTR_MATCH,		    // l(adr) = argument-no, r(var) = type that must match   name:type
-	INSTR_MATCH_VAL,
-	INSTR_ARRAY_TYPE,
-	INSTR_FN_TYPE,
-	INSTR_ANY,				// Represents any possible value. There is only one cell like this.
+	INSTR_VAL,				// 73
+	INSTR_ARRAY_TYPE,       // 74
+	INSTR_FN_TYPE,          // 75
+	INSTR_ANY,				// 76 Represents any possible value. There is only one cell like this.
 
-	INSTR_USES,				// Extern instruction declares use of variable inside function
+	INSTR_USES,				// 77 Extern instruction declares use of variable inside function
 	                        // it can have either left side maning the instruction is written or arg1 meaning the variable is read
-	INSTR_POWER,
-	INSTR_CNT
+	INSTR_POWER,			// 78
+	INSTR_MEMORY,			// 79
+	INSTR_SRC_FILE,			// 80
+	INSTR_PRINT,			// 81
+	INSTR_CODE,
+	INSTR_CNT				//82
 } InstrOp;
 
 #include "errors.h"
@@ -352,10 +348,13 @@ INSTR_RANGE   Range given by two variables (min..max).
 typedef struct TypeInfoTag TypeInfo;
 typedef struct InstrTag Instr;
 typedef struct ExpTag Exp;
-typedef struct InstrBlockTag InstrBlock;
+typedef struct CellTag InstrBlock;
 
-typedef struct VarTag Type;				// Type is special version of Cell
-typedef struct VarTag Cell;
+
+#include "cell/cell_memory.h"
+#include "cell/cell_sequence.h"
+#include "cell/cell_src_file.h"
+#include "cell/cell_code.h"
 
 typedef enum {
 	TYPE_VOID = 0,
@@ -368,28 +367,17 @@ typedef enum {
 	TYPE_ANY
 } TypeVariant;
 
-typedef struct {
-	Type * init;		// initial value of the step
-	InstrOp op;			// step_type INSTR_ADD, INSTR_SUB, INSTR_MUL, INSTR_DIV, ...
-	Type * step;		// type of argument (step value)
-	InstrOp compare_op;
-	Type * limit;		// limit value of step (for ADD, MUL this is top value, for SUB, DIV this is bottom value)
-} TypeSequence;
-
-
-/*
-
-Integer Limits
-
-*/
-
-#define INTLIMIT_MIN (-2147483647 - 1)		// To prevent error in some compilers parser
-#define INTLIMIT_MAX 2147483647L
-
-// min + N * mul  (<max)
-
+typedef enum {
+	JUMP_IF    = 0,
+	JUMP_LOOP  = 1,
+	JUMP_LOOP_EXIT = 2,
+	JUMP_LOOP_ENTRY = 4     // may be combined with loop exit
+} JumpType;
 
 #define MACRO_ARG_CNT 26
+
+extern SrcLine * PREV_SRC_LINE;
+extern SrcLine * SRC_LINE;
 
 /*
 
@@ -416,6 +404,7 @@ typedef enum {
 	SUBMODE_OUT_SEQUENCE = 64,
 	SUBMODE_PARAM    = 1024,
 	SUBMODE_MACRO    = 2048,
+	SUBMODE_LOCKED   = 4096,		// variable cannot be assigned multiple times
 
 	// General
 	SUBMODE_SYSTEM = 128,				// This is system variable (defined either by system or platform)
@@ -453,63 +442,105 @@ typedef enum {
 #define VarLabelDefined    32
 
 typedef unsigned int VarIdx;
-//typedef char * Name;
-
 typedef UInt8 VarFlags;
 
-struct VarTag {
+struct VarCellTag {
+	char *	name;
+	VarIdx  idx;			// two variables with same name but different index may exist
+	// 0 means no index, 1 means index 1 etc.
+	// variable name "x1" is automatically converted to x,1
+	Cell *	adr;	 // Address of variable in memory. For INSTR_TYPE, this means alignment of variable of this type.
+	Type *  type;	 // Type of variable
+	Cell *  subscope;
+};
+
+struct OpCellTag {
+	Var * l;
+	Var * r;
+};
+
+struct CellTag {
 
 	InstrOp      mode;
 	VarSubmode   submode;
 
+	VarFlags  flags;
+
 	// Variable identification (name,idx,scope)
 
-	// INSTR_VAR
-	char *	name;
-	VarIdx  idx;			// two variables with same name but different index may exist
-							// 0 means no index, 1 means index 1 etc.
-							// variable name "x1" is automatically converted to x,1
-
-	// Location
-	Var *   file;			// file in which the variable has been defined
-	LineNo  line_no;		// line of number, on which the variable has been defined
-	LinePos line_pos;		// position on line at which the variable has been declared
-
-	Var  *  scope;			// scope, in which this variable has been declared
-	Var  *  next_in_scope;  // in future, this will be replaced by 'next'
-	Var  *  subscope;		// first variable in subscope of this variable
-
-
-	VarFlags  flags;
+	// INSTR_CODE, other
 	union {
-	Var *	adr;	 // Address of variable in memory. For INSTR_TYPE, this means alignment of variable of this type.
-					 // INSTR_ELEMENT	Array to which this variable belongs
-					 // INSTR_TUPLE      First variable of tuple
-	Var * l;
-	};
 
-	union {
-	Type *  type;	 // Type of variable
-	Var * m;
-	};
+		struct {
+			// INSTR_VAR
+			char *	name2;
+			VarIdx  idx;			// two variables with same name but different index may exist
+									// 0 means no index, 1 means index 1 etc.
+									// variable name "x1" is automatically converted to x,1
+			// Location
+			SrcLine * line;			// file in which the variable has been defined
+			LinePos   line_pos;		// position on line at which the variable has been declared
 
-	union {	
-		BigInt  n;				    // INSTR_INT
-		InstrBlock * instr;		    // INSTR_ARRAY, INSTR_FN  instructions for procedure or array initialization
-		char * str;				    // INSTR_TEXT
-		Var * var;				    // INSTR_VAR
-		Var * r;
-		TypeSequence seq;
-		struct {					// INSTR_TYPE
-			TypeVariant  variant;	// int, struct, proc, array
-			Bool         is_enum;	// INSTR_INT  is enum
-			Var *        possible_values;	// for each type, there can be possible set of value defined
-			// TYPE_ARRAY, TYPE_ADR
-			struct {
-				Type * index;
-				Type * element;
-				UInt16 step;					// Index will be multiplied by this value. Usually it is same as element size, but can be bigger.
+			Var  *  scope;			// scope, in which this variable has been declared
+			Var  *  next_in_scope;  // in future, this will be replaced by 'next'
+			Var  *  subscope;		// first variable in subscope of this variable
+
+			union {
+				Cell *	_adr;	 // Address of variable in memory. For INSTR_TYPE, this means alignment of variable of this type.
+								 // INSTR_ELEMENT	Array to which this variable belongs
+								 // INSTR_TUPLE      First variable of tuple
+				Var * l;
 			};
+
+			union {
+				Type *  type;	 // Type of variable
+				Var * m;
+			};
+
+			union {
+				BigInt  n;				    // INSTR_INT
+				char * str;				    // INSTR_TEXT
+				MemoryCell mem;				// INSTR_MEMORY
+				InstrBlock * instr;		    // INSTR_ARRAY, INSTR_FN  instructions for procedure or array initialization
+				Cell * r;
+				SrcFileCell src_file;
+				SequenceCell seq;
+				struct {					// INSTR_TYPE
+					TypeVariant  variant;	// int, struct, proc, array
+					Bool         is_enum;	// INSTR_INT  is enum
+					Cell *        possible_values;	// for each type, there can be possible set of value defined
+					// TYPE_ARRAY, TYPE_ADR
+					struct {
+						Type * index;
+						Type * element;
+					};
+				};
+			};
+		}; // other
+
+		//===== INSTR_CODE
+		struct {
+			InstrBlock * next;			// Blocks are linked in chain, so we can traverse them as required.
+			// This is normally in order, in which the blocks were parsed.
+			UInt32 seq_no;				// Block sequence number. It is used to determine order of blocks when detecting loops.
+			// It is also useful when debugging the compiler, as we can quickly locate an instruction by block number and
+			// sequence number of the caller.
+
+			InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, we leave the routine after the last instruction in the block)
+			InstrBlock * cond_to;		// last instruction conditionally jumps to this block if the condition if true
+
+			InstrBlock * from;			// we may come to this block from here
+
+			InstrBlock * callers;		// list of blocks calling this block (excluding from)
+			InstrBlock * next_caller;	// next caller in the chain
+
+			JumpType     jump_type;		// whether this is end of loop or some other type of branch
+
+			Cell * label;				// label that starts the block
+			Bool  processed;
+			Type * itype;				// type computed in this block for variable when inferring types
+			Instr * first, * last;		// first and last instruction of the block
+			void * analysis_data;
 		};
 	};
 
@@ -559,7 +590,7 @@ INSTR_LABEL          Address.
 Variables are managed in blocks.
 
 Unused variable has INSTR_NULL and is in special scope.
-Unused variables are kept in a list usinf next_in_scope.
+Unused variables are kept in a list using next_in_scope.
 
 */
 
@@ -582,18 +613,38 @@ extern UInt16 G_VAR_I;
 #define MAX_ARG_COUNT 128
 
 /*
-INSTR_LINE is special instruction, which does not affect execution of program.
-It marks place, where next line in source code begins.
-All instructions after INSTR_LINE until next INSTR_LINE instruction were generated as a result
-of parsing the line specified in instruction.
-
-To save memory, INSTR_LINE argument are not pointers to ordinary variables.
-result     pointer to variable, that defines source file in it's name
-arg1       integer line number.
-arg2       pointer to text of line
-
-
+For every cell type, we define cell interface, which provides set of functions applicable to this cell.
 */
+//$I
+/*
+#define CELL_FREE void CellFree(Cell * cell)
+#define CELL_PRINT void CellPrint(Cell * cell)
+#define CELL_EXECUTE void CellExecute(Instr * i);
+
+//typedef struct CellInterfaceTag CellInterface;
+
+#define CELL_INTERFACE(NAME) CellInterface NAME ## CellInterface = {
+#define END_CELL_INTERFACE };
+
+typedef struct {
+	void (*cell_free_fn)(Cell * cell);
+	void (*cell_print_fn)(Cell * cell);
+	Cell * (*eval_fn)(Cell * cell);
+} CellInterface;
+
+CellInterface GenericCellInterface;
+
+CellInterface SrcFileCellInterface;
+*/
+
+// These functions may be used as default implementations of cell interface functions.
+void VoidCellFree(Cell * cell);
+void DefaultCellPrint(Cell * cell);
+Cell * VoidEval(Cell * cell);
+Cell * SelfEval(Cell * cell);
+
+
+Cell * Eval(Cell * cell);
 
 typedef struct MemBlockTag MemBlock;
 
@@ -670,13 +721,21 @@ void TypeInfer(Var * proc);
 
 extern Type TLBL;
 
-#include "cell_int.h"
-#include "cell_array_type.h"
-#include "cell_fn_type.h"
-#include "cell_fn.h"
-#include "cell_tuple.h"
-#include "cell_range.h"
-#include "cell_item.h"
+#include "cell/cell_int.h"
+#include "cell/cell_text.h"
+#include "cell/cell_var.h"
+
+//#include "cell/relational/cell_eq.h"
+//#include "cell/relational/cell_ne.h"
+
+//#include "cell/arithmetic/cell_add.h"
+
+#include "cell/cell_array_type.h"
+#include "cell/cell_fn_type.h"
+#include "cell/cell_fn.h"
+#include "cell/cell_tuple.h"
+#include "cell/cell_range.h"
+#include "cell/cell_item.h"
 
 /**********************************************
 
@@ -691,8 +750,6 @@ void VarInit();
 void InitCPU();
 
 Var * NewArray(Type * type, InstrBlock * instr);
-
-char * VarName(Var * var);
 
 // Name cell
 
@@ -717,15 +774,16 @@ Var * NewCellInScope(InstrOp mode, Var * scope);
 Var * CellCopy(Var * var);
 
 Type * CellType(Var * cell);
+void CellSetLocation(Var * cell, SrcLine * line, LinePos line_pos);
 
-void CellSetLocation(Var * cell, Var * file, LineNo line_no, LinePos line_pos);
 
 
+//---- labels
 Var * VarNewLabel(char * name);
 Var * FindOrAllocLabel(char * name);
-
-
 Var * VarNewTmpLabel();
+
+
 
 Var * VarFind(Var * scope, char * name);
 Var * VarFind(Var * scope, char * name);
@@ -753,7 +811,10 @@ Var * NewVariant(Var * left, Var * right);
 
 Bool VarIsLabel(Var * var);
 Bool VarIsArray(Var * var);
+
 Bool CellIsValue(Var * var);
+Bool CellIsStatic(Var * var);
+
 Bool VarIsTmp(Var * var);
 Bool VarIsStructElement(Var * var);
 Bool VarIsArrayElement(Var * var);
@@ -777,7 +838,6 @@ Bool VarIdentical(Var * left, Var * right);
 Var * VarFindAssociatedConst(Var * var, char * name);
 
 Var * VarField(Var * var, char * fld_name);
-void VarLet(Var * var, Var * val);
 
 #define InVar(var)  FlagOn((var)->submode, SUBMODE_IN)
 #define OutVar(var) FlagOn((var)->submode, SUBMODE_OUT)
@@ -803,6 +863,8 @@ void VarInitStr(Var * var, char * str);
 //===== Op
 Var * NewOp(InstrOp op, Var * left, Var * right);
 Bool CellIsOp(Var * cell);
+void PrintBinaryOp(Cell * cell);
+void PrintUnaryOp(Cell * cell);
 
 //===== Sequence
 Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp compare_op);
@@ -922,24 +984,15 @@ We use three-address instructions. in the form  result = arg1 op arg2.
 
 struct InstrTag {
 	InstrOp op;
-	Rule *  rule;		// after translation, this is pointer to rule defining the operator (may be NULL for INSTR_LINE)
-
-	//--- dest
+	Rule *  rule;		// after translation, this is pointer to rule defining the operator
 	Var * result;
-
-	//TODO: Merge the union to arg1,arg2 & line_no, line
-	union {
-		Var * arg1;
-		UInt16 line_no;
-	};
-	union {
-		Var * arg2;
-		char * line;
-	};
+	Var * arg1;
+	Var * arg2;
 
 	// Position on line, on which is the token that generated the instruction.
 	// If 0, it means the position is not specified (previous token should be used)
 
+	SrcLine * line;
 	LinePos  line_pos;
 
 	// Type of result computed by this instruction
@@ -991,19 +1044,13 @@ For instructions, where arg1 or arg2 = result, source points to instruction, tha
 4.      let a,x
 
 */
-typedef enum {
-	JUMP_IF    = 0,
-	JUMP_LOOP  = 1,
-	JUMP_LOOP_EXIT = 2,
-	JUMP_LOOP_ENTRY = 4     // may be combined with loop exit
-} JumpType;
-
+/*
 struct InstrBlockTag {
 
 	InstrBlock * next;			// Blocks are linked in chain, so we can traverse them as required.
 								// This is normally in order, in which the blocks were parsed.
 	UInt32 seq_no;				// Block sequence number. It is used to determine order of blocks when detecting loops.
-								// It is also usefull when debugging the compiler, as we can quickly locate an instruction by block number and
+								// It is also useful when debugging the compiler, as we can quickly locate an instruction by block number and
 								// sequence number of the caller.
 
 	InstrBlock * to;			// this block continues (jumps) to this block (if to == NULL, we leave the routine after the last instruction in the block)
@@ -1014,17 +1061,15 @@ struct InstrBlockTag {
 	InstrBlock * callers;		// list of blocks calling this block (excluding from)
 	InstrBlock * next_caller;	// next caller in the chain
 
-//	InstrBlock * loop_end;
 	JumpType     jump_type;		// whether this is end of loop or some other type of branch
 
-	Var * label;				// label that starts the block
+	Cell * label;				// label that starts the block
 	Bool  processed;
-	Type * type;				// type computed in this block for variable when inferring types
+	Type * itype;				// type computed in this block for variable when inferring types
 	Instr * first, * last;		// first and last instruction of the block
 	void * analysis_data;
 };
-
-InstrBlock * InstrBlockAlloc();
+*/
 
 void InstrInit();
 void InstrPrint(Instr * i);
@@ -1035,22 +1080,19 @@ char * OpSymbol(InstrOp op);
 
 #define PrintInferredTypes 1
 
-void PrintVarVal(Var * var);
+void PrintCell(Cell * cell);
+void PrintCell(Var * var);
 void PrintProc(Var * proc);
 void PrintProcFlags(Var * proc, UInt32 flags);
 void PrintBlockHeader(InstrBlock * blk);
 void PrintInstrLine(UInt32 n);
+void PrintCode(InstrBlock * blk, UInt32 flags);
 
 InstrOp InstrFind(char * name);
 
 // When we generate instructions, it is always done to defined code block
 // Code blocks are managed using those procedures.
 
-
-Instr * FirstInstr(InstrBlock * blk);
-Instr * LastInstr(InstrBlock * blk);
-void InstrBlockFree(InstrBlock * blk);
-UInt32 InstrBlockInstrCount(InstrBlock * blk);
 
 void InstrMoveCode(InstrBlock * to, Instr * after, InstrBlock * from, Instr * first, Instr * last);
 Instr * InstrDelete(InstrBlock * blk, Instr * i);
@@ -1061,6 +1103,7 @@ void InstrInsertRule(InstrBlock * blk, Instr * before, InstrOp op, Var * result,
 InstrBlock * LastBlock(InstrBlock * block);
 
 Bool IsGoto(Instr * i);
+InstrBlock * IfInstr(Instr * i);
 
 typedef void (*ProcessBlockFn)(InstrBlock * block, void * info);
 
@@ -1076,9 +1119,6 @@ void VarUse();
 Var * InstrEvalConst(InstrOp op, Var * arg1, Var * arg2);
 Var * InstrEvalAlgebraic(InstrOp op, Var * arg1, Var * arg2);
 
-Bookmark SetBookmarkLine(Loc * loc);
-Bookmark SetBookmarkVar(Var * var);
-
 void InstrBlockReplaceVar(InstrBlock * block, Var * from, Var * to);
 void ProcReplaceVar(Var * proc, Var * from, Var * to);
 
@@ -1090,23 +1130,27 @@ Bool InstrIsSelfReferencing(Instr * i);
 void GenerateInit();
 void GenRegisterRule(Rule * rule);
 void GenSetDestination(InstrBlock * blk, Instr * i);
-void GenBegin();
-InstrBlock * GenEnd();
+InstrBlock * GenBegin();
+InstrBlock * GenEnd();		//TODO: GenEnd should return void
+InstrBlock * GenNewBlock();
 
+void GenFromLine(SrcLine * line, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2);
 void GenLet(Var * result, Var * arg1);
-void GenLine();
 void GenLabel(Var * var);
 void GenGoto(Var * var);
 void GenBlock(InstrBlock * blk);
 void GenMacro(Var * macro, Var ** args);
-void GenMacroParse(Var * macro, Var ** args);
+//void GenMacroParse(Var * macro, Var ** args);
 void GenLastResult(Var * var, Var * item);
 
 void GenPos(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void GenLetPos(Var * result, Var * arg1);
+
+
+// Cell/instruction information
 
 #define RESULT 0
 #define ARG1   1
@@ -1126,7 +1170,13 @@ typedef struct {
 	char * symbol;
 	TypeVariant arg_type[3];		// 0 = result, 1 = arg1, 2 = arg2
 	UInt8   flags;
-	void (*execute_fn)(Instr * i);
+
+	void (*cell_free_fn)(Cell * cell);
+	void (*cell_print_fn)(Cell * cell);
+	Cell * (*eval_fn)(Cell * cell);
+
+//	CellInterface * intf;
+
 } InstrInfo;
 
 extern InstrInfo INSTR_INFO[INSTR_CNT];
@@ -1158,15 +1208,15 @@ struct RuleArgTag {
 
 struct RuleTag {
 	Rule * next;
-	Var *  file;			// file in which the rule has been defined
-	LineNo line_no;			// line in the source code, on which the rule was defined
+	SrcLine *  line;			// file in which the rule has been defined
 
 	InstrOp op;
-	RuleArg * arg[3];
+	Cell * arg[3];
+//	RuleArg * arg[3];
 	InstrBlock * to;
 	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
 	UInt8 cycles;			// How many cycles the instruction uses.
-	Var * fn;			// function used for this rule. This fn will contain local variables of the rule.
+	Var * fn;				// function used for this rule. This fn will contain local variables of the rule.
 };
 
 
@@ -1226,7 +1276,7 @@ struct BlockTag {
 };
 
 void ParseInit();
-Bool Parse(char * name, Bool main_file, Bool parse_options);
+Bool Parse(char * name, UInt16 blk_type, Bool main_file, Bool parse_options);
 void ProcCheck(Var * proc);
 
 void ReportSimilarNames(char * name);
@@ -1245,7 +1295,7 @@ Type * ParseTypeInline();
 
 void ParseExpression(Var * result);
 void ParseExpressionType(Type * result_type);
-void ParseDefExpression();
+Cell * ParseDefExpression();
 Bool ParseArg(Var ** p_var);
 
 #define STACK_LIMIT 100
@@ -1369,3 +1419,4 @@ extern Bool  ASSERTS_OFF;		// do not generate asserts into output code
 
 #define COLOR_OPTIMIZE (GREEN+LIGHT)
 
+Cell * Interpret(Cell * proc, Cell * args);

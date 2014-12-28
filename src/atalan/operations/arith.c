@@ -11,9 +11,9 @@ Arithmetic functions support interval arithmetics.
 
 #include "../language.h"
 
-Var * Add(Var * l, Var * r)
+Cell * Add(Cell * l, Cell * r)
 {
-	Var * result = NULL;
+	Cell * result = NULL;
 	BigInt * il, * ir, ii;
 
 	if (r == NULL || l == NULL) return NULL;
@@ -36,7 +36,7 @@ Var * Add(Var * l, Var * r)
 		break;
 
 	case INSTR_TUPLE:
-		result = NewTuple(Add(l->adr, r), Add(l->var, r));
+		result = NewTuple(Add(l->l, r), Add(l->r, r));
 		break;
 
 	default:
@@ -78,10 +78,10 @@ Var * Sub(Var * l, Var * r)
 		if (r->mode == INSTR_RANGE) {
 			result = NewRange(Sub(l->l, r->r), Sub(l->r, r->l));
 		} else {
-			result = NewRange(Sub(l->adr, r), Sub(l->var, r));
+			result = NewRange(Sub(l->l, r), Sub(l->r, r));
 		}
 	} else if (l->mode == INSTR_TUPLE) {
-		result = NewTuple(Sub(l->adr, r), Sub(l->var, r));
+		result = NewTuple(Sub(l->l, r), Sub(l->r, r));
 	} else {
 		if (l->mode == INSTR_INT && r->mode == INSTR_RANGE) {
 			return NewRange(Sub(l, r->r), Sub(l, r->l));
@@ -280,100 +280,10 @@ Var * Power(Var * l, Var * r)
 	return result;
 }
 
-Bool IsEqual(Var * left, Var * right)
+Cell * Sqrt(Cell * l)
 {
-	BigInt * l, * r;
-
-	if (left == NULL || right == NULL) return false;
-	if (left == right) return true;
-	if (left->mode == INSTR_VAR && left->adr != NULL) return IsEqual(left->adr, right);
-	if (right->mode == INSTR_VAR && right->adr != NULL) return IsEqual(left, right->adr);
-
-	// Try to compare as two integers
-	l = IntFromCell(left);
-	r = IntFromCell(right);
-
-	if (l != NULL && r != NULL) {
-		return IntEq(l, r);
-	}
-
-	if (left->mode == right->mode) {
-		if (left->mode == INSTR_TUPLE) {
-			return IsEqual(left->adr, right->adr) && IsEqual(left->var, right->var);
-		} else if (left->mode == INSTR_SEQUENCE) {
-			if (IsEqual(left->seq.init, right->seq.init) && IsEqual(left->seq.step, right->seq.step) && left->seq.op == right->seq.op) {
-				if (left->seq.compare_op == right->seq.compare_op && IsEqual(left->seq.limit, right->seq.limit)) return true;
-
-				//TODO: We should compute steps in a better way
-				if (left->seq.op == INSTR_ADD) {
-					if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
-						if (IsEqual(Sub(left->seq.limit, left->seq.step), right->seq.limit)) return true;
-					} else if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
-						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
-					}
-				} else if (left->seq.op == INSTR_SUB) {
-					if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
-						if (IsEqual(Add(left->seq.limit, left->seq.step), right->seq.limit)) return true;
-					} else if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
-						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
-					}
-				}
-			}
-		}
-	}
-	return false;
-}
-
-Int16 CellCompare(Var * left, Var * right)
-/*
-Purpose:
-	0    left == right
-	-1   left < right
-	1    left > right
-	127  uncomparable
-*/
-{
-	BigInt * l, * r;
-	if (left == right) return 0;
-	if (left == NULL || right == NULL) return 127;
-	if (left->mode == INSTR_VAR && left->adr != NULL) return CellCompare(left->adr, right);
-	if (right->mode == INSTR_VAR && right->adr != NULL) return CellCompare(left, right->adr);
-
-	// Try to compare as two integers
-	l = IntFromCell(left);
-	r = IntFromCell(right);
-
-	if (l != NULL && r != NULL) {
-		if (IntEq(l,r)) return 0;
-		if (IntLower(l,r)) return -1;
-		return 1;
-	}
-
-	return 127;
-}
-
-Bool IsHigher(Var * left, Var * right)
-{
-	Int16 r = CellCompare(left, right);
-	return r == 1;
-}
-
-Bool IsHigherEq(Var * left, Var * right)
-{
-	Int16 r = CellCompare(left, right);
-	return r == 0 || r == 1;
-}
-
-Bool IsLowerEq(Var * left, Var * right)
-{
-	Int16 r = CellCompare(left, right);
-	return r == 0 || r == -1;
-}
-
-Bool IsLower(Var * left, Var * right)
-{
-	Int16 r = CellCompare(left, right);
-	return r == -1;
+	Cell * r = NewOp(INSTR_SQRT, l, NULL);
+	return r;
 }
 
 Var * CellOp(InstrOp op, Var * left, Var * right)
@@ -388,3 +298,46 @@ Var * CellOp(InstrOp op, Var * left, Var * right)
 		return NewOp(op, left, right);
 	}
 }
+
+Cell * AddEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_ADD);
+	return Add(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * SubEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_SUB);
+	return Sub(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * MulEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_MUL);
+	return Mul(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * DivIntEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_DIV);
+	return DivInt(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * PowerEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_POWER);
+	return Power(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * ModEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_MOD);
+	return Mod(Eval(cell->l), Eval(cell->r));
+}
+
+Cell * SqrtEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_SQRT);
+	return Sqrt(Eval(cell->l));
+}
+

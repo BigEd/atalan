@@ -35,7 +35,7 @@ GLOBAL UInt32 LOGIC_ERROR_CNT;
 
 #define MAX_STORE 16
 
-UInt16 BOOKMARK_LINE_NO;
+SrcLine * BOOKMARK_LINE;
 UInt16 BOOKMARK_LINE_POS;
 Instr * ERR_INSTR;
 
@@ -62,7 +62,9 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 {
 	UInt16 i, token_pos, indent, line_cnt, indent_len, end_pos, token_len;
 	char c, * t;
-	char * line;
+	SrcLine * line;
+	char * filename;
+	char * line_txt;
 	char buf[2048];
 	char * o;
 	Var * var;	
@@ -96,28 +98,31 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 		text++;
 	}
 
-	i = LINE_NO;
+	line = SRC_LINE;	//i = LINE_NO;
 	token_pos = TOKEN_POS;
 	if (bookmark != 0) {
-		i = BOOKMARK_LINE_NO;
+		line = BOOKMARK_LINE;
 		token_pos = BOOKMARK_LINE_POS;
 	}
 
-	// Line text
-	line = NULL;
-	if (bookmark == 0) {
-		line = LINE;
-	} else {
-		if (BOOKMARK_LINE_NO == LINE_NO) {
-			line = LINE;
-		} else if (BOOKMARK_LINE_NO == LINE_NO-1) {
-			line = PREV_LINE;
-		}
-	}
+	i = LineNumber(line);
 
+	// Line text
+//	line = NULL;
+//	if (bookmark == 0) {
+//		line = SRC_LINE;
+//	} else {
+//		if (BOOKMARK_LINE_NO == LINE_NO) {
+//			line = SRC_LINE;
+//		} else if (BOOKMARK_LINE_NO == LINE_NO-1) {
+//			line = PREV_SRC_LINE;
+//		}
+//	}
+
+	line_txt = line->txt;
 	token_len = 0;
 	if (to_here) {
-		for(end_pos = TOKEN_POS-1; end_pos>0 && line[end_pos]==' ';) end_pos--;
+		for(end_pos = TOKEN_POS-1; end_pos>0 && line_txt[end_pos]==' ';) end_pos--;
 		token_len = end_pos - token_pos + 1;
 	}
 
@@ -129,8 +134,10 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 	line_cnt = 0;
 	ERR_OLD_COLOR = PrintColor(color);
 
-	if (SRC_FILE != NULL) {
-		PrintFmt("%s(%d) %s: ", SRC_FILE->name, i, kind);
+	filename = LineFileName(line);
+
+	if (filename != NULL) {
+		PrintFmt("%s(%d) %s: ", filename, i, kind);
 	} else {
 		PrintFmt("%s: ", kind);
 	}
@@ -219,9 +226,9 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 		for(i=0; i<arg_cnt; i++) {
 			c = used_args[i];
 			var = ERR_ARGS[c-1];
-			if (var->file != NULL) {
+			if (var->line != NULL) {
 				PrintRepeat(" ", indent);
-				PrintFmt("'%s' was declared at line %s(%d)\n", var->name, var->file->name, var->line_no);
+				PrintFmt("'%s' was declared at line %s(%d)\n", VarName(var), LineFileName(line), LineNumber(line));
 			}
 		}
 
@@ -231,37 +238,37 @@ static void ReportError(char * kind, char * text, Bookmark bookmark)
 	// Print line with error and position of the error on line
 
 	indent_len = 0;
-	if (line != NULL && *line != 0) {
+	if (line_txt != NULL && *line_txt != 0) {
 
 		PrintEOL();
 		PrintColor(COLOR_LINE_POS);
 
-		while(*line == SPC || *line == TAB) {
+		while(*line_txt == SPC || *line_txt == TAB) {
 			if (show_indent) {
-				if (*line == SPC) Print(".");
-				if (*line == TAB) Print("->|");
+				if (*line_txt == SPC) Print(".");
+				if (*line_txt == TAB) Print("->|");
 			}
-			line++;
+			line_txt++;
 			indent_len++;
 			if (token_pos > 0) token_pos--;
 		}
 
 		// Print line. If it does contain end new line, print one extra new line.
-		Print(line);
-		len = StrLen(line);
-		if (line[len-1] != '\n') {
+		Print(line_txt);
+		len = StrLen(line_txt);
+		if (line_txt[len-1] != '\n') {
 			PrintEOL();
 		}
 
 		if (!show_indent) {
 			if (token_pos > 0) {
 				for(i=0; i<token_pos; i++) {
-					c = line[i];
+					c = line_txt[i];
 					if (c != 9) c = 32;
 					PrintChar(c);
 				}
 				// There can be some spaces or tabs before at the token pos
-				while((c = line[i]) == SPC || c == TAB) {
+				while((c = line_txt[i]) == SPC || c == TAB) {
 					PrintChar(c);
 					i++;
 				}
@@ -301,13 +308,13 @@ void LogicWarning(char * text, Bookmark bookmark)
 
 void LogicWarningLoc(char * text, Loc * loc)
 {
-	Bookmark bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLoc(loc);
 	LogicWarning(text, bookmark);
 }
 
 void LogicErrorLoc(char * text, Loc * loc)
 {
-	Bookmark bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLoc(loc);
 	LogicError(text, bookmark);
 }
 
@@ -339,7 +346,7 @@ void InternalError(char * text, ...)
 
 void InternalErrorLoc(char * text, Loc * loc)
 {
-	Bookmark bookmark = SetBookmarkLine(loc);
+	Bookmark bookmark = SetBookmarkLoc(loc);
 	ReportError("Internal error", text, bookmark);
 	TOK = TOKEN_ERROR;
 	ERROR_CNT++;
@@ -352,7 +359,7 @@ void Warning(char * text)
 
 Bookmark SetBookmark()
 {
-	BOOKMARK_LINE_NO = LINE_NO;
+	BOOKMARK_LINE = SRC_LINE;
 	BOOKMARK_LINE_POS = TOKEN_POS;
 	return 1;
 }
@@ -366,17 +373,16 @@ InstrBlock * PrevBlk(InstrBlock * first, InstrBlock * blk)
 	return b;
 }
 
-Bookmark SetBookmarkLine(Loc * loc)
+Bookmark SetBookmarkLoc(Loc * loc)
 {
-	Instr * i;
+	Instr * i = loc->i;
 	InstrBlock * blk = loc->blk;
 
-	ERR_INSTR = loc->i;
+	ERR_INSTR = i;
 
-	i = loc->i;
 	do {
 
-		while(i != NULL && i->op != INSTR_LINE) i = i->prev;
+		while(i != NULL && i->line == NULL) i = i->prev;
 		if (i != NULL) break;
 
 		blk = PrevBlk(loc->proc->instr, blk);
@@ -384,24 +390,16 @@ Bookmark SetBookmarkLine(Loc * loc)
 		i = blk->last;
 	} while (true);
 
-	LINE_NO = i->line_no;
-	BOOKMARK_LINE_NO  = i->line_no;
-	SRC_FILE = i->result;
-	strcpy(LINE, i->line);
-	BOOKMARK_LINE_POS = 0;
-	if (ERR_INSTR != NULL && ERR_INSTR->line_pos != 0) {
-		BOOKMARK_LINE_POS = ERR_INSTR->line_pos - 1;
-	}
+	BOOKMARK_LINE = i->line;
+	BOOKMARK_LINE_POS = i->line_pos;
+
 	return 1;
 }
 
 Bookmark SetBookmarkVar(Var * var)
 {
-	LINE_NO = var->line_no;
-	BOOKMARK_LINE_NO = var->line_no;
-	SRC_FILE = var->file; 
-	*LINE = 0;
-	BOOKMARK_LINE_POS = 0;
+	BOOKMARK_LINE = var->line;
+	BOOKMARK_LINE_POS = var->line_pos;
 	return 1;
 }
 

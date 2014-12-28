@@ -1,0 +1,13 @@
+;We may declare variable using non-static expression. This is same as assign, but
+;the variable can not be assigned different value.
+
+in x: 0..100
+out x'@x
+out z: 0..400
+
+x' = 34
+
+;This is same as a = x * 10 + 13, but a can not be assigned different value anymore
+a: x * 10 + 13
+
+z = a

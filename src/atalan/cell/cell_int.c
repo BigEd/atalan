@@ -9,14 +9,17 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 GLOBAL Var * ZERO;
 GLOBAL Var * ONE;
 GLOBAL Var * MINUS_ONE;
+GLOBAL Var * TRUE;
+GLOBAL Var * FALSE;
 
 GLOBAL Var * INTS[256];
 GLOBAL Var INT_VAR;
+
 
 Var * IntCellN(Int32  n)
 {
@@ -108,5 +111,17 @@ Purpose:
 	MemEmpty(&INTS, sizeof(INTS));
 	ZERO = IntCellN(0);
 	ONE  = IntCellN(1);
+	TRUE = ONE;
+	FALSE = ZERO;
 	MINUS_ONE = IntCellN(-1);
+}
+
+void IntCellFree(Cell * cell)
+{
+	IntFree(&cell->n);
+}
+
+void IntCellPrint(Cell * cell)
+{
+	PrintBigInt(&cell->n);
 }

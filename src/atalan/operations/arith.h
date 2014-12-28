@@ -1,20 +1,23 @@
-Var * CellMin(Var * v);
-Var * CellMax(Var * v);
+Cell * CellMin(Cell * v);
+Cell * CellMax(Cell * v);
 
-Var * Add(Var * l, Var * r);
-Var * Sub(Var * l, Var * r);
-Var * Mul(Var * l, Var * r);
-Var * DivInt(Var * l, Var * r);
-Var * Mod(Var * l, Var * r);
-Var * Div(Var * l, Var * r);
-Var * Power(Var * l, Var * r);
+Cell * Add(Cell * l, Cell * r);
+Cell * Sub(Cell * l, Cell * r);
+Cell * Mul(Cell * l, Cell * r);
+Cell * DivInt(Cell * l, Cell * r);
+Cell * Mod(Cell * l, Cell * r);
+Cell * Div(Cell * l, Cell * r);
+Cell * Power(Cell * l, Cell * r);
+Cell * Sqrt(Cell * l);
 
-Var * CellOp(InstrOp op, Var * left, Var * right);
+Cell * CellOp(InstrOp op, Cell * l, Cell * r);
 
-Int16 CellCompare(Var * left, Var * right);
+//==== Evaluation of cells
 
-Bool IsHigher(Var * left, Var * right);
-Bool IsLower(Var * left, Var * right);
-Bool IsHigherEq(Var * left, Var * right);
-Bool IsLowerEq(Var * left, Var * right);
-
+Cell * AddEval(Cell * cell);
+Cell * SubEval(Cell * cell);
+Cell * MulEval(Cell * cell);
+Cell * DivIntEval(Cell * cell);
+Cell * ModEval(Cell * cell);
+Cell * PowerEval(Cell * cell);
+Cell * SqrtEval(Cell * cell);

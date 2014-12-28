@@ -131,3 +131,140 @@ Bool TypeIsEqual(Type * left, Type * right)
 {
 	return (left == right) || (IsSubset(left, right) && IsSubset(right, left));
 }
+
+Int16 CellCompare(Var * left, Var * right)
+/*
+Purpose:
+	0    left == right
+	-1   left < right
+	1    left > right
+	127  uncomparable
+*/
+{
+	BigInt * l, * r;
+	if (left == right) return 0;
+	if (left == NULL || right == NULL) return 127;
+	if (left->mode == INSTR_VAR && VarAdr(left) != NULL) return CellCompare(VarAdr(left), right);
+	if (right->mode == INSTR_VAR && VarAdr(right) != NULL) return CellCompare(left, VarAdr(right));
+
+	// Try to compare as two integers
+	l = IntFromCell(left);
+	r = IntFromCell(right);
+
+	if (l != NULL && r != NULL) {
+		if (IntEq(l,r)) return 0;
+		if (IntLower(l,r)) return -1;
+		return 1;
+	}
+
+	return 127;
+}
+
+Bool IsHigher(Var * left, Var * right)
+{
+	Int16 r = CellCompare(left, right);
+	return r == 1;
+}
+
+Bool IsHigherEq(Var * left, Var * right)
+{
+	Int16 r = CellCompare(left, right);
+	return r == 0 || r == 1;
+}
+
+Bool IsLowerEq(Var * left, Var * right)
+{
+	Int16 r = CellCompare(left, right);
+	return r == 0 || r == -1;
+}
+
+Bool IsLower(Var * left, Var * right)
+{
+	Int16 r = CellCompare(left, right);
+	return r == -1;
+}
+
+Bool IsEqual(Var * left, Var * right)
+{
+	BigInt * l, * r;
+
+	if (left == NULL || right == NULL) return false;
+	if (left == right) return true;
+	if (left->mode == INSTR_VAR && VarAdr(left) != NULL) return IsEqual(VarAdr(left), right);
+	if (right->mode == INSTR_VAR && VarAdr(right) != NULL) return IsEqual(left, VarAdr(right));
+
+	// Try to compare as two integers
+	l = IntFromCell(left);
+	r = IntFromCell(right);
+
+	if (l != NULL && r != NULL) {
+		return IntEq(l, r);
+	}
+
+	if (left->mode == right->mode) {
+		if (left->mode == INSTR_TUPLE) {
+			return IsEqual(left->l, right->l) && IsEqual(left->r, right->r);
+		} else if (left->mode == INSTR_SEQUENCE) {
+			if (IsEqual(left->seq.init, right->seq.init) && IsEqual(left->seq.step, right->seq.step) && left->seq.op == right->seq.op) {
+				if (left->seq.compare_op == right->seq.compare_op && IsEqual(left->seq.limit, right->seq.limit)) return true;
+
+				//TODO: We should compute steps in a better way
+				if (left->seq.op == INSTR_ADD) {
+					if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
+						if (IsEqual(Sub(left->seq.limit, left->seq.step), right->seq.limit)) return true;
+					} else if (left->seq.compare_op == INSTR_LT && right->seq.compare_op == INSTR_LE) {
+						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
+					}
+				} else if (left->seq.op == INSTR_SUB) {
+					if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
+						if (IsEqual(Add(left->seq.limit, left->seq.step), right->seq.limit)) return true;
+					} else if (left->seq.compare_op == INSTR_GT && right->seq.compare_op == INSTR_GE) {
+						if (IsEqual(left->seq.limit, Sub(right->seq.limit, right->seq.step))) return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+Bool IsNotEqual(Cell * l, Cell * r)
+{
+	return !IsEqual(l, r);
+}
+
+Cell * EqEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_EQ);
+	return ToBool(IsEqual(Eval(cell->l), Eval(cell->r)));
+}
+
+Cell * NeEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_NE);
+	return ToBool(IsNotEqual(Eval(cell->l), Eval(cell->r)));
+}
+
+Cell * LtEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_LT);
+	return ToBool(IsLower(Eval(cell->l), Eval(cell->r)));
+}
+
+Cell * LeEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_LE);
+	return ToBool(IsLowerEq(Eval(cell->l), Eval(cell->r)));
+}
+
+Cell * GeEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_GT);
+	return ToBool(IsHigher(Eval(cell->l), Eval(cell->r)));
+}
+
+Cell * GtEval(Cell * cell)
+{
+	ASSERT(cell->mode == INSTR_GE);
+	return ToBool(IsHigherEq(Eval(cell->l), Eval(cell->r)));
+}

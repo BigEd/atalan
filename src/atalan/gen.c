@@ -7,24 +7,20 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 
 This module contains functions, that are used to generate instructions.
-Instructions are generated to specified procedure and block of code.
-
-Instructions are always generated to some specified instruction block, which is located in some procedure.
-Current position, where will be the next instruction generated is stored in GENLOC varaible.
+Instructions are generated to specified block of code.
 
 */
 
 #include "language.h"
 
-GLOBAL InstrBlock * BLK;
-GLOBAL Instr *      INSTR;
+GLOBAL InstrBlock * FIRST_BLK;				// First generated block (while generating instructions, multiple block can be created)
+GLOBAL InstrBlock * BLK;					// Current generated block (it is always the last block)
+GLOBAL Instr *      INSTR;					// Last generated instruction. The next generated instruction will be appended after this instruction.
 
 GLOBAL InstrBlock * IBLOCK_STACK[128];
 GLOBAL UInt16       IBLOCK_STACK_SIZE;
-
-GLOBAL Var   ROOT_PROC;
-
-RuleSet GEN_RULES;
+GLOBAL Var          ROOT_PROC;
+GLOBAL RuleSet      GEN_RULES;
 
 
 void GenSetDestination(InstrBlock * blk, Instr * i)
@@ -37,16 +33,18 @@ Purpose:
 	INSTR = i;
 }
 
-void GenBegin()
+InstrBlock * GenBegin()
 /*
 Purpose:
 	Create new code block and let next instructions be generated into this block.
 */
 {
-	IBLOCK_STACK[IBLOCK_STACK_SIZE] = BLK;
+	IBLOCK_STACK[IBLOCK_STACK_SIZE] = FIRST_BLK;
 	IBLOCK_STACK_SIZE++;
-	BLK = InstrBlockAlloc();
+	FIRST_BLK = BLK = NewCode();
+	BLK->seq_no = 1;
 	INSTR = NULL;
+	return BLK;
 }
 
 InstrBlock * GenEnd()
@@ -56,10 +54,23 @@ Purpose:
 */
 {
 	InstrBlock * blk;
-	blk = BLK;
+	blk = FIRST_BLK;
 	IBLOCK_STACK_SIZE--;
-	BLK = IBLOCK_STACK[IBLOCK_STACK_SIZE];
-	INSTR = NULL;
+	FIRST_BLK = IBLOCK_STACK[IBLOCK_STACK_SIZE];
+	BLK = CodeLastBlock(FIRST_BLK);
+	if (BLK != NULL) {
+		INSTR = BLK->last;
+	}
+	return blk;
+}
+
+InstrBlock * GenNewBlock()
+{
+	InstrBlock * blk = NewCode();
+	if (BLK != NULL) {
+		blk->seq_no = BLK->seq_no+1;
+	}
+	GenBlock(blk);
 	return blk;
 }
 
@@ -79,7 +90,20 @@ Purpose:
 	The code is attached to the generated output (copy is not made).
 */
 {
-	if (blk != NULL && blk->first != NULL) {
+	if (blk != NULL) {
+		InstrBlock * last = LastBlock(blk);
+		if (BLK == NULL) {
+			FIRST_BLK = blk;
+			blk->seq_no = 1;
+		} else {
+			last->next = BLK->next;
+			BLK->next = blk;
+			blk->seq_no = BLK->seq_no+1;
+		}
+
+		BLK = last;
+		INSTR = BLK->last;
+/*
 		blk->first->prev = BLK->last;
 		blk->last->next  = NULL;
 		if (BLK->last != NULL) {
@@ -90,40 +114,15 @@ Purpose:
 			BLK->first = blk->first;
 		}
 		free(blk);	// free just block head
+*/
 	}
 }
 
-LineNo CURRENT_LINE_NO;
-
-void GenLine()
-{
-	char * line;
-	UInt32 line_no;
-	UInt16 line_len;
-
-	// Generate LINE instruction.
-	// Line instructions are used to be able to reference back from instructions to line of source code.
-	// That way, we can report logical errors detected in instructions to user.
-
-	if (PHASE == PHASE_PARSE && !ParsingRule() && !ParsingSystem() && CURRENT_LINE_NO != LINE_NO) {
-		InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
-		line = LINE;
-		line_no = LINE_NO;
-		if (LINE_POS == 0 && PREV_LINE != NULL) {
-			line = PREV_LINE;
-			line_no--;
-		}
-		line_len = StrLen(line)-1;
-		BLK->last->result    = SRC_FILE;
-		BLK->last->line_no = line_no;
-		BLK->last->line = StrAllocLen(line, line_len);
-		CURRENT_LINE_NO = line_no;
-	}
-}
-
-void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
+void GenFromLine(SrcLine * line, InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
 	Var * var;
+	Instr * i;
+
 	// For commutative or relational operations make sure the constant is the other operator
 	// This simplifies further code processing.
 
@@ -137,7 +136,14 @@ void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
 			}
 		}
 	}
-	InstrInsert(BLK, INSTR, op, result, arg1, arg2);
+	i = InstrInsert(BLK, INSTR, op, result, arg1, arg2);
+	i->line = line;
+	i->line_pos = 0;
+}
+
+void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2)
+{
+	GenFromLine(SRC_LINE, op, result, arg1, arg2);
 }
 
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2)
@@ -147,7 +153,6 @@ Purpose:
 */
 {
 	Rule * rule = NULL;
-	GenLine();
 
 	if (!ParsingRule()) {
 		rule = RuleSetFindRule(&GEN_RULES, op, result, arg1, arg2);
@@ -254,20 +259,20 @@ Purpose:
 	// create new array element referencing actual array and index.
 	
 	if (op == INSTR_DEREF) {
-		arg = GenArg(macro, var->var, args, locals);
-		if (arg != var->var) {
+		arg = GenArg(macro, var->l, args, locals);
+		if (arg != var->l) {
 			var = VarNewDeref(arg);
 		}
 	} else if (op == INSTR_ITEM || op == INSTR_ELEMENT || op == INSTR_BYTE || op == INSTR_BIT) {
 
-		arr = GenArg(macro, var->adr, args, locals);
+		arr = GenArg(macro, var->l, args, locals);
 
-		if (arr != var->adr && var->var->mode == INSTR_TEXT) {
-			var = VarField(arr, var->var->str);
+		if (arr != var->l && var->r->mode == INSTR_TEXT) {
+			var = VarField(arr, var->r->str);
 		} else {
-			arg = GenArg(macro, var->var, args, locals);	// index
+			arg = GenArg(macro, var->r, args, locals);	// index
 
-			if (arr != var->adr || arg != var->var) {
+			if (arr != var->l || arg != var->r) {
 				if (op == INSTR_ITEM) {
 					var = NewItem(arr, arg);
 				} else if (op == INSTR_ELEMENT) {
@@ -341,18 +346,15 @@ generating it.
 */
 
 extern Var * MACRO_ARG[MACRO_ARG_CNT];
-
-void GenMacroParse(Var * macro, Var ** args)
 /*
+void GenMacroParse(Var * macro, Var ** args)
 Purpose:
 	Expand macro when parsing.
 	This will generate line instruction if necessary.
-*/
 {
-	GenLine();
 	GenMacro(macro, args);
 }
-
+*/
 #define FOR_EACH_INSTR(I, BLK) for(I = BLK->first; I != NULL; I = I->next) {
 #define NEXT_INSTR }
 
@@ -366,7 +368,7 @@ Argument:
 	macro	Variable containing the macro to expand.
 	args	Macro arguments (according to macro header).
 */{
-	Instr * i, * i2;
+	Instr * i;	//, * i2;
 	InstrOp op;
 	Var * result, * arg1, * arg2, * r;
 	VarSet locals;
@@ -382,7 +384,7 @@ Argument:
 
 	VarSetInit(&locals);
 
-	for(blk = macro->type->instr; blk != NULL; blk = blk->next) {
+	for(blk = FnVarCode(macro); blk != NULL; blk = blk->next) {
 
 		if (blk->label != NULL) {
 			arg1 = GenArg(macro, blk->label, args, &locals);
@@ -394,21 +396,9 @@ Argument:
 			local_result = false;
 
 			// In case, we are generating variable (means we are inlining a procedure), generate lines too
-			if (op == INSTR_LINE) {
-				if (!IsMacro(macro->type)) {
-					InstrInsert(BLK, INSTR, INSTR_LINE, NULL, NULL, NULL);
-					i2 = INSTR->prev;
-					i2->result    = i->result;
-					i2->line_no   = i->line_no;
-					i2->line      = StrAlloc(i->line);
-				}
-
 			// Macro may contain NOP instruction, we do not generate it to result
-			} else if (op != INSTR_VOID) {
+			if (op != INSTR_VOID) {
 
-				if (op == INSTR_LABEL) {
-					op = INSTR_LABEL;
-				}
 				result = i->result;
 				if (result != NULL) {
 					// %Z variable is used as forced local argument.
@@ -465,27 +455,22 @@ Argument:
 
 void GenerateInit()
 {
+	FIRST_BLK = BLK = NewCode();
+	BLK->seq_no = 1;
+
 
 	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
 	ROOT_PROC.mode = INSTR_VAR;
-	ROOT_PROC.name = "root";
+	ROOT_PROC.name2 = "root";
 	ROOT_PROC.idx  = 0;
-	ROOT_PROC.type = NewFn(NewFnType(VOID, VOID), NULL);
+	ROOT_PROC.type = NewFn(NewFnType(VOID, VOID), FIRST_BLK);
 
 	// Initialize procedure used to evaluate rules and it's arguments (A-Z)
 
 	InScope(&ROOT_PROC);
 
-	BLK = NULL;
-
-	// Alloc instruction block for root procedure.
-	
 	IBLOCK_STACK_SIZE = 0;
-	GenBegin();
-	IBLOCK_STACK_SIZE = 0;
-
-	ROOT_PROC.type->instr = BLK;
-	CURRENT_LINE_NO = 0;
+	INSTR = NULL;
 
 	RuleSetInit(&GEN_RULES);
 

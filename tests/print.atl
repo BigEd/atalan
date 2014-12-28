@@ -1,0 +1,8 @@
+﻿;Test print
+
+x:0..1000
+x = 0
+for i:1..10
+	x = x + i 
+
+"Sum is [x]."

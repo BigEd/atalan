@@ -12,112 +12,6 @@ UInt8 ParseArgNo();
 
 Bool PARSE_INLINE;
 
-/*
-      TUPLE
-      /   \
-	 V1   TUPLE
-	      /   \	    
-		 V2  TUPLE
-		      /  \
-			 V3  V4
-
-*/
-
-static Var * ParseStruct(Token end_token)
-{
-	Var * list = NULL;
-	Var * var, * type;
-	Var * last_tuple = NULL;
-	UInt32 cnt = 0;
-
-	var = NULL;
-	EnterBlockWithStop(TOKEN_VOID);
-
-	while (OK && !NextIs(TOKEN_BLOCK_END)) {
-
-		if (TOK == end_token) {
-			if (list == NULL) list = VOID;
-			ExitBlock();
-			break;
-		}
-
-		if (LexId(NAME2)) {
-			if (NextIs(TOKEN_COLON)) {
-				type = ParseType();
-			} else {
-				type = ANY;
-			}
-			var = NewVar(NULL, NAME2, type);
-		} else {
-			SyntaxError("Expected item name");
-		}
-
-		if (var != NULL) {
-			if (cnt == 0) {
-				list = var;
-			} else if (cnt == 1) {
-				list = NewTuple(list, var);
-				last_tuple = list;
-			} else {
-				last_tuple->r = NewTuple(last_tuple->r, var);
-				last_tuple = last_tuple->r;
-			}
-			cnt++;
-		}
-
-		if (NextIs(TOKEN_COMMA)) {
-			
-		} else {
-			ExitBlock();
-			break;
-		}
-	}
-
-	return list;
-}
-
-void ParseCommandBlock();
-
-Var * ParseFnType()
-{
-	Var * arg, * result = ANY;
-	Var * type;
-	Var * fn, * scope;
-
-	InstrBlock * body;
-
-	arg = ParseStruct(TOKEN_RIGHT_ARROW);
-
-	if (NextIs(TOKEN_RIGHT_ARROW)) {
-		ParseDefExpression();
-		result = BufPop();
-		if (result == NULL) result = VOID;
-	}
-
-	type = NewFnType(arg, result);
-	
-	FnTypeFinalize(type);
-
-	fn = NewFn(type, NULL);
-	fn->scope = SCOPE;
-	scope = InScope(fn);
-	
-	GenBegin();
-	ParseCommandBlock();
-	body = GenEnd();
-	ReturnScope(scope);
-
-	iferr return NULL;
-
-	if (body->first != NULL) {
-		fn->instr = body;
-		type = fn;
-	}
-
-	return type;
-}
-
-
 Type * ParseIntType()
 {
 	Type * type = ANY;
@@ -176,7 +70,7 @@ Type * ParseIntType()
 		} else {
 		}
 
-		if (type->mode == INSTR_RANGE && !IsLowerEq(type->adr, type->var)) {
+		if (type->mode == INSTR_RANGE && !IsLowerEq(type->l, type->r)) {
 			SyntaxErrorBmk("range minimum bigger than maximum", bookmark);
 		}
 	}
@@ -188,7 +82,6 @@ done:
 			var->l = VarRuleArg(arg_no-1);
 			var->r = type;
 			type = var;
-//			type = TypeAllocArg(arg_no, type);
 		}
 	}
 	return type;
@@ -296,7 +189,7 @@ Type * ParseType3()
 //		ParseExpression(NULL);
 //		index = BufPop();
 //	} else 
-	if (NextIs(TOKEN_TYPE2)) {
+/*	if (LexWord("type")) {
 		variant_type = ParseType2(INSTR_VAR);
 		type = TypeAlloc(TYPE_TYPE);
 		type->possible_values = variant_type;
@@ -309,24 +202,21 @@ Type * ParseType3()
 		} else {
 			type = ParseConstList(type);
 		}
-
+*/
 	//# "fn" args
-	} else if (NextIs(TOKEN_FN)) {
-		type = ParseFnType();
+	if (LexWord("fn")) {
+		type = ParseFn(false);
 	//# "macro" args
-	} else if (NextIs(TOKEN_MACRO)) {
+	} else if (LexWord("macro")) {
 
-		type = ParseFnType();
-		if (type != NULL) {
-			SetFlagOn(type->submode, SUBMODE_MACRO);
-		}
+		type = ParseFn(true);
 
 	// String
-	} else if (NextIs(TOKEN_STRING_TYPE)) {
+	} else if (LexWord("string")) {
 		type = TypeAlloc(TYPE_STRING);
 
 	// Array
-	} else if (NextIs(TOKEN_ARRAY)) {		
+	} else if (LexWord("array")) {		
 		index = NULL; t = NULL;
 		item = NULL;
 		step = NULL;
@@ -356,7 +246,7 @@ Type * ParseType3()
 
 		// Element STEP may be defined
 		ifok {
-			if (NextIs(TOKEN_STEP)) {
+			if (LexWord("step")) {
 				ExpectExpression(NULL);
 				ifok {
 					step = STACK[0];
@@ -368,7 +258,7 @@ Type * ParseType3()
 		}
 
 		ifok {
-			if (NextIs(TOKEN_OF)) {
+			if (LexWord("of")) {
 				item = ParseSubtype();
 			} else {
 				item = TypeByte();
@@ -378,9 +268,9 @@ Type * ParseType3()
 		type = NewArrayType(index, item);
 		SetArrayStep(type, step);
 
-	} else if (NextIs(TOKEN_ADR2)) {
+	} else if (LexWord("adr")) {
 		elmt = NULL;
-		if (NextIs(TOKEN_OF)) {
+		if (LexWord("of")) {
 			elmt = ParseSubtype();
 		}
 		type = TypeAdrOf(elmt);
@@ -415,7 +305,7 @@ next:
 
 			min = BufPop();
 			if (min->mode == INSTR_RANGE) {
-				if (IsEqual(min->adr, min->var)) return min->adr;
+				if (IsEqual(min->l, min->r)) return min->l;
 				return min;
 			}
 
@@ -500,7 +390,7 @@ done:
 		}
 
 		if (NextIs(TOKEN_OR)) {
-			variant_type = NewVariant(type, NULL);
+			variant_type = NewOp(INSTR_VARIANT, type, NULL);
 			goto next;
 		}
 	}

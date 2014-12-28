@@ -238,7 +238,6 @@ Purpose:
 	Set all references to specified value to NULL in all values.
 */
 {
-	Var * var;
 	if (res == NULL) return;
 
 	ForEachCell(&ResetValueItem, res);
@@ -246,14 +245,11 @@ Purpose:
 	// If value is alias to some other value, reset it too
 	//TODO: How about element (non constant, let's say?)
 
-	var = res->adr;
-	if (res->mode == INSTR_VAR && var != NULL) {
-		if (var->mode == INSTR_VAR || var->mode == INSTR_TUPLE) {
-			ResetValue(var);
-		}
+	if (res->mode == INSTR_VAR && VarIsAlias(res)) {
+		ResetValue(VarAdr(res));
 	} else if (res->mode == INSTR_TUPLE) {
-		ResetValue(res->adr);
-		ResetValue(res->var);
+		ResetValue(res->l);
+		ResetValue(res->r);
 	}
 
 	res->src_i = NULL;
@@ -268,8 +264,8 @@ Purpose:
 {
 	if (var == NULL || alias == NULL) return false;
 	if (var == alias) return true;
-	if (var->adr != NULL && var->adr->mode == INSTR_VAR) if (VarIsAliasOf(var->adr, alias)) return true;
-	if (alias->adr != NULL &&  alias->adr->mode == INSTR_VAR) if (VarIsAliasOf(var, alias->adr)) return true;
+	if (VarAdr(var) != NULL && VarAdr(var)->mode == INSTR_VAR) if (VarIsAliasOf(VarAdr(var), alias)) return true;
+	if (VarAdr(alias) != NULL &&  VarAdr(alias)->mode == INSTR_VAR) if (VarIsAliasOf(var, VarAdr(alias))) return true;
 	return false;
 }
 
@@ -296,7 +292,7 @@ Bool ResetVarDepFn(Var * var, void * data)
 	if (exp != NULL) {
 		if (ExpUsesValue(exp, res)) {
 			ExpFree(&var->dep);
-		} else if (var->mode == INSTR_DEREF && VarUsesVar(var->var, res)) {
+		} else if (var->mode == INSTR_DEREF && VarUsesVar(var->l, res)) {
 			ExpFree(&var->dep);
 		}
 	}
@@ -310,22 +306,18 @@ Purpose:
 	Reset all references to specified value to NULL in all variables.
 */
 {
-	Var * var;
 
 	ForEachCell(&ResetVarDepFn, res);
 
 	// If the variable is alias for some other variable,
 	// reset aliased variable too
 
-	var = res->adr;
-	if (var != NULL) {
-		if (var->mode == INSTR_VAR) {
-			ResetVarDep(var);
-		}
+	if (res->mode == INSTR_VAR && VarIsAlias(res)) {
+		ResetVarDep(VarAdr(res));
 	} else {
 		if (res->mode == INSTR_TUPLE) {
-			ResetVarDep(var->adr);
-			ResetVarDep(var->var);
+			ResetVarDep(res->l);
+			ResetVarDep(res->r);
 		}
 	}
 }
@@ -357,21 +349,21 @@ Purpose:
 
 		if (arg->mode == INSTR_DEREF) {
 			src_dep = ExpAlloc(INSTR_DEREF);
-			ExpArg(src_dep, 0, arg->var);
+			ExpArg(src_dep, 0, arg->l);
 		} else if (VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) {
 			//TODO: Support for 2d arrays
 			//      In assembler phase is not required (we do not have instructions for 2d indexed arrays).
-			if (arg->var->mode != INSTR_INT) {
+			if (arg->r->mode != INSTR_INT) {
 				src_dep = ExpAlloc(arg->mode);
-				ExpArg(src_dep, 0, arg->adr);
-				ExpArg(src_dep, 1, arg->var);
+				ExpArg(src_dep, 0, arg->l);
+				ExpArg(src_dep, 1, arg->r);
 			}
 		} else if (arg->mode == INSTR_TUPLE) {
 			src_dep = ExpAlloc(arg->mode);
-			ExpArg(src_dep, 0, arg->adr);
-			ExpArg(src_dep, 1, arg->var);
-		} else if (arg->mode == INSTR_VAR && arg->adr != NULL && arg->adr->mode == INSTR_TUPLE) {
-			ExpArg(exp, arg_idx, arg->adr);
+			ExpArg(src_dep, 0, arg->l);
+			ExpArg(src_dep, 1, arg->r);
+		} else if (arg->mode == INSTR_VAR && VarAdr(arg) && VarAdr(arg)->mode == INSTR_TUPLE) {
+			ExpArg(exp, arg_idx, VarAdr(arg));
 			return;
 		}
 
@@ -392,7 +384,7 @@ void PrintExp(Exp * exp)
 			Print("@");
 			PrintExp(exp->arg[0]);
 		} else if (exp->op == INSTR_VAR) {
-			PrintVarVal(exp->var);
+			PrintCell(exp->var);
 		} else if (exp->op == INSTR_ELEMENT) {
 			PrintExp(exp->arg[0]);
 			Print("(");
@@ -432,10 +424,10 @@ Purpose:
 	arg = i->arg1;
 
 	if (op == INSTR_LET) {
-		if ((VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) && arg->var->mode != INSTR_INT) {
+		if ((VarIsArrayElement(arg) || arg->mode == INSTR_BYTE) && arg->r->mode != INSTR_INT) {
 			exp = ExpAlloc(arg->mode);
-			ExpArg(exp, 0, arg->adr);
-			ExpArg(exp, 1, arg->var);
+			ExpArg(exp, 0, arg->l);
+			ExpArg(exp, 1, arg->r);
 		} else {
 			if (arg->dep != NULL) {
 				if (op == INSTR_VAR) {
@@ -467,8 +459,8 @@ void SetDependency(Var * var, Exp * exp)
 	// Whole tuple however receives the dependency on the expression.
 
 	if (var->mode == INSTR_TUPLE) {
-		ResetVarDep(var->adr);
-		ResetVarDep(var->var);
+		ResetVarDep(var->l);
+		ResetVarDep(var->r);
 //		SetDependency(var->adr, exp);
 //		SetDependency(var->var, exp);
 //	} else {
@@ -476,8 +468,8 @@ void SetDependency(Var * var, Exp * exp)
 		var->dep = exp;
 //	}
 
-	if (var->mode == INSTR_VAR && var->adr != NULL && (var->adr->mode == INSTR_TUPLE || var->adr->mode == INSTR_VAR)) {
-		SetDependency(var->adr, exp);
+	if (var->mode == INSTR_VAR && VarIsAlias(var)) {
+		SetDependency(VarAdr(var), exp);
 	}
 }
 
@@ -502,7 +494,7 @@ void Dependency(Instr * i)
 /*
 	InstrPrintInline(i);
 	Print("       ");
-	PrintVarVal(i->result);
+	PrintCell(i->result);
 	Print(" = ");
 	PrintExp(exp);
 	Print("\n");
@@ -568,14 +560,12 @@ Bool CodeModifiesVar(Instr * from, Instr * to, Var * var)
 	Instr * i;
 	Var * result;
 	for(i = from; i != NULL && i != to; i = i->next) {
-		if (i->op != INSTR_LINE) {
-			result = i->result;
-			if (result != NULL)  {
-				if (result == var) return true;
-				if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-					if (result == var->adr) return true;
-					if (result == var->var) return true;
-				}
+		result = i->result;
+		if (result != NULL)  {
+			if (result == var) return true;
+			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
+				if (result == var->l) return true;
+				if (result == var->r) return true;
 			}
 		}
 	}
@@ -621,8 +611,7 @@ void ProcValuesUse(Var * proc)
 			} else {
 				for(blk = proc->instr; blk != NULL; blk = blk->next) {
 					for(i = blk->first; i != NULL; i = i->next) {
-						if (i->op == INSTR_LINE) {
-						} else if (i->op == INSTR_CALL) {
+						if (i->op == INSTR_CALL) {
 							ProcValuesUse(i->arg1);
 						} else if (IS_INSTR_JUMP(i->op)) {
 							// jump instructions do have result, but it is label we jump to
@@ -709,12 +698,10 @@ void VarSetSrcInstr(Var * var, Instr * i)
 
 	var->src_i = i;
 	if (var->mode == INSTR_TUPLE) {
-		VarSetSrcInstr(var->adr, i);
-		VarSetSrcInstr(var->var, i);
+		VarSetSrcInstr(var->l, i);
+		VarSetSrcInstr(var->r, i);
 	} else if (var->mode == INSTR_VAR) {
-		if (var->adr != NULL) {
-			VarSetSrcInstr(var->adr, i);
-		}
+		VarSetSrcInstr(VarAdr(var), i);
 	}
 }
 
@@ -823,7 +810,6 @@ retry:
 			// Instruction may be NULL here, if we have deleted the last instruction in the block.
 			if (i == NULL) break;
 			// Line instructions are not processed.
-			if (i->op == INSTR_LINE) continue;
 
 			if (i->op == INSTR_CALL) {
 				ProcValuesUse(i->arg1);
@@ -867,7 +853,7 @@ retry:
 						// Array references, that have non-const index may not be removed, as
 						// we can not be sure, that the index variable has not changed since last
 						// use.
-						if ((result->mode == INSTR_ELEMENT || result->mode == INSTR_BYTE) && result->var->mode != INSTR_INT) {
+						if ((result->mode == INSTR_ELEMENT || result->mode == INSTR_BYTE) && result->r->mode != INSTR_INT) {
 						
 						} else {
 	delete_instr:
@@ -1096,8 +1082,6 @@ Purpose:
 		for(i = blk->first; i != NULL; i = i->next, n++) {
 
 			op = i->op;
-			// Line instructions are not processed.
-			if (op == INSTR_LINE) continue;
 
 			// Try to convert compare with non-zero to compare versus zero
 			// If we compare variable that has only two possible values and one of them is 0, we want
@@ -1139,7 +1123,7 @@ Purpose:
 						// Get source instruction or directly previous instruction
 						i2 = arg1->src_i;
 						if (i2 == NULL) {
-							i2 = i->prev; while(i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
+							i2 = i->prev;
 						}
 						if (i2 != NULL && i2->result == arg1) {
 							if (i2->op == INSTR_ADD) {
@@ -1214,8 +1198,6 @@ next:
 				if (!OutVar(result) && VarIsFixed(arg1) && i->next_use[1] == NULL) {
 					for /*test*/ (i2 = i->prev; i2 != NULL; i2 = i2->prev) {
 
-						if (i2->op == INSTR_LINE) continue;
-
 						// Test, that it is possible to translate the instruction using new register
 						// (and possibly new instruction - we may change let to let_adr etc.)
 
@@ -1238,7 +1220,6 @@ next:
 							modified = true;
 
 							for (;i2 != i; i2 = i2->next) {
-								if (i2->op == INSTR_LINE) continue;
 								q = InstrReplaceVar(i2, arg1, result);
 								if (q > 0) {
 									i2->rule = InstrRule(i2);

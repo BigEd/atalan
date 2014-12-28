@@ -1,6 +1,6 @@
-﻿;Implementation of x86 CPU module for Atalan programming language
-;(c) 2013 Rudla Kudla
-;Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+﻿; Implementation of x86 CPU module for Atalan programming language
+; (c) 2013 Rudla Kudla
+; Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
 ;This module generates code, that can be compiled with masm32 assembler.
 
@@ -8,191 +8,220 @@ platform: ()
 
 ;Types defined in CPU are special in the way, that the CPU rules must use the types.
 
-x86:system.CPU
-	s32:type -2147483648..2147483647
-	arr_s32:type array(0..$ffffffff) of s32				
-	memory:type array(0..$ffffffff) of 0..255
-	flag:type 0..1
-	
-	eax:s32
-	ebx:s32
-	ecx:s32
-	edx:s32
-	ebp:s32
+;x86: system.CPU
 
-	z:flag		;zero
-	s:flag		;sign
-	c:flag      ;carry
-	o:flag		;overflow
-	p:flag		;parity
-	ac:flag     ;auxiliary carry
+system.processor.x86:
+	s32: type -2147483648..2147483647
+	arr_s32: type array s32 of 0..$ffffffff 				
+	flag: type 0..1
+	memory: type array 0..$ffffffff of 0..255
+	;memory: 0..255 # 0..$ffffffff
+	eax: s32
+	ebx: s32
+	ecx: s32
+	edx: s32
+	ebp: s32
 
-	r@(eax, ebx, ecx, edx)
+	z: flag		;zero
+	s: flag		;sign
+	c: flag     ;carry
+	o: flag		;overflow
+	p: flag		;parity
+	ac: flag    ;auxiliary carry
+
+	;r: @(eax, ebx, ecx, edx)		- this would mean all of them (i.e. 4x32 bit value)
+	r: 
+		• @eax 
+		• @ebx 
+		• @ecx
+		• @edx
 				
-	ocszacp@(o,c,s,z,ac,p)
-	oszacp@(o,s,z,ac,p)
-	edax@(edx,eax)
+	ocszacp:
+		@o
+		@c
+		@s
+		@z
+		@ac
+		@p
+		
+	oszacp: 
+		@o
+		@s
+		@z
+		@ac
+		@p
+		
+	edax: (@edx, @eax)
 	
-rule alloc %A:s32  -> "   %A  sdword ?"
+	rule instr alloc [A:s32] -> "   %A  sdword ?"
 
-rule include %A -> "   include <%A>"
+	rule instr include [A] -> "   include <%A>"
 	
-rule src_end   -> "end start"
-rule code_end  -> ".data?"
-rule data_end  -> "	;data_end"
+	rule instr src_end   -> "end start"
+	rule instr code_end  -> ".data?"
+	rule instr data_end  -> "	;data_end"
 
-rule %A:s32 = %B:s32 -> 
-	eax = %B
-	%A = eax   
+	rule [A:s32] = [B:s32] -> 
+		eax = %B
+		%A = eax   
 
-;Arithmetics
+	;Arithmetics
+	
+	rule [A:s32] = [B:s32] + [C:s32] ->
+		eax = %B
+		eax = eax + %C
+		%A = eax
+	
+	rule [A:s32] = [B:s32] - [C:s32] ->
+		eax = %B
+		eax = eax - %C
+		%A = eax
+	
+	rule [A:s32] = [B:s32] * [C:s32] ->
+		eax = %B
+		eax = eax * %C
+		%A = eax
+	
+	rule [A:s32] = [B:s32] / [C:s32] ->
+		eax = %B
+		edx = 0				;TODO: Use cdq instruction
+		ecx = %C
+		edax = edax / ecx
+		%A = eax
+	
+	; Bit operations
+	
+	rule [A:s32] = [B:s32] bitor [C:s32] ->
+		eax = %B
+		eax = eax bitor %C
+		%A = eax
+	
+	rule [A:s32] = [B:s32] bitand [C:s32] ->
+		eax = %B
+		eax = eax bitand %C
+		%A = eax
+	
+	rule [A:s32] = [B:s32] bitxor [C:s32] ->
+		eax = %B
+		eax = eax bitxor %C
+		%A = eax
+	
+	; Conditional jumps
+	
+	rule if [A:s32] = [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if z = 1 goto %C
+	
+	rule if [A:s32] ≠ [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if z = 0 goto %C
+	
+	rule if [A:s32] ≥ [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if s = o goto %C
+	
+	rule if [A:s32] > [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if s = o or z = 0 goto %C
+	
+	rule if [A:s32] ≤ [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if s ≠ o or z = 1 goto %C
+	
+	rule if [A:s32] < [B:s32] goto [C] ->
+		eax = %A
+		ocszacp = eax - %B
+		if s ≠ o goto %C
+	
+	;##### One dimensional s32 array
+	
+	rule instr alloc [A:s32 # [B:0..$ffffffff]]  -> "   %A  sdword %B.count dup (?)"
+	
+	rule [A:s32] = [B:arr_s32] # [C:s32] ->
+		ebx = %C
+		eax = %B#ebx
+		%A = eax 
+	
+	rule [B:arr_s32] # [C:s32] = [A:s32] ->
+		eax = %A
+		ebx = %C
+		%B#ebx = eax
+	
+	rule [A:r] = [B:arr_s32] # [C:r] -> "   mov %A, %B[%C*4]"
+	rule [B:arr_s32] # [C:r] = [A:r] -> "   mov %B[%C*4], %A"
+				
+	;############### CPU rules
+	
+	rule instr vardef [A], [B]  ->   "%A   equ %B"
+	rule instr label [A]      -> "%A:"
+	
+	rule [A:r] = [B:s32] -> "   mov %A, %B"
+	rule [A:s32] = [B:r] -> "   mov %A, %B"	
+	rule [A:r] = [A] + 1 @oszacp -> "   inc %A"   
+	rule [A:r] = [A] + [B:s32] @ocszacp -> "   add %A, %B"
+	rule [A:r] = [A] + [B:r] @ocszacp -> "   add %A, %B"
+	
+	rule [A:r] = [A] - [B:s32] @ocszacp -> "   sub %A, %B"
+	
+	rule [A:r] = [A:r] * [C:s32] @ocszacp -> "   imul %A, %C" 
+	rule [A:r] = [B:r] * [C:s32] @ocszacp -> "   imul %A, %B, %C" 
+	rule edax = eax * [C:s32] @ocszacp -> "   imul %C"
+	
+	rule edax = edax / [A:r] @ocszacp -> "   idiv %A" 
+	
+	rule ocszacp = [A:r] - [B:s32]     -> "   cmp %A, %B" 
+	
+	rule [A:r] = [A] bitor [B:s32] @ocszacp -> "   or %A, %B"
+	rule [A:r] = [A] bitand [B:s32] @ocszacp -> "   and %A, %B"
+	rule [A:r] = [A] bitxor [B:s32] @ocszacp -> "   xor %A, %B"
+	
+	;==== Conditional jumps
+	;---- common
+	
+	rule if z = 1 goto [A]            -> "   jz %A"
+	rule if z = 0 goto [A]            -> "   jnz %A"
+	rule if s = 1 goto [A]            -> "   js %A"
+	rule if s = 0 goto [A]            -> "   jns %A"
+	rule if o = 1 goto [A]            -> "   jo %A"
+	rule if o = 0 goto [A]            -> "   jno %A"
+	rule if p = 1 goto [A]            -> "   jp %A"
+	rule if p = 0 goto [A]            -> "   jnp %A"
+	
+	;---- unsigned conditionals
+	
+	rule if c = 0 goto [A]           -> "   jae %A"   ;>=
+	rule if c = 1 goto [A]           -> "   jb  %A"   ;<
+	rule if c = 0 and z = 0 goto [A] -> "   ja  %A"   ;>
+	rule if c = 1 or z = 1 goto [A]  -> "   jbe %A"   ;<=
+	
+	;---- signed conditionals
+	
+	rule if s = o goto [A]          -> "   jge %A"   ;>=
+	rule if s ≠ o goto [A]          -> "   jl  %A"   ;<
+	rule if s = o or z = 0 goto [A] -> "   jg  %A"   ;>
+	rule if s ≠ o or z = 1 goto [A] -> "   jle %A"   ;<=
+	
+	rule if 1 goto [A] ->  "   jmp %A"
+	
+	;==== Procedures
+	rule instr call [A] -> "   call %A"  
+	rule instr return [A] -> "   ret"
+	
+	rule instr fn [A]     -> "%A  proc"
+	rule instr endfn [A]  -> "%A  endp" 
 
-rule %A:s32 = %B:s32 + %C:s32 ->
-	eax = %B
-	eax = eax + %C
-	%A = eax
+	rule instr var_arg [A:string]    -> "   DB %A.size,'%A'"
+	rule instr var_arg [A:s32]       -> "   DB 132" "   DD %A"
+	rule instr var_arg [A:arr_s32] # [B:val s32] -> "   DB 132" "   DD %A+4*%B"
 
-rule %A:s32 = %B:s32 - %C:s32 ->
-	eax = %B
-	eax = eax - %C
-	%A = eax
-
-rule %A:s32 = %B:s32 * %C:s32 ->
-	eax = %B
-	eax = eax * %C
-	%A = eax
-
-rule %A:s32 = %B:s32 / %C:s32 ->
-	eax = %B
-	edx = 0				;TODO: Use cdq instruction
-	ecx = %C
-	edax = edax / ecx
-	%A = eax
-
-; Bit operations
-
-rule %A:s32 = %B:s32 bitor %C:s32 ->
-	eax = %B
-	eax = eax bitor %C
-	%A = eax
-
-rule %A:s32 = %B:s32 bitand %C:s32 ->
-	eax = %B
-	eax = eax bitand %C
-	%A = eax
-
-rule %A:s32 = %B:s32 bitxor %C:s32 ->
-	eax = %B
-	eax = eax bitxor %C
-	%A = eax
-
-; Conditional jumps
-
-rule if %A:s32 = %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if z = 1 goto %C
-
-rule if %A:s32 ≠ %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if z = 0 goto %C
-
-rule if %A:s32 ≥ %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if s = o goto %C
-
-rule if %A:s32 > %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if s = o or z = 0 goto %C
-
-rule if %A:s32 ≤ %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if s ≠ o or z = 1 goto %C
-
-rule if %A:s32 < %B:s32 goto %C ->
-	eax = %A
-	ocszacp = eax - %B
-	if s ≠ o goto %C
-
-;One dimensional s32 array
-rule alloc %A:array(%B:0..$ffffffff) of s32    -> "   %A  sdword %B.count dup (?)"
-
-rule %A:s32 = %B:arr_s32 # %C:s32 ->
-	ebx = %C
-	eax = %B#ebx
-	%A = eax 
-
-rule %B:arr_s32 # %C:s32 = %A:s32 ->
-	eax = %A
-	ebx = %C
-	%B#ebx = eax
-
-rule %A@r = %B:arr_s32 # %C@r -> "   mov %A, %B[%C*4]"
-rule %B:arr_s32 # %C@r = %A@r -> "   mov %B[%C*4], %A"
-			
-;############### CPU rules
-
-rule vardef %A, %B  ->   "%A   equ %B"
-rule label %A      -> "%A:"
-
-rule %A@r = %B:s32 -> "   mov %A, %B"
-rule %A:s32 = %B@r -> "   mov %A, %B"	
-rule %A@r = %A + 1 @oszacp -> "   inc %A"   
-rule %A@r = %A + %B:s32 @ocszacp -> "   add %A, %B"
-rule %A@r = %A + %B@r @ocszacp -> "   add %A, %B"
-
-rule %A@r = %A - %B:s32 @ocszacp -> "   sub %A, %B"
-
-rule %A@r = %A@r * %C:s32 @ocszacp -> "   imul %A, %C" 
-rule %A@r = %B@r * %C:s32 @ocszacp -> "   imul %A, %B, %C" 
-rule edax = eax * %C:s32 @ocszacp -> "   imul %C"
-
-rule edax = edax / %A@r @ocszacp -> "   idiv %A" 
-
-rule ocszacp = %A@r - %B:s32     -> "   cmp %A, %B" 
-
-rule %A@r = %A bitor %B:s32 @ocszacp -> "   or %A, %B"
-rule %A@r = %A bitand %B:s32 @ocszacp -> "   and %A, %B"
-rule %A@r = %A bitxor %B:s32 @ocszacp -> "   xor %A, %B"
-
-;==== Conditional jumps
-;---- common
-
-rule if z = 1 goto %A            -> "   jz %A"
-rule if z = 0 goto %A            -> "   jnz %A"
-rule if s = 1 goto %A            -> "   js %A"
-rule if s = 0 goto %A            -> "   jns %A"
-rule if o = 1 goto %A            -> "   jo %A"
-rule if o = 0 goto %A            -> "   jno %A"
-rule if p = 1 goto %A            -> "   jp %A"
-rule if p = 0 goto %A            -> "   jnp %A"
-
-;---- unsigned conditionals
-
-rule if c = 0 goto %A           -> "   jae %A"   ;>=
-rule if c = 1 goto %A           -> "   jb  %A"   ;<
-rule if c = 0 and z = 0 goto %A -> "   ja  %A"   ;>
-rule if c = 1 or z = 1 goto %A  -> "   jbe %A"   ;<=
-
-;---- signed conditionals
-
-rule if s = o goto %A          -> "   jge %A"   ;>=
-rule if s ≠ o goto %A          -> "   jl  %A"   ;<
-rule if s = o or z = 0 goto %A -> "   jg  %A"   ;>
-rule if s ≠ o or z = 1 goto %A -> "   jle %A"   ;<=
-
-rule if 1 goto %A ->  "   jmp %A"
-
-;==== Procedures
-rule call %A -> "   call %A"  
-rule return %A -> "   ret"
-
-rule proc %A     -> "%A  proc"
-rule endproc %A  -> "%A  endp" 
+	;======= Data
+	rule instr data [A:val 0..255] -> "   DB %A"
+	
 ;Printing
 
 system.print:fn -> ()
@@ -209,11 +238,3 @@ system.print_scr:macro -> ()
 system.assert:macro -> () 
     instr call system.print
 
-rule data const %A:0..255 -> "   DB %A"
-rule var_arg %A:string    -> "   DB %A.size,'%A'"
-rule var_arg %A:s32       -> "   DB 132" "   DD %A"
-rule var_arg %A:arr_s32 # const %B -> "   DB 132" "   DD %A+4*%B"
-
-;rule var_arg %A:u8      -> "   DB 129" "   DW %A"
-;rule var_arg %A:u16     -> "   DB 130" "   DW %A"
-;rule var_arg %A:s8      -> "   DB 129+32"    "   DW %A"

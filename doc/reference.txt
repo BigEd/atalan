@@ -8,11 +8,7 @@ ATALAN Programming Language Reference
 Syntax elements
 ***************
 
-Atalan source code is ASCII text file.
-It does not support reading of UTF-8 files, it can however safely skip UTF-8 header,
-so if you mistakenly save your source code using UTF-8 (hello PSPad), 
-there should be no problem.
-
+Atalan source code is UTF-8 text file.
 Atalan is case insensitive.
 
 ========
@@ -135,7 +131,7 @@ Variables, types, constants and assignment
 Variables do not have to be defined, they are declared using assignment action.
 
 :::::::::::::
-[const|type|in|out|in sequence] name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
+[in|out|in sequence] name ["@" adr] ["," name]* [":" [min ".." max]|[var] [ "(" dim ["," dim2] ")" ] ["=" value ["," value]
 :::::::::::::
 
 name	Name of variable, multiple variables may be declared/assigned at once (separated by comma)

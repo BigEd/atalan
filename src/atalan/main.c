@@ -41,7 +41,7 @@ Purpose:
 */
 {
 	if (proc != NULL && *VERBOSE_PROC != 0) {
-		return StrEqual(proc->name, VERBOSE_PROC);
+		return StrEqual(VarName(proc), VERBOSE_PROC);
 	}
 	return VERBOSE;
 }
@@ -64,7 +64,7 @@ Bool ProcessUsedProcFn(Var * var, void * data)
 
 	if (var->mode == INSTR_VAR) {
 		type = var->type;
-		if (type != NULL && type->mode == INSTR_FN && var->read > 0 && type->instr != NULL) {
+		if (type != NULL && type->mode == INSTR_FN && var->read > 0 && FnVarCode(var) != NULL) {
 			process_fn = (ProcFn)data;
 			process_fn(var);
 		}
@@ -105,17 +105,17 @@ Purpose:
 void PrintParsedProc(Var * var)
 {
 	if (Verbose(var)) {
-		PrintHeader(2, var->name);
+		PrintHeader(2, VarName(var));
 		PrintProc(var);
 	}
 }
 
 Bool ArrayTranslateFn(Var * var, void * data)
 {
-	if (var->mode == INSTR_NAME && var->var != NULL) {
-		if (var->var->mode == INSTR_ARRAY) {
-			if (var->var->instr != NULL) {
-				ProcTranslate(var->var);
+	if (var->mode == INSTR_NAME && var->l != NULL) {
+		if (var->l->mode == INSTR_ARRAY) {
+			if (var->l->instr != NULL) {
+				ProcTranslate(var->l);
 			}
 		}
 	}
@@ -276,7 +276,7 @@ int main(int argc, char *argv[])
 	GenerateInit();
 	TranslateInit();
 	ParseInit();
-	LexerInit();
+	LexInit();
 
 	data = VarNewTmpLabel();
 
@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
 	// Some of the definitions in system.atl are directly used by compiler.
 
 //	INSTRSET = NULL;
-	if (!Parse("system", false, false)) goto failure;
+	if (!Parse("system", BLOCK_FILE, false, false)) goto failure;
 	
 	SYSTEM_SCOPE = VarFind(&ROOT_PROC, "system");
 	INTERRUPT = VarFind(SYSTEM_SCOPE, "interrupt");
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
 
 	// If the platform has been specified as an argument, parse it
 	if (platform != NULL) {
-		if (!Parse(platform, false, false)) goto failure;
+		if (!Parse(platform, BLOCK_FILE, false, false)) goto failure;
 	}
 
 	//TODO: Read the var heap definition from configuration
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
 	//       Prologue and epilogue may be replaced by proc type specific PROC and ANDPROC instructions.
 
 	GenInternal(INSTR_PROLOGUE, NULL, NULL, NULL);
-	if (!Parse(filename, true, false)) goto failure;
+	if (!Parse(filename, BLOCK_FILE, true, false)) goto failure;
 
 //	if (*PLATFORM == 0) {
 //		SyntaxError("No target platform defined");
@@ -346,7 +346,7 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(&PrintParsedProc);
 
 	if (Verbose(&ROOT_PROC)) {
-		PrintHeader(2, ROOT_PROC.name);
+		PrintHeader(2, VarName(&ROOT_PROC));
 		PrintProc(&ROOT_PROC);
 	}
 
@@ -367,7 +367,7 @@ int main(int argc, char *argv[])
 	if (Verbose(NULL)) {
 		PrintHeader(1, "Generate Basic Blocks");
 	}
-	ProcessUsedProc(GenerateBasicBlocks);
+//	ProcessUsedProc(GenerateBasicBlocks);
 	ProcessUsedProc(CheckValues);
 
 	if (Verbose(NULL)) {
@@ -377,6 +377,14 @@ int main(int argc, char *argv[])
 	ProcessUsedProc(TypeInfer);
 
 	if (ERROR_CNT > 0) goto failure;
+
+	// If no platform was defined, we interpret the code
+	if (*PLATFORM == 0) {
+		// We will execute the code ourselves
+		Interpret(&ROOT_PROC, NULL);
+		result = 0;
+		goto done;
+	}
 
 	if (Verbose(NULL)) {
 		PrintHeader(1, "Translate Types");
@@ -445,7 +453,7 @@ int main(int argc, char *argv[])
 	//===== Emit code to resulting file
 	//      (Only if there is something to emit)
 
-	if (ROOT_PROC.instr->first != NULL) {
+	if (FnVarCode(&ROOT_PROC)->first != NULL) {
 		Emit(filename);
 	} else {
 		// We do not emit, just print the results
