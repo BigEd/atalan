@@ -16,7 +16,7 @@ There is a reference to code.
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 Cell * NewFn(Type * type, InstrBlock * instr)
 {
@@ -38,7 +38,13 @@ Bool IsFnImplemented(Var * fn_cell)
 	return fn_cell->instr != NULL && fn_cell->instr->first != NULL && fn_cell->instr->first->op != INSTR_USES;
 }
 
-InstrBlock * FnVarInstr(Var * proc)
+void FnSetCode(Cell * fn, InstrBlock * code)
+{
+	ASSERT(fn->mode == INSTR_FN);
+	fn->instr = code;
+}
+
+InstrBlock * FnVarCode(Var * proc)
 {
 	ASSERT(proc->mode == INSTR_VAR);
 	ASSERT(proc->type->mode == INSTR_FN);
@@ -64,4 +70,3 @@ Bool VarIsOutArg(Var * fn_var, Var * var)
 
 	return ContainsItem(ResultType(fn->type), var);
 }
-

@@ -227,23 +227,25 @@ Purpose:
 
 Type * CellType(Var * cell)
 {
+	Var * var = NULL;
 	Var * a;
 
 	if (cell == NULL) return VOID;
+
 	if (cell->mode == INSTR_VAR) {
-		return cell->type;
+		var = cell->type;
 	} else if (cell->mode == INSTR_ARRAY) {
-		return cell->type;
+		var = cell->type;
 	} else if (cell->mode == INSTR_INT || cell->mode == INSTR_RANGE || cell->mode == INSTR_TEXT) {
-		return cell;
+		var = cell;
 	} else if (FlagOn(INSTR_INFO[cell->mode].flags, INSTR_OPERATOR)) {
-		return CellOp(cell->mode, CellType(cell->l), CellType(cell->r));
+		var = CellOp(cell->mode, CellType(cell->l), CellType(cell->r));
 	} else if (cell->mode == INSTR_ITEM) {
 		a = cell->l;
 		if (a->mode == INSTR_VAR) a = a->type;		
-		return ItemType(a);
+		var = ItemType(a);
 	}
-	return NULL;
+	return var;
 }
 
 Bool CellIsValue(Var * var)
@@ -253,6 +255,28 @@ Purpose:
 */
 {
 	return var != NULL && (var->mode == INSTR_INT || var->mode == INSTR_TEXT || var->mode == INSTR_ARRAY || var->mode == INSTR_TYPE);
+}
+
+Bool CellIsStatic(Var * var)
+{
+	UInt8 flags;
+
+	if (var == NULL) return true;
+
+	switch(var->mode) {
+	case INSTR_INT:
+	case INSTR_TEXT:
+	case INSTR_TYPE:
+		return true;
+	case INSTR_VAR:
+		return CellIsConst(var->type);
+	default:
+		flags = INSTR_INFO[var->mode].flags;
+		if (FlagOn(flags, INSTR_OPERATOR)) {
+			return CellIsStatic(var->l) && CellIsStatic(var->r);
+		}
+		return true;
+	}
 }
 
 Bool TypeIsConst(Var * var)
@@ -267,7 +291,7 @@ Purpose:
 		return CellIsValue(var->possible_values);
 
 	case INSTR_RANGE:
-		return IsEqual(var->adr, var->var);
+		return IsEqual(var->l, var->r);
 
 	case INSTR_VAR:
 		return TypeIsConst(var->type);
@@ -287,7 +311,7 @@ Bool CellIsConst(Var * var)
 
 Bool VarIsStructElement(Var * var)
 {
-	return var->adr->mode == INSTR_TUPLE;
+	return var->l->mode == INSTR_TUPLE;
 }
 
 Bool VarIsArrayElement(Var * var)
@@ -295,7 +319,7 @@ Bool VarIsArrayElement(Var * var)
 	Var * adr;
 	if (var == NULL) return false;
 	if (var->mode != INSTR_ELEMENT) return false;
-	adr = var->adr;
+	adr = var->l;
 	if (adr->mode == INSTR_DEREF) return true;
 	return adr->type != NULL && VarIsArray(adr);
 }
@@ -335,7 +359,7 @@ Var * VarNewTmpLabel()
 	Var * var;
 	TMP_LBL_IDX++;
 	var = VarNewLabel(NULL);
-	var->name = TMP_LBL_NAME;
+	var->name2 = TMP_LBL_NAME;
 	var->idx  = TMP_LBL_IDX;
 	return var;
 }
@@ -400,7 +424,7 @@ Purpose:
 	Var * var;
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_VAR && var->adr == NULL) {
+		if (var->mode == INSTR_VAR && VarAdr(var)) {
 			if (VarIsUsed(var)) {
 /*
 				type = var->type;
@@ -429,8 +453,8 @@ Purpose:
 					} else {
 */
 						if (!IsVirtual(var)) {
-							if (InstrRule2(INSTR_ALLOC, var, NULL, NULL)) {
-								EmitInstrOp(INSTR_ALLOC, var, NULL, NULL);
+							if (InstrRule2(INSTR_ALLOC, NULL, var, NULL)) {
+								EmitInstrOp(INSTR_ALLOC, NULL, var, NULL);
 							}
 						}
 	//				}
@@ -454,15 +478,15 @@ Purpose:
 	// Generate initialized arrays, where location is not specified
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_NAME && var->var != NULL && var->var->mode == INSTR_ARRAY) {
-			arr = var->var;
-			if (arr->instr != NULL && arr->adr == NULL) {
+		if (var->mode == INSTR_NAME && var->r != NULL && var->r->mode == INSTR_ARRAY) {
+			arr = var->r;
+			if (arr->instr != NULL && arr->l == NULL) {
 				if (VarIsUsed(var)) {
 					type = var->type;
 					// Make array aligned (it type defines address, it is definition of alignment)
-					if (type->adr != NULL) {
-						rule = InstrRule2(INSTR_ALIGN, NULL, type->adr, NULL);
-						GenRule(rule, NULL, type->adr, NULL);
+					if (type->l != NULL) {
+						rule = InstrRule2(INSTR_ALIGN, NULL, type->l, NULL);
+						GenRule(rule, NULL, type->l, NULL);
 					}
 					// Label & initializers
 					GenLabel(var);
@@ -488,13 +512,13 @@ Purpose:
 	// Generate initialized arrays at specified addresses
 
 	FOR_EACH_VAR(var)
-		if (var->mode == INSTR_NAME && var->var != NULL && var->var->mode == INSTR_ARRAY) {
-			arr = var->var;
+		if (var->mode == INSTR_NAME && var->r != NULL && var->r->mode == INSTR_ARRAY) {
+			arr = var->r;
 			type = var->type;
-			if (arr->instr != NULL && arr->adr != NULL && VarIsUsed(var)) {
+			if (arr->instr != NULL && arr->l != NULL && VarIsUsed(var)) {
 //			if ((var->mode == INSTR_VAR || var->mode == INSTR_NAME) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
-				rule = InstrRule2(INSTR_ORG, NULL, var->adr, NULL);
-				GenRule(rule, NULL, var->adr, NULL);
+				rule = InstrRule2(INSTR_ORG, NULL, var->l, NULL);
+				GenRule(rule, NULL, var->l, NULL);
 				GenLabel(var);
 				GenBlock(arr->instr);
 			}
@@ -529,13 +553,14 @@ Purpose:
 		CPU->REG_CNT = 0;
 
 		if (CPU->SCOPE == NULL) {
-			InternalError("CPU scope not found");
+			InternalError("CPU not found");
+			return;
 		}
 
 		FOR_EACH_LOCAL(CPU->SCOPE, var)
 			// Only variables without address are registers.
 			// The variables with address are register sets.
-			if (var->mode == INSTR_VAR && var->adr == NULL && TypeIsInt2(var->type)) {
+			if (var->mode == INSTR_VAR && VarAdr(var) == NULL && TypeIsInt2(var->type)) {
 				SetFlagOn(var->submode, SUBMODE_REG);
 				CPU->REG[CPU->REG_CNT++] = var;
 			}
@@ -568,9 +593,9 @@ Purpose:
 
 	if (var->mode == INSTR_VAR) {
 		if (FlagOn(var->submode, SUBMODE_REG)) return true;
-		return VarIsReg(var->adr);		// variable address may be register
+		return VarIsReg(VarAdr(var));		// variable address may be register
 	} else if (var->mode == INSTR_TUPLE) {
-		return VarIsReg(var->adr) || VarIsReg(var->var);
+		return VarIsReg(var->l) || VarIsReg(var->r);
 	}
 	return false;
 }
@@ -606,7 +631,7 @@ Arguments:
 
 	proc->read++;
 
-	if (proc->instr == NULL) return;
+	if (FnVarCode(proc) == NULL) return;
 	if (FlagOn(proc->flags, VarProcessed)) return;
 
 //	PrintProc(proc);
@@ -619,7 +644,7 @@ Arguments:
 
 	// Mark all defined labels (those defined with label instruction)
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 		if (blk->label != NULL) {
 			SetFlagOn(blk->label->flags, VarLabelDefined);
 		}
@@ -630,7 +655,7 @@ Arguments:
 		}
 	}
 
-	for(blk = proc->instr; blk != NULL; blk = blk->next) {
+	for(blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 		for(i = blk->first, n=1; i != NULL; i = i->next, n++) {
 			if (i->op == INSTR_CALL) {
 				ProcUse(i->arg1, flag);
@@ -639,28 +664,26 @@ Arguments:
 //					SetFlagOn(proc->submode, SUBMODE_OUT);
 //				}
 			} else {
-				if (i->op != INSTR_LINE) {
-					if (i->arg1 != NULL && i->arg1->mode == INSTR_VAR && i->arg1->type->mode == INSTR_FN) {
-						ProcUse(i->arg1, flag | VarProcAddress);
-					}
-					if (i->arg2 != NULL && i->arg2->mode == INSTR_VAR && i->arg2->type->mode == INSTR_FN) {
-						ProcUse(i->arg2, flag | VarProcAddress);
-					}
-					label = i->result;
-					if (VarIsLabel(label)) {
-						if (FlagOff(label->flags, VarLabelDefined)) {
+				if (i->arg1 != NULL && i->arg1->mode == INSTR_VAR && i->arg1->type->mode == INSTR_FN) {
+					ProcUse(i->arg1, flag | VarProcAddress);
+				}
+				if (i->arg2 != NULL && i->arg2->mode == INSTR_VAR && i->arg2->type->mode == INSTR_FN) {
+					ProcUse(i->arg2, flag | VarProcAddress);
+				}
+				label = i->result;
+				if (VarIsLabel(label)) {
+					if (FlagOff(label->flags, VarLabelDefined)) {
 
-							loc.blk = blk;
-							loc.i   = i;
-							bmk = SetBookmarkLine(&loc);
+						loc.blk = blk;
+						loc.i   = i;
+						bmk = SetBookmarkLoc(&loc);
 
-							var = VarFindLabel(label->name);
-							if (var != NULL) {
-								ErrArg(var);
-								SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);
-							} else {
-								SyntaxErrorBmk("Label [A] is undefined", bmk);
-							}
+						var = VarFindLabel(VarName(label));
+						if (var != NULL) {
+							ErrArg(var);
+							SyntaxErrorBmk("Label [A] is defined in other procedure.\nIt is not possible to jump between procedures.", bmk);
+						} else {
+							SyntaxErrorBmk("Label [A] is undefined", bmk);
 						}
 					}
 				}
@@ -683,13 +706,13 @@ Purpose:
 	if (var == from) return to;
 
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_RANGE) {
-		l = VarReplaceVar(var->adr, from, to);
-		r = VarReplaceVar(var->var, from, to);
-		if (l != var->adr || r != var->var) var = NewOp(var->mode, l, r);
+		l = VarReplaceVar(var->l, from, to);
+		r = VarReplaceVar(var->r, from, to);
+		if (l != var->l || r != var->r) var = NewOp(var->mode, l, r);
 
 	} else if (var->mode == INSTR_DEREF) {
-		l = VarReplaceVar(var->var, from, to);
-		if (l != var->var) var = VarNewDeref(l);
+		l = VarReplaceVar(var->l, from, to);
+		if (l != var->l) var = VarNewDeref(l);
 	}
 	return var;
 }
@@ -705,11 +728,9 @@ Purpose:
 	InstrBlock * nb;
 	for(nb = block; nb != NULL; nb = nb->next) {
 		for (i = nb->first; i != NULL; i = i->next) {
-			if (i->op != INSTR_LINE) {
-				i->result = VarReplaceVar(i->result, from, to);
-				i->arg1   = VarReplaceVar(i->arg1, from, to);
-				i->arg2   = VarReplaceVar(i->arg2, from, to);
-			}
+			i->result = VarReplaceVar(i->result, from, to);
+			i->arg1   = VarReplaceVar(i->arg1, from, to);
+			i->arg2   = VarReplaceVar(i->arg2, from, to);
 		}
 	}
 }
@@ -735,7 +756,7 @@ Purpose:
 */
 {
 	if (var->mode == INSTR_VAR) return true;
-	if (var->mode == INSTR_ELEMENT && var->var->mode == INSTR_INT) return true;		// access to constant array element
+	if (var->mode == INSTR_ELEMENT && var->r->mode == INSTR_INT) return true;		// access to constant array element
 	return false;
 }
 
@@ -750,13 +771,13 @@ Bool VarModifiesVar(Var * var, Var * test_var)
 		} else {
 			
 			if (test_var->mode == INSTR_TUPLE) {
-				return VarModifiesVar(var, test_var->adr) || VarModifiesVar(var, test_var->var);
-			} else if (test_var->mode == INSTR_VAR && test_var->adr != NULL) {
-				return VarModifiesVar(var, test_var->adr);
+				return VarModifiesVar(var, test_var->l) || VarModifiesVar(var, test_var->r);
+			} else if (test_var->mode == INSTR_VAR && VarAdr(test_var)) {
+				return VarModifiesVar(var, VarAdr(test_var));
 			}
 
 			if (var->mode == INSTR_TUPLE) {
-				return VarModifiesVar(var->adr, test_var) || VarModifiesVar(var->var, test_var);
+				return VarModifiesVar(var->l, test_var) || VarModifiesVar(var->r, test_var);
 			}
 
 //			if (var->mode == INSTR_DEREF) {
@@ -796,28 +817,24 @@ Purpose:
 //			} else {
 
 			if (var->mode == INSTR_DEREF) {
-				return VarUsesVar(var->var, test_var);
-			} else if (var->mode == INSTR_VAR) {
-				if (var->adr != NULL) {
-					if (var->adr->mode != INSTR_INT) {
-						return VarUsesVar(var->adr, test_var);
-					}
-				}
+				return VarUsesVar(var->l, test_var);
+			} else if (var->mode == INSTR_VAR && VarIsAlias(var)) {
+				return VarUsesVar(VarAdr(var), test_var);
 			} else {
 				if (ii->arg_type[1] == TYPE_ANY) {
-					if (VarUsesVar(var->adr, test_var)) return true;
+					if (VarUsesVar(var->l, test_var)) return true;
 				}
 
 				if (ii->arg_type[2] == TYPE_ANY) {
-					if (VarUsesVar(var->var, test_var)) return true;
+					if (VarUsesVar(var->r, test_var)) return true;
 				}
 
 //				} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
 //					return VarUsesVar(var->var, test_var) || VarUsesVar(var->adr, test_var);
 			}
 		}
-		if (test_var->mode == INSTR_VAR && test_var->adr != NULL) {
-			return VarUsesVar(var, test_var->adr);
+		if (test_var->mode == INSTR_VAR && VarAdr(test_var) != NULL) {
+			return VarUsesVar(var, VarAdr(test_var));
 		}
 	}
 	return false;	
@@ -844,7 +861,7 @@ Purpose:
 	reg = var;
 	while(reg != NULL && reg->mode == INSTR_VAR) {
 		if (FlagOn(reg->submode, SUBMODE_REG)) return reg;
-		reg = reg->adr;
+		reg = VarAdr(reg);
 		if (reg != NULL && reg->mode == INSTR_TUPLE) return reg;
 	}
 	return var;
@@ -908,8 +925,8 @@ Purpose:
 
 		// Getting n-th byte is same as special variant of AND
 		if (res->mode == INSTR_BYTE) {
-			a   = IntFromCell(var->adr);
-			idx = IntFromCell(var->var);
+			a   = IntFromCell(var->l);
+			idx = IntFromCell(var->r);
 
 			if (a != NULL && idx != NULL) {
 				// t3 = (a >> (idx * 8)) & 0xff;
@@ -927,25 +944,6 @@ Purpose:
 		}
 	}
 	return res;
-}
-
-void VarLet(Var * var, Var * val)
-/*
-Purpose:
-	Set the variable var to specified value.
-	The variable must be of type INSTR_NAME or INSTR_VAR and the value is set to var property.
-*/
-{
-	if (var != NULL && val != NULL) {
-		ASSERT(var->mode == INSTR_VAR);
-
-		if (CellIsValue(val)) {
-			var->var = val;
-		} else {
-			var->var = val->var;
-		}
-
-	}
 }
 
 Bool VarIsArg(Var * var)
@@ -988,3 +986,10 @@ void VarInit()
 	IntCellInit();
 
 }
+
+void CellSetLocation(Var * cell, SrcLine * line, LinePos line_pos)
+{
+	cell->line = line;
+	cell->line_pos = line_pos;
+}
+

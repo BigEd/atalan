@@ -33,7 +33,7 @@ Purpose:
 	Instr * prev;
 	InstrBlock * nb;
 
-	nb = InstrBlockAlloc();
+	nb = NewCode();
 	nb->first = i;
 	nb->last  = block->last;
 	nb->next  = block->next;
@@ -60,7 +60,7 @@ InstrBlock * LastBlock(InstrBlock * block)
 Instr * InstrPrev(Instr * i)
 {
 	if (i != NULL) {
-		while(i != NULL && i->op == INSTR_LINE) i = i->prev;
+		i = i->prev;
 	}
 	return i;
 }
@@ -71,7 +71,7 @@ Purpose:
 	Return first non-line instruction in the block.
 */{
 	Instr * i;
-	for (i = blk->first; i != NULL && i->op == INSTR_LINE; i = i->next);
+	i = blk->first;
 	return i;
 }
 
@@ -97,12 +97,12 @@ void LinkBlocks(Var * proc)
 	InstrBlock * nb, * blk, * dst, * prev_blk, * first_blk;
 	Instr * i;
 	InstrOp op;
-	Var * label;
+	Cell * code;
 	UInt32 n;
 
 repeat:
 
-	first_blk = proc->type->instr;
+	first_blk = FnVarCode(proc);
 	for(blk = first_blk, n=1; blk != NULL; blk = blk->next, n++) {
 		blk->to      = NULL;
 		blk->cond_to = NULL;
@@ -132,12 +132,12 @@ repeat:
 		// If this is conditional jump or jump, register it as caller to destination block
 
 		if (op == INSTR_IF) {
-			label = i->arg2;
+			code = i->arg2;
 			// Jumps to other procedures are handled in a special way, as these are not normal jumps.
-			if (label->type->mode != INSTR_FN && !VarIsRuleArg(label)) {
-				dst = label->instr;
+			if (code->mode == INSTR_CODE /*label->type->mode != INSTR_FN && !VarIsRuleArg(label)*/) {
+				dst = IfInstr(i);	//label->instr;
 				if (dst == NULL) {
-					InternalError("Label has no block.");
+					InternalError("If has no code.");
 				}
 				if (IsGoto(i)) {
 					nb->to = dst;
@@ -165,24 +165,26 @@ repeat:
 			}
 		}
 
+		// Block is empty and does lead somewhere (there caqn be empty block at the end of procedure)
 		if (FirstInstr(blk) == NULL && blk->to != NULL) {
 
 			dst = blk->from;
 			if (dst != NULL) dst->to = blk->to;
+			// Move jumps in all callers to next block
 			for(dst = blk->callers; dst != NULL; dst = dst->next_caller) {
 				if (dst->to == blk) dst->to = blk->to;
 				if (dst->cond_to == blk) dst->cond_to = blk->to;
 				
 				i = InstrPrev(dst->last);
 				if (i != NULL) {
-					label = blk->label;
-					if (i->arg2 == label) {
-						if (blk->to->label == NULL) {
-							blk->to->label = label;
-							label->instr = blk->to;
-						} else {
-							i->arg2 = blk->to->label;
-						}
+					//label = blk->label;
+					if (i->arg2 == blk) {		//label
+//						if (blk->to->label == NULL) {
+//							blk->to->label = label;
+//							label->instr = blk->to;
+//						} else {
+							i->arg2 = blk->to;
+//						}
 					}
 				}
 			}
@@ -191,7 +193,7 @@ remove_block:
 			if (prev_blk != NULL) {
 				prev_blk->next = blk->next;
 			} else {
-				proc->instr = blk->next;
+				FnSetCode(proc, blk->next);
 			}
 
 
@@ -243,7 +245,7 @@ Purpose:
 //	Print("************* Before Blocks **************\n");
 //	PrintProc(proc);
 
-	blk = proc->type->instr;
+	blk = FnVarCode(proc);
 	while(blk != NULL) {
 		next_blk = blk->next;
 		nb = blk;
@@ -292,7 +294,7 @@ Purpose:
 	LinkBlocks(proc);
 
 	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
+		PrintHeader(2, VarName(proc));
 		PrintProc(proc);
 	}
 
@@ -402,7 +404,7 @@ void OptimizeJumps(Var * proc)
 //		PrintProc(proc);
 //	}
 
-	blk = proc->instr;
+	blk = FnVarCode(proc);
 	while (blk != NULL) {
 		blk_to = blk->to;
 		last_i = InstrPrev(blk->last);
@@ -468,7 +470,7 @@ retry:
 				label = cond_i->arg2;
 				blk_to = label->instr;
 				
-				i = FirstInstr(blk_to);	//for(i = blk_to->first; i != NULL && i->op == INSTR_LINE; i = i->next);
+				i = FirstInstr(blk_to);
 				if (IsGoto(i) && i->arg2 != cond_i->arg2) {
 					cond_i->arg2 = i->arg2;
 					goto retry;

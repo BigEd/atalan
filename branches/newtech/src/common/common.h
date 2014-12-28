@@ -54,6 +54,7 @@ Bool   StrEqual(char * str1, char * str2);
 Bool   StrEqualPrefix(char * str1, char * str2, int num);
 #define StrLen(str) strlen(str)
 Int16 StrEditDistance(char * s, char * t);
+#define StrFree(x) MemFree(x)
 
 // Flag (bit) testing and setting
 

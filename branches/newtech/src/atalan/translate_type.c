@@ -83,7 +83,7 @@ void TranslateTypes2(Var * proc, Bool always)
 
 	verbose = Verbose(proc);
 	if (verbose) {
-		PrintHeader(2, proc->name);
+		PrintHeader(2, VarName(proc));
 		PrintProc(proc);
 	}
 

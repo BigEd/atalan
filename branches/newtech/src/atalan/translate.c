@@ -52,13 +52,13 @@ Rule is more specific if it's arguments are more specific.
 
 */
 
-Bool RuleArgIsRegister(RuleArg * l)
+Bool RuleArgIsRegister(Cell * l)
 {
 	if (l->variant == INSTR_VAR || l->variant == INSTR_VARIANT) return true;
 	return false;
 }
 
-Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
+Bool RuleArgIsMoreSpecific(Cell * l, Cell * r)
 /*
 	Compare two rule arguments for specificity.
 	Return true if l is more specific than r.
@@ -78,8 +78,8 @@ Bool RuleArgIsMoreSpecific(RuleArg * l, RuleArg * r)
 
 	if (r_is_reg) return false;
 
-	if (l->variant == INSTR_MATCH_VAL) {
-		if (r->variant != INSTR_MATCH_VAL) return true;
+	if (l->variant == INSTR_VAL) {
+		if (r->variant != INSTR_VAL) return true;
 	}
 
 	// Accessing variable using byte or element is more specific than other variants
@@ -175,9 +175,9 @@ void RuleSetTranslate(RuleSet * ruleset)
 	}
 	for(i=0; i<INSTR_CNT;i++) {
 		for(rule = ruleset->rules[i]; rule != NULL; rule = rule->next) {
-			if (rule->fn != NULL && rule->fn->type->instr != NULL) {
+			if (rule->fn != NULL && FnVarCode(rule->fn) != NULL) {
 				TypeInfer(rule->fn);
-				TranslateTypes2(rule->fn, true);
+//				TranslateTypes2(rule->fn, true);
 			}
 		}
 	}
@@ -189,34 +189,11 @@ void RuleSetTranslate(RuleSet * ruleset)
 
 ************************************************/
 
-void RuleArgMarkNonGarbage(RuleArg * rule)
-{
-	if (rule != NULL) {
-		if (rule->variant == INSTR_MATCH || rule->variant == INSTR_MATCH_VAL) {
-			//TypeMark(rule->type);
-		} else if (rule->variant == INSTR_TUPLE || rule->variant == INSTR_DEREF) {
-			RuleArgMarkNonGarbage(rule->arr);
-		}
-		RuleArgMarkNonGarbage(rule->index);
-	}
-}
-
-void RulesMarkNonGarbage(Rule * rule)
-{
-	UInt8 i;
-	while(rule != NULL) {
-		for(i=0; i<2; i++) {
-			RuleArgMarkNonGarbage(rule->arg[i]);
-		}
-		rule = rule->next;
-	}
-}
-
 void RuleSetGarbageCollect(RuleSet * ruleset)
 {
 	UInt8 op;
 	for(op=0; op<INSTR_CNT; op++) {
-		RulesMarkNonGarbage(ruleset->rules[op]);
+//		RulesMarkNonGarbage(ruleset->rules[op]);
 	}
 }
 
@@ -252,7 +229,7 @@ void EmptyRuleArgs()
 	}
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant);
+static Bool ArgMatch(Cell * pattern, Var * arg, InstrOp parent_variant);
 
 Bool RuleMatch(Rule * rule, Instr * i, CompilerPhase match_mode)
 /*
@@ -279,7 +256,7 @@ Purpose:
 	return match;
 }
 
-Bool VarMatchesPattern(Var * var, RuleArg * pattern)
+Bool VarMatchesPattern(Var * var, Cell * pattern)
 {
 	Type * type = pattern->type;
 	Type * vtype = var->type;
@@ -294,7 +271,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 //				Print("");
 			} else {
 				// 1D index
-				if (!ArgMatch(pattern->index, var->var, INSTR_ELEMENT)) return false;
+				if (!ArgMatch(pattern->index, var->r, INSTR_ELEMENT)) return false;
 				return true;
 			}
 		} else {
@@ -305,7 +282,7 @@ Bool VarMatchesPattern(Var * var, RuleArg * pattern)
 	} else {
 		adr = var;
 		if (var->mode == INSTR_VAR && VarIsAlias(var)) {
-			adr = var->adr;
+			adr = VarAdr(var);
 		}
 		if (VarIsArrayElement(adr)) return false;
 		if (adr->mode == INSTR_TUPLE) return false;
@@ -320,17 +297,17 @@ Bool VarIsOneOf(Var * var, Var * variants)
 
 	o = variants;
 	if (variants->mode != INSTR_TUPLE) {
-		if (variants->adr != NULL) o = variants->adr;
+		if (variants->l != NULL) o = variants->l;
 	}
 
 	while(o->mode == INSTR_TUPLE) {
-		if (IsEqual(var, o->adr)) return true;
-		o = o->var;
+		if (IsEqual(var, o->l)) return true;
+		o = o->r;
 	}
 	return IsEqual(var, o);
 }
 
-static Bool ArgMatch(RuleArg * pattern, Var * arg, InstrOp parent_variant)
+static Bool ArgMatch(Cell * pattern, Var * arg, InstrOp parent_variant)
 /*
 Purpose:
 	Match argument against pattern.
@@ -351,16 +328,17 @@ Purpose:
 
 	var = arg;
 	if (arg->mode == INSTR_VAR) {
-		if (VarIsAlias(arg)) var = arg->adr;
+		if (VarIsAlias(arg)) var = VarAdr(arg);
 	}
 
 	atype = NULL;
-	if (arg->mode == INSTR_VAR) atype = arg->type;
+	if (arg->mode == INSTR_VAR) atype = VarType(arg);
 //	atype = arg->type;
 
 	// If this is rule argument and it has been previously set, it must match exactly
 
-	arg_no = pattern->arg_no;
+	TODO("Arg no");
+//	arg_no = pattern->arg_no;
 	if (arg_no != 0 && MACRO_ARG[arg_no-1] != NULL) {
 		return MACRO_ARG[arg_no-1] == arg;	
 	}
@@ -383,15 +361,15 @@ Purpose:
 			left = arg->l;
 			right = arg->r;
 		}
-		if (!ArgMatch(pattern->index, right, v)) return false;
-		return ArgMatch(pattern->arr, left, v); 
+		if (!ArgMatch(pattern->r, right, v)) return false;
+		return ArgMatch(pattern->l, left, v); 
 		break;
 
 	// <X>..<Y>
 	case INSTR_RANGE:
 		if (arg->mode != INSTR_RANGE) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, arg->var, v)) return false;
-		return ArgMatch(pattern->arr, arg->adr, v); 
+		if (!ArgMatch(pattern->r, arg->r, v)) return false;
+		return ArgMatch(pattern->l, arg->l, v); 
 		break;
 
 	// In case of destination register, we ignore all flag registers, that are specified in pattern and not specified in argument.
@@ -401,34 +379,35 @@ Purpose:
 	// <X>,<Y>
 	case INSTR_TUPLE:
 		if (arg->mode != INSTR_TUPLE) return false;
-		if (!ArgMatch(pattern->index, arg->var, v)) return false;
-		return ArgMatch(pattern->arr, arg->adr, v); 
+		if (!ArgMatch(pattern->r, arg->r, v)) return false;
+		return ArgMatch(pattern->l, arg->l, v); 
 		break;
 
 	// <X>$<Y>
 	case INSTR_BYTE:
 		if (arg->mode != INSTR_BYTE) return false;		// pattern expects byte, and variable is not an byte
-		if (!ArgMatch(pattern->index, arg->var, v)) return false;		
-		return ArgMatch(pattern->arr, arg->adr, v);
+		if (!ArgMatch(pattern->r, arg->r, v)) return false;		
+		return ArgMatch(pattern->l, arg->l, v);
 		break;
 
 	// <X>#<Y>
 	case INSTR_ELEMENT:
 		
 		if (var->mode != INSTR_ELEMENT) return false;		// pattern expects element, and variable is not an element
-		if (!ArgMatch(pattern->index, var->var, v)) return false;
-		return ArgMatch(pattern->arr, var->adr, v);
+		if (!ArgMatch(pattern->r, var->r, v)) return false;
+		return ArgMatch(pattern->l, var->l, v);
 		break;
 
 	// const %A:type
-	case INSTR_MATCH_VAL:
+	case INSTR_VAL:
 		if (!CellIsConst(arg)) return false;
 		if (!VarMatchesPattern(arg, pattern)) return false;
 		break;
 
 	// Exact variable or constant.
 	case INSTR_VAR:
-		pvar = pattern->var;
+		pvar = pattern;
+//		pvar = pattern->var;
 		if (CellIsConst(pvar)) {
 			if (!CellIsConst(arg)) return false;
 			if (pvar->mode == INSTR_TEXT) {
@@ -437,12 +416,12 @@ Purpose:
 				if (arg->mode != INSTR_INT || !IntEq(&pvar->n, &arg->n)) return false;
 			}
 		} else {
-			if (pattern->var != NULL && !IsEqual(arg, pattern->var)) return false;
+//			if (pattern->var != NULL && !IsEqual(arg, pattern->var)) return false;
 		}
 		break;
 
 	case INSTR_VARIANT:
-		if (!VarIsOneOf(arg, pattern->var)) return false;
+		if (!VarIsOneOf(arg, pattern)) return false;			// pattern->var
 		break;
 
 	case INSTR_MATCH:
@@ -454,8 +433,8 @@ Purpose:
 	// @%A
 	case INSTR_DEREF:
 		if (arg->mode != INSTR_DEREF) return false;
-		arg = arg->var;
-		if (!ArgMatch(pattern->arr, arg, v)) return false;
+		arg = arg->l;
+		if (!ArgMatch(pattern->l, arg, v)) return false;
 		break;
 
 	case INSTR_NULL:
@@ -463,8 +442,8 @@ Purpose:
 
 	default:
 		if (pattern->variant != arg->mode) return false;
-		if (!ArgMatch(pattern->index, arg->r, v)) return false;
-		return ArgMatch(pattern->arr, arg->l, v); 
+		if (!ArgMatch(pattern->r, arg->r, v)) return false;
+		return ArgMatch(pattern->l, arg->l, v); 
 		break;
 	}
 
@@ -495,7 +474,6 @@ Purpose:
 	Rule * rule;
 	
 	rule = ruleset->rules[op];
-	if (op == INSTR_LINE) return rule;
 
 	i.op = op; i.result = result; i.arg1 = arg1; i.arg2 = arg2;
 	for(; rule != NULL; rule = rule->next) {
@@ -515,7 +493,6 @@ Purpose:
 	Rule * rule;
 	
 	rule = INSTR_RULES.rules[instr->op];
-	if (instr->op == INSTR_LINE) return rule;
 
 	for(; rule != NULL; rule = rule->next) {
 		if (RuleMatch(rule, instr, PHASE_EMIT)) {		
@@ -564,7 +541,7 @@ void GenMatchedRule(Rule * rule)
 	rule_type.instr = rule->to;
 
 	rule_proc.mode = INSTR_VAR;
-	rule_proc.name = NULL;
+	rule_proc.name2 = NULL;
 	rule_proc.idx = 0;
 	rule_proc.type = &rule_type;
 
@@ -577,15 +554,12 @@ Bool InstrTranslate(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode
 	Rule * rule;
 
 	if (FlagOn(mode, TEST_ONLY)) {
-		if (op == INSTR_LINE) return true;
 		if (InstrRule2(op, result, arg1, arg2) != NULL) return true;
 		rule = TranslateRule(op, result, arg1, arg2);
 		return rule != NULL;
 	} else {
 
-		if (op == INSTR_LINE) {
-			GenInternal(INSTR_LINE, result, arg1, arg2);
-		} else if ((rule = InstrRule2(op, result, arg1, arg2))) {
+		if ((rule = InstrRule2(op, result, arg1, arg2))) {
 			if (VERBOSE_NOW) {
 				Print("     "); EmitInstrOp(op, result, arg1, arg2);
 			}
@@ -694,7 +668,7 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 
 		// Let r = x - (y * 2)
 
-		while (VarIsAlias(a_r)) a_r = a_r->adr;
+		while (VarIsAlias(a_r)) a_r = VarAdr(a_r);
 
 		if (CellIsOp(a_r)) {
 			type = ANY; if (result != NULL) type = result->type;
@@ -734,8 +708,8 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 	// First we perform simple test detecting, if one of the arguments is more complex, then what we will
 	// use for replacing it (simple variable).
 
-	while (VarIsAlias(result)) result = result->adr;
-	while (VarIsAlias(arg1)) arg1 = arg1->adr;
+	while (VarIsAlias(result)) result = VarAdr(result);
+	while (VarIsAlias(arg1)) arg1 = VarAdr(arg1);
 
 	has_r = (result != NULL && result->mode != INSTR_VAR);
 	has1 = (arg1 != NULL && arg1->mode != INSTR_VAR);
@@ -864,13 +838,12 @@ Purpose:
 		PrintHeader(2, VarName(proc));
 	}
 
-	first_blk = FnVarInstr(proc);
+	first_blk = FnVarCode(proc);
 
 	// As first step, we translate all variables stored on register addresses to actual registers
 
 	for(blk = first_blk; blk != NULL; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
 			i->result = VarReg(i->result);
 			i->arg1   = VarReg(i->arg1);
 			i->arg2   = VarReg(i->arg2);

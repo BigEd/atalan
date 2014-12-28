@@ -34,3 +34,8 @@ Var * Not(Var * v)
 	}
 	return r;
 }
+
+Cell * ToBool(Bool b)
+{
+	return b?TRUE:FALSE;
+}

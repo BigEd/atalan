@@ -116,14 +116,14 @@ Purpose:
 				MarkVarCollision(info, live, idx);
 //			}
 		}
-		if (var->adr != NULL) {
-			VarAllocVar(info, var->adr, live, mark);
+		if (VarAdr(var) != NULL) {
+			VarAllocVar(info, VarAdr(var), live, mark);
 		}
 
 	// For array element, we mark the index variable as read, while whole array gets marked as dead/alive
 	} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-		VarAllocVar(info, var->adr, live, mark);
-		VarAllocVar(info, var->var, live, 1);
+		VarAllocVar(info, var->l, live, mark);
+		VarAllocVar(info, var->r, live, 1);
 	}
 }
 
@@ -268,7 +268,7 @@ Purpose:
 		var = VarSetItem(&info.vars, i)->key;
 
 		// Do not assign address to variable that already has address
-		if (var->adr == NULL) {
+		if (VarAdr(var) == NULL) {
 			size = TypeSize(var->type);		
 			if (size > 0) {
 
@@ -276,8 +276,8 @@ Purpose:
 				for(j = 0; j < count; j++) {
 					if (i != j && info.collisions[i*count+j] == 0) {
 						var2 = VarSetItem(&info.vars, j)->key;
-						if (CellIsIntConst(var2->adr) && !OutVar(var2) && !InVar(var2)) {
-							if (TypeSize(var2->type) == size) {
+						if (CellIsIntConst(VarAdr(var2)) && !OutVar(var2) && !InVar(var2)) {
+							if (TypeSize(VarType(var2)) == size) {
 								// We have found the variable, whose address we can use
 
 								// Mark variable to which we assign address of other variable to be conflicting with same variables as the other
@@ -286,7 +286,7 @@ Purpose:
 //								PrintIntCellName(var); Print("@"); PrintIntCellName(var2); PrintEOL();
 //								PrintCollisions(&info);
 
-								var->adr = var2;
+								VarSetAdr(var, var2);
 								goto next;
 							}
 						}
@@ -296,7 +296,7 @@ Purpose:
 
 				if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
 //							PrintIntCellName(var); Print("@%d\n", adr);
-					var->adr = IntCellN(adr);
+					VarSetAdr(var, IntCellN(adr));
 				} else {
 					// failed to alloc memory
 				}
@@ -350,13 +350,13 @@ void AllocateVariablesFromHeapNoOptim(Var * proc, MemHeap * heap)
 			AllocateVariablesFromHeap(var, heap);
 		} else {
 			// Do not assign address to unused variables, labels and registers
-			if (var->adr == NULL && var->mode == INSTR_VAR) {
+			if (var->mode == INSTR_VAR && VarAdr(var) == NULL) {
 				if ((var->write > 0 || var->read > 0) && !VarIsLabel(var) && !VarIsReg(var)) {
 					size = TypeSize(var->type);		
 					if (size > 0) {
 						if (HeapAllocBlock(heap, size, &adr) || HeapAllocBlock(&VAR_HEAP, size, &adr)) {
 //							PrintIntCellName(var); Print("@%d\n", adr);
-							var->adr = IntCellN(adr);
+							VarSetAdr(var, IntCellN(adr));
 						} else {
 							// failed to alloc in zero page
 						}
@@ -379,8 +379,8 @@ void HeapVarOp(MemHeap * heap, Var * var, int op)
 	if (var == NULL) return;
 
 	if (var->mode == INSTR_VAR) {
-		size = TypeSize(var->type);
-		vadr = var->adr;
+		size = TypeSize(VarType(var));
+		vadr = VarAdr(var);
 		if (size > 0 && vadr != NULL) {
 			if (vadr->mode == INSTR_TUPLE) {
 				HeapVarOp(heap, vadr, op);

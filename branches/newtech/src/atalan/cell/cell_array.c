@@ -10,7 +10,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 Var * NewArray(Type * type, InstrBlock * instr)
 {

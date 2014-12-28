@@ -47,38 +47,36 @@ Input:
 
 	// Dereferencing reads the variable (even if it is used for writing at that address later)
 	if (var->mode == INSTR_DEREF) {
-		VarMarkLive(var->var);
+		VarMarkLive(var->l);
 
 	// If this is array access variable, mark indices as live (used)
 	} if (var->mode == INSTR_ITEM || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
 
-		if (var->adr->mode == INSTR_DEREF) {
-			VarMarkLive(var->adr);
+		if (var->l->mode == INSTR_DEREF) {
+			VarMarkLive(var->l);
 		}
 		
 		// Index used to access array is always live
-		VarMarkLive(var->var);
+		VarMarkLive(var->r);
 
 		// Array references with variable indexes are always live
-		if (var->var->mode != INSTR_INT) state = VarLive;
+		if (var->r->mode != INSTR_INT) state = VarLive;
 
 	} else {
 
 		ii = &INSTR_INFO[var->mode];
 
 		if (ii->arg_type[1] == TYPE_ANY) {
-			VarMark(var->adr, state);
+			VarMark(var->l, state);
 		}
 
 		if (ii->arg_type[2] == TYPE_ANY) {
-			VarMark(var->var, state);
+			VarMark(var->r, state);
 		}
 
 		// If variable is alias for some other variable, mark the other variable too
-		if (var->mode == INSTR_VAR && var->adr != NULL) {
-			if (var->adr->mode == INSTR_VAR || var->adr->mode == INSTR_TUPLE) {
-				VarMark(var->adr, state);
-			}
+		if (var->mode == INSTR_VAR && VarIsAlias(var)) {
+			VarMark(VarAdr(var), state);
 		}
 	}
 
@@ -90,7 +88,7 @@ Input:
 		// Each element, which has this variable as an array is marked same
 		FOR_EACH_VAR(var2)
 			if (var2->mode == INSTR_ITEM || var2->mode == INSTR_BYTE || var2->mode == INSTR_BIT) {
-				if (var2->adr == var) {
+				if (var2->l == var) {
 					var2->flags = (var2->flags & ~VarLive) | state;
 				}
 			}
@@ -111,11 +109,11 @@ Purpose:
 {
 	if (var == NULL) return false;
 	if (var == find_var) return true;
-	if (var->mode == INSTR_VAR && var->adr != NULL) {
-		return VarInTuple(var->adr, find_var);
+	if (var->mode == INSTR_VAR && VarAdr(var) != NULL) {
+		return VarInTuple(VarAdr(var), find_var);
 	}
 	if (var->mode == INSTR_TUPLE) {
-		return VarInTuple(var->adr, find_var) || VarInTuple(var->var, find_var);
+		return VarInTuple(var->l, find_var) || VarInTuple(var->r, find_var);
 	}
 	return false;
 }
@@ -130,8 +128,8 @@ Purpose:
 		if (test_var->mode == INSTR_ITEM || test_var->mode == INSTR_BYTE) {
 			if (var->mode == INSTR_ITEM || var->mode == INSTR_BYTE) {
 				// This is the same array and the index of the variable is the same
-				if (var->adr == test_var->adr) {
-					if (var->var->mode != INSTR_INT || test_var->var->mode != INSTR_INT || IntEq(&var->var->n, &test_var->var->n)) return true;
+				if (var->l == test_var->l) {
+					if (var->r->mode != INSTR_INT || test_var->r->mode != INSTR_INT || IntEq(&var->r->n, &test_var->r->n)) return true;
 				}
 			}
 		}
@@ -160,7 +158,6 @@ Purpose:
 //	}
 
 	for (i = block->first; i != NULL; i = i->next) {
-		if (i->op == INSTR_LINE) continue;
 
 		if (i->op == INSTR_CALL) {
 			if (VarUsesVar(i->arg1, var)) { res1 = 1; goto done; }
@@ -183,12 +180,12 @@ Purpose:
 			if (VarInTuple(i->rule->flags, var)) { res1 = 0; goto done;}
 		}
 
-		if (var->adr != NULL && i->arg1 == var->adr) { res1 = 1; goto done; }			//TODO: Maybe not necessary? (Tested by VarUsesVar)
+		if (var->mode == INSTR_VAR && VarAdr(var) != NULL && i->arg1 == VarAdr(var)) { res1 = 1; goto done; }			//TODO: Maybe not necessary? (Tested by VarUsesVar)
 
 		if (i->op == INSTR_LET_ADR) {
 			if (VarIsArrayElement(i->arg1)) {
 				if (var->mode == INSTR_ITEM) {
-					if (var->adr == i->arg1->adr) { res1 = 1; goto done; }
+					if (var->l == i->arg1->l) { res1 = 1; goto done; }
 				}
 			}
 		}
@@ -248,8 +245,8 @@ void VarMarkNextUse(Var * var, Instr * i)
 	if (var->mode == INSTR_VAR) {
 		var->src_i = i;
 	} else {
-		if (ii->arg_type[1] == TYPE_ANY) VarMarkNextUse(var->adr, i);
-		if (ii->arg_type[2] == TYPE_ANY) VarMarkNextUse(var->var, i);
+		if (ii->arg_type[1] == TYPE_ANY) VarMarkNextUse(var->l, i);
+		if (ii->arg_type[2] == TYPE_ANY) VarMarkNextUse(var->r, i);
 	}
 /*
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_TUPLE || var->mode == INSTR_DEREF || var->mode == INSTR_SUB) {
@@ -267,8 +264,8 @@ Bool VarDereferences(Var * var)
 	if (var != NULL) {
 		ii = &INSTR_INFO[var->mode];
 		if (var->mode == INSTR_DEREF) return true;
-		if (ii->arg_type[1] == TYPE_ANY) if (VarDereferences(var->adr)) return true;
-		if (ii->arg_type[2] == TYPE_ANY) if (VarDereferences(var->var)) return true;
+		if (ii->arg_type[1] == TYPE_ANY) if (VarDereferences(var->l)) return true;
+		if (ii->arg_type[2] == TYPE_ANY) if (VarDereferences(var->r)) return true;
 //		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) return VarDereferences(var->adr) || VarDereferences(var->var);
 	}
 	return false;
@@ -282,9 +279,9 @@ Bool VarIsDead(Var * var)
 	ii = &INSTR_INFO[var->mode];
 
 	if (var->mode == INSTR_TUPLE) {
-		return VarIsDead(var->adr) && VarIsDead(var->var);
-	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL && !CellIsConst(var->adr)) {
-		return VarIsDead(var->adr);
+		return VarIsDead(var->l) && VarIsDead(var->r);
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && VarIsAlias(var)) {
+		return VarIsDead(VarAdr(var));
 	} else {
 		return FlagOff(var->flags, VarLive) && !OutVar(var);
 	}
@@ -297,9 +294,9 @@ Bool FlagIsDead(Var * var, Instr * i)
 	if (var == NULL) return true;
 
 	if (var->mode == INSTR_TUPLE) {
-		return FlagIsDead(var->adr, i) && FlagIsDead(var->var, i);
-	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG) && var->adr != NULL) {
-		return FlagIsDead(var->adr, i);
+		return FlagIsDead(var->l, i) && FlagIsDead(var->r, i);
+	} if (var->mode == INSTR_VAR && FlagOff(var->submode, SUBMODE_REG)) {
+		return FlagIsDead(VarAdr(var), i);
 	} else {
 		if (OutVar(var)) return false;
 		if (FlagOff(var->flags, VarLive)) return true;
@@ -309,7 +306,6 @@ Bool FlagIsDead(Var * var, Instr * i)
 
 		if (i->op == INSTR_LET) {
 			i2 = i->prev;
-			while (i2 != NULL && i2->op == INSTR_LINE) i2 = i2->prev;
 			if (i2 != NULL) {
 				if (IsEqual(i->arg1, i2->result) && VarUsesVar(i2->rule->flags, var)) {
 					return true;
@@ -337,7 +333,7 @@ Bool OptimizeLive(Var * proc)
 	UInt8 color;
 
 	if (Verbose(proc)) {
-		PrintHeader(3, "optimize live", proc->name);
+		PrintHeader(3, "optimize live", VarName(proc));
 		PrintProc(proc);
 	}
 
@@ -397,12 +393,12 @@ Bool OptimizeLive(Var * proc)
 			NEXT_OUT_ARG(var)
 		}
 
-		n = InstrBlockInstrCount(blk);
+		n = CodeInstrCount(blk);
 
 		for(i = blk->last; i != NULL; i = i->prev, n--) {
 
 			op = i->op;
-			if (op == INSTR_LINE || op == INSTR_RETURN) continue;
+			if (op == INSTR_RETURN) continue;
 
 			if (i->rule == NULL) {
 				loc.proc = proc;
@@ -415,7 +411,7 @@ Bool OptimizeLive(Var * proc)
 
 			result = i->result;
 			if (result != NULL) {
-				if (op != INSTR_LABEL && op != INSTR_CALL) {
+				if (op != INSTR_CALL) {
 					if (VarIsDead(result) && !VarIsLabel(result) && !VarIsArray(result) && !VarDereferences(result)) {
 						// Prevent removing instructions, that read IN SEQUENCE variable
 						if ((i->arg1 == NULL || FlagOff(i->arg1->submode, SUBMODE_IN_SEQUENCE)) && (i->arg2 == NULL || FlagOff(i->arg2->submode, SUBMODE_IN_SEQUENCE))) {

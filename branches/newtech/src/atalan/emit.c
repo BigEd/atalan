@@ -5,6 +5,9 @@ Emit phase
 (c) 2010 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
 
+This module is responsible for emitting compiled code to appropriate output.
+Emit supports two basic function EmitByte & EmitStr, which is the point through which all other functions go.
+
 */
 
 #include "language.h"
@@ -15,6 +18,8 @@ extern Rule * EMIT_RULES[INSTR_CNT];
 extern Var   ROOT_PROC;
 
 /*
+Removing null operations
+========================
 When emitting output source code, we sometimes generate texts like X+0, Y-0 etc.
 We do not want this artifacts become part of generated source code, as it unnecessarily clutters it.
 We therefore postpone emitting characters like + and - and if they are followed by integer 0, we do not output the sequence.
@@ -23,16 +28,14 @@ G_PREV_OP is variable, which remembers the previous operator.
 */
 
 UInt8 G_PREV_OP = 0;
+static SrcLine * EMIT_LINE;
 
-
-void PrintOptim(char * text)
-{
-	UInt8 color;
-	color = PrintColor(GREEN);
-	Print(":");
-	Print(text);
-	PrintColor(color);
-}
+/*
+Emit to Buffer
+==============
+Emit can generate it's output either to a file or to specified memory buffer.
+The buffer is used for example to format assembler command
+*/
 
 char * G_BUF;		// buffer to output
 
@@ -124,13 +127,16 @@ void EmitBigInt(BigInt * n)
 	EmitInt(i);
 }
 
-
 void EmitStrConst(char * str)
 /*
 Purpose:
 	Emit string constant.
 	This code is currently MADS specific to handle emit of single quotes.
 	Quotes are emitted like:  'ahaha', 39, 'sksksks'
+TODO:
+	Define escapes for string generation.
+	'  -> "', 39, '"
+	
 */
 {
 	char * s, c;
@@ -182,7 +188,7 @@ Purpose:
 {
 	char * s, c;
 
-	s = var->name;
+	s = VarName(var);
 	if (s != NULL) {
 		// If identifier starts with number, we prefix _N
 		c = *s;
@@ -205,7 +211,7 @@ Purpose:
 	}
 
 	// If variable has index, append the index
-	if (var->idx != 0) EmitInt(var->idx-1);
+//	if (var->idx != 0) EmitInt(var->idx-1);
 }
 
 void EmitVar(Var * var, UInt8 format)
@@ -225,7 +231,7 @@ void EmitVar(Var * var, UInt8 format)
 				InternalError("don't know how to emit element");
 //			}
 		} else if (var->mode == INSTR_DEREF) {
-			EmitVar(var->var, format);
+			EmitVar(var->l, format);
 		} else if (var->mode == INSTR_BYTE) {
 			InternalError("don't know how to emit byte array element");
 		} else if (var->mode == INSTR_TEXT) {
@@ -237,26 +243,22 @@ void EmitVar(Var * var, UInt8 format)
 		} else if (var->mode == INSTR_INT) {
 			EmitBigInt(&var->n);
 		} else if (var->mode == INSTR_VAR) {
-			if (var->name != NULL) {
-				// *** Module parameters (4)
-				// When parameter name is emmited, it is prefixed with PARAM_ prefix
-				if (VarIsParam(var)) {
-					EmitStr("PARAM_");
-					EmitStr("__");
-				} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && var->scope->name != NULL && !VarIsLabel(var)) {
-					EmitIntCellName(var->scope);
-					EmitStr("__");
-				} else {
-					non_keyword = true;
-					// For variables (excluding registers), emit extra underscore at the beginning to prevent name clash with assembler built-in keywords and register names
-					if (!VarIsReg(var)) {
-						EmitStr("_");
-					}
-				}
-				EmitIntCellName(var);			
+			// *** Module parameters (4)
+			// When parameter name is emmited, it is prefixed with PARAM_ prefix
+			if (VarIsParam(var)) {
+				EmitStr("PARAM_");
+				EmitStr("__");
+			} else if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope != CPU->SCOPE && VarName(var->scope) != NULL && !VarIsLabel(var)) {
+				EmitIntCellName(var->scope);
+				EmitStr("__");
 			} else {
-				FAILURE("What's this?")
+				non_keyword = true;
+				// For variables (excluding registers), emit extra underscore at the beginning to prevent name clash with assembler built-in keywords and register names
+				if (!VarIsReg(var)) {
+					EmitStr("_");
+				}
 			}
+			EmitIntCellName(var);			
 		}
 	}
 }
@@ -273,10 +275,6 @@ void EmitInstr2(Instr * instr, char * str)
 	BigInt bn;
 	Var * pn;
 	s = str;
-
-	if (instr->op == INSTR_LINE) {
-		PrintColor(BLUE+LIGHT);
-	}
 
 	while(c = *s++) {		
 		if (c == '%') {
@@ -339,27 +337,16 @@ void EmitInstr2(Instr * instr, char * str)
 				case '0': 
 					EmitVar(instr->result, format); continue;
 				case '1': 
-					if (instr->op != INSTR_LINE) {
-						EmitVar(instr->arg1, format); 
-					} else {
-						EmitInt(instr->line_no);
-					}
+					EmitVar(instr->arg1, format); 
 					continue;
 				case '2': 
-					if (instr->op != INSTR_LINE) {
-						EmitVar(instr->arg2, format); 
-					} else {
-						EmitStr(instr->line);
-					}
+					EmitVar(instr->arg2, format); 
 					continue;
 				case '@': break;
 				case 't': c = '\t'; break;
 			}
 		}
 		EmitChar(c);
-	}
-	if (instr->op == INSTR_LINE) {
-		PrintColor(RED+GREEN+BLUE);
 	}
 }
 
@@ -436,7 +423,9 @@ Bool EmitProc(Var * proc)
 	Bool result = true;
 	InstrBlock * blk;
 
-	for(blk = proc->type->instr; blk != NULL; blk = blk->next) {
+	EMIT_LINE = NULL;
+
+	for(blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 
 		// If block is labeled, Emit label instruction
 		if (blk->label != NULL) {
@@ -488,9 +477,9 @@ Purpose:
 //			if (type != NULL && type->variant == TYPE_ARRAY && var->mode == INSTR_INT) continue;
 			if (VarIsReg(var)) continue;
 
-			adr = var->adr;
+			adr = VarAdr(var);
 			if ( (adr != NULL && !VarIsReg(adr) && var->mode == INSTR_VAR && (var->read > 0 || var->write > 0))
-			  || (CellIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && var->name != NULL)
+			  || (CellIsIntConst(var) && (var->read > 0  || FlagOn(var->submode, SUBMODE_PARAM)) && VarName(var) != NULL)
 			) {
 
 				if (adr != NULL && adr->mode == INSTR_INT && IntN(&adr->n) >= DATA_SEGMENT) {
@@ -548,7 +537,7 @@ Purpose:
 
 		if (FlagOff(var->submode, SUBMODE_MAIN_FILE)) {
 
-			StrCopy(name, var->name);
+			StrCopy(name, VarName(var));
 			len = StrLen(name);
 			name[len-4] = 0;
 			f = FindFile(name, ".asm", path);

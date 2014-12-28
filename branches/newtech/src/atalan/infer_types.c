@@ -135,7 +135,7 @@ Result:
 
 	if (blk->processed) goto done2;
 
-	blk->type = NULL;
+	blk->itype = NULL;
 
 	if (instr == NULL) {
 		i = blk->last;
@@ -148,7 +148,6 @@ Result:
 
 	// Definition of the variable may be in this block
 	for(; i != NULL; i = i->prev) {
-		if (i->op == INSTR_LINE) continue;
 
 		if (i->op == INSTR_CALL) {
 			type = FindTypeCall(i->arg1, var);
@@ -193,7 +192,7 @@ sub1:
 			goto done;
 		// For array, we check, that A(x) fits B(y) so, that A = B and x contains y
 		} else if (var->mode == INSTR_ELEMENT) {
-			if (i->result->mode == INSTR_ELEMENT && var->adr == i->result->adr) {
+			if (i->result->mode == INSTR_ELEMENT && var->l == i->result->l) {
 				// Now we need to find the type of result index & type of var index
 				if (IsSubset(index_type, i->result_index_type)) {
 					type = i->type[RESULT];
@@ -267,9 +266,9 @@ sub1:
 	if (caller_count > 0) paths += caller_count - 1;
 
 done:
-	blk->type = type;
+	blk->itype = type;
 done2:
-	return blk->type;
+	return blk->itype;
 }
 
 Bool HoldsForAllItems(InstrOp op, Var * left, Var * right)
@@ -446,7 +445,7 @@ Result:
 			paths = 1;
 			looped = false;
 			undefined = 0;
-			MarkBlockAsUnprocessed(loc->proc->instr);
+			MarkBlockAsUnprocessed(FnVarCode(loc->proc));
 			index_type = NULL;
 			if (VarIsArrayElement(var)) {
 				index_type = FindType(loc, var->r, false);
@@ -457,7 +456,7 @@ Result:
 			if (type == NULL || type->mode == INSTR_ANY) {
 
 				if (var->mode == INSTR_ELEMENT) {
-					arr_type = var->adr->type;
+					arr_type = var->l->type;
 					if (VarIsArrayElement(var)) {
 						type = ItemType(arr_type);
 					//Using address to access array element
@@ -541,7 +540,6 @@ Result:
 
 	// Definition of the variable may be in this block
 	for(; i != NULL; i = i->prev) {
-		if (i->op == INSTR_LINE) continue;
 		if (i->result == NULL) continue;
 
 		if (VarIdentical(i->result, var)) {
@@ -593,7 +591,7 @@ Bool PropagateConstraint(Loc * loc, Var * var, Type * restriction, InstrBlock * 
 	paths = 1;
 	looped = false;
 	undefined = 0;
-	MarkBlockAsUnprocessed(loc->proc->instr);
+	MarkBlockAsUnprocessed(FnVarCode(loc->proc));
 
 	return DistributeRestrictionBlk(loc, var, restriction, blk, instr);
 }
@@ -605,12 +603,12 @@ void VarConstraints(Loc * loc, Var * var, InferData * d)
 
 	// Index of array access must match the type specified in array
 	if (VarIsArrayElement(var)) {
-		idx = var->var;
+		idx = var->r;
 		if (idx->mode == INSTR_VAR || idx->mode == INSTR_INT) {
 			ti = FindType(loc, idx, d->final_pass);
 			// Type of the index is undefined, this is restriction
 			if (ti == NULL || ti->mode == INSTR_ANY) {
-				if (PropagateConstraint(loc, idx, var->adr->type->index, loc->blk, loc->i)) {
+				if (PropagateConstraint(loc, idx, var->l->type->index, loc->blk, loc->i)) {
 					d->modified = true;
 				}
 			}
@@ -766,15 +764,15 @@ void CheckIndex(Loc * loc, Var * var)
 	Var * idx, * idx_type;
 
 	if (VarIsArrayElement(var)) {
-		idx = var->var;
-		type = FindType(loc, var->var, true);
+		idx = var->r;
+		type = FindType(loc, idx, true);
 		if (type != NULL) {
-			idx_type = IndexType(var->adr->type);
+			idx_type = IndexType(var->l->type);
 			if (!IsSubset(type, idx_type)) {
 //				if (type->variant == TYPE_INT) {
 					ErrArg(CellMax(idx_type));
 //					ErrArg(CellMin(type));
-					ErrArg(var->adr);
+					ErrArg(var->l);
 					LogicWarningLoc("Index of array [A] out of bounds.\nThe index is [B].", loc);
 //				} else {
 //					ErrArg(var->adr);
@@ -857,7 +855,7 @@ Purpose:
 		// The type may be later used when looking for the type of some instruction argument.
 
 		if (i->result_index_type == NULL && VarIsArrayElement(i->result)) {
-			i->result_index_type = FindType(loc, i->result->var, d->final_pass);
+			i->result_index_type = FindType(loc, i->result->r, d->final_pass);
 			if (i->result_index_type != NULL) d->modified = true;
 		}
 
@@ -888,7 +886,7 @@ Purpose:
 
 		// Type was evaluated, test, whether there is not an error while assigning it
 		if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
-			if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == INSTR_ELEMENT && FlagOn(result->adr->submode, SUBMODE_USER_DEFINED))) {
+			if (FlagOn(result->submode, SUBMODE_USER_DEFINED) || (result->mode == INSTR_ELEMENT && FlagOn(result->l->submode, SUBMODE_USER_DEFINED))) {
 
 				// We allow assigning values to arrays, so we must allow this operation in type checker
 
@@ -1060,7 +1058,7 @@ Purpose:
 	loc2.proc = proc;
 
 	MarkLoops(proc);
-	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
+	for(loc.blk = FnVarCode(proc); loc.blk != NULL; loc.blk = loc.blk->next) {
 		header = NULL;
 		if (loc.blk->jump_type == JUMP_LOOP) {
 			header = loc.blk->cond_to;
@@ -1217,7 +1215,7 @@ Purpose:
 	Type * type;
 
 	FOR_EACH_LOCAL(proc, var)
-		if (var->mode == INSTR_VAR && FlagOn(var->submode, SUBMODE_USER_DEFINED) && var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
+		if (var->mode == INSTR_VAR && FlagOn(var->submode, SUBMODE_USER_DEFINED) && !VarIsTmp(var) && VarName(var) != NULL && FlagOff(var->submode, SUBMODE_SYSTEM) && FlagOff(var->submode, SUBMODE_USED_AS_TYPE)) {
 			type = var->type;
 			if (type != NULL && type->mode == INSTR_TYPE && type->variant == TYPE_LABEL) continue;
 			if (var->read == 0) {
@@ -1247,7 +1245,7 @@ void ReportAlwaysFalseAsserts(Var * proc)
 
 	loc.proc = proc;
 
-	for(loc.blk = proc->instr; loc.blk != NULL; loc.blk = loc.blk->next) {
+	for(loc.blk = FnVarCode(proc); loc.blk != NULL; loc.blk = loc.blk->next) {
 		assert_begin = false;
 		for(i = loc.blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_ASSERT_BEGIN) {
@@ -1276,8 +1274,8 @@ void ReportAlwaysFalseAsserts(Var * proc)
 void PrintProcHeader(UInt8  level, Var * proc)
 {
 	if (Verbose(proc)) {
-		if (proc->file != NULL) {
-			PrintHeader(level, "%s (%s:%d)", VarName(proc), proc->file->name, proc->line_no);
+		if (proc->line != NULL) {
+			PrintHeader(level, "%s (%s:%d)", VarName(proc), LineFileName(proc->line), LineNumber(proc->line));
 		} else {
 			PrintHeader(level, "%s", VarName(proc));
 		}
@@ -1304,7 +1302,7 @@ Purpose:
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 	PrintProcHeader(2, proc);
 
-	GenerateBasicBlocks(proc);
+//	GenerateBasicBlocks(proc);
 	TypeDeduce(proc);
 
 	data.modified = false;
@@ -1322,7 +1320,7 @@ Purpose:
 	ProcInstrEnum(proc, &InstrConstraints, &data);
 
 	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
+		PrintHeader(2, VarName(proc));
 		PrintProcFlags(proc, PrintInferredTypes);
 	}
 
@@ -1331,11 +1329,9 @@ Purpose:
 	// - Check array indexes (this may already lead to argument inference algorithm)
 
 	loc.proc = proc;
-	for(loc.blk = FnVarInstr(proc); loc.blk != NULL; loc.blk = loc.blk->next) {
+	for(loc.blk = FnVarCode(proc); loc.blk != NULL; loc.blk = loc.blk->next) {
 		for(n = 1, loc.i = loc.blk->first; loc.i != NULL; loc.i = loc.i->next, n++) {
 			i = loc.i;
-
-			if (i->op == INSTR_LINE) continue;
 
 			var = i->result;
 			if (var != NULL && !VarIsLabel(var) && !VarIsArrayElement(var) && !VarIsArray(var)) {

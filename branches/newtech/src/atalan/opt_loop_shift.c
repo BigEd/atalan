@@ -56,10 +56,10 @@ Purpose:
 
 	if (var != NULL) {
 		if (var->mode == INSTR_ELEMENT) {
-			var_idx = var->var;
+			var_idx = var->r;
 			if (IsEqual(var_idx, idx)) {
 				idx = NewOp(INSTR_SUB, idx, IntCell(shift));
-				*p_var = NewItem(var->adr, idx);
+				*p_var = NewItem(var->l, idx);
 				return true;
 			} else if (var_idx->mode == INSTR_SUB) {
 			} else if (var_idx->mode == INSTR_ADD) {
@@ -71,34 +71,12 @@ Purpose:
 
 Bool VarIsIdxElem(Var * var, Var * idx)
 {
-	return var != NULL && var->mode == INSTR_ELEMENT && var->var == idx;
-}
-
-Var * FindPtrReplace(InstrBlock * head, InstrBlock * loop_end, Var * idx)
-/*
-Purpose:
-	Test, that it is possible to use address instead of arr#idx in the loop.
-	This means:
-		- there is at least one use of arr#idx
-*/{
-	Var * arr = NULL;
-	InstrBlock * blk;
-	Instr * i;
-
-	for(blk = head; blk != loop_end; blk = blk->next) {
-		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
-			if (VarIsIdxElem(i->result, idx)) return i->result->adr;
-			if (VarIsIdxElem(i->arg1, idx)) return i->arg1->adr;
-			if (VarIsIdxElem(i->arg2, idx)) return i->arg2->adr;
-		}
-	}
-	return arr;
+	return var != NULL && var->mode == INSTR_ELEMENT && var->r == idx;
 }
 
 void VarReplaceArr(Var ** p_var, Var * arr, Var * idx, Var * ptr_ref)
 {
-	if (VarIsIdxElem(*p_var, idx) && (*p_var)->adr == arr) {
+	if (VarIsIdxElem(*p_var, idx) && (*p_var)->l == arr) {
 		*p_var = ptr_ref;
 	}
 }
@@ -113,7 +91,6 @@ void LoopPtr(InstrBlock * head, InstrBlock * loop_end, Var * arr, Var * idx, Var
 
 	for(blk = head; blk != loop_end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
 			VarReplaceArr(&i->result, arr, idx, ptr_deref);
 			VarReplaceArr(&i->arg1, arr, idx, ptr_deref);
 			VarReplaceArr(&i->arg2, arr, idx, ptr_deref);
@@ -136,7 +113,6 @@ Bool VarShiftIsPossible(InstrBlock * head, InstrBlock * loop_end, Var * var, Big
 
 	for(blk = head; blk != loop_end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
 			if (IsEqual(i->result, var) || IsEqual(i->arg1, var) || IsEqual(i->arg2, var)) {
 				if (IS_INSTR_BRANCH(i->op) && CellIsConst(i->arg2) || CellIsConst(i->arg1)) {
 					// this is comparison against constant, that's possible
@@ -195,7 +171,6 @@ void LoopShift(InstrBlock * head, InstrBlock * loop_end, Var * var, BigInt * shi
 	Instr * i;
 	for(blk = head; blk != loop_end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
-			if (i->op == INSTR_LINE) continue;
 			if (IS_INSTR_BRANCH(i->op)) {
 				if (IsEqual(i->arg1, var)) {
 					i->arg2 = VarAddNMod(i->arg2, shift, top);

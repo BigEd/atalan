@@ -27,7 +27,7 @@ void DataFlowAnalysis(Var * proc, AnalyzeBlockFn block_fn, void * info)
 	change = true;
 	while (change) {
 		change = false;
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 			change |= block_fn(proc, blk, info);
 		}
 	}
@@ -46,13 +46,13 @@ Purpose:
 	InstrBlock * blk;
 	Bool change;
 
-	blk = proc->instr;
+	blk = FnVarCode(proc);
 	MarkBlockAsUnprocessed(blk);
 
 	change = true;
 	while(change) {
 		change = false;
-		for(blk = proc->instr; blk != NULL; blk = blk->next) {
+		for(blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 			if (!blk->processed) {
 				// Process block, if all it's followers have been processed (or if it has none).
 				if (Processed(blk, to) && Processed(blk, cond_to)) {	//(blk->to == NULL || blk->to->processed) && (blk->cond_to == NULL || blk->cond_to->processed || blk->cond_to == blk)) {

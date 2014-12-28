@@ -13,9 +13,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 #include "../language.h"
 
-static BigInt LIM_MIN = INTLIMIT_MIN;
-static BigInt LIM_MAX = INTLIMIT_MAX;
-
 Var * CellMin(Var * v)
 {
 	Var * l, * r;
@@ -26,11 +23,11 @@ Var * CellMin(Var * v)
 		return v;
 
 	case INSTR_RANGE:
-		return v->adr;
+		return v->l;
 
 	case INSTR_VARIANT:
 	case INSTR_TUPLE:
-		l = CellMin(v->adr); r = CellMin(v->var);
+		l = CellMin(v->l); r = CellMin(v->r);
 		return IsLowerEq(l, r)?l:r;
 
 	case INSTR_VAR:
@@ -63,11 +60,11 @@ Var * CellMax(Var * v)
 		return v;
 
 	case INSTR_RANGE:
-		return v->var;
+		return v->r;
 
 	case INSTR_VARIANT:
 	case INSTR_TUPLE:
-		l = CellMax(v->adr); r = CellMax(v->var);
+		l = CellMax(v->l); r = CellMax(v->r);
 		return IsHigherEq(l, r)?l:r;
 		break;
 
@@ -107,8 +104,8 @@ Purpose:
 		*p_min = *p_max = var;
 		return true;
 	} else if (var->mode == INSTR_RANGE) {
-		*p_min = var->adr;
-		*p_max = var->var;
+		*p_min = var->l;
+		*p_max = var->r;
 		return true;
 	} else if (var->mode == INSTR_VAR) {
 		return CellRange(var->type, p_min, p_max);
@@ -138,8 +135,8 @@ void VarRange(Var * var, BigInt ** p_min, BigInt ** p_max)
 		*p_min = *p_max = IntFromCell(var);
 		if (*p_min == NULL) {
 			if (var->mode == INSTR_RANGE) {
-				*p_min = IntFromCell(var->adr);
-				*p_max = IntFromCell(var->var);
+				*p_min = IntFromCell(var->l);
+				*p_max = IntFromCell(var->r);
 			}
 		}
 	}

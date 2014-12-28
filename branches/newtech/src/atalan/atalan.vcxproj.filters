@@ -21,6 +21,15 @@
     <Filter Include="Source Files\support">
       <UniqueIdentifier>{e5f8b3a6-7c5b-421b-b29a-f1d576549add}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\cells\values">
+      <UniqueIdentifier>{3c3022af-a1d7-4812-b13e-d9233def4110}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cells\compound">
+      <UniqueIdentifier>{9bb637ef-9dca-4c2a-8ff9-4f7380a3da17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\cells\vars">
+      <UniqueIdentifier>{779fffef-00f5-4da1-9539-2672c4074829}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="emit.c">
@@ -59,24 +68,6 @@
     <ClCompile Include="parse_type.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cell_array.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_int.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_op.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_text.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_type.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_var.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
     <ClCompile Include="opt_blocks.c">
       <Filter>Source Files\optimizations</Filter>
     </ClCompile>
@@ -101,20 +92,11 @@
     <ClCompile Include="opt_values.c">
       <Filter>Source Files\optimizations</Filter>
     </ClCompile>
-    <ClCompile Include="cell_module.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
     <ClCompile Include="translate_type.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="infer_types.c">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_range.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_sequence.c">
-      <Filter>Source Files\cells</Filter>
     </ClCompile>
     <ClCompile Include="bigint.c">
       <Filter>Source Files\support</Filter>
@@ -143,23 +125,65 @@
     <ClCompile Include="operations\bool.c">
       <Filter>Source Files\operations</Filter>
     </ClCompile>
-    <ClCompile Include="cell_array_type.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_fn_type.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_fn.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_tuple.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
-    <ClCompile Include="cell_item.c">
-      <Filter>Source Files\cells</Filter>
-    </ClCompile>
     <ClCompile Include="simmilar_names.c">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="interpret.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_array_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_fn_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_item.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_memory.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_module.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_op.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_src_file.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_type.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_int.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_text.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_sequence.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_tuple.c">
+      <Filter>Source Files\cells\compound</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_range.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_fn.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_var.c">
+      <Filter>Source Files\cells\vars</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_array.c">
+      <Filter>Source Files\cells\vars</Filter>
+    </ClCompile>
+    <ClCompile Include="print.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_code.c">
+      <Filter>Source Files\cells\values</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -184,28 +208,52 @@
     <ClInclude Include="operations\bool.h">
       <Filter>Source Files\operations</Filter>
     </ClInclude>
-    <ClInclude Include="cell_array_type.h">
-      <Filter>Source Files\cells</Filter>
-    </ClInclude>
-    <ClInclude Include="cell_fn_type.h">
-      <Filter>Source Files\cells</Filter>
-    </ClInclude>
-    <ClInclude Include="cell_int.h">
-      <Filter>Source Files\cells</Filter>
-    </ClInclude>
-    <ClInclude Include="cell_fn.h">
-      <Filter>Source Files\cells</Filter>
-    </ClInclude>
-    <ClInclude Include="cell_tuple.h">
-      <Filter>Source Files\cells</Filter>
-    </ClInclude>
     <ClInclude Include="errors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="cell_range.h">
+    <ClInclude Include="lexer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_array_type.h">
       <Filter>Source Files\cells</Filter>
     </ClInclude>
-    <ClInclude Include="cell_item.h">
+    <ClInclude Include="cell\cell_fn_type.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_item.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_memory.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_src_file.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_int.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_sequence.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_tuple.h">
+      <Filter>Source Files\cells\compound</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_range.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_fn.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_var.h">
+      <Filter>Source Files\cells\vars</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_text.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_code.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_val.h">
       <Filter>Source Files\cells</Filter>
     </ClInclude>
   </ItemGroup>

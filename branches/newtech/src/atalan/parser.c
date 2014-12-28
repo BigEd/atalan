@@ -28,6 +28,8 @@ Syntax:
 // How many vars in a row are processed before error
 #define MAX_VARS_COMMA_SEPARATED 100
 
+extern InstrBlock * FIRST_BLK;
+
 Var *  STACK[STACK_LIMIT];
 UInt16 TOP;
 UInt16 VAR_LINE_POS;		// Position of top variable on stack. This is used when 
@@ -60,7 +62,7 @@ Var * RULE_FN_VAR = NULL;
 void ParseExpRoot();
 
 void ParseEnumItems(Type * type, UInt16 column_count);
-void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type);
+Bool ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type);
 UInt16 ParseSubExpression(Type * result_type);
 void ParseCall(Var * proc);
 void ParseMacro(Var * macro);
@@ -69,6 +71,8 @@ Var * ParseArrayElement(Var * arr);
 Var * ParseStructElement(Var * arr);
 Var * ParseFile();
 void ParseIf(Bool negated, Var * result);
+void ParseCommandBlock();
+Bool ParseRule();
 
 // This variable is set to true, when we parse expression inside condition.
 // It modifies parsing behavior concerning and, or and not.
@@ -76,9 +80,10 @@ void ParseIf(Bool negated, Var * result);
 //UInt8 G_CONDITION_EXP;
 
 #define STR_NO_EOL 1
-void ParseString(InstrBlock * i, UInt32 flags);
+Cell * ParseString(UInt32 flags);
 void ParseExpressionType(Type * result_type);
 void ParseExpression(Var * result);
+Cell * ParseExpression2();
 
 // All rules share one common scope, so they do not mix with normal scope of program.
 
@@ -222,7 +227,7 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 		spaces = Spaces();
 		if (var == NULL) {
 			var = NewVar(scope, NAME, NULL);			
-			CellSetLocation(var, SRC_FILE, LINE_NO, TOKEN_POS);
+//			CellSetLocation(var, SRC_FILE, LINE_NO, TOKEN_POS);
 			SetFlagOn(var->submode, SUBMODE_FRESH);
 			if (ParsingSystem()) SetFlagOn(var->submode, SUBMODE_SYSTEM);
 
@@ -235,7 +240,7 @@ Syntax:  var_name [ ~ "." ~ var_name  ]*
 	return var;
 }
 
-void ParseCommands();
+void ParseCommands(UInt8 blk_type);
 
 /*********************************************************************
 
@@ -244,6 +249,21 @@ void ParseCommands();
 *********************************************************************/
 //$E
 
+void InstrBinary2(InstrOp op, Cell * l, Cell * r)
+{
+	Var * result;
+
+	if (l == NULL) {
+		SyntaxError("Left operand missing");
+		return;
+	}
+
+	result = CellOp(op, l, r);
+	ASSERT(result != NULL);
+	BufPush(result);
+	return;
+
+}
 
 void InstrBinary(InstrOp op)
 /*
@@ -251,55 +271,26 @@ Purpose:
 	Generate binary instruction as part of expression.
 */
 {
-	Var * result, * arg1, * arg2;
+	Var * l, * r;
 
-	arg1 = STACK[TOP-2];
-	arg2 = STACK[TOP-1];
+	r = BufPop();
+	l = BufPop();
 
-	result = CellOp(op, arg1, arg2);
-	ASSERT(result != NULL);
-	TOP--;
-	STACK[TOP-1] = result;
-	return;
+	//l = STACK[TOP-2];
+	//r = STACK[TOP-1];
 
-	// Todo: we may use bigger of the two
-	if (RESULT_TYPE == NULL) {
-		RESULT_TYPE = STACK[TOP-2]->type;
-	}
-
-	// Try to evaluate the instruction as constant.
-	// If we succeed, no instruction is generated, we instead push the result on stack
-
-	result = InstrEvalConst(op, arg1, arg2);
-	if (result == NULL) {
-		if (EXP_INSTR) {
-			result = NewOp(op, arg1, arg2);
-		} else {
-			result = NewTempVar(NULL);
-			CellSetLocation(result, SRC_FILE, OP_LINE_NO, OP_LINE_POS);
-			GenPos(op, result, arg1, arg2);
-			OP_LINE_NO = 0;
-			OP_LINE_POS = 0;
-		}
-	}
-
-	TOP--;
-	STACK[TOP-1] = result;
+	InstrBinary2(op, l, r);
 }
 
-void InstrUnary(InstrOp op)
+void InstrUnary(InstrOp op, Cell * arg)
 /*
 Purpose:
 	Generate unary instruction in expression.
 */
 {
 	Var * result;
-	Var * top;
 
 	BigInt * n1, r;
-//	PrintStack();
-
-	top = STACK[TOP-1];
 
 	// Todo: we may use bigger of the two
 
@@ -311,16 +302,16 @@ Purpose:
 			RESULT_TYPE = TypeByte();
 			break;
 		default:
-			RESULT_TYPE = top->type;
+			RESULT_TYPE = arg->type;
 		}
 	}
 
-	n1 = IntFromCell(top);
+	n1 = IntFromCell(arg);
 
 	if (n1 != NULL) {
-		n1 = &STACK[TOP-1]->n;
+		//n1 = &STACK[TOP-1]->n;
 		switch(op) {
-		case INSTR_HI: 
+		case INSTR_HI:
 			IntSet(&r, n1);
 			IntDivN(&r, 256);
 			IntAndN(&r, 0xff);
@@ -342,13 +333,14 @@ Purpose:
 		goto done;
 	}
 unknown_unary:
-	result = NewTempVar(RESULT_TYPE);
-	Gen(op, result, top, NULL);
+//	result = NewTempVar(RESULT_TYPE);
+//	Gen(op, result, arg, NULL);
+	result = NewOp(op, arg, NULL);
 done:
-	STACK[TOP-1] = result;
+	BufPush(result);
 }
 
-UInt8 ParseArgNo2()
+UInt8 ParseArgNo()
 /*
 Parse %A - %Z and return it as number 1..26.
 Return 0, if there is not such argument.
@@ -357,8 +349,8 @@ Return 0, if there is not such argument.
 	UInt8 arg_no = 0;
 	UInt8 c;
 
-	if (NextIs(TOKEN_PERCENT)) {
-		if (TOK == TOKEN_ID) {
+	if (LexPrefix("%")) {
+		if (LexId(NAME)) {
 			c = NAME[0];
 			if (NAME[1] == 0 && c >= 'A' && c <='Z') {
 				arg_no = c - 'A' + 1;
@@ -367,13 +359,6 @@ Return 0, if there is not such argument.
 			}
 		}
 	}
-	return arg_no;
-}
-
-UInt8 ParseArgNo()
-{
-	UInt8 arg_no = ParseArgNo2();
-	if (arg_no > 0) NextToken();
 	return arg_no;
 }
 
@@ -395,7 +380,6 @@ Purpose:
 	Parse index after $, % or #.
 */
 {
-	UInt8 arg_no;
 	Var * item = NULL;
 
 	NextToken();
@@ -409,9 +393,7 @@ Purpose:
 		} else {
 			item = ParseSimpleVariable();
 		}
-	} else if (arg_no = ParseArgNo2()) {		//TODO: Use ParseArgNo
-		item = VarRuleArg(arg_no-1);
-		NextToken();
+	} else if (ParseArg(&item)) {
 	} else if (TOK == TOKEN_OPEN_P) {
 		item = ParseArrayIdx(arr->type);
 	} else {
@@ -462,19 +444,19 @@ Syntax:
 
 	// Try to find local variable in local scope of array variable.
 	
-	if (arr->mode == INSTR_ELEMENT /*&& arr->adr->mode == INSTR_SCOPE*/) {
+	if (arr->mode == INSTR_ELEMENT) {
 		NextIs(TOKEN_DOT);
 		if (TOK == TOKEN_ID) {
-			item = VarFind(arr->adr, NAME);
+			item = VarFind(arr->l, NAME);
 			if (item != NULL) {
 				if (item->type->variant == TYPE_ARRAY) {
-					idx = VarNewElement(item, arr->var);
+					idx = VarNewElement(item, arr->r);
 //					idx->type = idx->type->element;
 				} else {
 					SyntaxError("$Variable is not an array.");
 				}
 			} else {
-				if (arr->adr->mode == INSTR_SCOPE) {
+				if (arr->l->mode == INSTR_SCOPE) {
 					SyntaxError("$Scope does not contain member with name");
 				}
 			}
@@ -490,7 +472,7 @@ Syntax:
 			if (item == NULL) {
 				item = NewVar(arr, NAME, NULL);
 				SetFlagOn(item->submode, SUBMODE_FRESH);
-				CellSetLocation(item, SRC_FILE, LINE_NO, TOKEN_POS);
+//				CellSetLocation(item, SRC_FILE, LINE_NO, TOKEN_POS);
 				NextToken();
 				return item;
 //TODO: Check nonexistent element
@@ -770,7 +752,7 @@ done_idx:
 	return item;
 }
 
-
+/*
 
 Var * ParseStructExp()
 {
@@ -781,20 +763,8 @@ Var * ParseStructExp()
 
 	EnterBlock();			// TOKEN_EQUAL
 
-/*
-      TUPLE
-      /   \
-	 V1   TUPLE
-	      /   \	    
-		 V2  TUPLE
-		      /  \
-			 V3  V4
-
-*/
-
 	while (OK && !NextIs(TOKEN_BLOCK_END)) {
-		ParseDefExpression();
-		item = BufPop();
+		item = ParseDefExpression();
 		ifok {			
 			if (var == NULL) {
 				var = item;
@@ -811,34 +781,292 @@ Var * ParseStructExp()
 //			SyntaxError("Expected EOL");
 		}
 	};
+
+	return var;
+}
+*/
+Cell * ParseOperand();
+
+Var * ParseAdr()
+{
+	VarSubmode flags = 0;
+	Cell * adr = ANY;
+	Cell * var = NULL;
+	Bool defines;
+
+	if (NextIs(TOKEN_IN)) {
+		flags |= SUBMODE_IN;
+		if (NextIs(TOKEN_SEQUENCE)) {
+			flags |= SUBMODE_IN_SEQUENCE;
+		}
+	}
+	if (NextIs(TOKEN_OUT)) {
+		flags |= SUBMODE_OUT;
+	}
+
+	defines = EXP_DEFINES_VARS;
+	EXP_DEFINES_VARS = false;
+	adr = ParseOperand();
+	EXP_DEFINES_VARS = defines;
+	ifok {
+		if (flags != 0 || adr->mode == INSTR_INT) {
+			var = NewMemory(adr, NULL, 0, flags);
+		} else {
+			var = adr;
+		}
+	}
 	return var;
 }
 
-void ParseOperand()
+/*
+      TUPLE
+      /   \
+	 V1   TUPLE
+	      /   \	    
+		 V2  TUPLE
+		      /  \
+			 V3  V4
+
+*/
+
+static Var * ParseStruct()
 {
-	Var * var = NULL, * item = NULL, * proc, * arg;
+	Var * var, * type;
+	UInt16 blk_type;
+	ListBuilder list;
+
+	var = NULL;	
+	ListInit(&list);
+
+	blk_type = LexBlock();
+
+	while (OK && !LexBlockEnd(blk_type)) {
+
+		LexSpaces();
+		if (LexId(NAME2)) {
+			if (LexSymbol(":")) {
+				ParseExpression(NULL);
+			} else {
+				type = ANY;
+			}
+			var = NewVar(NO_SCOPE, NAME2, type);
+		} else {
+			if (blk_type == 1) goto done;
+			SyntaxError("Expected item name");
+		}
+
+		ListAppend(&list, var, INSTR_TUPLE);
+		if (LexBlockSeparator(blk_type)) {
+			
+		} else {
+			break;
+		}
+	}
+done:
+	if (list.list == NULL) list.list = VOID;
+	return list.list;
+}
+
+Bool ParseOpWord(UInt8 * text)
+{
+	Bool r;
+	LinePos line_pos;
+	LineNo line_no;
+
+	line_pos = TOKEN_POS;
+	line_no  = LINE_NO;
+	r = LexWord(text);
+	if (r) {
+		OP_LINE_NO  = line_no;
+		OP_LINE_POS = line_pos+1;
+	}
+	return r;
+}
+
+Bool ParseOpSymbol(UInt8 * text)
+{
+	Bool r;
+	LinePos line_pos;
+	LineNo line_no;
+
+	line_pos = TOKEN_POS;
+	line_no  = LINE_NO;
+	r = LexSymbol(text);
+	if (r) {
+		OP_LINE_NO  = line_no;
+		OP_LINE_POS = line_pos+1;
+	}
+	return r;
+}
+
+
+Bool LexArrow()
+{
+	return LexSymbol2("->", "\xE2\x86\x92");
+}
+
+Cell * ParseFn(Bool as_macro)
+{
+	Var * arg, * result = ANY;
+	Var * type;
+	Var * fn, * scope;
+
+	InstrBlock * body;
+
+	arg = ParseStruct();
+
+	if (LexArrow()) {
+		result = ParseDefExpression();
+		if (result == NULL) result = VOID;
+	}
+
+	type = NewFnType(arg, result);
+	
+	if (!as_macro) {
+		FnTypeFinalize(type);
+	}
+
+	fn = NewFn(type, NULL);
+	fn->scope = SCOPE;
+	scope = InScope(fn);
+	
+	body = GenBegin();
+	ParseCommandBlock();
+	GenEnd();
+	ReturnScope(scope);
+
+	iferr return NULL;
+
+	if (body->first != NULL) {
+		fn->instr = body;
+		type = fn;
+	}
+
+	if (as_macro) {
+		if (type != NULL) {
+			SetFlagOn(type->submode, SUBMODE_MACRO);
+		}
+	}
+
+	return type;
+}
+
+
+Cell * ParseOperand()
+{
+	Var * var = NULL, * item = NULL, * proc, * arg, * last, * parent_scope;
 	Bool ref = false;
 	Bool type_match;
-	UInt8 arg_no;
+	Bool variant_type;
 	Type * type;
 	UInt32 arg_cnt;
 	Var * en;
+	UInt8 arg_no;
+	UInt8 c;
 
 	type_match = false;
 
-	if (NextIs(TOKEN_OPEN_P)) {
-		if (NextIs(TOKEN_CLOSE_P)) {
-			BufPush(VOID);
+	// Indented block of declarations
+	if (LexIndent()) {
+
+		// Special support for CPU
+		if (SCOPE->mode == INSTR_VAR && VarIsNamed(SCOPE->scope, "processor")) {
+			CPU->SCOPE = SCOPE;
+		}
+
+		last = NULL;
+		variant_type = false;
+		while (OK && !LexOutdent()) {
+			
+			if (ParseOpSymbol("\xE2\x80\xA2")) {
+				variant_type = true;
+			}
+
+			item = ParseDefExpression();
+			ifok {			
+				if (item != NULL) {
+					if (var == NULL) {
+						var = item;
+					} else if (last == NULL) {
+						if (variant_type) {
+							last = NewVariant(var, item);
+						} else {
+							last = NewTuple(var, item);
+						}
+						var = last;
+					} else {
+						if (variant_type) {
+							item = NewVariant(last->r, item);
+						} else {
+							item = NewTuple(last->r, item);
+						}
+						last->r = item;
+						last = item;
+					}
+				}
+			}
+			if (LexEOL()) {
+				item = NULL;
+				//			SyntaxError("Expected EOL");
+			}
+		};
+	} else if (LexSymbol("[")) {
+		if (LexSymbol("]")) {
+			return VOID;
 		} else {
-			NewBlock(TOKEN_CLOSE_P, TOKEN_VOID);
 			EXP_PARENTHESES++;
-			ParseExpRoot();
-			if (!NextIs(TOKEN_BLOCK_END)) SyntaxError("missing closing ')'");			
+			LexSpaces();
+			if (LexId(NAME)) {
+				c = NAME[0];
+				if (NAME[1] == 0 && c >= 'A' && c <='Z') {
+					arg_no = c - 'A' + 1;
+				} else {
+					SyntaxError("Rule argument must be A..Z");
+				}
+				var = VarRuleArg(arg_no);		// TODO: Use real names...
+			}	
+			if (LexSymbol(":")) {
+				parent_scope = InScope(var);
+				ParseSubExpression(NULL);
+				type = BufPop();
+				ReturnScope(parent_scope);
+
+			} else {
+				type = ANY;
+			}
+			var = NewOp(INSTR_MATCH, var, type);
+			if (LexSymbol("]")) {
+
+			} else {
+				SyntaxError("missing closing ']'");
+			}
 			EXP_PARENTHESES--;
 		}
+	} else if (LexSymbol("(")) {
+		if (LexSymbol(")")) {
+			return VOID;
+		} else {
+			EXP_PARENTHESES++;
+			var = ParseExpression2();
+			if (LexSymbol(")")) {
+
+			} else {
+				SyntaxError("missing closing ')'");
+			}
+			EXP_PARENTHESES--;
+		}
+	} else if (LexWord("type")) {
+		item = ParseDefExpression();
+		var = TypeAlloc(TYPE_TYPE);
+		var->possible_values = item;
+	} else if (LexWord("fn")) {
+		var = ParseFn(false);
+	} else if (LexWord("macro")) {
+		var = ParseFn(true);
+
 	} else {
 		// file "slssl"
-		if (NextIs(TOKEN_FILE)) {
+		if (LexWord("file")) {
 			// This will be constant variable with temporary name, array of bytes
 			item = ParseFile();
 			ifok {
@@ -849,30 +1077,33 @@ void ParseOperand()
 				var = NewTempVar(type);
 				var->mode = INSTR_INT;
 
-				GenBegin();
+				var->instr = GenBegin();
 				Gen(INSTR_FILE, NULL, item, NULL);
-				var->instr = GenEnd();
+				GenEnd();
 			}
-		// @id denotes reference to variable
-		} else if (NextIs(TOKEN_ADR)) {
-			if (arg_no = ParseArgNo2()) {
-				var = VarRuleArg(arg_no-1);
-			} else {
+		// @id denotes reference to existing variable
+		} else if (LexSymbol("@")) {
+			if (ParseArg(&var)) {
+
+			} else if (LexId(NAME)) {
 				var = FindExpVar();
+				if (var != NULL) {
+					var = VarNewDeref(var);
+				} else {
+					SyntaxError("$unknown variable");
+				}
+			} else {
+				SyntaxError("expected variable name after @");
 			}
 
-			if (var != NULL) {
-				var = VarNewDeref(var);
-			} else {
-				SyntaxError("$unknown variable");
-			}
 			goto no_id;
-		} else if (arg_no = ParseArgNo2()) {
-			var = VarRuleArg(arg_no-1);
+		} else if (LexWord("rule")) {
+			ParseRule();
+		} else if (ParseArg(&var)) {
 			goto indices;
 
 		} else if (LexNum(&var)) {
-		} else if (TOK == TOKEN_ID) {
+		} else if (LexId(NAME)) {
 			var = FindExpVar();
 
 			//TODO: We should try to search for the scoped constant also in case the resulting type
@@ -921,7 +1152,7 @@ void ParseOperand()
 
 no_id:
 			// Procedure call
-			if (var->type->mode == INSTR_FN /*|| (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)*/) {
+			if (var->mode == INSTR_VAR && var->type->mode == INSTR_FN /*|| (var->type->variant == TYPE_ADR && var->type->element != NULL && var->type->element->variant == TYPE_PROC)*/) {
 				if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR) {
 					// this is address of procedure
 				} else {
@@ -929,7 +1160,7 @@ no_id:
 					NextToken();
 					if (IsMacro(var->type)) {
 						ParseMacro(proc);
-						return;
+						return proc;
 					} else {
 						ParseCall(proc);
 					}
@@ -954,21 +1185,21 @@ no_id:
 					if (arg_cnt == 0) {
 						SyntaxError("PROC does not return any result");
 					}
-					return;
+					return proc;
 				}
 			}
 indices:
-			item = ParseSpecialArrays(var);
-			if (item != NULL) {
-				var = item;
-			} else {
-				NextToken();
-			}
+//			item = ParseSpecialArrays(var);
+//			if (item != NULL) {
+//				var = item;
+//			} else {
+//				NextToken();
+//			}
 
 retry_indices:
 //			while(item = ParseSpecialArrays(var)) var = item;
 
-			if (NextNoSpaceIs(TOKEN_DOT)) {
+			if (LexSymbol(".")) {
 				//TODO: Why is this?
 				if (VarIsArg(var)) {
 					var = VarNewElement(var, TextCell(NAME));
@@ -979,7 +1210,7 @@ retry_indices:
 						NextToken();
 					}
 				} else {
-					if (TOK == TOKEN_ID) {
+					if (LexId(NAME)) {
 						item = VarFind(var, NAME);
 						// If the item is not part of variable scope, try to find it in type
 						if (item == NULL) {
@@ -1002,16 +1233,19 @@ retry_indices:
 							var = item;
 							goto indices;	//NextToken();
 						} else {
-							SyntaxError("$unknown item");
+							item = NewVar(var, NAME, ANY);
+							SetFlagOn(item->submode, SUBMODE_FRESH);
+							var = item;
+//							SyntaxError("$unknown item");
+							goto indices;
 						}
 					} else {
 						SyntaxError("variable name expected after .");
 					}
 				}
 
-			// Access to array may be like
-			// 
-			} else if (TOK_NO_SPACES == TOKEN_OPEN_P) {
+			// Access to array may be like ( )
+			} else if (LexSymbol("(")) {	//		TOK_NO_SPACES == TOKEN_OPEN_P) {
 				item = ParseArrayElement(var);
 				var = item;
 				goto retry_indices;
@@ -1020,26 +1254,26 @@ retry_indices:
 
 			if (EXP_DEFINES_VARS) {
 				var = ParseType3();
-				if (var != NULL) {
-					BufPush(var);
-					return;
-				}
 			}
-
-			var = ParseStructExp();
-			if (var != NULL) {
-				BufPush(var);
-				return;
-			}
-			return;
+			return var;
 		}
 
-		if (NextIs(TOKEN_COLON)) {
+		if (LexSymbol(":")) {
 			if (var != NULL) {
 				if (FlagOn(var->submode, SUBMODE_FRESH)) {
+
+					// Parse Address
+					if (LexSymbol("@")) {
+						var = ParseAdr();
+					}
+					parent_scope = InScope(var);
 					ParseExpression(NULL);
+					ReturnScope(parent_scope);
 					ifok {
-						var->type = BufPop();
+						if (TOP > 0) {
+							var->type = BufPop();
+							SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
+						}
 					}
 				} else {
 					// *** Type Assert (1)
@@ -1049,8 +1283,8 @@ retry_indices:
 					// Type Assert is implemented using special INSTR_MATCH operator.
 
 					if (PARSING_CONDITION) {
-						ParseExpression(NULL);
-						var = NewOp(INSTR_MATCH, var, BufPop());
+						type = ParseExpression2();
+						var = NewOp(INSTR_MATCH, var, type);
 					} else {
 						SyntaxError("Type redefinition is not allowed.");
 					}
@@ -1064,40 +1298,22 @@ retry_indices:
 		if (RESULT_TYPE != NULL && RESULT_TYPE->variant == TYPE_ADR && var->type->variant != TYPE_ADR) {
 			//TODO: Check type of the adress
 			//      Create temporary variable and generate letadr
-			BufPush(var);				
-			InstrUnary(INSTR_LET_ADR);
-			return;
+			InstrUnary(INSTR_LET_ADR, var);
+			var = BufPop();
 		}
-//done:
-		BufPush(var);
 	}
-}
-
-Bool NextOpIs(Token tok)
-{
-	Bool r;
-	LinePos line_pos;
-	LineNo line_no;
-
-	line_pos = TOKEN_POS;
-	line_no  = LINE_NO;
-	r = NextIs(tok);
-	if (r) {
-		OP_LINE_NO  = line_no;
-		OP_LINE_POS = line_pos+1;
-	}
-	return r;
+	return var;
 }
 
 Bool ParseRelOp(InstrOp * pOp)
 {
 	InstrOp op;
-	if      (NextIs(TOKEN_EQUAL))        op = INSTR_EQ;
-	else if (NextIs(TOKEN_NOT_EQUAL))    op = INSTR_NE; 
-	else if (NextIs(TOKEN_LOWER))        op = INSTR_LT; 
-	else if (NextIs(TOKEN_HIGHER))       op = INSTR_GT; 
-	else if (NextIs(TOKEN_LOWER_EQUAL))  op = INSTR_LE; 
-	else if (NextIs(TOKEN_HIGHER_EQUAL)) op = INSTR_GE; 
+	if      (LexSymbol("="))        op = INSTR_EQ;
+	else if (LexSymbol("<>") || LexSymbol("\xE2\x89\xA0"))    op = INSTR_NE; 
+	else if (LexSymbol("<=") || LexSymbol("\xE2\x89\xA4"))  op = INSTR_LE; 
+	else if (LexSymbol(">=") || LexSymbol("\xE2\x89\xA5")) op = INSTR_GE; 
+	else if (LexSymbol("<"))        op = INSTR_LT; 
+	else if (LexSymbol(">"))       op = INSTR_GT; 
 	else return false;
 	*pOp = op;
 	return true;
@@ -1118,8 +1334,7 @@ void ParseSequence()
 	ifok {
 		do {		
 			if (TOK == TOKEN_DOTDOT) break;
-			ParseOperand();
-			var[var_cnt] = BufPop();
+			var[var_cnt] = ParseOperand();
 			var_cnt++;
 			if (!NextIs(TOKEN_COMMA)) break;
 			iferr break;
@@ -1130,8 +1345,7 @@ void ParseSequence()
 				SyntaxError("Expected comma before sequence limit");
 				return;
 			}
-			ParseOperand();
-			limit = BufPop();
+			limit = ParseOperand();
 			ifok {
 				step = ONE;
 				step_op = INSTR_ADD;
@@ -1182,34 +1396,49 @@ void ParseSequence()
 	}
 }
 
+Cell * ParseItem()
+{
+	Var * var, * idx;
+	var = ParseOperand();
+	if (LexSymbol("#")) {
+		idx = ParseOperand();
+		var = NewItem(var, idx);
+	}
+	return var;
+}
+
 void ParseUnary()
 {
-	Var * var;
-	if (NextOpIs(TOKEN_MINUS)) {
+	Var * arg;
+	if (!LexPeekSymbol("->") && ParseOpSymbol("-")) {
 		// Unary minus before X is interpreted as 0 - X
-		BufPush(ZERO);
-		ParseOperand();
-		InstrBinary(INSTR_SUB);
-	} else if (NextOpIs(TOKEN_HI)) {
-		ParseOperand();
-		InstrUnary(INSTR_HI);
-	} else if (NextOpIs(TOKEN_LO)) {
-		ParseOperand();
-		InstrUnary(INSTR_LO);
-	}  else if (NextOpIs(TOKEN_BITNOT)) {
-		ParseOperand();
-		InstrUnary(INSTR_NOT);
-	} else if (NextOpIs(TOKEN_SQRT)) {
-		ParseOperand();
-		InstrUnary(INSTR_SQRT);
-	} else if (NextOpIs(TOKEN_PLUSMINUS)) {
-		ParseOperand();
-		var = BufPop();
-		BufPush(NewRange(Sub(ZERO, var), var));
-	} else if (NextIs(TOKEN_SEQUENCE)) {
+		arg = ParseItem();
+		InstrBinary2(INSTR_SUB, ZERO, arg);
+	} else if (ParseOpWord("hi")) {
+		arg = ParseItem();
+		InstrUnary(INSTR_HI, arg);
+	} else if (ParseOpWord("lo")) {
+		arg = ParseItem();
+		InstrUnary(INSTR_LO, arg);
+	}  else if (ParseOpWord("not")) {
+		arg = ParseItem();
+		InstrUnary(INSTR_NOT, arg);
+	} else if (ParseOpWord("sqrt") || ParseOpSymbol("\xE2\x88\x9A")) {
+		arg = ParseItem();
+		InstrUnary(INSTR_SQRT, arg);
+	} else if (ParseOpSymbol("\xB1")) {   //plusminus
+		arg = ParseItem();
+		BufPush(NewRange(Sub(ZERO, arg), arg));
+	} else if (ParseOpWord("sequence")) {
 		ParseSequence();
+	} else if (ParseOpWord("val")) {
+		arg = ParseItem();
+		InstrUnary(INSTR_VAL, arg);
 	} else {
-		ParseOperand();
+		arg = ParseItem();
+		if (arg != NULL) {
+			BufPush(arg);
+		}
 	}
 }
 
@@ -1217,7 +1446,7 @@ void ParsePower()
 {
 	ParseUnary();
 retry:
-	if (NextOpIs(TOKEN_POWER)) {
+	if (ParseOpSymbol("^")) {
 		ParseUnary();
 		ifok {
 			InstrBinary(INSTR_POWER);
@@ -1226,23 +1455,24 @@ retry:
 	}
 }
 
+
 void ParseMulDiv()
 {
 	ParsePower();
 retry:
-	if (NextOpIs(TOKEN_MUL) || NextOpIs(TOKEN_MUL2)) {
+	if (ParseOpSymbol("*") || ParseOpSymbol("\xD7")) {
 		ParsePower();
 		ifok {
 			InstrBinary(INSTR_MUL);
 		}
 		goto retry;
-	} else if (NextOpIs(TOKEN_DIV)) {
+	} else if (ParseOpSymbol("/")) {
 		ParsePower();
 		ifok {
 			InstrBinary(INSTR_DIV);
 		}
 		goto retry;
-	}  else if (NextOpIs(TOKEN_MOD)) {
+	}  else if (ParseOpWord("mod")) {
 		ParsePower();
 		ifok {
 			InstrBinary(INSTR_MOD);
@@ -1253,18 +1483,16 @@ retry:
 
 void ParsePlusMinus()
 {
-	LinePos pos;
 
 	ParseMulDiv();
 retry:
-	pos = TOKEN_POS;
-	if (NextOpIs(TOKEN_PLUS)) {
+	if (ParseOpSymbol("+")) {
 		ParseMulDiv();
 		ifok {
 			InstrBinary(INSTR_ADD);
 		}
 		goto retry;
-	} else if (NextOpIs(TOKEN_MINUS)) {
+	} else if (!LexPeekSymbol("->") && ParseOpSymbol("-")) {
 		ParseMulDiv();
 		ifok {
 			InstrBinary(INSTR_SUB);
@@ -1277,7 +1505,7 @@ void ParseBinaryAnd()
 {
 	ParsePlusMinus();
 retry:
-	if (NextOpIs(TOKEN_BITAND)) {
+	if (ParseOpWord("bitand")) {
 		ParsePlusMinus();
 		ifok {
 			InstrBinary(INSTR_AND);
@@ -1290,13 +1518,13 @@ void ParseBinaryOr()
 {
 	ParseBinaryAnd();
 retry:
-	if (NextOpIs(TOKEN_BITOR)) {
+	if (ParseOpWord("bitor")) {
 		ParseBinaryAnd();
 		ifok {
 			InstrBinary(INSTR_OR);
 		}
 		goto retry;
-	} else if (NextOpIs(TOKEN_BITXOR)) {
+	} else if (ParseOpWord("bitxor")) {
 		ParseBinaryAnd();
 		ifok {
 			InstrBinary(INSTR_XOR);
@@ -1309,12 +1537,12 @@ void ParseRangeOp()
 {
 	Var * var;
 	ParseBinaryOr();
-	if (NextOpIs(TOKEN_DOTDOT)) {
+	if (ParseOpSymbol("..")) {
 		ParseBinaryOr();
 		var = NewRange(STACK[TOP-2], STACK[TOP-1]);
 		TOP--;
 		STACK[TOP-1] = var;
-	} else if (NextOpIs(TOKEN_PLUSMINUS)) {
+	} else if (ParseOpSymbol("\xB1")) {
 		ParseBinaryOr();
 		var = NewRange(Sub(STACK[TOP-2], STACK[TOP-1]), Add(STACK[TOP-2], STACK[TOP-1]));
 		TOP--;
@@ -1328,7 +1556,7 @@ void ParseTuple()
 	ParseRangeOp();
 retry:
 	if (EXP_PARENTHESES > 0) {
-		if (NextOpIs(TOKEN_COMMA)) {
+		if (ParseOpSymbol(",")) {
 			ParseTuple();
 			ifok {
 				var = NewTuple(STACK[TOP-2], STACK[TOP-1]);
@@ -1355,7 +1583,7 @@ void ParseRel2()
 void ParseLogAnd()
 {
 	ParseRel2();
-	while(NextOpIs(TOKEN_AND)) {
+	while(ParseOpWord("and")) {
 		ParseRel2();
 		ifok {
 			InstrBinary(INSTR_AND);
@@ -1366,11 +1594,11 @@ void ParseLogAnd()
 void ParseLogOr()
 {
 	InstrOp op = INSTR_OR;
-	if (NextOpIs(TOKEN_EITHER)) {
+	if (ParseOpWord("either")) {
 		op = INSTR_XOR;
 	}
 	ParseLogAnd();
-	while(NextOpIs(TOKEN_OR)) {
+	while(ParseOpWord("or")) {
 		ParseLogAnd();
 		ifok {
 			InstrBinary(op);
@@ -1379,28 +1607,30 @@ void ParseLogOr()
 }
 
 void ParseExpIf()
+//  ("if"|"unless") cond
 {
 	Var * var;
 	Bool negated = false;
 
-	if (PARSING_CONDITION || ParsingRule()) {
-		ParseLogOr();
-		return;
-	}
+//	if (PARSING_CONDITION || ParsingRule()) {
+//		ParseLogOr();
+//		return;
+//	}
 	// IF <condition> THEN <true_val> ELSE <false_val>
 
-	if (NextIs(TOKEN_UNLESS)) {
+	if (LexWord("unless")) {
 		negated = true;
 	}
 
-	if (negated || NextIs(TOKEN_IF)) {
+	if (negated || LexWord("if")) {
 		// 1. create temporary variable
 		// 2. parse condition
 		var = NewTempVar(NULL);
 		ParseIf(negated, var);
 		BufPush(var);	
 	} else {
-		ParseTuple();
+		ParseLogOr();
+//		ParseTuple();
 	}
 }
 
@@ -1457,12 +1687,14 @@ void ParseExpressionType(Type * result_type)
 	ParseExpRoot();
 }
 
-void ParseDefExpression()
+Cell * ParseDefExpression()
 {
+	Cell * c;
 	Bool prev = EXP_DEFINES_VARS;
 	EXP_DEFINES_VARS = true;
-	ParseExpression(NULL);
+	c = ParseExpression2();
 	EXP_DEFINES_VARS = prev;
+	return c;
 }
 
 void ParseExpression(Var * result)
@@ -1479,8 +1711,8 @@ If result mode is INSTR_INT, no code is to be generated.
 		type = result->type;
 
 		if (result->mode == INSTR_ELEMENT) {
-			type = result->adr->type;
-			if (VarIsArray(result->adr)) {
+			type = result->l->type;
+			if (VarIsArray(result->l)) {
 				RESULT_TYPE = type->element;
 			} else if (type->variant == TYPE_ADR) {
 				type = type->element;		// adr of array(index) of type
@@ -1499,30 +1731,24 @@ If result mode is INSTR_INT, no code is to be generated.
 	}
 	TOP = 0;
 	EXP_TYPE.mode = INSTR_ANY;
-	EXP_PARENTHESES = 0;
+//	EXP_PARENTHESES = 0;
 	ParseExpRoot();
-
-	// When we parse very simple expressions, no instruction gets generated
-	// Calling code would typically call generating let instruction.
-	// We simulate it for the type here, so the type returned from expression
-	// parsing is correct.
-
-	ifok {
-		if (EXP_TYPE.mode == INSTR_ANY) {
-			if (TOP > 0) {
-//				TypeLet(&EXP_TYPE, STACK[0]);
-			}
-		}
-	}
 }
 
-Var * ParseCondExpression()
+Cell * ParseExpression2()
+{
+	Var * var;
+	ParseExpression(NULL);
+	var = BufPop();
+	return var;
+}
+
+Cell * ParseCondExpression()
 {
 	Var * var;
 	PARSING_CONDITION = true;
-	ParseExpression(NULL);
+	var = ParseExpression2();
 	PARSING_CONDITION = false;
-	var = BufPop();
 	return var;
 }
 
@@ -1542,7 +1768,7 @@ Purpose:
 	BigInt icnt;
 
 	// Set the parentheses mode on.
-	// This nesures, we are parse comma operator as part of expresion parsing.
+	// This ensures, we are parse comma operator as part of expression parsing.
 	EXP_PARENTHESES = 1;
 	ParseExpressionType(NULL);
 	ifok {
@@ -1557,8 +1783,8 @@ Purpose:
 			item = list;
 			do {
 				if (item->mode == INSTR_TUPLE) {
-					var = item->adr;
-					item = item->var;
+					var = item->l;
+					item = item->r;
 				} else {
 					var = item;
 					item = NULL;
@@ -1574,8 +1800,8 @@ Purpose:
 			item = list;
 			do {
 				if (item->mode == INSTR_TUPLE) {
-					var = item->adr;
-					item = item->var;
+					var = item->l;
+					item = item->r;
 				} else {
 					var = item;
 					item = NULL;
@@ -1602,48 +1828,11 @@ void ExpectExpression(Var * result)
 	}
 }
 
-//Bool  G_NOT;
-
-//void ParseCondition();
-
-GLOBAL Block   G_BLOCKS[100];
-GLOBAL Block * G_BLOCK;
-
-void BeginBlock(Token command)
-/*
-Purpose:
-	This method is called, when we start processing program flow control command.
-*/
-{
-	Block * blk;
-	Var * loop_label;
-	blk = G_BLOCK+1;
-	blk->command = command;
-
-	// Do not generate label for if, as we are not going to repeat the if, so it would be never jumped anyways
-	loop_label = NULL;
-	if (command != TOKEN_IF) {
-		loop_label = VarNewTmpLabel();
-	}
-
-	blk->body_label = NULL;
-	blk->loop_label = loop_label;
-	blk->t_label = NULL;
-	blk->f_label = NULL;
-	blk->not     = false;
-
-	G_BLOCK = blk;
-
-//	EnterBlock();		// instruct parser to parse block
-//	ParseCommands();
-//	NextIs(TOKEN_BLOCK_END);	// Block must end with TOKEN_END_BLOCK
-}
-
 void ParseBlock(Token stop, Var * result)
 {
 	EnterBlockWithStop(stop);		// To each command block there is appropriate lexer block
 	if (result == NULL) {
-		ParseCommands();
+		ParseCommands(0);
 	} else {
 		ParseExpression(result);
 		NextIs(TOKEN_EOL);
@@ -1654,15 +1843,12 @@ void ParseBlock(Token stop, Var * result)
 
 void ParseCommandBlock()
 {
-	ParseBlock(TOKEN_VOID, NULL);
+	UInt8 blk_type = LexBlock();
+	ParseCommands(blk_type);
+//	ParseBlock(TOKEN_VOID, NULL);
 }
 
-void EndBlock()
-{
-	G_BLOCK--;
-}
-
-void ParseLabel(Var ** p_label)
+Cell * ParseLabel()
 {
 // Labels are global in procedure
 
@@ -1670,28 +1856,37 @@ void ParseLabel(Var ** p_label)
 
 	if (ParseArg(&var)) {
 
-	} else {
-		ExpectToken(TOKEN_ID);
-		if (TOK == TOKEN_ID) {
-			var = FindOrAllocLabel(NAME);
-			NextToken();
-		}
+	} else if (LexId(NAME)) {
+		var = FindOrAllocLabel(NAME);
 	}
-	*p_label = var;
-	
+	return var;
 }
 
-void ParseGoto()
+Bool ParseGoto()
 {
 	Var * var;
-	ParseLabel(&var);
+	if (!LexWord("goto")) return false;
+	var = ParseLabel();
 	ifok {
 		if (!VarIsLabel(var) && !VarIsArg(var)) {
 			var = VarNewDeref(var);
 		}
 		GenGoto(var);
 	}
-	
+	return true;
+}
+
+Bool ParseCond()
+{
+	if (LexWord("if")) {
+		ParseIf(false, NULL);
+		return true;	
+	} else if (LexWord("unless")) {
+		ParseIf(true, NULL);
+		return true;
+	} else {
+		return false;
+	}
 }
 
 void ParseIf(Bool negated, Var * result)
@@ -1701,38 +1896,37 @@ Purpose:
 	"IF" cond ["THEN"] commands ["ELSE IF" <cond> ["THEN"] commands]* ["ELSE"] commands
 */
 {
-	Var * cond, * label, * neg, * else_label;
+	Cell * cond, * label, * after_code, * else_code;
 	
 	cond = ParseCondExpression();
 
 	iferr return;
-	if (NextIs(TOKEN_GOTO)) {
-		ParseLabel(&label);
+	if (LexWord("goto")) {
+		label = ParseLabel();
 		Gen(INSTR_IF, NULL, cond, label);
 		return;
 	}
 
-	if (!negated) neg = Not(cond);
-	label =  VarNewTmpLabel();
+	if (!negated) cond = Not(cond);
+	after_code =  NewCode();
 	// There may be optional THEN
-	NextIs(TOKEN_THEN);
+	LexWord("then");
 
-	Gen(INSTR_IF, NULL, neg, label);
-	ParseBlock(TOKEN_ELSE, NULL);
+	Gen(INSTR_IF, NULL, cond, after_code);
+	GenNewBlock();
+	ParseCommandBlock();
 
-	// "ELSE"
-	if (NextIs(TOKEN_ELSE)) {
-		else_label = VarNewTmpLabel();
-		GenGoto(else_label);
-		GenLabel(label);
-		ParseBlock(TOKEN_VOID, NULL);
-		GenLabel(else_label);
-	} else {
-		GenLabel(label);
+	if (LexWord("else")) {
+		else_code = after_code;
+		after_code = NewCode();
+		GenGoto(after_code);
+		GenBlock(else_code);
+		ParseCommandBlock();
 	}
+	GenBlock(after_code);
 }
 
-void ParseFor()
+Bool ParseFor()
 /*
 Syntax:
 	for: ["for" <var> [":" <range>][#<index>][in <array>] ["where" where_cond]] ["until" cond | "while" cond]
@@ -1747,35 +1941,41 @@ Syntax:
 	Var * where_cond;
 	InstrBlock * cond_code, * where_cond_code, * body;
 	LinePos idx_tok_pos;
-//	Int32 n, nmask;
-	LinePos token_pos;
+	LinePos token_pos, var_pos;
 	BigInt * n, nmask;
 	BigInt t1, t2, t3;
 	Bool higher;
 	Var * cond;
 	Var * body_label = VarNewTmpLabel();
 	Bool cond_first = false;
-
+	Bool is_loop = false;
+	Cell * f_label, * t_label, * loop_label;
+	Bool negative;
+	SrcLine * idx_line;
 
 	var = NULL; idx = NULL; min = NULL; max = NULL; cond = NULL; where_cond = NULL; step = NULL; arr = NULL;
 	where_t_label = NULL;
+	t_label = f_label = loop_label = NULL;
+	negative = false;
 
 	*idx_name = 0;
 	EnterSubscope();
 
 	// Parse "for" part.
 	// We may also call this function when the loop begins just with "while" or "until".
-	if (NextIs(TOKEN_FOR)) {
-		GenLine();
-		if (NextIs(TOKEN_HASH)) goto indexed;
-
+	if (LexWord("for")) {
+		is_loop = true;
+		if (LexSymbol("#")) goto indexed;	// TODO: we may not need this
+		
+		var_pos = LINE_POS;
 		if (LexId(name)) {
-
-			if (NextIs(TOKEN_HASH)) {
+			idx_line = SRC_LINE;
+			if (LexSymbol("#")) {
 indexed:
-				idx_tok_pos = TOKEN_POS;
+				idx_tok_pos = LINE_POS;
 				if (LexId(idx_name)) {
-					if (NextIs(TOKEN_IN)) {
+					idx_line = SRC_LINE;
+					if (LexWord("in")) {
 						goto parse_in;
 					} else {
 						SyntaxError("There should be in after index variable");
@@ -1785,25 +1985,20 @@ indexed:
 				}
 			}
 
-			token_pos = TOKEN_POS;
+			token_pos = LINE_POS;
 			// for i ":" <range>
-			if (NextIs(TOKEN_COLON)) {
+			if (LexSymbol(":")) {
 
 				var = NewVar(NULL, name, NULL);
-				CellSetLocation(var, SRC_FILE, LINE_NO, token_pos);
+				CellSetLocation(var, SRC_LINE, var_pos);
 
-				ParseExpression(NULL);
-//				ParseRange(&min, &max);
+				type = ParseExpression2();
 				ifok {
-					type = BufPop();
 					TypeLimits(type, &min, &max);
-//					type = NewRange(min, max);
 					ifok {
-
 						if (CellIsConst(min) && CellIsConst(max)) {
 							SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 						}
-//						var->type = type;
 					}
 				}
 				idx = var;
@@ -1811,7 +2006,7 @@ indexed:
 			// For in, we create two local variables.
 			// One is local (unnamed) index variable that we use to iterate.
 			// The second is named as user specified and represents arr#index.
-			} else if (NextIs(TOKEN_IN)) {
+			} else if (LexWord("in")) {
 parse_in:
 				arr = ParseArray();
 				ifok {
@@ -1821,15 +2016,15 @@ parse_in:
 
 						if (*idx_name != 0) {
 							idx = NewVar(NULL, idx_name, type);
-							CellSetLocation(idx, SRC_FILE, LINE_NO, idx_tok_pos);
+							CellSetLocation(idx, SRC_LINE, idx_tok_pos);
 							SetFlagOn(idx->submode, SUBMODE_USER_DEFINED);
 						} else {
 							idx = NewTempVar(type);						
 						}
 						var = NewVar(NULL, name, ItemType(arr->type));
-						var->adr = NewItem(arr, idx);
+						VarSetAdr(var, NewItem(arr, idx));
 
-						CellSetLocation(var, SRC_FILE, LINE_NO, token_pos);
+						CellSetLocation(var, SRC_LINE, var_pos);
 						SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
 
@@ -1846,17 +2041,17 @@ parse_in:
 		} else {
 			SyntaxError("Expected loop variable name");
 		}
-	}
+	} // "for"
 
-	iferr return;
+	iferr return false;
 
-	BeginBlock(TOKEN_FOR);
+//	BeginBlock(TOKEN_FOR);
 	
 	// STEP can be only used if we have the loop variable defined
 	// Default step is 1.
 
 	if (var != NULL) {
-		if (NextIs(TOKEN_STEP)) {
+		if (LexWord("step")) {
 			ParseExpression(max);
 			step = STACK[0];
 		} else {
@@ -1866,48 +2061,50 @@ parse_in:
 
 	// WHERE can be used only if there was FOR
 
-	if (NextIs(TOKEN_WHERE)) {
+	if (LexWord("where")) {
 		if (var != NULL) {
-			G_BLOCK->f_label = G_BLOCK->loop_label;
-			GenBegin();
+			f_label = loop_label;
+			where_cond_code = GenBegin();
 			where_cond = ParseCondExpression();
-//			ParseCondition();
-			if (G_BLOCK->t_label != NULL) {
-				GenLabel(G_BLOCK->t_label);
-				G_BLOCK->t_label = NULL;
+			if (t_label != NULL) {
+				GenLabel(t_label);
+				t_label = NULL;
 			}
-
-			where_cond_code = GenEnd();
-			G_BLOCK->f_label = NULL;
+			GenEnd();
+			f_label = NULL;
 			iferr goto done;
 		} else {
 			SyntaxError("Where can only be used together with loop variable");
 		}
 	}
 
-	if (NextIs(TOKEN_UNTIL)) {
-		G_BLOCK->not = true;
+	if (LexWord("until")) {
+		negative = true;
 		goto cond_parse;
-	} else if (NextIs(TOKEN_WHILE)) {
+	} else if (LexWord("while")) {
 cond_parse:
 
-		GenBegin();
-		GenLine();
+		cond_code = GenBegin();
 		cond = ParseCondExpression();
-		if (!G_BLOCK->not) cond = Not(cond);
+		if (!negative) cond = Not(cond);
 
-		if (G_BLOCK->f_label == NULL) {
-			G_BLOCK->f_label = VarNewTmpLabel();
+		if (f_label == NULL) {
+			f_label = VarNewTmpLabel();
 		}
 
-		GenInternal(INSTR_IF, NULL, cond, G_BLOCK->f_label);
+		GenInternal(INSTR_IF, NULL, cond, f_label);
 
 //		if (G_BLOCK->t_label != NULL) {
 //			GenLabel(G_BLOCK->t_label);
 //		}
-		cond_code = GenEnd();
+		GenEnd();
 
 		iferr goto done;
+	} else {
+		if (var == NULL) {
+			ExitSubscope();
+			return false;
+		}
 	}
 
 	/*
@@ -1944,19 +2141,18 @@ cond_parse:
 	f_label@
 	*/
 
-	// Parse body
-
-	GenBegin();
-	GenLine();
-	ParseCommandBlock();
-	body = GenEnd();
-	iferr return;
-
 	// Variable initialization
 
-	if (var != NULL) {
-		GenInternal(INSTR_LET, idx, min, NULL);
+	if (idx != NULL) {
+		GenLet(idx, min);
 	}
+
+	// Parse body of the loop
+
+	body = GenNewBlock();
+	ParseCommandBlock();
+//	GenEnd();
+	iferr return true;
 
 	if (cond != NULL || (min != NULL && !CellIsIntConst(min)) || (max != NULL && !CellIsIntConst(max))) {
 		cond_first = true;
@@ -1964,13 +2160,13 @@ cond_parse:
 
 	// Loop with condition, but without variable
 	if (cond_first) {
-		GenGoto(G_BLOCK->loop_label);
+		GenGoto(loop_label);
 	}
 
 	// Body consists of where_cond & body
 
-	G_BLOCK->body_label = body_label;
-	GenLabel(G_BLOCK->body_label);
+//	G_BLOCK->body_label = body_label;
+//	GenLabel(body_label);
 
 	if (cond != NULL && var != NULL) {
 		GenBlock(cond_code);
@@ -1980,27 +2176,27 @@ cond_parse:
 		GenBlock(where_cond_code);
 	}
 
-	GenBlock(body);
+//	GenBlock(body);
 
 	if (where_cond != NULL) {
-		GenLabel(G_BLOCK->loop_label);
+		GenLabel(loop_label);
 	}
 
 	// Insert condition (we do not have index variable)
 	if (cond != NULL && var == NULL) {
 		if (where_cond == NULL) {
-			GenLabel(G_BLOCK->loop_label);
+			GenLabel(loop_label);
 		}
 		GenBlock(cond_code);
 //		if (var == NULL) {
-			GenGoto(G_BLOCK->body_label);
+			GenGoto(body_label);
 //		}
 	}
 
-	if (var != NULL) {
+	if (idx != NULL) {
 
 		// Add the step to variable
-		GenInternal(INSTR_LET, idx, NewOp(INSTR_ADD, idx, step), NULL);
+		GenFromLine(idx_line, INSTR_LET, idx, NewOp(INSTR_ADD, idx, step), NULL);
 
 		// 1. If max equals to byte limit (0xff, 0xffff, 0xffffff, ...), only overflow test is enough
 		//    We must constant adding by one, as that would be translated to increment, which is not guaranteed
@@ -2016,7 +2212,7 @@ cond_parse:
 			}
 
 			if (IntEq(n, &nmask) && (step->mode != INSTR_INT || IntHigherN(&step->n, 255))) {
-				GenInternal(INSTR_NOVERFLOW, G_BLOCK->body_label, NULL, NULL);
+				GenInternal(INSTR_NOVERFLOW, body_label, NULL, NULL);
 				goto var_done;
 			} else if (step->mode == INSTR_INT) {
 
@@ -2040,7 +2236,8 @@ cond_parse:
 					max = IntCell(&t3);
 					IntFree(&t3);
 					idx->type = NewRange(min, max);
-					GenInternal(INSTR_IF, NULL, NewOp(INSTR_NE, idx, max), G_BLOCK->body_label);	//TODO: Overflow
+					GenFromLine(idx_line, INSTR_IF, NULL, NewOp(INSTR_NE, idx, max), body);	//TODO: Overflow
+					GenNewBlock();
 					goto var_done;
 				// 3. max & step are constant, we may detect, that overflow will not occur
 				} else {
@@ -2053,33 +2250,34 @@ cond_parse:
 		}
 
 		// Alloc f_label if necessary
-		if (G_BLOCK->f_label == NULL) {
-			G_BLOCK->f_label = VarNewTmpLabel();
+		if (f_label == NULL) {
+			f_label = VarNewTmpLabel();
 		}
 
 		// If step is 1, it is not necessary to test the overflow
 		if (!IsEqual(step, ONE)) {
-			GenInternal(INSTR_OVERFLOW, G_BLOCK->f_label, NULL, NULL);
+			GenInternal(INSTR_OVERFLOW, f_label, NULL, NULL);
 		}
 no_overflow:
 
 		if (cond_first) {
-			GenLabel(G_BLOCK->loop_label);
+			GenLabel(loop_label);
 		}
 		// We use > comparison as in the case step is <> 1, it may step over the limit without touching it.
 		// Also user may modify the index variable (although this should be probably discouraged when for is used).
 
-		GenInternal(INSTR_IF, NULL, NewOp(INSTR_GE, max, idx), G_BLOCK->body_label);	//TODO: Overflow
+		GenInternal(INSTR_IF, NULL, NewOp(INSTR_GE, max, idx), body);
 //		GenInternal(INSTR_GE, G_BLOCK->body_label, max, idx);
 	}
 var_done:
 
-	if (G_BLOCK->f_label != NULL) {
-		GenLabel(G_BLOCK->f_label);
+	if (f_label != NULL) {
+		GenLabel(f_label);
 	}
 done:
-	EndBlock();
+//	PrintCode(FIRST_BLK, 0);
 	ExitSubscope();
+	return true;
 }
 
 Var * ParseFile()
@@ -2280,18 +2478,18 @@ void ArrParserInit(ArrParser * apar, Var * arr)
 	apar->elem_type = arr->type->element;
 
 	if (apar->elem_type->variant == TYPE_ARRAY) {
-//		index_lo_i = InstrBlockAlloc();
-//		index_hi_i = InstrBlockAlloc();
+//		index_lo_i = NewCode();
+//		index_hi_i = NewCode();
 
 //		apar->sizes = VarAllocScope(arr, INSTR_ARRAY, "size");
 
-		arr_const_type = NewArray(NULL, InstrBlockAlloc());
+		arr_const_type = NewArray(NULL, NewCode());
 		apar->sizes = NewVar(arr, "size", arr_const_type);
 
-		arr_const_type = NewArray(TypeByte(), InstrBlockAlloc());
+		arr_const_type = NewArray(TypeByte(), NewCode());
 		apar->index_lo = NewVar(arr, "index_lo", arr_const_type);
 
-		arr_const_type = NewArray(TypeByte(), InstrBlockAlloc());
+		arr_const_type = NewArray(TypeByte(), NewCode());
 		apar->index_hi = NewVar(arr, "index_hi", arr_const_type);
 
 //		apar->sizes->instr = sizes_i;
@@ -2302,7 +2500,7 @@ void ArrParserInit(ArrParser * apar, Var * arr)
 //		apar->index_hi = VarAllocScope(arr, INSTR_ARRAY, "index_hi");
 //		apar->index_hi->instr = index_hi_i;
 	} else {
-		arr->instr = InstrBlockAlloc();
+		arr->instr = NewCode();
 	}
 
 	apar->min_size = 0xffffff;
@@ -2392,10 +2590,10 @@ Var * ParseArrayC(Type * type)
 
 
 	} else {
-		GenBegin();
+		var->instr = GenBegin();
 		// Make the array parser generate more specific type
 		size = ParseArrayConst(type, false, &type->element);
-		var->instr = GenEnd();
+		GenEnd();
 	}
 
 	if (flexible) {
@@ -2544,7 +2742,7 @@ Bool VarIsImplemented(Var * var)
 	//TODO: We do not want to use array size
 //	ArraySize(var->type, &i.arg1, &i.arg2);
 //	rule = InstrRule2(INSTR_ALLOC, var, i.arg1, i.arg2);
-	rule = InstrRule2(INSTR_ALLOC, var, NULL, NULL);
+	rule = InstrRule2(INSTR_ALLOC, NULL, var, NULL);
 	if (rule != NULL) return true;
 
 	rule = TranslateRule(INSTR_DECL, NULL, var, NULL);
@@ -2556,12 +2754,8 @@ Bool VarIsImplemented(Var * var)
 	return false;
 }
 
-
-Var * ParseAdr()
 /*
-Purpose:
-	Parse address specified after the @ symbol in variable definition.
-*/
+Var * ParseAdr()
 {
 	UInt16 cnt;
 
@@ -2629,7 +2823,7 @@ dot:
 	}
 	return adr;
 }
-
+*/
 void InsertRegisterArgumentSpill(Var * proc, Var * args, VarSubmode submode, Instr * i)
 {
 	Var * en, * arg, * tmp;
@@ -2640,9 +2834,9 @@ void InsertRegisterArgumentSpill(Var * proc, Var * args, VarSubmode submode, Ins
 			ProcReplaceVar(proc, arg, tmp);
 
 			if (submode == SUBMODE_ARG_IN) {
-				InstrInsert(proc->instr, i, INSTR_LET, tmp, arg, NULL);
+				InstrInsert(FnVarCode(proc), i, INSTR_LET, tmp, arg, NULL);
 			} else {
-				InstrInsert(proc->instr, i, INSTR_LET, arg, tmp, NULL);
+				InstrInsert(FnVarCode(proc), i, INSTR_LET, arg, tmp, NULL);
 			}
 		}
 	NEXT_ITEM(en, arg)
@@ -2662,7 +2856,6 @@ Purpose:
 		for(i = blk->first; i != NULL; i = i->next) {
 			if (i->op == INSTR_CALL) {
 				if (FlagOn(var->submode, SUBMODE_OUT)) return true;
-			} else if (i->op == INSTR_LINE) {
 			} else {
 				var = i->result;
 				if (var != NULL) {
@@ -2678,6 +2871,7 @@ void ParseMacroBody(Var * proc)
 {
 	Var * lbl;
 	Var * scope;
+	ASSERT(proc->mode == INSTR_FN_TYPE);
 
 	if (proc->instr != NULL) {
 		SyntaxError("Macro has already been defined");
@@ -2685,7 +2879,7 @@ void ParseMacroBody(Var * proc)
 	}
 
 	scope = InScope(proc);
-	GenBegin();
+	proc->instr = GenBegin();
 	ParseCommandBlock();
 
 	// If there is a return statement in procedure, special label "_exit" is defined.
@@ -2693,7 +2887,7 @@ void ParseMacroBody(Var * proc)
 	lbl = VarFind(SCOPE, "_exit");
 	GenLabel(lbl);
 
-	proc->instr = GenEnd();
+	GenEnd();
 	if (CodeHasSideEffects(proc, proc->instr)) {
 		SetFlagOn(proc->submode, SUBMODE_OUT);
 	}
@@ -2746,7 +2940,7 @@ Purpose:
 
 	FOR_EACH_LOCAL(structure, elmt)
 		subtype = TypeArray(idx, elmt->type);
-		sub = NewVar(var, elmt->name, subtype);
+		sub = NewVar(var, VarName(elmt), subtype);
 
 		if (!VarIsImplemented(sub)) {
 			ErrArg(structure);
@@ -2764,18 +2958,44 @@ void ParseElements(Var * var)
 		if (NextIs(TOKEN_EOL)) continue;
 		ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL);
 		while(NextIs(TOKEN_EOL));
+		iferr break;
 	}
 
 }
 
 #define LOCAL_SCOPE 0
 #define GLOBAL_SCOPE 1
+#define NORMAL_SCOPE 2
 
-void ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type)
+
+Bool ParseAssign2()
+{
+	Cell * var;
+	var = ParseDefExpression();
+	ifok {
+		if (var != NULL) {
+			if (var->mode == INSTR_EQ) {
+				GenLet(var->l, var->r);
+			}
+		}
+
+		return true;
+	}
+	return false;
+}
+
+Bool ParseAssign(InstrOp mode, VarSubmode submode, Type * to_type)
 /*
 Purpose:
 	Parse variable assignment/declaration.
 	Lexer contains name of the first defined variable.
+
+	When declaring a variable, we may specify the scope:
+
+	@name   variable in outer (not function) scope
+	name    variable in function scope
+	.name   variable in block scope
+
 */
 {
 	Bool is_assign, existed;
@@ -2784,32 +3004,21 @@ Purpose:
 	Var * vars[MAX_VARS_COMMA_SEPARATED];
 	Type * type;
 	UInt16 bookmark;
-	Bool global_scope;
-	UInt8 arg_no;
+	UInt8 scope_type;
 	BigInt ib;
 
 	type = ANY;
 	is_assign = false;
 	existed   = true;
-	global_scope = false;
 	scope = NULL;
 
 	// Force use of current scope
 	// For example .X will try to find X in current scope, not in any other parent scope
-	if (!Spaces()) {
-		if (NextIs(TOKEN_DOT)) {
-			scope = SCOPE;
 
-		// It is necessary to use @x to address global variable.
-		} else if (NextIs(TOKEN_ADR)) {
-			global_scope = true;
-		}
-	}
-
-	if (TOK != TOKEN_ID && TOK != TOKEN_PERCENT) {
-		SyntaxError("expected identifier");
-		return;
-	}
+//	if (TOK != TOKEN_ID && TOK != TOKEN_PERCENT) {
+//		SyntaxError("expected identifier");
+//		return true;
+//	}
 
 	bookmark = SetBookmark();
 
@@ -2817,21 +3026,45 @@ Purpose:
 	cnt = 0;
 	do {
 retry:
-		if ((arg_no = ParseArgNo2()) != 0) {
-			var = VarRuleArg(arg_no-1);
-		} else if (!ParseArg(&var)) {
-			// Either find an existing variable or create new one
-			if (to_type == NULL) {
-				if (scope == NULL) {
-					if (EXP_EXTRA_SCOPE != NULL) {
-						var = VarFind(EXP_EXTRA_SCOPE, NAME);
-					} 
-					if (var == NULL) {					
-						var = VarFind2(NAME);
+		
+		if (!ParseArg(&var)) {
+
+			if (LexPrefix(".")) {
+				scope_type = LOCAL_SCOPE;
+			} else if (LexPrefix("@")) {
+				scope_type = GLOBAL_SCOPE;
+			} else {
+				scope_type = NORMAL_SCOPE;
+			}
+
+			if (LexId(NAME)) {
+				// Either find an existing variable or create new one
+				if (to_type == NULL) {
+					if (scope_type == LOCAL_SCOPE) {
+						var = VarFind(SCOPE, NAME);
+					} else {
+						if (EXP_EXTRA_SCOPE != NULL) {
+							var = VarFind(EXP_EXTRA_SCOPE, NAME);
+						} 
+						scope = SCOPE;
+						if (scope_type == GLOBAL_SCOPE) {
+							scope = VarProcScope();
+							if (scope != NULL) {
+								scope = scope->scope;
+							}
+						}
+						if (var == NULL) {					
+							var = VarFind2(NAME);
+						}
 					}
-				} else {
-					var = VarFind(scope, NAME);
 				}
+			} else {
+				if (scope_type == LOCAL_SCOPE) {
+					SyntaxError("Expected name after .");
+				} else if (scope_type == GLOBAL_SCOPE) {
+					SyntaxError("Expected name after @");
+				}
+				break;
 			}
 		}
 
@@ -2843,7 +3076,7 @@ retry:
 			// Real mode is assigned when the variable type is parsed.
 
 			var = NewVar(scope, NAME, NULL);			
-			CellSetLocation(var, SRC_FILE, LINE_NO, TOKEN_POS);
+//			CellSetLocation(var, SRC_FILE, LINE_NO, TOKEN_POS);
 			if (ParsingSystem()) submode |= SUBMODE_SYSTEM;
 			existed = false;
 			var->submode = submode;
@@ -2895,6 +3128,8 @@ no_dot:
 				NextToken();
 				is_assign = true;
 			} else {
+				SyntaxError("Unexpected text after label");
+/*
 				adr = ParseAdr();
 				is_assign = true;
 				if (var->adr == NULL) {
@@ -2902,6 +3137,7 @@ no_dot:
 				} else {
 					SyntaxError("Address of variable [A] has been already defined.");
 				}
+*/
 			}
 		}
 parsed:
@@ -2913,10 +3149,17 @@ parsed:
 		}
 	} while (NextIs(TOKEN_COMMA));
 
-	// This is definitely a type!!!
-	// Assignment does not allow type specified.
-
+	
 	if (NextIs(TOKEN_COLON)) {
+
+		// This is definitely a type!!!
+		// Assignment does not allow type specified.
+		is_assign = true;
+
+		adr = NULL;
+		if (NextIs(TOKEN_ADR)) {
+			adr = ParseAdr();
+		}
 
 		for(j = 0; j<cnt; j++) {
 			var = vars[j];
@@ -2924,25 +3167,37 @@ parsed:
 			//TODO: We may need to copy more than one level of variable
 
 			if (FlagOff(var->submode, SUBMODE_FRESH) && var->scope != SCOPE) {
-				var = NewVar(scope, var->name, NULL);
+				var = NewVar(scope, VarName(var), NULL);
 				var->mode = INSTR_VOID;
-				var->line_no = LINE_NO;
+//				var->line_no = LINE_NO;
 	//			var->line_pos = TOKEN_POS;
-				var->file    = SRC_FILE;
+//				var->file    = SRC_FILE;
 				if (ParsingSystem()) submode |= SUBMODE_SYSTEM;
 				existed = false;
 				var->submode = submode;
 				vars[j] = var;
 			}
-		}
 
-		is_assign = true;
+			if (adr != NULL) {
+				if (VarAdr(var) != NULL) {
+					SyntaxError("Address of variable [A] has been already defined.");
+				} else {
+					VarSetAdr(var, adr);
+				}
+			}
+		}
 
 		// Parsing may create new constants, arguments etc. so we must enter subscope, to assign the
 		// type elements to this variable
 		scope = InScope(vars[0]);
 		bookmark = SetBookmark();
 		type = ParseType2(mode);
+		if (type == NULL) {
+			if (adr != NULL && adr->mode != INSTR_MEMORY) {
+				type = CellType(adr);
+			}
+		}
+		if (type == NULL) type = ANY;
 
 		ifok {
 			// CPU is defined as object with CPU type
@@ -2950,8 +3205,8 @@ parsed:
 				CPU->SCOPE = var;
 			}
 
-			if (type == NULL || type->mode != INSTR_TYPE) {
-				if (type == NULL || (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN)) {
+			if (type != NULL && type->mode != INSTR_TYPE) {
+				if (type->mode != INSTR_FN_TYPE && type->mode != INSTR_FN) {
 					ParseElements(vars[0]);
 				}
 			}
@@ -2961,7 +3216,7 @@ parsed:
 	}
 
 	// Set the parsed type to all new variables (we do this, even if a type was not parsed)
-	if (!TOK) return;
+	if (!TOK) return true;
 
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
@@ -2977,50 +3232,58 @@ parsed:
 			var->mode = mode;
 			SetFlagOff(var->submode, SUBMODE_FRESH);
 			if (type->mode != INSTR_ANY) {
-				var->type = type;
-				SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
 
-				// Definition of named constant assigned to type (name:xxx = 34)
-				if (var->mode == INSTR_NAME && FlagOff(submode, SUBMODE_PARAM)) {
-					if (var->type->mode != INSTR_ANY) {
-						TypeAddConst(var->type, var);
-					}
+				if (type->mode != INSTR_EMPTY && !CellIsStatic(type)) {
+					GenLet(var, type);
+					SetFlagOn(var->submode, SUBMODE_LOCKED);
+					var->type = ANY;					
 				} else {
-					if (!VarIsImplemented(var)) {
-						// If this is array of structure, convert the variable to structure of arrays
-//						if (var->type->variant == TYPE_ARRAY && var->type->element->variant == TYPE_STRUCT) {
-//							VarArrayOfStructToStructOfArrays(var);
-							//TODO: Error if subelement not supported
-//						} else {
-							if (*PLATFORM != 0) {
-//								LogicError("Type not supported by platform", bookmark);
-							} else {
-//								SyntaxError("Platform has not been specified");
-							}
-//						}
+
+					var->type = type;
+					SetFlagOn(var->submode, SUBMODE_USER_DEFINED);
+
+					// Definition of named constant assigned to type (name:xxx = 34)
+					if (var->mode == INSTR_NAME && FlagOff(submode, SUBMODE_PARAM)) {
+						if (var->type->mode != INSTR_ANY) {
+							TypeAddConst(var->type, var);
+						}
+					} else {
+						if (!VarIsImplemented(var)) {
+							// If this is array of structure, convert the variable to structure of arrays
+	//						if (var->type->variant == TYPE_ARRAY && var->type->element->variant == TYPE_STRUCT) {
+	//							VarArrayOfStructToStructOfArrays(var);
+								//TODO: Error if subelement not supported
+	//						} else {
+								if (*PLATFORM != 0) {
+	//								LogicError("Type not supported by platform", bookmark);
+								} else {
+	//								SyntaxError("Platform has not been specified");
+								}
+	//						}
+						}
 					}
 				}
 			// If type has not been defined, but this is alias, use type of the aliased variable
-			} else if (var->adr != NULL) {
-				adr = var->adr;
+			} else if (VarAdr(var) != NULL) {
+				adr = VarAdr(var);
 
 				// We are parsing procedure or macro argument
 				if (adr->mode == INSTR_VAR) {
-					var->type = adr->type;
+					var->type = VarType(adr);
 				} else if (adr->mode == INSTR_TUPLE) {
 					is_assign = true;
 				} else if (adr->mode == INSTR_ELEMENT) {
 					is_assign = true;
 					var->type = adr->type;
-					idx = adr->var;
+					idx = adr->r;
 
 					// For array ranges, define type as array(0..<range_size>) of <array_element>
 
 					if (idx->mode == INSTR_RANGE) {
-						min = idx->adr; max = idx->var;
+						min = idx->l; max = idx->r;
 						if (min->mode == INSTR_INT && max->mode == INSTR_INT) {
 							IntSub(&ib, &max->n, &min->n);
-							var->type = TypeArray(NewRangeInt(Int0(), &ib), adr->adr->type->element);
+							var->type = TypeArray(NewRangeInt(Int0(), &ib), VarType(adr->l)->element);
 							IntFree(&ib);
 						} else {
 							SyntaxError("Address can not use variable slices");
@@ -3055,7 +3318,10 @@ parsed:
 			ErrArgClear();
 			ErrArg(var);
 
-			if (CellIsConst(var) && existed) {
+			if (FlagOn(var->submode, SUBMODE_LOCKED)) {
+				SyntaxError("Value can not be assigned again [A].");
+				continue;
+			} else if (CellIsConst(var) && existed) {
 				SyntaxError("Assigning value to constant [A].");
 				continue;
 			} else if (var->mode == INSTR_TYPE) {
@@ -3076,7 +3342,7 @@ parsed:
 				// Array is initialized as list of constants.
 
 				if (type->mode == INSTR_ARRAY_TYPE) {
-					var->var = ParseArrayC(var->type);			// Warning: The type variable may get modified according to match parsed constant
+					var->r = ParseArrayC(var->type);			// Warning: The type variable may get modified according to match parsed constant
 
 				// Normal assignment
 				} else {
@@ -3088,7 +3354,7 @@ parsed:
 								// Call format routine (set address argument)
 								GenBegin();
 								GenMacro(MACRO_FORMAT, &var);
-								ParseString(GenEnd(), STR_NO_EOL);
+								//ParseString(GenEnd(), STR_NO_EOL);
 							} else {
 								SyntaxError("printing into array not supported by the platform");
 							}
@@ -3126,7 +3392,7 @@ parsed:
 
 								// Default value for procedure argument or parameter
 								if (VarIsParam(var) || FlagOn(submode, SUBMODE_ARG_IN) || FlagOn(submode, SUBMODE_ARG_OUT)) {		// mode == INSTR_ARG
-									var->var = item;
+									VarSetAdr(var, item);
 /*								} else if (var->mode == INSTR_VAR) {
 									VarLet(var, item);
 									// Set the type based on the constant
@@ -3175,11 +3441,11 @@ parsed:
 	for(j = 0; j<cnt; j++) {
 		var = vars[j];
 		if (VarIsParam(var)) {
-			item = VarFindScope2(SRC_FILE, var->name);
+			item = VarFindScope2(SRC_FILE, VarName(var));
 			if (item != NULL) {
 				VarLet(var, item);
 			} else {
-				if (var->var == NULL) {
+				if (VarAdr(var) == NULL) {
 					SyntaxError("Value of parameter [A] has not been specified.");
 				}
 			}
@@ -3195,25 +3461,21 @@ parsed:
 			}
 		}
 	}
+	return true;
 }
 
 Var * ParseInstrArg()
 {
 	Var * var = NULL;
 	EXP_EXTRA_SCOPE = CPU->SCOPE;
-	ParseExpression(NULL);
+	var = ParseExpression2();
 	EXP_EXTRA_SCOPE = NULL;
-	ifok {
-		var = STACK[0];
-	}
 	return var;
-
 }
 
 Var * ParseInstrLabel()
 {
 	Var * label = NULL;
-	UInt8 arg_no;
 
 	label = ParseVariable2();
 
@@ -3223,9 +3485,7 @@ Var * ParseInstrLabel()
 			FlagOff(label->submode, SUBMODE_FRESH);
 			label->type = &TLBL;
 		}
-	} else if (arg_no = ParseArgNo()) {
-		label = VarRuleArg(arg_no-1);
-//		NextIs(TOKEN_COMMA);
+	} else if (ParseArg(&label)) {
 	} else {
 		SyntaxError("expected label identifier");
 	}
@@ -3241,9 +3501,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 {
 	Var * arg[3];
 	UInt8 n;
-//	UInt8 arg_no;
 	InstrOp op;
-//	Var * label, * scope;
 	char inc_path[MAX_PATH_LEN];
 	Var * inop;
 	Type * type;
@@ -3254,7 +3512,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 	EXP_INSTR = true;
 	had_comma = false;
 
-	if (NextIs(TOKEN_IF)) {
+	if (LexWord("if")) {
 		arg[1] = ParseInstrArg();
 		if (ParseRelOp(&op)) {
 			arg[2] = ParseInstrArg();
@@ -3267,6 +3525,7 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			SyntaxError("Expected relational operator");
 		}
 	} else {
+		LexSpaces();
 		if (LexId(NAME2)) {
 
 			// This is instruction
@@ -3287,7 +3546,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 					}
 				}
 			}
-		} else {
+		} else if (LexEOL()) {
+			return;
+		} else{
 			SyntaxError("Expected instruction or macro name or IF");
 		}
 
@@ -3296,8 +3557,6 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 		ifok {
 
 			n = 0;
-		// Include has special handling
-		// We need to make the file relative to current file dir and check the existence of the file
 
 			if (op == INSTR_DECL) {
 				arg[1] = ParseInstrArg();
@@ -3305,6 +3564,9 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 				type = ParseTypeInline();
 				arg[1]->type = type;
 				n=3;
+
+			// Include has special handling
+			// We need to make the file relative to current file dir and check the existence of the file
 			} else if (op == INSTR_INCLUDE || op == INSTR_FILE) {
 
 				if (LexString(NAME2)) {
@@ -3317,7 +3579,8 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			// Branching instruction has label as first argument
 			// 
 			} else if (op == INSTR_CALL) {
-				arg[1] = ParseInstrLabel();
+				n+=2;
+				arg[1] = ParseInstrArg();
 				ifok {
 					n++;
 					goto next_arg;
@@ -3332,22 +3595,21 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			}
 
 			EXP_IS_DESTINATION = true;
+
 			while(n<3 && OK) {
-				// For first argument, we always try to parse, as currently some rules are written with the comma at the start
-				if (n!=0 && INSTR_INFO[op].arg_type[n] == TYPE_VOID) {
-					n++;
-				} else {
+				if (INSTR_INFO[op].arg_type[n] != TYPE_VOID) {
 					had_comma = false;
 					arg[n++] = ParseInstrArg();
-					EXP_IS_DESTINATION = false;
 next_arg:
-					if (!NextIs(TOKEN_COMMA)) break;
+					if (!LexSymbol(",")) break;
 					had_comma = true;
 				}
+				n++;
+				EXP_IS_DESTINATION = false;
 			}
 			EXP_IS_DESTINATION = false;
 
-			if (had_comma || NextIs(TOKEN_COMMA)) {
+			if (had_comma || LexSymbol(",")) {
 				SyntaxError("instruction does not take more arguments");
 			}
 		}
@@ -3362,13 +3624,18 @@ next_arg:
 	EXP_INSTR = false;
 }
 
-void ParseInstr2()
+Bool ParseInstr2()
 {	
-	EnterBlock(TOKEN_VOID);
-	while(OK && !NextIs(TOKEN_BLOCK_END)) {
+	UInt16 blk_type;
+	if (!LexWord("instr")) return false;
+
+	blk_type = LexBlock();
+
+	while (OK && !LexBlockEnd(blk_type)) {
 		ParseInstr();
-		NextIs(TOKEN_EOL);
-	};
+		LexBlockSeparator(blk_type);
+	}
+	return true;
 }
 
 /*
@@ -3378,7 +3645,7 @@ TODO: Rule Parsing
 
 2. Parse rule arguments using expression parser
    var:type     => INSTR_MATCH
-   var:val type => INSTR_MATCH_VAL
+   var:val type => INSTR_VAL
    var@list     => one of constants
    .var         => reference to variable
 
@@ -3472,7 +3739,7 @@ RuleArg *  ParseSimpleRuleArg(Bool from_deref)
 		arg->variant = INSTR_VAR;
 		arg->var = var;
 
-	} else if (arg_no = ParseArgNo2()) {
+	} else if (arg_no = ParseArgNo()) {
 		arg = NewRuleArg();
 		arg->arg_no = arg_no;
 		if (NextCharIs(TOKEN_ADR)) {
@@ -3489,7 +3756,7 @@ RuleArg *  ParseSimpleRuleArg(Bool from_deref)
 
 	} else if (NextIs(TOKEN_CONST)) {
 		arg = NewRuleArg();
-		arg->variant = INSTR_MATCH_VAL;
+		arg->variant = INSTR_VAL;
 		arg->arg_no  = ParseArgNo();
 
 	} else if (NextIs(TOKEN_OPEN_P)) {
@@ -3508,6 +3775,7 @@ RuleArg *  ParseRuleUnary()
 {
 	RuleArg * arg = NULL;
 	if (NextIs(TOKEN_ADR)) {
+		arg = NewRuleArg();
 		arg->variant = INSTR_DEREF;
 		arg->arr = ParseSimpleRuleArg(true);
 		if (arg->arr->variant == INSTR_MATCH) {
@@ -3647,11 +3915,11 @@ RuleArg * ParseRuleRel()
 	RuleArg * arg;
 	InstrOp op;
 	arg = ParseRuleDeref();
-	if (PARSING_CONDITION) {
+//	if (PARSING_CONDITION) {
 		while (ParseRelOp(&op)) {
 			arg = NewOpRule(op, arg, ParseRuleDeref());
 		}
-	}
+//	}
 	return arg;
 }
 
@@ -3659,11 +3927,11 @@ RuleArg * ParseRuleNot()
 {
 	RuleArg * arg;
 	Bool n = false;
-	if (PARSING_CONDITION) {
+//	if (PARSING_CONDITION) {
 		if (NextIs(TOKEN_NOT)) {
 			n = true;
 		}
-	}
+//	}
 	arg = ParseRuleRel();
 	if (n) {
 		arg = NewOpRule(INSTR_NOT, arg, NULL);
@@ -3675,11 +3943,11 @@ RuleArg * ParseRuleAnd()
 {
 	RuleArg * arg;
 	arg = ParseRuleNot();
-	if (PARSING_CONDITION) {
+//	if (PARSING_CONDITION) {
 		if (NextIs(TOKEN_AND)) {
 			arg = NewOpRule(INSTR_AND, arg, ParseRuleRel());
 		}
-	}
+//	}
 	return arg;
 }
 
@@ -3691,11 +3959,11 @@ RuleArg * ParseRuleOr()
 		op = INSTR_XOR;
 	}
 	arg = ParseRuleAnd();
-	if (PARSING_CONDITION) {
+//	if (PARSING_CONDITION) {
 		if (NextIs(TOKEN_OR)) {
 			arg = NewOpRule(op, arg, ParseRuleAnd());
 		}
-	}
+//	}
 	return arg;
 }
 
@@ -3716,7 +3984,7 @@ RuleArg * ParseRuleConditionArg()
 	return ParseRuleArg2();
 }
 
-
+/*
 void ResolveRuleArg(Rule * rule, RuleArg * arg)
 {
 	UInt8 i;
@@ -3734,7 +4002,7 @@ void ResolveRuleArg(Rule * rule, RuleArg * arg)
 		}
 	}
 }
-
+*/
 Bool ParsingRule()
 {
 	return PARSING_RULE;
@@ -3745,107 +4013,116 @@ Bool ParsingPattern()
 	return PARSING_PATTERN;
 }
 
-void ParseRule()
+Bool ParseRule()
 /*
 <instr> "=" "instr" <instr>+  | "emit"+
 */
 {
 	InstrOp op = INSTR_NULL;
 
-	UInt8 i;
+	UInt8 i, parsed_count;
 	Rule * rule;
+	Cell * rule2;
 	char buf[255];
 	char *s, *d, c;
 	Bool macro_rule = false;
 	Var * n, * scope, * fn;
+	Var * arg1, * arg2;
+	
+//	if (!LexWord("rule")) return false;
 
 	rule = MemAllocStruct(Rule);
-	rule->line_no = LINE_NO;
-	rule->file    = SRC_FILE;
+	rule->line = SRC_LINE;
 
 	PARSING_RULE = true;
 	PARSING_PATTERN = true;
 
-	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
-		op = InstrFind(NAME);
-	}
+//	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
+//		op = InstrFind(NAME);
+//	}
 
 	// If the rule does not start with instruction name, we try more general syntax in the form
 	//   <var> "=" <var>
 	
 	EXP_EXTRA_SCOPE = CPU->SCOPE;
 
-	if (op == INSTR_NULL) {
-		if (NextIs(TOKEN_IF)) {
-			rule->arg[1] = ParseRuleConditionArg();
-			if (NextIs(TOKEN_GOTO)) {
-				rule->arg[2] = ParseRuleArg();		// must be label!	
-				rule->op = INSTR_IF;
-			} else {
-				SyntaxError("Expected goto");
-			}
-
+	if (LexWord("if")) {
+		arg1 = ParseExpression2();
+		if (LexWord("goto")) {
+			arg2 = ParseExpression2();
+			rule2 = NewOp(INSTR_IF, arg1, arg2);
 		} else {
-
-			//TODO: In future, we will parse the rule in a more general way
-			EXP_IS_DESTINATION = true;
-			rule->arg[0] = ParseRuleArg();
-			EXP_IS_DESTINATION = false;
-
-			if (NextIs(TOKEN_EQUAL)) {
-				rule->op = INSTR_LET;
-				rule->arg[1] = ParseRuleArg();
+			SyntaxError("Expected goto");
+		}
+	} else if (LexWord("instr")) {
+		LexSpaces();
+		if (LexId(NAME)) {
+			op = InstrFind(NAME);
+			if (op != INSTR_NULL) {
+				EXP_IS_DESTINATION = true;
+				EXP_EXTRA_SCOPE = CPU->SCOPE;
+					
+				parsed_count = 0;
+				for(i=0; i<3 && OK; i++) {
+					if (INSTR_INFO[op].arg_type[i] != TYPE_VOID) {
+						if (parsed_count > 0) {
+							LexSymbol(",");
+						}
+						rule->arg[i] = ParseExpression2();		//RuleArg();
+						parsed_count++;
+					}
+					EXP_IS_DESTINATION = false;
+				}
 			} else {
-				SyntaxError("Expected equal");
+				SyntaxError("$ is not an instruction name");
 			}
+		} else {
+			SyntaxError("Expected instruction name.");
 		}
-
-		// Flags defined as @flags
-		if (NextIs(TOKEN_ADR)) {
-			rule->flags = ParseVariable();
-		}
-
-		EXP_EXTRA_SCOPE = NULL;
 	} else {
 
-		NextToken();
+		rule2 = ParseExpression2();
+		//TODO: In future, we will parse the rule in a more general way
+//			EXP_IS_DESTINATION = true;
+//			rule->arg[0] = ParseRuleArg();
+//			EXP_IS_DESTINATION = false;
 
-		// Parse three parameters
-		rule->op = op;
+//			if (NextIs(TOKEN_EQUAL)) {
+//				rule->op = INSTR_LET;
+//				rule->arg[1] = ParseRuleArg();
+//			} else {
+//				SyntaxError("Expected equal");
+//			}
+	}
 
-		EXP_IS_DESTINATION = true;
-		EXP_EXTRA_SCOPE = CPU->SCOPE;
-
-		for(i=0; i<3 && TOK != TOKEN_EQUAL && OK; i++) {
-			if (INSTR_INFO[op].arg_type[i] != TYPE_VOID) {
-				rule->arg[i] = ParseRuleArg();
-			}
-			EXP_IS_DESTINATION = false;
-
-			// Flags defined as @flags
-			if (NextIs(TOKEN_ADR)) {
-				rule->flags = ParseVariable();
-				break;
-			}
-
-			if (i != 2) {
-				NextIs(TOKEN_COMMA);
+	ifok {
+		// Flags defined as @flags
+		if (LexSymbol("@")) {		
+			if (LexId(NAME)) {
+				rule->flags = VarFind2(NAME);
+				if (rule->flags == NULL) {
+					SyntaxError("Flags must reference existing variable");
+				}
 			}
 		}
 	}
 
-	for(i=0; i<3; i++) {
-		ResolveRuleArg(rule, rule->arg[i]);
-	}
+	EXP_EXTRA_SCOPE = NULL;
 
-	// Number of cycles may be defined after hash '#3'
-	if (TOK == TOKEN_HASH) {
-		if (LexInt(&n)) {
-			rule->cycles = (UInt8)IntN(IntFromCell(n));
-		} else {
-			SyntaxError("Expected cycle count as integer");
-		}
+//	for(i=0; i<3; i++) {
+//		ResolveRuleArg(rule, rule->arg[i]);
+//	}
+
+	ifok {
+		// Number of cycles may be defined after hash '#3'
+		if (LexSymbol("#")) {
+			if (LexInt(&n)) {
+				rule->cycles = (UInt8)IntN(IntFromCell(n));
+			} else {
+				SyntaxError("Expected cycle count as integer");
+			}
 		
+		}
 	}
 
 	PARSING_PATTERN = false;
@@ -3854,83 +4131,79 @@ void ParseRule()
 
 	// TODO: Rule should use parse block to parse code, TOKEN_INSTR should be part of parse code
 
-	if (NextIs(TOKEN_RIGHT_ARROW)) {
-
-		if (RULE_FN_VAR == NULL) {
-			fn = NewFn(RULE_FN_TYPE->type, NULL);
-			fn->submode |= SUBMODE_MACRO;
-			RULE_FN_VAR = NewTempVar(fn);
-		}
-
-//		rule->fn = NewFn(RULE_FN_TYPE->type, NULL);
-//		rule->fn->submode |= SUBMODE_MACRO;
-
-		if (NextIs(TOKEN_MACRO)) {
-			macro_rule = true;
-			GenBegin();
-			ParseCommandBlock();
-			rule->to = GenEnd();
-		} else if (NextIs(TOKEN_INSTR)) {
-			GenBegin();
-			ParseInstr2();
-			rule->to = GenEnd();
-		// Emitting rule
-		} else if (LexString(NAME2)) {
-			GenBegin();
-			do {
-
-				// Rule strings may are preprocessed so, that %/ is replaced by current path.
-				s = NAME2;
-				d = buf;
-				do {
-					c = *s++;
-					if (c == '%' && s[0] == '/') {
-						strcpy(d, FILE_DIR);
-						d += strlen(FILE_DIR);
-						s++;
-					} else {
-						*d++ = c;
-					}
-				} while (c != 0);
-
-				GenInternal(INSTR_EMIT, NULL, TextCell(buf), NULL);
-
-			} while (LexString(NAME2));
-			rule->to = GenEnd();
-
-		// General syntax rule. We set CPU scope to allow access to registers.
-		} else {
-			GenBegin();
-			EXP_EXTRA_SCOPE = CPU->SCOPE;
-			scope = InScope(RULE_FN_VAR);
-			ParseCommandBlock();
-			ReturnScope(scope);
-
-			if (RULE_FN_VAR->subscope != NULL) {
-				rule->fn = RULE_FN_VAR;
-				RULE_FN_VAR = NULL;
-			}
-			EXP_EXTRA_SCOPE = NULL;
-			rule->to = GenEnd();
-			if (rule->fn != NULL) {
-				rule->fn->line_no = rule->line_no;
-				rule->fn->file = rule->file;
-				rule->fn->type->instr = rule->to;
-			}
-		}
-	} else {
-		SyntaxError("Expected ->.");
-	}
-
 	ifok {
-		if (macro_rule) {
-			GenRegisterRule(rule);
+		if (LexArrow()) {
+
+			if (RULE_FN_VAR == NULL) {
+				fn = NewFn(RULE_FN_TYPE->type, NULL);
+				fn->submode |= SUBMODE_MACRO;
+				RULE_FN_VAR = NewTempVar(fn);
+			}
+
+			GenBegin();
+			LexSpaces();
+			if (LexWord("macro")) {
+				macro_rule = true;
+				ParseCommandBlock();
+				rule->to = GenEnd();
+			} else if (ParseInstr2()) {
+				rule->to = GenEnd();
+			// Emitting rule
+			} else if (LexString(NAME2)) {
+				do {
+
+					// Rule strings may are preprocessed so, that %/ is replaced by current path.
+					s = NAME2;
+					d = buf;
+					do {
+						c = *s++;
+						if (c == '%' && s[0] == '/') {
+							strcpy(d, FILE_DIR);
+							d += strlen(FILE_DIR);
+							s++;
+						} else {
+							*d++ = c;
+						}
+					} while (c != 0);
+
+					GenInternal(INSTR_EMIT, NULL, TextCell(buf), NULL);
+
+					LexSpaces();
+				} while (LexString(NAME2));
+				rule->to = GenEnd();
+
+			// General syntax rule. We set CPU scope to allow access to registers.
+			} else {
+				EXP_EXTRA_SCOPE = CPU->SCOPE;
+				scope = InScope(RULE_FN_VAR);
+				ParseCommandBlock();
+				ReturnScope(scope);
+
+				if (RULE_FN_VAR->subscope != NULL) {
+					rule->fn = RULE_FN_VAR;
+					RULE_FN_VAR = NULL;
+				}
+				EXP_EXTRA_SCOPE = NULL;
+				rule->to = GenEnd();
+				if (rule->fn != NULL) {
+					rule->fn->line = rule->line;
+					rule->fn->type->instr = rule->to;
+				}
+			}
 		} else {
-			RuleRegister(rule);
+			SyntaxError("Expected ->.");
+		}
+
+		ifok {
+			if (macro_rule) {
+				GenRegisterRule(rule);
+			} else {
+				RuleRegister(rule);
+			}
 		}
 	}
 	PARSING_RULE = false;
-	
+	return true;	
 }
 
 Var * VarSize(Var * var)
@@ -3938,10 +4211,10 @@ Var * VarSize(Var * var)
 	Var * size = NULL, * arr;
 
 	if (var->mode == INSTR_ELEMENT) {
-		arr = var->adr;
+		arr = var->l;
 		size = VarFind(arr, "size");
 		if (size != NULL) {
-			size = VarNewElement(size, var->var);
+			size = VarNewElement(size, var->r);
 		}
 	} else {
 		if (var->type->variant == TYPE_ARRAY) {			
@@ -3951,7 +4224,40 @@ Var * VarSize(Var * var)
 	return size;
 }
 
-void ParseString(InstrBlock * call, UInt32 flags)
+/*
+ASSERT(TOK == '[');
+EnterBlock();
+ASSERT(TOK == TOKEN_BLOCK_END);
+
+for(n=0; n<TOP; n++) {
+
+var = STACK[n];
+
+if (VarIsArray(var)) {
+var2 = NewTempVar(TypeAdrOf(var->type));
+size_var = VarSize(var);
+Gen(INSTR_LET_ADR, var2, var, NULL);
+if (size_var->mode == INSTR_ELEMENT) {
+size_tmp = NewTempVar(size_var->l->type->element);
+GenLet(size_tmp, size_var);
+size_var = size_tmp;
+}
+
+InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var2, size_var);
+} else {
+// If the parsed value is element, we need to store it to temporary variable first.
+// Otherwise the code to access the element would get generated into list of arguments.
+
+if (var->mode == INSTR_ELEMENT) {
+var2 = NewTempVar(var->l->type->element);
+GenLet(var2, var);
+var = var2;
+}
+InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
+}
+*/
+
+Cell * ParseString(UInt32 flags)
 /*
 Purpose:
 	Parse string constant.
@@ -3969,10 +4275,15 @@ Purpose:
 	5. End of argument list
 */
 
-	Var * var, * var2, * size_var, * size_tmp;
+//	Var * var, * var2, * size_var, * size_tmp;
+	Cell * var, * var2;
 	Bool no_eol;
 	UInt16 n;
-	InstrBlock * args;
+//	InstrBlock * args;
+	UInt8 txt[256];
+	ListBuilder list;
+
+	ListInit(&list);
 
 	do {
 
@@ -3980,82 +4291,55 @@ Purpose:
 		// Therefore we create instrblock and insert the argument instructions there.
 		// Later it gets generated to current code.
 
-		args =  InstrBlockAlloc();
 		no_eol = false;
-		LINE_POS = TOKEN_POS+1;
 
-		while (OK) {
-			NextStringToken();
-			if (TOK == TOKEN_BLOCK_END) break;
+		while (OK && !LexSymbol("\"")) {
+			n = LexStringPart(txt, 255);
+			if (n > 0) {
+				var = TextCell(txt);
+				ListAppend(&list, var, INSTR_TUPLE);
+			}
 
-			// Constant string argument
-			if (TOK == TOKEN_STRING) {
-				var = TextCell(NAME);
-				InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
-			// Expression argument (one or more expressions)
-			} else {
-				ASSERT(TOK == '[');
-				EnterBlock();
-				ParseExpression(NULL);
-				ASSERT(TOK == TOKEN_BLOCK_END);
+			if (LexSymbol("[")) {
+				var = ParseExpression2();
+				
+				// If the parsed value is element, we need to store it to temporary variable first.
+				// Otherwise the code to access the element would get generated into list of arguments.
 
-				for(n=0; n<TOP; n++) {
-
-					var = STACK[n];
-
-					if (VarIsArray(var)) {
-						var2 = NewTempVar(TypeAdrOf(var->type));
-						size_var = VarSize(var);
-						Gen(INSTR_LET_ADR, var2, var, NULL);
-						if (size_var->mode == INSTR_ELEMENT) {
-							size_tmp = NewTempVar(size_var->adr->type->element);
-							GenLet(size_tmp, size_var);
-							size_var = size_tmp;
-						}
-
-						InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var2, size_var);
-					} else {
-						// If the parsed value is element, we need to store it to temporary variable first.
-						// Otherwise the code to access the element would get generated into list of arguments.
-
-						if (var->mode == INSTR_ELEMENT) {
-							var2 = NewTempVar(var->adr->type->element);
-							GenLet(var2, var);
-							var = var2;
-						}
-						InstrInsert(args, NULL, INSTR_VAR_ARG, NULL, var, NULL);
-					}
+				if (var->mode == INSTR_ELEMENT) {
+					var2 = NewTempVar(var->l->type->element);
+					GenLet(var2, var);
+					var = var2;
+				}
+				ListAppend(&list, var, INSTR_TUPLE);
+				if (!LexSymbol("]")) {
+					SyntaxError("expected closing ] in string");
 				}
 			}
 		}
 
-		GenBlock(call);
-		GenBlock(args);
-
-		ifok {
-			NextToken();
-		}
+//		GenBlock(call);
+//		GenBlock(args);
 
 		if (FlagOn(flags, STR_NO_EOL)) {
 			no_eol = true;
-		} else if (TOK == TOKEN_COMMA) {
+		} else if (LexSymbol(",")) {
 			no_eol = true;
-			NextToken();
 		}
 
 		// If not instructed otherwise, generate EOL
 		if (!no_eol) {
 			var2 = IntCellN(128);
-			Gen(INSTR_DATA, NULL, var2, NULL);
+			ListAppend(&list, var2, INSTR_TUPLE);
+//			Gen(INSTR_DATA, NULL, var2, NULL);
 		}
 
-	} while (TOK == TOKEN_STRING);
-
+	} while (LexSymbol("\""));
 
 	// Generate ending 0 byte
-	var2 = ZERO;
-	Gen(INSTR_DATA, NULL, var2, NULL);
+//	Gen(INSTR_DATA, NULL, ZERO, NULL);
 
+	return list.list;
 }
 
 
@@ -4127,7 +4411,7 @@ Arguments:
 			if (TOP > idx) {
 				val = STACK[idx++];
 			} else {
-				val = arg->var;		// argument default value
+				//TODO: val = arg->var;		// argument default value
 			}
 
 			if (val != NULL) {
@@ -4201,7 +4485,7 @@ void ParseCall(Var * var)
 	Gen(INSTR_CALL, NULL, var, NULL);
 }
 
-void ParseReturn()
+Bool ParseReturn()
 /*
 Syntax: "return" arg*
 */
@@ -4209,7 +4493,7 @@ Syntax: "return" arg*
 	Var * proc;
 	Var * label;
 
-	NextToken();
+	if (!LexWord("return")) return false;
 	proc = VarProcScope();
 	ParseArgs(proc, ResultType(proc->type->type), SUBMODE_ARG_OUT, NULL);
 
@@ -4218,6 +4502,7 @@ Syntax: "return" arg*
 
 	label = FindOrAllocLabel("_exit");
 	GenGoto(label);
+	return true;
 }
 
 void ParseMacro(Var * macro)
@@ -4242,14 +4527,13 @@ void ParseMacro(Var * macro)
 		GenMacro(macro, args);
 	}
 }
-
-void ParseDeclarations(InstrOp mode, VarSubmode submode)
 /*
+void ParseDeclarations(InstrOp mode, VarSubmode submode)
+
 Purpose:
 	Parse list of declarations of variables of specified mode and submode.
 Syntax:
 	Decl: { [<assign>]* }
-*/
 {
 	EnterBlock();		
 	while (OK && !NextIs(TOKEN_BLOCK_END)) {
@@ -4257,28 +4541,28 @@ Syntax:
 		while(NextIs(TOKEN_EOL));
 	}
 }
+*/
 
-void ParseUseFile()
-{
-	if (TOK != TOKEN_ID && TOK != TOKEN_STRING) {
-		SyntaxError("Expected module name");
-		return;
-	}
-	Parse(NAME, false, true);
-}
-
-void ParseUse()
+Bool ParseUse()
 /*
 Syntax: { [file_ref] }
 */
 {
-	NextToken();		// skip TOKEN_USE
-	EnterBlock();
-	while (OK && !NextIs(TOKEN_BLOCK_END)) {
-		ParseUseFile();
-		NextIs(TOKEN_COMMA);
-		while(NextIs(TOKEN_EOL));
+	BLOCK_TYPE blk_type;
+	if (LexWord("use")) {
+
+		blk_type = LexBlock();
+		while (OK && !LexBlockEnd(blk_type)) {
+			if (LexId(NAME) || LexString(NAME)) {
+				Parse(NAME, blk_type, false, true);
+			} else {
+				SyntaxError("Expected module name");
+			}
+			LexBlockSeparator(blk_type);
+		}
+		return true;
 	}
+	return false;
 }
 
 void AssertVar(Var * var)
@@ -4287,13 +4571,14 @@ void AssertVar(Var * var)
 	char buf[200];
 	InstrInfo * ii;
 	char * p;
+	char * n;
 
 	if (var == NULL) return;
 	p = buf; 
 	*p++ = ' ';
 
-	if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var) && var->name != NULL && !VarIsTmp(var)) {
-		StrCopy(p, var->name); p += StrLen(var->name);
+	if (var->mode == INSTR_VAR && !VarIsReg(var) && !VarIsLabel(var) && (n = VarName(var)) != NULL && !VarIsTmp(var)) {
+		StrCopy(p, n); p += StrLen(n);
 		StrCopy(p, " = "); p += 3;
 		name = TextCell(buf);
 		GenInternal(INSTR_VAR_ARG, NULL, name, NULL);
@@ -4302,7 +4587,8 @@ void AssertVar(Var * var)
 	// Array access will be reported using syntax array#index = value.
 
 	} else if (var->mode == INSTR_ITEM) {
-		StrCopy(p, var->l->name); p += StrLen(var->l->name);
+		n = VarName(var->l);
+		StrCopy(p, n); p += StrLen(n);
 		*p++ = '#';
 		if (var->r->mode == INSTR_INT) {
 			p = IntFormat(p, &var->r->n);
@@ -4324,7 +4610,7 @@ void AssertVar(Var * var)
 	}
 }
 
-void ParseAssert()
+Bool ParseAssert()
 {
 	InstrBlock * cond_code, * args;
 	Instr * i;
@@ -4332,11 +4618,13 @@ void ParseAssert()
 	UInt16 bookmark;
 	Var * cond, * label;
 
+	if (!LexWord("assert")) return false;
+
 	if (TOK == TOKEN_STRING) {
 		if (MACRO_ASSERT_PRINT != NULL) {
 			GenBegin();
 			GenMacro(MACRO_ASSERT_PRINT, NULL);
-			ParseString(GenEnd(), 0); 
+//			ParseString(GenEnd(), 0); 
 		} else {
 			SyntaxError("This platform does not support output asserts");
 		}
@@ -4345,14 +4633,14 @@ void ParseAssert()
 		// We must remember block to be able to analyze the used variables
 
 		Gen(INSTR_ASSERT_BEGIN, NULL, NULL, NULL);
-		BeginBlock(TOKEN_IF);		// begin if block		
-		G_BLOCK->not = true;
+//		BeginBlock(TOKEN_IF);		// begin if block		
+//		G_BLOCK->not = true;
 
 		GenBegin();
 		bookmark = SetBookmark();
 //		ParseCondition();
 		cond = ParseCondExpression();
-		iferr return;
+		iferr return true;
 
 		label =  VarNewTmpLabel();
 		Gen(INSTR_IF, NULL, cond, label);
@@ -4367,167 +4655,109 @@ void ParseAssert()
 
 		if (!ASSERTS_OFF) {
 			GenBegin();
-
-			sprintf(location, "Error %s(%d): ", SRC_FILE->name, LINE_NO);
+			Gen(INSTR_ASSERT, NULL, NULL, NULL);
+			sprintf(location, "Error %s(%d): ", VarName(SRC_FILE), LINE_NO);
 			Gen(INSTR_VAR_ARG, NULL, TextCell(location), NULL);
 			for(i = cond_code->first; i != NULL; i = i->next) {
-				if (i->op != INSTR_LINE) {
-					AssertVar(i->arg1);
-					AssertVar(i->arg2);
-				}
+				AssertVar(i->arg1);
+				AssertVar(i->arg2);
 			}
 			Gen(INSTR_DATA, NULL, ZERO, NULL);
-
 			args = GenEnd();
 		}
 
 		GenBlock(cond_code);
+		GenBlock(args);
 
 		// If condition referenced true label (which is not necessary, if it didn't contain AND or OR),
 		// generate it here
 
-		if (G_BLOCK->t_label != NULL) {
-			GenLabel(G_BLOCK->t_label);
-		}
+//		if (G_BLOCK->t_label != NULL) {
+//			GenLabel(G_BLOCK->t_label);
+//		}
 
 		// Generate call to assert (variant of print instruction)
-		if (!ASSERTS_OFF) {
-			GenMacro(MACRO_ASSERT, NULL);
-			GenBlock(args);
-		}
+//		if (!ASSERTS_OFF) {
+//			GenMacro(MACRO_ASSERT, NULL);
+//			GenBlock(args);
+//		}
 
 		// generate file name and line number
 		// generate list of used variables
 
-		Gen(INSTR_ASSERT, NULL, NULL, NULL);
-		GenLabel(G_BLOCK->f_label);
+//		GenLabel(G_BLOCK->f_label);
 		GenLabel(label);
 		Gen(INSTR_ASSERT_END, NULL, NULL, NULL);
-		EndBlock();
 	}
+	return true;
 }
 
-void ParseCommands()
+Bool ParseDebug()
 {
-	VarSubmode submode;
+	if (LexWord("debug")) {
+		Gen(INSTR_DEBUG, NULL, NULL, NULL);
+	}
+	return false;
+}
 
-	while (TOK != TOKEN_BLOCK_END && TOK != TOKEN_EOF && OK && TOK != TOKEN_OUTDENT) {
+Bool ParsePrint()
+{
+	Cell * args;
+	if (LexSymbol("\"")) {
+		args = ParseString(0);
+		Gen(INSTR_PRINT, NULL, args, NULL);
+		return true;
+	}
+	return false;
+}
 
-		if (NextIs(TOKEN_IF)) {
-			ParseIf(false, NULL);
-		} else if (NextIs(TOKEN_UNLESS)) {
-			ParseIf(true, NULL);
-		} else if (NextIs(TOKEN_GOTO)) {
-			ParseGoto();
-		} else if (NextIs(TOKEN_RULE)) {
-			ParseRule();
-		} else if (NextIs(TOKEN_ASSERT)) {
-			ParseAssert();
-		} else if (PeekNext(TOKEN_WHILE)) {
-			ParseFor();
-		} else if (PeekNext(TOKEN_UNTIL)) {
-			ParseFor();
-		} else if (PeekNext(TOKEN_FOR)) {
-			ParseFor();
-		} else if (NextIs(TOKEN_DEBUG)) {
-			Gen(INSTR_DEBUG, NULL, NULL, NULL);
+void ParseCommands(UInt8 blk_type)
+{
+
+	while (OK &&  !LexBlockEnd(blk_type)) {
+
+		if (
+			   LexComment()
+			|| LexEOL()
+			|| ParsePrint()
+			|| ParseCond()
+			|| ParseGoto()
+			|| ParseFor()
+//			|| ParseRule()
+			|| ParseAssert()
+			|| ParseDebug()
+			|| ParseReturn()
+			|| ParseUse()
+			|| ParseInstr2()
+			|| ParseAssign2()
+			|| LexBlockSeparator(blk_type)
+			) {
+			continue;
 		} else {
-			switch(TOK) {
-
-			// *** Module parameters (2)
-			// Module parameters are declared in the module is the same way as constants, only prefixed with ::param:: keyword.
-			// For example: ::param ORG:0..65535 = $2000
-
-			case TOKEN_PARAM: 
-				NextToken();
-				ParseDeclarations(INSTR_NAME, SUBMODE_PARAM); break;
-			case TOKEN_CONST: 
-				NextToken();
-				ParseDeclarations(INSTR_NAME, SUBMODE_EMPTY); break;
-			case TOKEN_TYPE2:  
-				NextToken();
-				ParseDeclarations(INSTR_TYPE, SUBMODE_EMPTY); break;
-			case TOKEN_IN:
-				submode = SUBMODE_IN;
-				NextToken();
-				if (NextIs(TOKEN_SEQUENCE)) {
-					submode |= SUBMODE_IN_SEQUENCE;
-				}
-				if (NextIs(TOKEN_OUT)) {
-					submode |= SUBMODE_OUT;
-				}
-				ParseDeclarations(INSTR_VAR, submode); 
-				break;
-			case TOKEN_OUT:  
-				submode = SUBMODE_OUT;
-				NextToken();
-				ParseDeclarations(INSTR_VAR, SUBMODE_OUT);	
-				break;
-
-			case TOKEN_USE:
-				ParseUse();
-				break;
-
-			case TOKEN_RETURN:
-				ParseReturn();
-				break;
-
-			case TOKEN_INSTR:
-				NextToken();
-				ParseInstr2();
-				break;
-
-			case TOKEN_STRING: 
-				if (MACRO_PRINT != NULL) {
-					GenBegin();
-					if (IsMacro(MACRO_PRINT->type)) {
-						GenMacroParse(MACRO_PRINT, NULL);
-					} else {
-						Gen(INSTR_CALL, NULL, MACRO_PRINT, NULL);
-					}
-					ParseString(GenEnd(), 0); 
-				} else {
-					PlatformError("Print is not supported by the platform");
-				}
-				break;
-
-			case TOKEN_PERCENT:
-				ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL); 
-				break;
-			case TOKEN_ID:
-			case TOKEN_DOT:
-				ParseAssign(INSTR_VAR, SUBMODE_EMPTY, NULL); 
-				break;
-
-			case TOKEN_EOL:
-				NextToken(); 
-				break;
-			default:         
-				SyntaxError("unexpected token");
-			}
+			SyntaxError("unexpected token");
 		}
 	}
 }
 
 extern UInt8      BLK_TOP;
 
-Bool Parse(char * name, Bool main_file, Bool parse_options)
+Bool Parse(char * name, BLOCK_TYPE blk_type, Bool main_file, Bool parse_options)
 {
 	Bool no_platform;
 
 	no_platform = (*PLATFORM == 0);
-	if (SrcOpen(name, parse_options)) {
+	if (SrcOpen(name, blk_type, parse_options)) {
 		if (main_file) {
 			SRC_FILE->submode = SUBMODE_MAIN_FILE;
 		}
-		ParseCommands();
+		ParseCommands(BLOCK_FILE);
 		ifok {
 			if (no_platform  && *PLATFORM != 0) {
 				InitPlatform();
 			}
-			if (TOK != TOKEN_BLOCK_END) {
-				SyntaxError("Unexpected end of file");
-			}
+//			if (TOK != TOKEN_BLOCK_END) {
+//				SyntaxError("Unexpected end of file");
+//			}
 		}
 		SrcClose();
 	}
@@ -4537,13 +4767,11 @@ Bool Parse(char * name, Bool main_file, Bool parse_options)
 
 void ParseInit()
 {
-	MemEmptyVar(G_BLOCKS);
-	G_BLOCK = &G_BLOCKS[0];
-	G_BLOCK->command = TOKEN_FN;
 	USE_PARSE = false;
 	EXP_EXTRA_SCOPE = NULL;
 	OP_LINE_POS = 0;
 	OP_LINE_NO  = 0;
 	UNUSED_INSTR_SCOPE = NULL;
+	EXP_PARENTHESES = 0;
 
 }

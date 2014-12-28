@@ -73,17 +73,17 @@ Purpose:
 	}
 
 	if (left->mode == INSTR_VARIANT) {
-		un = VarUnion2(left->adr, right, p_merged);
-		if (un == left->adr) un = left; 	//TODO: Test the other half here
+		un = VarUnion2(left->l, right, p_merged);
+		if (un == left->l) un = left; 	//TODO: Test the other half here
 //		if (un == right) return right;
 		if (un != NULL && un != left) {
-			un = NewVariant(un, left->var);
+			un = NewVariant(un, left->r);
 		} else {
-			un2 = VarUnion2(left->var, right, p_merged);
-			if (un2 == left->var) return left;
+			un2 = VarUnion2(left->r, right, p_merged);
+			if (un2 == left->r) return left;
 			if (un2 == right) return right;
 			if (un2 != NULL) {
-				un = NewVariant(left->adr, un2);
+				un = NewVariant(left->l, un2);
 			}
 		}
 	} else if (left->mode == INSTR_INT || left->mode == INSTR_RANGE) {
@@ -110,8 +110,8 @@ Purpose:
 	if (var == item) return NULL;
 
 	if (var->mode == INSTR_VARIANT) {
-		un = VarFindUnionRange(var->adr, item);
-		if (un == NULL) un = VarFindUnionRange(var->var, item);
+		un = VarFindUnionRange(var->l, item);
+		if (un == NULL) un = VarFindUnionRange(var->r, item);
 	} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {
 		un = VarUnionRange(var, item);
 	}
@@ -128,11 +128,11 @@ Purpose:
 	Var * nv1, *nv2;
 	if (item == NULL || var == item) return var;
 	if (var->mode == INSTR_VARIANT) {
-		nv1 = VarRemoveContainedItems(var->adr, item);
-		nv2 = VarRemoveContainedItems(var->var, item);
+		nv1 = VarRemoveContainedItems(var->l, item);
+		nv2 = VarRemoveContainedItems(var->r, item);
 		if (nv1 == NULL) return nv2;
 		if (nv2 == NULL) return nv1;
-		if (nv1 != var->adr || nv2 != var->var) {
+		if (nv1 != var->l || nv2 != var->r) {
 			return NewVariant(nv1, nv2);
 		}
 	} else if (var->mode == INSTR_INT || var->mode == INSTR_RANGE) {

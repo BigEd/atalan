@@ -1,5 +1,7 @@
 extern Var * ZERO;
 extern Var * ONE;
+extern Var * TRUE;
+extern Var * FALSE;
 extern Var * MINUS_ONE;
 
 Var * IntCellN(long n);
@@ -11,3 +13,7 @@ Bool CellIsIntConst(Var * var);
 Bool CellIsN(Var * var, Int32 n);
 
 BigInt * IntFromCell(Var * var);
+
+
+void IntCellFree(Cell * cell);
+void IntCellPrint(Cell * cell);

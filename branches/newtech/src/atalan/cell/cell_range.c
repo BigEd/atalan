@@ -17,31 +17,31 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
-Var * NewRange(Var * min, Var * max)
+Cell * NewRange(Cell * min, Cell * max)
 {
-	Var * var = NewOp(INSTR_RANGE, min, max);
+	Cell * var = NewOp(INSTR_RANGE, min, max);
 
 	return var;
 }
 
-Var * NewRangeOpenRight(Var * min, Var * max)
+Cell * NewRangeOpenRight(Cell * min, Cell * max)
 {
 	return NewRange(min, Sub(max, ONE));
 }
 
-Var * NewRangeOpenLeft(Var * min, Var * max)
+Cell * NewRangeOpenLeft(Cell * min, Cell * max)
 {
 	return NewRange(Add(min, ONE), max);
 }
 
-Var * NewRangeInt(BigInt * min, BigInt * max)
+Cell * NewRangeInt(BigInt * min, BigInt * max)
 {
 	return NewRange(IntCell(min), IntCell(max));
 }
 
-Var * NewRangeIntN(Int32 min, Int32 max)
+Cell * NewRangeIntN(Int32 min, Int32 max)
 {
 	Type * type;
 	BigInt imin, imax;
@@ -54,7 +54,7 @@ Var * NewRangeIntN(Int32 min, Int32 max)
 	return type;
 }
 
-Var * NewBitRange(UInt32 bit_count)
+Cell * NewBitRange(UInt32 bit_count)
 {
 	Type * rt;
 	BigInt n;
@@ -70,4 +70,16 @@ Var * NewBitRange(UInt32 bit_count)
 	rt = NewRangeInt(Int0(), &n);
 
 	return rt;
+}
+
+void PrintRange(Cell * cell)
+{
+	PrintCell(cell->l);
+	Print("..");
+	PrintCell(cell->r);
+}
+
+Cell * RangeEval(Cell * cell)
+{
+	return NewRange(Eval(cell->l), Eval(cell->r));
 }

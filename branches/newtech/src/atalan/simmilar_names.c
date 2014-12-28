@@ -15,8 +15,11 @@ void SimmilarNamesInit(SimmilarNames * names)
 void SimmilarNamesAdd(SimmilarNames * names, char * name,  Var * v)
 {
 	Int16 dist;
-	if (v->name != NULL && v->idx == 0) {
-		dist = StrEditDistance(name, v->name);
+	char * vname;
+	if (v->mode != INSTR_NAME) return;
+	vname = VarName(v);
+	if (vname != NULL) {
+		dist = StrEditDistance(name, vname);
 		if (dist < 2) {
 			if (dist < names->min_dist) {
 				names->min[0] = v;
@@ -40,7 +43,6 @@ void ReportSimilarNames(char * name)
 	Bool printed = false;
 	UInt16 len;
 	UInt8 color;
-
 
 	v = NULL;
 
@@ -96,25 +98,25 @@ void ReportSimilarNames(char * name)
 			proc_cnt = 0;
 			for(i=0; i<names.cnt; i++) {
 				v = names.min[i];
-				if (v->line_no != 0) {
+				if (v->line != NULL) {
 
 					if (!printed) {
 						Print("Variable with the same name was declared in different scope:"); PrintEOL(); PrintEOL();
 						printed = true;
 					}
 
-					Print("   "); Print(v->file->name); Print("("); PrintInt(v->line_no); Print(")"); 
+					Print("   "); Print(LineFileName(v->line)); Print("("); PrintInt(LineNumber(v->line)); Print(")"); 
 					// Find some scope with name
 
 					scope = v->scope;
-					while(scope != NULL && scope->name == NULL) scope = scope->scope;
+					while(scope != NULL && VarName(scope) == NULL) scope = scope->scope;
 					if (scope != NULL) {
 						if (scope->type->mode == INSTR_FN) {
 							Print("  in procedure '"); 
 						} else if (scope->type->mode == INSTR_VOID) {
 							Print("  in scope '"); 
 						}
-						Print(scope->name); Print("'");
+						Print(VarName(scope)); Print("'");
 						proc_cnt++;
 					}
 					PrintEOL();

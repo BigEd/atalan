@@ -11,7 +11,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 */
 
-#include "language.h"
+#include "../language.h"
 
 Cell * NewArrayType(Type * index, Type * item)
 {

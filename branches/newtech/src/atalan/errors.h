@@ -7,6 +7,12 @@
 extern UInt32 ERROR_CNT;
 extern UInt32 LOGIC_ERROR_CNT;
 
+typedef UInt16 Bookmark;
+
+Bookmark SetBookmark();
+Bookmark SetBookmarkLoc(Loc * loc);
+Bookmark SetBookmarkVar(Var * var);
+
 void ErrArgClear();
 void ErrArg(Var * var);
 void SyntaxErrorBmk(char * text, Bookmark bookmark);

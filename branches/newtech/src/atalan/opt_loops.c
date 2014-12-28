@@ -102,8 +102,8 @@ Purpose:
 //			}
 
 			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-				if (FlagOn(var->adr->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG)) continue;
-				if (var->var->mode != INSTR_INT) continue;
+				if (FlagOn(var->l->submode, SUBMODE_IN | SUBMODE_OUT | SUBMODE_REG)) continue;
+				if (var->r->mode != INSTR_INT) continue;
 //				continue;
 				// If array index is loop dependent, do not attempt to replace it with register
 //				if (FlagOn(var->var->flags, VarLoopDependent)) continue;
@@ -145,8 +145,6 @@ void InstrVarLoopDependent(InstrBlock * code, InstrBlock * end)
 
 		for(blk = code; blk != end; blk = blk->next) {
 			for(i = blk->first; i != NULL; i = i->next) {
-
-				if (i->op == INSTR_LINE) continue;
 
 				result = i->result;
 				if (result != NULL) {
@@ -291,8 +289,6 @@ Arguments:
 	// Compute usage quotient
 	for(blk = header; blk != blk_exit; blk = blk->next) {
 		for(i = blk->first, n = 0; i != NULL; i = i->next, n++) {
-
-			if (i->op == INSTR_LINE) continue;
 
 			// Call to subroutine destroys all registers, there will be spill
 			if (i->op == INSTR_CALL) { q = 1; goto done; }
@@ -495,18 +491,6 @@ void LoopMoveToPrologue(Var * proc, InstrBlock * header, InstrBlock * from, Inst
 //	PrintProc(proc);
 }
 
-Bool VarIsLoopDependent(Var * var, VarSet * liveset)
-{
-	if (var == NULL) return false;
-	if (VarSetFind(liveset, var)) return false;
-	if (FlagOn(var->flags, VarLoop|VarLoopDependent)) return true;
-	if (var->mode != INSTR_INT) {
-		if (VarIsLoopDependent(var->adr, liveset)) return true;
-		if (VarIsLoopDependent(var->adr, liveset)) return true;
-	}
-	return false;
-}
-
 void DefsAdd(Defs * defs, InstrBlock * blk, Instr * i)
 {
 	Loc * def = &defs->defs[defs->count];
@@ -539,7 +523,6 @@ void ReachingDefsBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr, De
 
 	// Definition of the variable may be in this block
 	for(; i != NULL; i = i->prev) {
-		if (i->op == INSTR_LINE) continue;
 		if (i->result == var) {
 			DefsAdd(defs, blk, i);
 			return;
@@ -584,7 +567,6 @@ void NextDefsBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr, Defs *
 
 	// Next definition may be in this block
 	for(; i != NULL; i = i->next) {
-		if (i->op == INSTR_LINE) continue;
 		if (i->result == var && !VarUsesVar(i->arg1, i->result) && !VarUsesVar(i->arg2, i->result)) {
 			DefsAdd(defs, blk, i);
 			return;
@@ -621,7 +603,7 @@ Bool VarInvariant(Var * proc, Var * var, Loc * loc, Loop * loop)
 
 	// For array access, array adr is constant (except referenced array), important is index change
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-		return VarInvariant(proc, var->var, loc, loop);
+		return VarInvariant(proc, var->r, loc, loop);
 	}
 
 	DefsInit(&defs);
@@ -658,7 +640,6 @@ Bool VarLoopDepBlock(Var * var, Loc * loc, InstrBlock * blk, Instr * instr)
 
 	// Next definition may be in this block
 	for(; i != NULL; i = i->next) {
-		if (i->op == INSTR_LINE) continue;
 		if (FlagOff(i->flags, InstrInvariant) && (VarUsesVar(i->arg1, var) || VarUsesVar(i->arg2, var))) {
 			return true;
 		}
@@ -678,7 +659,7 @@ Bool VarLoopDep(Var * proc, Var * var, Loc * loc, Loop * loop)
 
 	// For array access, array adr is constant (except referenced array), important is index change
 	if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-		return VarLoopDep(proc, var->var, loc, loop);
+		return VarLoopDep(proc, var->r, loc, loop);
 	}
 
 	MarkBlockAsUnprocessed(proc->instr);
@@ -764,7 +745,7 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 			loc.blk = blk;
 			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
 				loc.i = i;
-				if (i->op == INSTR_LINE || IS_INSTR_BRANCH(i->op)) continue;
+				if (IS_INSTR_BRANCH(i->op)) continue;
 				if (FlagOff(i->flags, InstrInvariant)) {
 					if (i->result != NULL && !OutVar(i->result)) {
 						if (VarInvariant(proc, i->arg1, &loc, loop) && VarInvariant(proc, i->arg2, &loc, loop)) {
@@ -801,8 +782,6 @@ void OptimizeLoopInvariants(Var * proc, Loop * loop)
 			loc.blk = blk;
 			i2 = NULL;
 			for (i = blk->first, n=1; i != NULL; i = i->next, n++) {
-//				loc.i = i;
-				if (i->op == INSTR_LINE) continue;
 				if (i2 != NULL && FlagOn(i2->flags, InstrInvariant) && FlagOff(i->flags, InstrInvariant)) {
 					if (i->op == INSTR_LET && i2->op == INSTR_LET && i2->result == i->arg1) {
 						SetFlagOff(i2->flags, InstrInvariant);
@@ -948,7 +927,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 	InstrVarLoopDependent(header, end);
 
 	// When processing, we assign var to register
-	for(regi = 0; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->var = NULL;
+	for(regi = 0; regi < CPU->REG_CNT; regi++) CPU->REG[regi]->r = NULL;
 
 	while(top_var = FindMostUsedVar()) {
 
@@ -972,7 +951,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			if (FlagOn(reg->submode, SUBMODE_IN|SUBMODE_OUT)) continue;		// exclude input/output registers
 //			if (!reg->type->range.max == 1) continue;						// exclude flag registers
 			if (var_size != VarByteSize(reg)) continue;						// exclude registers with different byte size
-			if (reg->var != NULL) continue;
+			if (reg->r != NULL) continue;
 
 			if (InstrRule2(INSTR_LET, reg, top_var, NULL)) {
 
@@ -995,7 +974,7 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 		if (Verbose(proc)) {
 			color = PrintColor(COLOR_OPTIMIZE);
 			PrintFmt("*** Loop %d..%d\n", header->seq_no, end->seq_no);
-			Print("Var: "); PrintVarVal(top_var); PrintEOL();
+			Print("Var: "); PrintCell(top_var); PrintEOL();
 			Print("Register: "); PrintIntCellName(top_reg); PrintEOL();
 			PrintFmt("Quotient: %d\n", top_q);
 			PrintColor(color);
@@ -1032,10 +1011,10 @@ Bool OptimizeLoop(Var * proc, InstrBlock * header, InstrBlock * end)
 			for(i = blk->first, n=0; i != NULL; i = i->next) {
 retry:
 				n++;
-				if (i->op == INSTR_LINE) {
-					if (verbose) { PrintInstrLine(n); EmitInstrInline(i); PrintEOL(); }
-					continue;
-				}
+//				if (i->op == INSTR_LINE) {
+//					if (verbose) { PrintInstrLine(n); EmitInstrInline(i); PrintEOL(); }
+//					continue;
+//				}
 
 				// Delete unnecessary assignment
 				if (i->op == INSTR_LET) {
@@ -1136,7 +1115,7 @@ del2:					if (verbose) { PrintDelete(); }
 
 			if (!CellIsConst(top_var)) {
 				if (blk_exit == NULL || blk_exit->callers != NULL || blk_exit->from != end) {
-					blk_exit = InstrBlockAlloc();
+					blk_exit = NewCode();
 					blk_exit->to = end->to;
 					blk_exit->next = end->to;
 					end->next = blk_exit;

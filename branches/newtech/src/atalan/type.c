@@ -186,10 +186,10 @@ void PrintVars(Var * proc)
 		if (var->mode == INSTR_SCOPE) {
 			PrintVars(var);
 		} else {
-			if (var->name != NULL && var->name != TMP_NAME && FlagOff(var->submode, SUBMODE_SYSTEM) && var->mode == INSTR_VAR) {
+			if (var->mode == INSTR_VAR && VarName(var) != NULL && !VarIsTmp(var) && FlagOff(var->submode, SUBMODE_SYSTEM)) {
 				type = var->type;
 				if (type != NULL && type->variant == TYPE_LABEL) continue;
-				PrintFmt("%s: ", var->name);
+				PrintFmt("%s: ", VarName(var));
 				PrintVar(var->type);
 				Print("\n");
 			}

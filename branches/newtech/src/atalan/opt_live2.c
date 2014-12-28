@@ -40,12 +40,12 @@ static void VarAddReference(Var * var, VarSet * set)
 		VarSetAdd(set, var, NULL);
 
 	// Array references with constant index are handled like simple variable
-	} else if ((var->mode == INSTR_BYTE || var->mode == INSTR_ELEMENT) && CellIsConst(var->var)) {
+	} else if ((var->mode == INSTR_BYTE || var->mode == INSTR_ELEMENT) && CellIsConst(var->r)) {
 		VarSetAdd(set, var, NULL);		
-		VarSetAdd(set, var->adr, NULL);
+		VarSetAdd(set, var->l, NULL);
 	} else {
-		VarAddReference(var->adr, set);
-		VarAddReference(var->var, set);
+		VarAddReference(var->l, set);
+		VarAddReference(var->r, set);
 	}
 
 }
@@ -104,22 +104,22 @@ void VarSetLiveness(LiveSet live, VarSet * vars, Var * var, int mark)
 	}
 
 	if (var->mode == INSTR_VAR) {
-		if (var->adr != NULL) {
-			VarSetLiveness(live, vars, var->adr, mark);
+		if (VarAdr(var) != NULL) {
+			VarSetLiveness(live, vars, VarAdr(var), mark);
 		}
 
 	} else if (var->mode == INSTR_TUPLE) {
-		VarSetLiveness(live, vars, var->adr, mark);
-		VarSetLiveness(live, vars, var->var, mark);
+		VarSetLiveness(live, vars, var->l, mark);
+		VarSetLiveness(live, vars, var->r, mark);
 
 	// For array element, we mark the index variable as read, while whole array gets marked as dead/alive
 	} else if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_BIT) {
-		VarSetLiveness(live, vars, var->adr, mark);
-		VarSetLiveness(live, vars, var->var, VarLive);
+		VarSetLiveness(live, vars, var->l, mark);
+		VarSetLiveness(live, vars, var->r, VarLive);
 
 	} else {
-		VarSetLiveness(live, vars, var->adr, VarLive);
-		VarSetLiveness(live, vars, var->var, VarLive);
+		VarSetLiveness(live, vars, var->l, VarLive);
+		VarSetLiveness(live, vars, var->r, VarLive);
 	}
 
 }
@@ -235,7 +235,7 @@ void LiveVariableAnalysis(Var * proc)
 
 	// Initialize variable live sets in every block
 
-	for (blk = proc->instr; blk != NULL; blk = blk->next) {
+	for (blk = FnVarCode(proc); blk != NULL; blk = blk->next) {
 		set = (LiveSet)MemAlloc(count);
 		for (i=0; i<count; i++) set[i] = VarLive;
 		blk->analysis_data = set;

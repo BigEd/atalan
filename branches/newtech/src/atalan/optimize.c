@@ -37,11 +37,11 @@ void VarIncRead(Var * var)
 //		} else 
 		if (var->mode == INSTR_VAR) {
 			// Do not increment constant used as address
-			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
+			if (VarIsAlias(var)) VarIncRead(VarAdr(var));
 		} else if (CellIsConst(var)) {
 		} else {
-			VarIncRead(var->adr);
-			VarIncRead(var->var);
+			VarIncRead(var->l);
+			VarIncRead(var->r);
 		}
 	}
 }
@@ -51,15 +51,15 @@ void VarIncWrite(Var * var)
 	if (var != NULL) {
 		var->write++;
 		if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE) {
-			VarIncWrite(var->adr);
-			VarIncRead(var->var);
+			VarIncWrite(var->l);
+			VarIncRead(var->r);
 		} else if (var->mode == INSTR_DEREF) {
-			VarIncRead(var->var);
+			VarIncRead(var->r);
 		} else if (var->mode == INSTR_TUPLE) {
-			VarIncWrite(var->adr);
-			VarIncWrite(var->var);
+			VarIncWrite(var->l);
+			VarIncWrite(var->r);
 		} else {
-			if (var->adr != NULL && var->adr->mode != INSTR_INT) VarIncRead(var->adr);
+			if (var->l != NULL && var->l->mode != INSTR_INT) VarIncRead(var->l);
 		}
 	}
 }
@@ -73,7 +73,6 @@ void InstrVarUse(InstrBlock * code, InstrBlock * end)
 	for(blk = code; blk != end; blk = blk->next) {
 		for(i = blk->first; i != NULL; i = i->next) {
 
-			if (i->op == INSTR_LINE) continue;
 			if (i->op == INSTR_CALL) continue;		// Calls are used to compute call chains and there are other rules of computation
 
 			// Writes are registered as last to correctly detect uninitialized variable access
@@ -98,7 +97,7 @@ Bool VarUseProcFn(Var * proc, void * data)
 //	Var * var;
 	if (IsFnVar(proc) && proc->read > 0) {
 //		if (proc->type->instr != NULL) {
-			InstrVarUse(proc->type->instr, NULL);
+			InstrVarUse(FnVarCode(proc), NULL);
 /*
 		} else {
 			// Procedure that has no defined body can still define variables and arguments it uses.
@@ -116,8 +115,8 @@ Bool VarUseArrayFn(Var * proc, void * data)
 {
 	if (proc->mode == INSTR_VAR && proc->type != NULL && proc->type->variant == TYPE_ARRAY && proc->mode == INSTR_VAR) {
 		if (proc->read > 0 || proc->write > 0) {
-			if (proc->instr != NULL) {
-				InstrVarUse(proc->instr, NULL);
+			if (FnVarCode(proc) != NULL) {
+				InstrVarUse(FnVarCode(proc), NULL);
 			}
 		}
 	}
@@ -132,7 +131,7 @@ Purpose:
 {
 	VarResetUse();
 	ForEachCell(&VarUseProcFn, NULL);
-	InstrVarUse(ROOT_PROC.instr, NULL);
+	InstrVarUse(FnVarCode(&ROOT_PROC), NULL);
 	ForEachCell(&VarUseArrayFn, NULL);
 }
 
@@ -160,13 +159,13 @@ Purpose:
 			if (CellIsValue(var)) {
 				// values do not get replaced
 			} else if (var->mode == INSTR_VAR) {
-				if (var->adr != NULL) {
-					*p_var = var->adr;
+				if (VarAdr(var) != NULL) {
+					*p_var = VarAdr(var);
 					n = VarTestReplace(p_var, from, to);
 				}
 			} else /*if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE)*/ {
-				v2 = var->adr;
-				v3 = var->var;
+				v2 = var->l;
+				v3 = var->r;
 				n2 = VarTestReplace(&v2, from, to);
 				n3 = VarTestReplace(&v3, from, to);
 
@@ -175,8 +174,8 @@ Purpose:
 
 				if (n2 > 0 || n3 > 0) {
 					var2 = CellCopy(var);
-					var2->adr = v2;
-					var2->var = v3;
+					var2->l = v2;
+					var2->r = v3;
 					var2->next_in_scope = NULL;
 
 					n += n2 + n3;
@@ -207,8 +206,8 @@ Purpose:
 	} else {
 		if (var != NULL) {
 			if (var->mode != INSTR_INT && var->mode != INSTR_VAR) {
-				n += VarReplace(&var->adr, from, to);
-				n += VarReplace(&var->var, from, to);
+				n += VarReplace(&var->l, from, to);
+				n += VarReplace(&var->r, from, to);
 			}
 
 //			if (var->mode == INSTR_ELEMENT || var->mode == INSTR_BYTE || var->mode == INSTR_TUPLE) {
@@ -240,7 +239,7 @@ Int16 InstrTestReplaceVar(Instr * i, Var * from, Var * to)
 
 Bool InstrUsesVar(Instr * i, Var * var)
 {
-	if (i == NULL || i->op == INSTR_LINE) return false;
+	if (i == NULL) return false;
 
 	return VarUsesVar(i->result, var) 
 		|| VarUsesVar(i->arg1, var)
@@ -252,7 +251,7 @@ Bool VarReadsVar(Var * var, Var * read_var)
 	if (var == NULL) return false;
 	if (var->mode == INSTR_VAR || var->mode == INSTR_INT || var->mode == INSTR_TUPLE) return false;
 
-	return VarUsesVar(var->adr, read_var) || VarUsesVar(var->var, read_var);
+	return VarUsesVar(var->l, read_var) || VarUsesVar(var->r, read_var);
 }
 
 Bool SameVar(Var * l, Var * r)
@@ -262,7 +261,7 @@ Bool SameVar(Var * l, Var * r)
 
 Bool InstrReadsVar(Instr * i, Var * var)
 {
-	if (i == NULL || i->op == INSTR_LINE) return false;
+	if (i == NULL) return false;
 
 	return VarReadsVar(i->result, var) 
 		|| SameVar(i->arg1, var) || VarUsesVar(i->arg1, var)
@@ -288,7 +287,7 @@ Bool ArgNeedsSpill(Var * arg, Var * var)
 	Bool spill = false;
 	if (arg != NULL) {
 		if (arg->mode == INSTR_ELEMENT || arg->mode == INSTR_BYTE) {
-			if (arg->adr->mode == INSTR_DEREF && arg->adr->var == var->adr) {
+			if (arg->l->mode == INSTR_DEREF && arg->l->l == VarAdr(var)) {
 				spill = true;
 			}			
 		}
@@ -308,7 +307,7 @@ Bool InstrSpill(Instr * i, Var * var)
 			 || ArgNeedsSpill(i->arg1, var) 
 			 || ArgNeedsSpill(i->arg2, var);
 
-		if (i->arg1 == var->adr || i->arg2 == var->adr) {
+		if (i->arg1 == var->l || i->arg2 == var->l) {
 			spill = true;
 		}
 	}
@@ -336,7 +335,7 @@ void OptimizeCombined(Var * proc)
 void ProcOptimize(Var * proc)
 {
 	if (Verbose(proc)) {
-		PrintHeader(2, proc->name);
+		PrintHeader(2, VarName(proc));
 	}
 	OptimizeCombined(proc);
 }
@@ -356,10 +355,10 @@ void InlineArgs(Var * proc, Var * args)
 	Var * en, * var, * arg;
 
 	FOR_EACH_ITEM(en, arg, args)
-		if (arg->adr == NULL) {
-			var = NewVarInScope(proc, arg->type);
+		if (VarAdr(arg) == NULL) {
+			var = NewVarInScope(proc, VarType(arg));
 		} else {
-			var = arg->adr;
+			var = VarAdr(arg);
 		}
 		BufPush(var);
 		ProcReplaceVar(proc, arg, var);

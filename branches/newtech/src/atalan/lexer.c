@@ -18,7 +18,14 @@
 
 typedef UInt16 LineIndent;
 
+//#define CHR_INDENT 2		// ASCII Start Of text
+//#define CHR_OUTDENT 3		// ASCII End Of text
+
+#define CHR_INDENT '{'		// ASCII Start Of text
+#define CHR_OUTDENT '}' 	// ASCII End Of text
+
 #define UNDEFINED_INDENT 65535
+Cell * SrcLoad(UInt8 * name);
 
 
 /*
@@ -48,14 +55,16 @@ char SYSTEM_DIR[MAX_PATH_LEN];
 char FILE_DIR[MAX_PATH_LEN];			// directory where the current file is stored
 char FILENAME[MAX_PATH_LEN];
 
-GLOBAL Var * MODULES;					// variable with all modules loadad into application (contained in scope)
-
-GLOBAL Var *  SRC_FILE;					// current source file
+GLOBAL Var * MODULES;					// variable with all modules loaded into application (contained in scope)
 
 GLOBAL ParseState * PREV_LEXER;
-GLOBAL FILE * F;
-GLOBAL char   LINE[MAX_LINE_LEN+2];		// current buffer
-GLOBAL char * PREV_LINE;				// previous line
+
+GLOBAL Cell *  SRC_FILE;					// current source file
+SrcLineBlock * SRC_LINE_BLOCK;
+UInt16 SRC_LINE_INDEX;
+SrcLine * SRC_LINE;
+SrcLine * PREV_SRC_LINE;
+UInt8 * LINE;				// actual text of SRC_LINE. It is used to shorten the code (so we do not need to say SRC_LINE->txt in lexer).
 GLOBAL LineNo LINE_NO;
 GLOBAL LinePos  LINE_LEN;
 GLOBAL LinePos  LINE_POS;				// index of next character in line
@@ -66,7 +75,7 @@ GLOBAL LinePos  TOKEN_POS;
 GLOBAL Lexer LEX;
 GLOBAL Token TOK;						// current token
 GLOBAL Token TOK_NO_SPACES;				// if the current token was not preceded by whitespaces, it is copied here
-GLOBAL static BlockStyle LEXBLK[64];		// Lexer blocks (indent, parentheses, line block)
+static BlockStyle LEXBLK[64];		// Lexer blocks (indent, parentheses, line block)
 GLOBAL UInt8      BLK_TOP;
 GLOBAL char NAME[256];
 GLOBAL char NAME2[256];
@@ -93,6 +102,50 @@ void PrintLex()
 	}
 }
 
+Bool NextLine()
+{
+	if (SRC_LINE_INDEX == LINES_PER_BLOCK-1) {
+next_block:
+		if (SRC_LINE_BLOCK != NULL) {
+			SRC_LINE_BLOCK = SRC_LINE_BLOCK->next;
+		}
+		if (SRC_LINE_BLOCK == NULL) return false;
+		SRC_LINE_INDEX = 0;
+		LINE_NO = SRC_LINE_BLOCK->line_no;
+	} else {
+		SRC_LINE_INDEX++;
+		LINE_NO++;
+	}
+	PREV_SRC_LINE = SRC_LINE;
+	SRC_LINE = &SRC_LINE_BLOCK->lines[SRC_LINE_INDEX];
+	LINE = SRC_LINE->txt;
+	if (LINE == NULL) goto next_block;
+	LINE_LEN = StrLen(LINE);
+	LINE_POS = 0;
+	return true;
+}
+
+SrcLine * PeekNextLine()
+{
+	SrcLineBlock * blk;
+	SrcLine * line = NULL;
+	if (SRC_LINE_BLOCK != NULL) {
+		if (SRC_LINE_INDEX == LINES_PER_BLOCK-1) {
+			blk = SRC_LINE_BLOCK;
+			if (blk != NULL) {
+				blk = blk->next;
+			}
+			if (blk != NULL) {
+				line = &blk->lines[0];
+			}
+		} else {
+			line = &SRC_LINE_BLOCK->lines[SRC_LINE_INDEX+1];
+			if (line->txt == NULL) line = NULL;
+		}
+	}
+
+	return line;
+}
 
 /*******************************************************************
 
@@ -100,19 +153,15 @@ void PrintLex()
 
 ********************************************************************/
 //$C
-
+/*
 static int ReadByte()
 {
-	return fgetc(F);
+//	return fgetc(F);
+	return 0;
 }
 
+
 static Bool ReadLine()
-/*
-Purpose:
-	Read next line from current source file.
-Result:
-	Return true, if some line was loaded.
-*/
 {
 	int b, b2;
 	LineIndent indent, prev_indent;
@@ -128,7 +177,7 @@ Result:
 		free(PREV_LINE);
 		PREV_LINE = NULL;
 	}
-	if (LINE_LEN > 0) {
+	if (LINE_LEN > 0) { 
 		PREV_LINE = StrAlloc(LINE);
 	}
 
@@ -254,7 +303,7 @@ have_char:
 
 	return true;
 }
-
+*/
 Bool Spaces()
 /*
 Purpose:
@@ -262,9 +311,9 @@ Purpose:
 	EOF is considered space too (in the logic, that no text follows the token directly.
 */
 {
-	int c;
+	UInt8 c;
 	c = LINE[LINE_POS];
-	return c == SPC || c == TAB || c == EOL || c == EOF;
+	return c == SPC || c == TAB || c == EOL;
 }
 
 /***********************************************
@@ -329,7 +378,15 @@ void EnterBlockWithStop(Token stop_token)
 	// NextToken MUST be called AFTER new block  has been created 
 	// (so it may possibly immediately exit that block, if it is empty)
 
-	if (next_token) NextToken();
+	if (next_token) {
+		NextToken();
+		if (TOK == TOKEN_BLOCK_END && end == TOKEN_OUTDENT) {
+			// This is empty indented block.
+			// Lexer has moved to next line, and discovered, there is no indented block.
+			// We need to return to that previous line so the next time when someone starts a block, we do not consume tokens we do not want to.
+			NewBlock(TOKEN_BLOCK_END, TOKEN_EOL);
+		}
+	}
 }
 
 void EnterBlock()
@@ -358,52 +415,425 @@ Purpose:
 ************************************************/
 //$T
 
-Bool LexString(char * p_str)
+BLOCK_TYPE LexNestedBlock(BLOCK_TYPE parent_blk_type)
 {
-	*p_str = 0;
-	ifok {
-		if (TOK == TOKEN_STRING) {
-			strcpy(p_str, NAME);
-			NextToken();
+	if (LexSymbol("(")) {
+		return BLOCK_BRACES;
+	} else if (LexIndent()) {
+		return BLOCK_INDENT;
+	}
+
+	if (parent_blk_type == BLOCK_INDENT || parent_blk_type == BLOCK_FILE) {
+		return BLOCK_LINE;
+	}
+	return BLOCK_NONE;
+}
+
+UInt8 LexBlock()
+{
+	return LexNestedBlock(BLOCK_FILE);
+}
+
+Bool LexBlockSeparator(UInt8 blk_type)
+{
+	switch(blk_type) {
+	case BLOCK_LINE: return  LexSymbol(",") || LexEOL();
+	case BLOCK_BRACES: return LexSymbol(",");
+	case BLOCK_INDENT: return LexEOL();
+	}
+	return false;
+}
+
+Bool LexBlockEnd(UInt8 blk_type)
+{
+	switch(blk_type) {
+	case BLOCK_FILE: return LexEOF();
+	case BLOCK_LINE: return  LexEOF() || LexEOL();
+	case BLOCK_BRACES: return LexSymbol(")");
+	case BLOCK_INDENT: return LexEOF() || LexOutdent();
+	case BLOCK_NONE: return true;
+	}
+//	if (blk_type == 2) 
+	return false;
+}
+
+Bool LexEOF()
+{
+	if (LINE_POS == LINE_LEN) {
+		if (PeekNextLine() == NULL) {
 			return true;
 		}
 	}
 	return false;
 }
 
-Bool LexInt(Var ** p_i)
+Bool LexEOL()
 {
-	*p_i = NULL;
-	ifok {
-		if (TOK == TOKEN_INT) {
-			*p_i = IntCell(&NUMERATOR);
-			NextToken();
-			return true;
-		}
+	if (LINE_POS == LINE_LEN) {
+		NextLine();
+		return true;
+	}
+	return false;	
+}
+
+Bool LexSpaces()
+{
+	UInt8 c;
+	Bool cnt = 0;
+	c = LINE[LINE_POS];
+	while(c == SPC || c == TAB) {
+		cnt++;
+		LINE_POS++;
+		c = LINE[LINE_POS];
+	}
+	return cnt != 0;
+}
+
+Bool LexComment() 
+/*** Syntax/Comments
+Anything after ::;:: to the end of a line is comment.
+*/
+{
+	LexSpaces();
+	if (LINE[LINE_POS] == ';') {
+		LINE_POS = LINE_LEN;
+		return true;
+	}
+	return false;
+}
+
+
+Bool LexIndent()
+{
+	SrcLine * line;
+	LexComment();
+	if (LINE_POS != LINE_LEN) return false;
+	line = PeekNextLine();
+	if (line != NULL && *line->txt == CHR_INDENT) {
+		NextLine();
+		LINE_POS++;
+		return true;
+	}
+	return false;
+}
+
+Bool LexOutdent()
+{
+	LexComment();
+	if (LINE[LINE_POS] == CHR_OUTDENT) {
+		LINE_POS++;
+		return true;
 	}
 	return false;
 }
 
 Bool LexNum(Var ** p_i)
+/*** Literals (1)
+Numeric literals may be defined using the following notation:
+
+:::::::::::::
+65535       dec
+$494949     hex
+%0101010    bin
+:::::::::::::
+
+It is possible to separate parts of a numeric constant by apostrophe.
+
+::::::::::::::::::::::::::::::
+65'535
+$ff'ff
+%0101'0101'0101'1111
+::::::::::::::::::::::::::::::
+
+Decimal numbers may be defined using decimal dot.
+
+:::::::::::::::
+24.562
+:::::::::::::::
+*/
 {
-	*p_i = NULL;
-	ifok {
-		if (TOK == TOKEN_INT) {
-			*p_i = Div(IntCell(&NUMERATOR), IntCell(&DENOMINATOR));
-			NextToken();
-			return true;
+	BigInt numerator;
+	BigInt denominator;
+	UInt8 digit_count = 0;
+	UInt8 c;
+	UInt8 n;
+
+	c = LINE[LINE_POS];
+	// $fdab  hex number
+	if (c == '$') {
+		LINE_POS++;
+		IntInit(&numerator, 0);
+		IntInit(&denominator, 1);
+		do {
+			c = LINE[LINE_POS++];
+			if (isdigit(c)) {
+				n = c - '0';
+			} else if (c >= 'a' && c<='f') {
+				n = c - ('a' - 10);
+			} else if (c >= 'A' && c<='F') {
+				n = c - ('A' - 10);
+			} else if (c == '\'') {
+				continue;
+			} else {
+				LINE_POS--;
+				break;
+			}
+			IntMulN(&numerator, 16);
+			IntAddN(&numerator, n);
+			digit_count++;
+		} while(true);
+
+		if (digit_count == 0) {
+			LINE_POS--;
+			return false;
 		}
+	// %10  bin number
+	} else if (c == '%') {
+		LINE_POS++;
+		IntInit(&numerator, 0);
+		IntInit(&denominator, 1);
+		do {
+			c = LINE[LINE_POS++];
+			if (c == '0' || c == '1') {
+				n = c - '0';
+			} else if (c == '\'') {
+				continue;
+			} else {
+				LINE_POS--;
+				break;
+			}
+			IntMulN(&numerator, 2);
+			IntAddN(&numerator, n);
+			digit_count++;
+		} while(true);
+
+		if (digit_count == 0) {
+			LINE_POS--;
+			return false;
+		}
+
+	// Decimal number (possibly with decimal dot)
+	} else if (isdigit(c)) {
+		LINE_POS++;
+		IntInit(&numerator, 0);
+		IntInit(&denominator, 1);
+		while (isdigit(c) || c == '\'') {
+			if (c != '\'') {
+				IntMulN(&numerator, 10);
+				IntAddN(&numerator, c - '0');
+			}
+			c = LINE[LINE_POS++];
+		}
+
+		if (c == '.' && isdigit(LINE[LINE_POS])) {
+			c = LINE[LINE_POS++];
+			while (isdigit(c) || c == '\'') {
+				if (c != '\'') {
+					IntMulN(&numerator, 10);
+					IntAddN(&numerator, c - '0');
+					IntMulN(&denominator, 10);
+				}
+				c = LINE[LINE_POS++];
+			}
+		}
+		LINE_POS--;
+	} else {
+		return false;
+	}
+	if (IntEqN(&denominator, 1)) {
+		*p_i = IntCell(&numerator);
+	} else {
+		*p_i = Div(IntCell(&numerator), IntCell(&denominator));
+	}
+	IntFree(&numerator);
+	IntFree(&denominator);
+	return true;
+}
+
+
+Bool LexString(UInt8 * p_str)
+/*** Literals (2)
+Text literals are enclosed in double quotes.
+Special characters may be enclosed in square brackets.
+
+::::::::::::::::
+"This is text."
+"I said: ["]Hello!["]"
+:::::::::::::::::::
+
+The following escape sequences are supported:
+::::::::::::::::::::
+["]  "
+[[   [
+]]   ]
+::::::::::::::::
+*/
+{
+	UInt8 n, nest, c2;
+
+	if (LINE[LINE_POS] == '\"') {
+		n = 0; nest = 0;
+		LINE_POS++;
+		do {
+			if (n >= 254) {
+				SyntaxError("string too long");
+				return false;
+			}
+
+			c2 = LINE[LINE_POS++];
+	str_chr:
+			if (c2 == '[') {
+				c2 = LINE[LINE_POS++];
+				// [[
+				if (c2 != '[') {
+					// ["]
+					if (c2 == '\"' && LINE[LINE_POS] == ']') {
+						LINE_POS++;
+						goto store;  // we must skip the test for string end
+					} else {
+						nest++;
+						p_str[n++] = '[';
+					}
+				}
+			} else if (c2 == ']') {
+				c2 = LINE[LINE_POS++];
+				// ]]
+				if (c2 != ']') {
+					if (nest == 0) {
+						SyntaxError("unexpected closing ] in string");
+					} else {
+						nest--;
+						p_str[n++] = ']';
+						goto str_chr;
+					}
+				}
+			}
+
+			if (nest == 0 && c2 == '\"') break;
+	store:
+			p_str[n++] = c2;
+		} while(1);
+		p_str[n] = 0;
+		return true;
+	}
+
+	// End of line
+	return false;
+}
+
+Bool LexInt(Var ** p_i)
+{
+	return LexNum(p_i);
+}
+
+Bool LexText(Var ** p_i)
+{
+	UInt8 buf[1024];
+	*p_i = NULL;
+	if (LexString(buf)) {
+		*p_i = TextCell((char *)buf);
+		return true;
 	}
 	return false;
 }
 
 Bool LexId(char * p_name)
-{
-	if (TOK == TOKEN_ID || TOK >= TOKEN_KEYWORD && TOK<=TOKEN_LAST_KEYWORD) {
-		strcpy(p_name, NAME);
-		NextToken();
+/* 
+### Identifiers
+Identifiers must start with a letter and may contain numbers, underlines and apostrophes.
+Identifier may be enclosed in apostrophes. In such case, it may contain any character 
+except apostrophe or newline. 
+
+Example:
+:::::::::::::
+name
+x1 x2
+x'pos
+'RH-'
+'else'		; this is identifier, even if else is keyword
+x x' x''  ; three different identifiers
+'*'
+:::::::::::::
+*/{
+	UInt8 c, n, c2;
+
+	c = LINE[LINE_POS];
+	if (isalpha(c) || c == '_' || c == '\'') {
+		LINE_POS++;
+		n = 0;
+		// Identifier may be closed in ''
+		c2 = 0; if (c == '\'') {
+			c2 = c;
+			c = LINE[LINE_POS++];
+		}
+		do {
+			if (n == 255) {
+				SyntaxError("identifier is too long");
+				return false;
+			}
+			p_name[n++] = c;
+			c = LINE[LINE_POS++];
+			if (c == 0) break;
+			if (c == c2) { LINE_POS++; break; }
+		} while(c2 != 0 || isalpha(c) || isdigit(c) || c == '_' || c == '\'');
+		p_name[n] = 0;
+		LINE_POS--;
 		return true;
 	}
+	return false;
+}
+
+UInt32 UCase(UInt32 c)
+{
+	if (c >= 'a' && c<='z') return c-('a'+'A');
+	return c;
+}
+
+Bool LexWord(UInt8 * text)
+{
+	UInt8 n;
+	UInt32 c1, c2;
+
+	LexSpaces();
+	n = LINE_POS;
+	while(*text != 0) {
+		c1 = *text++;
+		if (*text == SPC) {
+			if (!LexSpaces()) goto no_match;
+		}
+		c2 = LINE[LINE_POS++];
+		if (UCase(c1) != UCase(c2)) goto no_match;
+	}
+	return true;
+no_match:
+	LINE_POS = n;
+	return false;	
+}
+
+Bool LexPeekSymbol(UInt8 * text)
+{
+	Bool r;
+	LinePos pos = LINE_POS;
+	r = LexSymbol(text);
+	LINE_POS = pos;
+	return r;
+}
+
+Bool LexSymbol(UInt8 * text)
+{
+	return LexWord(text);
+}
+
+Bool LexSymbol2(UInt8 * text, UInt8 * text2)
+{
+	return LexWord(text) || LexWord(text2);
+}
+
+Bool LexPrefix(UInt8 * text)
+{
+	LinePos l = LINE_POS;
+	if (LexSymbol(text) && !LexSpaces()) return true;
+	LINE_POS = l;
 	return false;
 }
 
@@ -415,25 +845,27 @@ static char * keywords[KEYWORD_COUNT] = {
 	
 };
 
-void NextStringToken()
+UInt16 LexStringPart(UInt8 * text, UInt8 max_len)
 /*
+Purpose:
 	Parse part of string.
+	Stop on [ or end of string (so the next text is [ or ") or when string contains max_len characters.
+Special Sequences:
+	[[			Represents [
+	]]			Represents ]
+	[unparsed]  The part in square braces should be parsed by caller
 
-	TOKEN_STRING	String part of string
-	[				Beginning of embedded expression
-	TOKEN_BLOCK_END	End of string
+Result:
+	Return number of characters in resulting string.
+	If 0, there was no constant text.
+
 */
 {
 	UInt16 n;
 	UInt8 c;
 
 	n = 0;
-	do {
-		if (n >= 254) {
-			SyntaxError("string too long");
-			return;
-		}
-
+	while (n<max_len) {
 		c = LINE[LINE_POS++];
 
 		if (c == '[') {
@@ -455,29 +887,17 @@ void NextStringToken()
 			// ]]
 			if (c != ']') {
 				SyntaxError("unexpected closing ] in string");				
+				return n;
 			}
 		} else if (c == '\"') {
 			LINE_POS--;
 			break;
 		}
 store:
-		NAME[n++] = c;
-	} while(1);
-	NAME[n] = 0;
-
-	ifok {
-		if (n != 0) {
-			TOK = TOKEN_STRING;
-		} else {
-			if (LINE[LINE_POS] == '[') {
-				LINE_POS++;
-				TOK = '[';
-			} else {
-				LINE_POS++;
-				TOK = TOKEN_BLOCK_END;
-			}
-		}
-	}
+		text[n++] = c;
+	};
+	text[n] = 0;
+	return n;
 }
 
 void NextToken()
@@ -487,6 +907,7 @@ void NextToken()
 	UInt8 c, c2, c3, n;
 	Bool spaces = false;
 
+	FAILURE("To Remove");
 	TOK_NO_SPACES = TOKEN_VOID;
 
 	// If there are some ended blocks, return TOKEN_BLOCK_END and exit the block
@@ -504,11 +925,10 @@ retry:
 
 	if (LINE_POS == LINE_LEN) {
 
-		ReadLine();
+		NextLine();
 
 		// This is end of line, all line blocks in current file should be ended
 		for(top = BLK_TOP; top > 0 && LEXBLK[top].end_token == TOKEN_EOL || LEXBLK[top].end_token == TOKEN_BLOCK_END; top--) {
-//		for(top = BLK_TOP; top > 0 && LEXBLK[top].end_token != TOKEN_EOF; top--) {
 			if (LEXBLK[top].end_token == TOKEN_EOL) {
 				LEXBLK[top].end_token = TOKEN_BLOCK_END;
 				LEXBLK[top].stop_token = TOKEN_VOID;
@@ -779,11 +1199,6 @@ Bool NextCharIs(UInt8 chr)
 	return true;
 }
 
-Bool PeekNext(Token tok)
-{
-	return TOK == tok;
-}
-
 Bool NextIs(Token tok)
 {
 	if (TOK != tok) return false;
@@ -823,26 +1238,23 @@ void ExpectToken(Token tok)
 
 Bool ParsingSystem()
 {
-	return SRC_FILE == NULL || FlagOn(SRC_FILE->submode, SUBMODE_SYSTEM);
+	return SRC_FILE == NULL || FlagOn(SRC_FILE->type->submode, SUBMODE_SYSTEM);
 }
 
 void ParseStatePush()
 {
 	ParseState * s;
-
 	s = MemAllocStruct(ParseState);
-	s->file      = F;
-	s->line      = StrAlloc(LINE);
+	s->file      = SRC_FILE;
+	s->line      = SRC_LINE;
+	s->prev_line = PREV_SRC_LINE;
 	s->line_len  = LINE_LEN;
 	s->line_no   = LINE_NO;
 	s->line_pos  = LINE_POS;
-	s->prev_line = PREV_LINE;
 	s->token     = TOK;
 	s->prev_char = PREV_CHAR;
-	s->var       = SRC_FILE;
 	s->parent    = PREV_LEXER;
 	PREV_LEXER   = s;
-
 }
 
 void ParseStatePop()
@@ -850,17 +1262,14 @@ void ParseStatePop()
 	ParseState * s = PREV_LEXER;
 	if (s != NULL) {
 		PREV_LEXER = s->parent;
-		F     = s->file;
-		strcpy(LINE, s->line);
+		SRC_FILE   = s->file;
+		SRC_LINE   = s->line;
+		PREV_SRC_LINE = s->prev_line;
 		LINE_LEN  = s->line_len;
 		LINE_NO   = s->line_no;
 		LINE_POS  = s->line_pos;
-		PREV_LINE = s->prev_line;
 		TOK       = s->token;
 		PREV_CHAR = s->prev_char;
-		SRC_FILE  = s->var;
-
-		MemFree(s->line);
 		MemFree(s);
 	}
 }
@@ -950,97 +1359,81 @@ FILE * FindFile(char * name, char * ext, char * path)
 }
 
 // *** Module parameters (1)
-// When using module using USE command, programmer may specify comma separated list of parameters in the form 'name = value'.
+// When using module using USE command, programmer may specify comma separated list of parameters in the form 'name: value'.
 // Parsed parameters are stored as constants in source file variable scope.
 // Type of parameter is not known at this moment, so we store whatever value is parsed (integer or string or identifier).
 
-void ParseModuleParameters(Bool SkipOnly)
+void ParseModuleParameters(BLOCK_TYPE parent_blk_type, Bool SkipOnly)
 /*
 Purpose:
 	Parse module arguments.
 Syntax:
-	{ name "=" value ["," name "=" value]* }
+	{ name ":" value ["," name ":" value]* }
 */
 {
 	char opt_name[256];
 	Var * param, * val;
+	BLOCK_TYPE blk_type;
 
-	NextToken();		// Skip filename token
-	if (TOK == TOKEN_OPEN_P) {
-		EnterBlock();
-		while (OK && !NextIs(TOKEN_BLOCK_END)) {
-			do {
-				// identifier
-				if (TOK == TOKEN_ID) {
-					StrCopy(opt_name, NAME);
-					NextToken();
-					if (NextIs(TOKEN_EQUAL)) {
-								
-						// Parse till comma or closing brace
-						//TODO: Use parse assignment
-//							param = NewVar(SRC_FILE, opt_name, NULL);
-						if (LexInt(&val)) {
-						} else {
-							val = TextCell(NAME);
-							NextToken();
-						}
-
-						if (!SkipOnly) {
-							param = NewVar(SRC_FILE, opt_name, val);
-						}
+	blk_type = LexNestedBlock(parent_blk_type);
+	while(OK && !LexBlockEnd(blk_type)) {
+		if (LexId(opt_name)) {
+			if (LexSymbol(":")) {
+				// TODO: Parse expression
+				if (LexNum(&val) || LexText(&val)) {
+					if (!SkipOnly) {
+						param = NewVar(SRC_FILE, opt_name, val);
 					}
 				}
-			} while (NextIs(TOKEN_COMMA));
-			// equal
-			// value
-			// .. comma
+			}
 		}
+		LexBlockSeparator(blk_type);
 	}
 }
 
-Bool SrcOpen(char * name, Bool parse_options)
+/*
+
++----------------+
+| INSTR_VAR      |
+|                |
+|                |
++----------------+
+        |
+        |     +----------------+        +----------------+
+		|     | INSTR_SRC_FILE |        | SrcLineBlock   |
+		+---->|                |------->|                |
+		      |                |        |                |
+		      +----------------+        +----------------+
+                                           |next
+										   v
+                                        +----------------+
+		                                | SrcLineBlock2  |
+		                                |                |
+		                                |                |
+		                                +----------------+
+										   |next
+										   v
+										  ...
+*/
+
+
+Bool SrcOpen(char * name, UInt16 blk_type, Bool parse_options)
 /*
 Purpose:
 	Instruct lexer to use file with specified name as input.
 	After parsing this file, parsing continues with current file.
 */
 {
-	int c;
 	Var * file_var;
-	FILE * f;
-	char path[MAX_PATH_LEN];
-	UInt16 path_len;
-	char * filename;
 
 	// When parsing system files, use SYSTEM folder
 	// Build the file name to compare for duplicity.
 
-	f = FindFile(name, ".atl", path);
-
-	if (f != NULL) {
-		path_len = StrLen(path);
-		filename = path + path_len;
-		strcat(path, name);
-		strcat(filename, ".atl");
-
-		// Check, that files are not cyclic dependent
-		for(file_var = SRC_FILE; file_var != NULL; file_var = file_var->scope) {
-			if (StrEqual(file_var->name, filename)) {
-				ErrArg(file_var);
-				ErrArg(SRC_FILE);
-				SyntaxError("Modules [A] and [B] are trying to use each other.");
-				if (parse_options) ParseModuleParameters(true);
-				return false;
-			}
-		}
-
-		// If the file has been already loaded (variable with filename exists), 
-		// ignore the load request (do not however report error)
-
-		if (VarFind(MODULES, filename)) {
-			if (parse_options) ParseModuleParameters(true);
-			return false;
-		}
+	file_var = SrcLoad(name);
+	if (file_var == NULL) {
+		if (parse_options) ParseModuleParameters(blk_type, true);
+		return false;
+	} else {
 
 		// Create new block for the file 
 		// File block is ended with TOKEN_EOF and starts with indent 0
@@ -1051,45 +1444,26 @@ Purpose:
 
 		// Reference to file is stored in variable of INSTR_SRC_FILE
 
-		file_var = NewVar(MODULES, filename, NULL);
 
-		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
-			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);
-		}
-
-		SRC_FILE = file_var;
+//		if (StrEqualPrefix(path, SYSTEM_DIR, StrLen(SYSTEM_DIR))) {
+//			SetFlagOn(file_var->submode, SUBMODE_SYSTEM);
+//		}
 
 		if (parse_options) {
-			ParseModuleParameters(false);
+			ParseModuleParameters(blk_type, false);
 		}
 
 		ParseStatePush();
-
-		PREV_CHAR = EOF;
-		F         = f;
-		LINE_NO   = 0;
-		LINE_POS  = 0;
-		LINE_LEN  = 0;
-		LINE_INDENT = 0;
-		PREV_LINE = NULL;
-		TOK = TOKEN_EOL;
-
-		// Skip UTF-8 BOM
-
-		c = ReadByte();
-		if (c == 239) {
-			c = ReadByte();
-			c = ReadByte();
-		} else {
-			PREV_CHAR = c;
-		}
-	} else {
-		BLK_TOP--;
-		strcpy(path, name);
-		strcat(path, ".atl");
-		InternalError("could not open file: %s", path);
-		return false;
-    }
+		SRC_FILE = file_var;
+		SRC_LINE_BLOCK = SRC_FILE->type->src_file.lines;
+		SRC_LINE = &SRC_LINE_BLOCK->lines[0];
+		SRC_LINE_INDEX = 0;
+		LINE_NO = 1;
+		PREV_SRC_LINE = NULL;
+		LINE = SRC_LINE->txt;
+		LINE_LEN = StrLen(LINE);
+		LINE_POS = 0;
+	}
 	return true;
 }
 
@@ -1100,21 +1474,14 @@ Purpose:
 */
 {
 	Token tok;
-	if (F != NULL) {
-		fclose(F);
-		F = 0;
-	}
 	tok = TOK;
 	ParseStatePop();
-//	if (SRC_FILE != NULL) {
-//		SRC_FILE = SRC_FILE->scope;
-//	}
 	iferr {
 		TOK = tok;
 	}
 }
 
-void LexerInit()
+void LexInit()
 {
 	*FILE_DIR = 0;
 	PREV_LEXER = NULL;
@@ -1126,4 +1493,167 @@ void LexerInit()
 
 	MODULES = NewCell(INSTR_SCOPE);
 
+}
+
+#define MAX_INDENT_NESTING 128
+
+Cell *  SrcLoad(UInt8 * name)
+{
+	Cell * file = NULL, * file_var = NULL;
+	SrcLineBlock * block = NULL, * block2;
+	SrcLine * line;
+	UInt8 buf[MAX_INDENT_NESTING+MAX_LINE_LEN+2];
+	UInt16 indent_stack[MAX_INDENT_NESTING];
+	UInt8 indent_level = 0;
+	UInt16 indent;
+	UInt8 * p, b;
+	Bool mixed_spaces;
+	UInt16 tabs, spaces,len;
+	UInt16 line_idx = LINES_PER_BLOCK;
+	UInt32 line_no = 0;
+	Bool end_of_file;
+	FILE * f;
+	char path[MAX_PATH_LEN];
+	char * filename;
+
+	f = FindFile(name, ".atl", path);
+
+	len = StrLen(path);
+	filename = path + len;
+	strcat(path, name);
+	strcat(filename, ".atl");
+
+	if (f == NULL) {
+		InternalError("could not open file: %s", path);
+		return NULL;
+	}
+
+	// Check, that files are not cyclic dependent
+	for(file_var = SRC_FILE; file_var != NULL; file_var = file_var->scope) {
+		if (VarIsNamed(file_var, filename)) {
+			ErrArg(file_var);
+			ErrArg(SRC_FILE);
+			SyntaxError("Modules [A] and [B] are trying to use each other.");
+			goto done;
+		}
+	}
+	
+	// If the file has been already loaded (variable with filename exists), 
+	// ignore the load request (do not however report error)
+
+	if (VarFind(MODULES, filename)) {
+		goto done;
+	}
+
+	file = NewCell(INSTR_SRC_FILE);
+	file->src_file.line_count = 0;
+	file->src_file.lines = NULL;
+
+	indent_stack[0] = 0;
+	end_of_file = false;
+	do {
+		buf[MAX_INDENT_NESTING] = 0;
+		if (fgets(buf+MAX_INDENT_NESTING, sizeof(buf), f) == NULL) {
+			end_of_file = true;
+		}
+
+		p = buf+MAX_INDENT_NESTING;
+
+		// Remove whitespaces at the end of line
+		len = StrLen(p);
+		while(len>0 && p[len-1]==EOL || p[len-1]==SPC || p[len-1]==13) len--;
+		p[len] = 0;
+
+		if (line_no == 0) {
+			if (*p == 239) {
+				p+=3;
+			}
+		}
+		line_no++;
+
+		// Compute indent of the line.
+		// Indent is defined by spaces and tabs at the beginning of the line.
+		// Spaces and tabs can not be mixed, there must be first tabs, then spaces.
+		// If there is exactly one space before a TAB character, it is ignored.
+		// Two and more spaces are reported as errors.
+
+		mixed_spaces = false; tabs = 0; spaces = 0;
+
+		while(*p != 0) {
+			b = *p;
+			if (b == SPC) {
+				spaces++;
+			} else if (b == TAB) {
+				// One space before TAB will be ignored. We suppose, that TAB size is at least 2,
+				// so one space should not cause any misalignment.
+				if (spaces > 1) mixed_spaces = true;
+				spaces = 0;
+				tabs++;
+			} else {
+				break;
+			}
+			p++;
+		}
+
+		// For empty line, we do not do any special processing (even if it contained some tabs or spaces)
+		// Mixed indent is ignored too.
+		// One notable exception if empty line generated at the end of file.
+		// We process that to make sure that for each indent there is corresponding outdent.
+
+		if (!end_of_file && *p == 0) goto add_line;
+
+		if (mixed_spaces) {
+			SyntaxError(">Spaces before tab");
+		}
+		indent = tabs * 256 + spaces;
+
+		// Indent is either bigger than current indent, which means we have one extra indent level,
+		if (indent > indent_stack[indent_level]) {
+			indent_level++;
+			indent_stack[indent_level] = indent;
+			p--; *p = CHR_INDENT;
+		// Or smaller or equal, in which case we must find the same indent on stack.
+		} else {
+			while(indent_level>0 && indent < indent_stack[indent_level]) {
+				indent_level--;
+				p--; *p = CHR_OUTDENT;
+			}
+
+			if (indent != indent_stack[indent_level]) {
+				if (tabs == 0 && (indent_stack[indent_level] % 256) == 0) {
+					SyntaxError(">Invalid indent (previous indent is made of tabs, this one of spaces)");
+				} else {
+					SyntaxError(">Invalid indent");
+				}						
+			}
+		}
+
+		// Now we have pointer to line data and indent level.
+		// We can add the line to list of lines...
+add_line:
+		if (line_idx == LINES_PER_BLOCK) {
+			block2 = MemAllocStruct(SrcLineBlock);
+			block2->line_no = line_no;
+			block2->file = file;
+			line_idx = 0;
+			if (block == NULL) {
+				file->src_file.lines = block2;
+			} else {
+				block->next = block2;
+			}
+			block = block2;
+		}
+
+		line = &block->lines[line_idx];
+		line->block = block;
+		line->txt = StrAlloc(p);
+		line_idx++;
+	} while(!end_of_file);
+
+	file_var = NewVar(MODULES, filename, file);
+	file->src_file.file_var = file_var;
+
+done:
+	fclose(f);
+	return file_var;
 }
