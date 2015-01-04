@@ -359,6 +359,21 @@ Result:
 		type = NewTuple(left, right);
 		break;
 
+	case INSTR_ITEM:
+//		right = FindType(loc, var->r, report_errors);
+//		if (right->mode == INSTR_INT) {
+//
+//		} else {
+			//TODO: If this is tuple, we use it as constant array
+			left = FindType(loc, var->l, report_errors);		
+			if (left != NULL) {
+				if (left->mode == INSTR_ARRAY_TYPE) {
+					type = IndexType(left);
+				}
+			}
+//		}
+		break;
+
 	case INSTR_EQ:
 		if (CellIsConst2(var->l) && CellIsConst2(var->r)) {
 			if (IsEqual(var->l, var->r)) {
@@ -457,10 +472,11 @@ Result:
 
 				if (var->mode == INSTR_ELEMENT) {
 					arr_type = var->l->type;
-					if (VarIsArrayElement(var)) {
-						type = ItemType(arr_type);
+//					if (VarIsArrayElement(var)) {
+//						type = ItemType(arr_type);
+//					} else
 					//Using address to access array element
-					} else if (arr_type->variant == TYPE_ADR) {
+					if (arr_type->variant == TYPE_ADR) {
 						if (ItemType(arr_type)->variant == TYPE_ARRAY) {
 							// adr of array of type
 							type = arr_type->element->element;
@@ -1143,7 +1159,7 @@ retry:
 		// 2. Repeat this until no new result type was inferred
 		steps = 0;
 		do {
-			PrintProcFlags(proc, PrintInferredTypes);
+//			PrintProcFlags(proc, PrintInferredTypes);
 			data.modified = false;
 			data.modified_blocks = false;
 			ProcInstrEnum(proc, &InstrInferType, &data);

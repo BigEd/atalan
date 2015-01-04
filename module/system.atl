@@ -95,10 +95,6 @@ rule if [A] or [B] goto [C] ->
    if %A goto %C
    if %B goto %C
 
-rule if [A] or [B] goto [C] ->
-   if %A goto %C
-   if %B goto %C
-
 rule if [A] and [B] goto [C] ->
    if %A 
       if %B goto %C

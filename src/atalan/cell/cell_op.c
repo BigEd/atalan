@@ -122,7 +122,7 @@ Purpose:
 {
 	PrintCell(cell->l);
 	PrintChar(' ');
-	Print(INSTR_INFO[cell->mode].symbol);
+	PrintKeyword(INSTR_INFO[cell->mode].symbol);
 	PrintChar(' ');
 	PrintCell(cell->r);
 }
@@ -133,7 +133,14 @@ Purpose:
 	Used to implement printing for binary operators.
 */
 {
-	Print(INSTR_INFO[cell->mode].symbol);
+	char * s = INSTR_INFO[cell->mode].symbol;
+	if (*s == 0) s = INSTR_INFO[cell->mode].name;
+	PrintKeyword(s);
 	PrintChar(' ');
 	PrintCell(cell->l);
+}
+
+void PrintInstr(Cell * cell)
+{
+	PrintUnaryOp(cell);
 }

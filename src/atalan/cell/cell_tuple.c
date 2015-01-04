@@ -64,6 +64,29 @@ Purpose:
 	return var;
 }
 
+UInt32 ItemCount(Cell * list)
+{
+	Var * en, * var;
+	UInt32 n = 0;
+	FOR_EACH_ITEM(en, var, list)
+		n++;
+	NEXT_ITEM(en, var)
+
+	return n;
+
+}
+
+Cell * NthItem(Cell * list, UInt32 index)
+{
+	Var * en, * var;
+	UInt32 n = 0;
+	FOR_EACH_ITEM(en, var, list)
+		n++;
+		if (n == index) return var;
+	NEXT_ITEM(en, var)
+	return NULL;
+}
+
 void ListInit(ListBuilder * cl)
 {
 	cl->list = cl->last_tuple = NULL;

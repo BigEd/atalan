@@ -185,6 +185,18 @@
     <ClCompile Include="cell\cell_code.c">
       <Filter>Source Files\cells\values</Filter>
     </ClCompile>
+    <ClCompile Include="cell\cell_symbol.c">
+      <Filter>Source Files\cells\values</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_if.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_let.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
+    <ClCompile Include="cell\cell_match.c">
+      <Filter>Source Files\cells</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="language.h">
@@ -254,6 +266,18 @@
       <Filter>Source Files\cells\values</Filter>
     </ClInclude>
     <ClInclude Include="cell\cell_val.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_symbol.h">
+      <Filter>Source Files\cells\values</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_if.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_let.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
+    <ClInclude Include="cell\cell_match.h">
       <Filter>Source Files\cells</Filter>
     </ClInclude>
   </ItemGroup>

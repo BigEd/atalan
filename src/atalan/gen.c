@@ -165,13 +165,13 @@ Purpose:
 
 }
 
-void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2)
+void GenRule(Rule * rule, InstrOp op, Var * result, Var * arg1, Var * arg2)
 /*
 Purpose:
 	Generate CPU instruction translated using specified rule.
 */
 {
-	InstrInsert(BLK, INSTR, rule->op, result, arg1, arg2);
+	InstrInsert(BLK, INSTR, op, result, arg1, arg2);
 	BLK->last->rule = rule;
 }
 
@@ -299,7 +299,7 @@ Purpose:
 
 		// Optimization for instruction rule
 		if (VarIsRuleArg(var)) {
-			return args[var->idx-1];
+			return args[VarArgIdx(var)-1];
 		}
 
 		// If the variable is format arguments or result, return one of specified actual arguments
@@ -402,7 +402,7 @@ Argument:
 				result = i->result;
 				if (result != NULL) {
 					// %Z variable is used as forced local argument.
-					local_result = VarIsArg(result) && result->idx == ('Z' - 'A' + 1);
+					local_result = VarIsArg(result) && VarArgIdx(result) == ('Z' - 'A' + 1);
 					if (!local_result) {
 						result = GenArg(macro, result, args, &locals);
 					}
@@ -461,8 +461,7 @@ void GenerateInit()
 
 	memset(&ROOT_PROC, 0, sizeof(ROOT_PROC));
 	ROOT_PROC.mode = INSTR_VAR;
-	ROOT_PROC.name2 = "root";
-	ROOT_PROC.idx  = 0;
+	ROOT_PROC.symbol = NewSymbol("root");
 	ROOT_PROC.type = NewFn(NewFnType(VOID, VOID), FIRST_BLK);
 
 	// Initialize procedure used to evaluate rules and it's arguments (A-Z)

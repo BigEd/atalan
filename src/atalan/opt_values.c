@@ -714,7 +714,7 @@ void VarSetSrcInstr2(Var * var, Instr * i)
 }
 
 
-void TransformInstrRule(Loc * loc, Rule * rule, Var * result, Var * arg1, Var * arg2, char * message)
+void TransformInstrRule(Loc * loc, Rule * rule, InstrOp op, Var * result, Var * arg1, Var * arg2, char * message)
 {
 	Instr * i;
 	UInt8 old_color;
@@ -724,7 +724,7 @@ void TransformInstrRule(Loc * loc, Rule * rule, Var * result, Var * arg1, Var * 
 		old_color = PrintColor(GREEN+LIGHT);
 		PrintFmt("%ld#%ld %s:", loc->blk->seq_no, loc->n, message); InstrPrintInline(i);
 	}
-	i->op = rule->op;
+	i->op = op;
 	i->result = result;
 	i->arg1 = arg1;
 	i->arg2 = arg2;
@@ -740,7 +740,7 @@ Bool TransformInstr(Loc * loc, InstrOp op, Var * result, Var * arg1, Var * arg2,
 	Rule * rule;
 	rule = InstrRule2(op, result, arg1, arg2);
 	if (rule != NULL) {
-		TransformInstrRule(loc, rule, result, arg1, arg2, message);
+		TransformInstrRule(loc, rule, op, result, arg1, arg2, message);
 		return true;
 	}
 	return false;
@@ -753,7 +753,7 @@ Bool TransformInstrIfCheaper(Loc * loc, InstrOp op, Var * result, Var * arg1, Va
 	// We transform the instruction only it the alternative instruction exists and the new instruction if faster.
 	// We also perform the transformation, if the speed is same (we suppose the instruction may be shorter)
 	if (rule != NULL && rule->cycles <= loc->i->rule->cycles) {
-		TransformInstrRule(loc, rule, result, arg1, arg2, message);
+		TransformInstrRule(loc, rule, op, result, arg1, arg2, message);
 		return true;
 	}
 	return false;
