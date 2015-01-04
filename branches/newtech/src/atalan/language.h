@@ -25,7 +25,6 @@ typedef struct CellTag Cell;
 typedef struct LocTag Loc;
 typedef struct VarSetTag VarSet;
 typedef struct RuleTag Rule;
-typedef struct RuleArgTag RuleArg;
 typedef struct SrcLineTag SrcLine;
 
 #define COLOR_ERROR (RED+LIGHT)
@@ -315,6 +314,7 @@ typedef enum {
 	INSTR_SRC_FILE,			// 80
 	INSTR_PRINT,			// 81
 	INSTR_CODE,
+	INSTR_SYMBOL,			// 82 Character string
 	INSTR_CNT				//82
 } InstrOp;
 
@@ -473,10 +473,8 @@ struct CellTag {
 
 		struct {
 			// INSTR_VAR
-			char *	name2;
-			VarIdx  idx;			// two variables with same name but different index may exist
-									// 0 means no index, 1 means index 1 etc.
-									// variable name "x1" is automatically converted to x,1
+			Cell * symbol;
+
 			// Location
 			SrcLine * line;			// file in which the variable has been defined
 			LinePos   line_pos;		// position on line at which the variable has been declared
@@ -517,6 +515,14 @@ struct CellTag {
 				};
 			};
 		}; // other
+
+		//===== INSTR_SYMBOL
+		struct {
+			char * name;
+			VarIdx  idx2;			// two symbols with same name but different index may exist
+									// 0 means no index, 1 means index 1 etc.
+									// variable name "x1" may be automatically converted to x,1
+		};
 
 		//===== INSTR_CODE
 		struct {
@@ -723,7 +729,11 @@ extern Type TLBL;
 
 #include "cell/cell_int.h"
 #include "cell/cell_text.h"
+#include "cell/cell_symbol.h"
 #include "cell/cell_var.h"
+#include "cell/cell_if.h"
+#include "cell/cell_let.h"
+#include "cell/cell_match.h"
 
 //#include "cell/relational/cell_eq.h"
 //#include "cell/relational/cell_ne.h"
@@ -779,7 +789,7 @@ void CellSetLocation(Var * cell, SrcLine * line, LinePos line_pos);
 
 
 //---- labels
-Var * VarNewLabel(char * name);
+Var * VarNewLabel(Cell * symbol);
 Var * FindOrAllocLabel(char * name);
 Var * VarNewTmpLabel();
 
@@ -859,12 +869,12 @@ Var * VarNewDeref(Var * var);
 Var * TextCell(char * str);
 void VarInitStr(Var * var, char * str);
 
-
 //===== Op
 Var * NewOp(InstrOp op, Var * left, Var * right);
 Bool CellIsOp(Var * cell);
 void PrintBinaryOp(Cell * cell);
 void PrintUnaryOp(Cell * cell);
+void PrintInstr(Cell * cell);
 
 //===== Sequence
 Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp compare_op);
@@ -1137,7 +1147,7 @@ InstrBlock * GenNewBlock();
 void GenFromLine(SrcLine * line, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void GenInternal(InstrOp op, Var * result, Var * arg1, Var * arg2);
 void Gen(InstrOp op, Var * result, Var * arg1, Var * arg2);
-void GenRule(Rule * rule, Var * result, Var * arg1, Var * arg2);
+void GenRule(Rule * rule, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void GenLet(Var * result, Var * arg1);
 void GenLabel(Var * var);
 void GenGoto(Var * var);
@@ -1193,32 +1203,16 @@ Type * CpuType(Type * type);
 
 extern Var * RULE_FN_TYPE;
 
-struct RuleArgTag {
-	InstrOp variant;
-	UInt8          arg_no;		// argument index (1..26)  used for variable & const
-	union {
-	   Var * var;
-	   Type * type;
-	   RuleArg * arr;
-	};
-	RuleArg  * index;		        // pointer to index for array (NULL if there is no index)
-							        // Rule arg is allocated in this case
-							        // This type must be INSTR_MATCH or INSTR_VAR, variable must be array
-};
-
 struct RuleTag {
 	Rule * next;
 	SrcLine *  line;			// file in which the rule has been defined
-
-	InstrOp op;
-	Cell * arg[3];
-//	RuleArg * arg[3];
-	InstrBlock * to;
-	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified, when this instruction is executed
+	Cell * pattern;
+	Var * flags;			// for instruction rule, this is variable with flag or flags (tuple) that are modified by result, when this instruction is executed
 	UInt8 cycles;			// How many cycles the instruction uses.
+	UInt8 size;				// TODO: how many bytes the instruction uses
+	InstrBlock * to;
 	Var * fn;				// function used for this rule. This fn will contain local variables of the rule.
 };
-
 
 /*
 Rules are stored in rule sets. We have three sets of rules:
@@ -1237,6 +1231,9 @@ void RuleSetInit(RuleSet * ruleset);
 void RuleSetAddRule(RuleSet * ruleset, Rule * rule);
 Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void TranslateRules();
+void PrintRules();
+
+void PrintKeyword(char * txt);
 
 void GenMatchedRule(Rule * rule);
 

@@ -17,7 +17,6 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 #include "../language.h"
 
 GLOBAL UInt32 TMP_IDX;
-char * TMP_NAME = "_";
 
 Cell * VarAdr(Var * var)
 {
@@ -46,6 +45,24 @@ void VarSetType(Var * var, Type * type)
 	var->type = type;
 }
 
+Cell * VarSymbol(Cell * var)
+{
+	ASSERT(var != NULL);
+	ASSERT(var->mode == INSTR_VAR);
+	return var->symbol;
+}
+
+void VarSetSymbol(Cell * var, Cell * symbol)
+{
+	if (symbol == NULL) symbol = VOID;
+	var->symbol = symbol;
+}
+
+UInt8 VarArgIdx(Cell * var)
+{
+	return SymbolIdx(var->symbol);
+}
+
 Var * NewVarInScope(Type * scope, Var * type)
 {
 	Var * var = NewCellInScope(INSTR_VAR, scope);
@@ -53,13 +70,20 @@ Var * NewVarInScope(Type * scope, Var * type)
 	return var;
 }
 
+Cell * NewVarWithSymbol(Cell * scope, Cell * symbol, Type * type)
+{
+	Cell * var = NewVarInScope(scope, type);
+	VarSetSymbol(var, symbol);
+	return var;
+}
+
 Var * NewVarWithIndex(Var * scope, char * name, UInt16 idx, Type * type)
 {
 	Var * var = NewVarInScope(scope, type);
-	var->name2 = StrAlloc(name);
-	var->idx  = idx;
+	var->symbol = NewSymbolWithIndex(name, idx);
 	return var;
 }
+
 
 Var * NewVar(Var * scope, char * name, Type * type)
 {
@@ -68,7 +92,7 @@ Var * NewVar(Var * scope, char * name, Type * type)
 
 Bool VarIsNamed(Var * var, char * name)
 {
-	return var != NULL && var->mode == INSTR_VAR && StrEqual(name, var->name2);
+	return var != NULL && var->mode == INSTR_VAR && SymbolIsNamed(var->symbol, name);
 }
 
 
@@ -78,13 +102,15 @@ Purpose:
 	Alloc variable in specified scope scope.
 */
 {
+	Cell * symbol;
 	TMP_IDX++;
-	return NewVarWithIndex(NULL, TMP_NAME, TMP_IDX, type);
+	symbol = NewSymbolWithIndex(NULL, TMP_IDX);
+	return NewVarWithSymbol(NULL, symbol, type);
 }
 
 Bool VarIsTmp(Var * var)
 {
-	return var->name2 == TMP_NAME;
+	return SymbolIsTmp(VarSymbol(var));
 }
 
 Bool VarIsUsed(Var * var)
@@ -138,8 +164,6 @@ Purpose:
 	return var;
 }
 
-GLOBAL char VAR_NAME[128];
-
 char * VarName(Var * var)
 /*
 Purpose:
@@ -148,12 +172,9 @@ Purpose:
 	Next call to the function will render the name invalid.
 */
 {
-	VAR_NAME[0] = 0;
 	if (var == NULL) return "";
 	ASSERT(var->mode == INSTR_VAR);
-	if (var->idx == 0) return var->name2;
-	sprintf(VAR_NAME, "%s%d", var->name2, var->idx-1);
-	return VAR_NAME;
+	return SymbolName(VarSymbol(var));
 }
 
 Var * VarFindLabel(char * name)
@@ -213,7 +234,7 @@ Purpose:
 Cell * VarEval(Cell * cell)
 {
 	Cell * r = VarAdr(cell);
-	if (r == NULL) r = VarType(r);
+	if (r == NULL) r = VarType(cell);
 	return r;
 }
 
@@ -231,9 +252,9 @@ void PrintIntCellName(Var * var)
 		PrintCellNameNoScope(var);
 		PrintColor(oc);
 	} else if (VarIsArg(var)) {
-		Print("%"); PrintChar(var->idx-1+'A');
+		Print("%"); PrintChar(VarArgIdx(var)-1+'A');
 	} else {
-		if (var->scope != NULL && var->scope != &ROOT_PROC && var->scope->name2 != NULL && !VarIsLabel(var)) {
+		if (var->scope != NULL && var->scope != &ROOT_PROC && !VarIsTmp(var->scope) && !VarIsLabel(var)) {
 			PrintIntCellName(var->scope);
 			Print(".");
 		}
@@ -244,10 +265,8 @@ void PrintIntCellName(Var * var)
 void VarCellPrint(Cell * cell)
 {
 	PrintIntCellName(cell);
-
 }
 
 void VarCellFree(Cell * cell)
 {
-	StrFree(cell->name2);
 }

@@ -352,6 +352,13 @@ void InternalErrorLoc(char * text, Loc * loc)
 	ERROR_CNT++;
 }
 
+void RuntimeError(char * text)
+{
+	ReportError("Runtime error", text, 0);
+	TOK = TOKEN_ERROR;
+	ERROR_CNT++;
+}
+
 void Warning(char * text)
 {
 	fprintf(STDERR, "Warning: %s\n", text);

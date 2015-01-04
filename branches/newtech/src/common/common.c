@@ -284,7 +284,7 @@ Purpose:
 		g = (FlagOn(color, GREEN))?h:0;
 		b = (FlagOn(color, BLUE))?h:0;
 
-		fprintf(G_PRINT_LOG, "<font color=\"#%2x%2x%2x\">", r, g, b);
+		fprintf(G_PRINT_LOG, "<font color=\"#%02x%02x%02x\"/>", r, g, b);
 	}
 	return old_color;
 }

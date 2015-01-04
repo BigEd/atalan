@@ -26,6 +26,8 @@ void InternalErrorLoc(char * text, Loc * loc);
 void Warning(char * text);
 void EndErrorReport();
 
+void RuntimeError(char * text);
+
 void InitErrors();
 
 void PlatformError(char * text);

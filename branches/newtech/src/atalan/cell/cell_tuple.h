@@ -7,6 +7,9 @@ Var * NextItem(Var ** p_en);
 Var * NewTuple(Var * left, Var * right);
 Bool ContainsItem(Var * tuple, Var * item);
 
+UInt32 ItemCount(Cell * list);
+Cell * NthItem(Cell * list, UInt32 index);
+
 typedef struct {
 	Cell * list;
 	Cell * last_tuple;

@@ -98,11 +98,7 @@ Purpose:
 	Return false, if it is less specific or we are not able to decide which of the rules is more specific.
 */
 {
-	UInt8 i;
-	for(i=0; i<3; i++) {
-		if (RuleArgIsMoreSpecific(l->arg[i], r->arg[i])) return true;
-		if (RuleArgIsMoreSpecific(r->arg[i], l->arg[i])) return false;
-	}
+	if (RuleArgIsMoreSpecific(l->pattern, r->pattern)) return true;
 	return false;
 }
 
@@ -122,7 +118,7 @@ Purpose:
 	The rules are hashed by operation.
 */
 {
-	InstrOp op = rule->op;
+	InstrOp op = rule->pattern->mode;
 	Rule * prev_r, * r;
 
 	if (!rule->to->first) {
@@ -238,15 +234,19 @@ Purpose:
 */
 {
 	Bool match;
+	Cell * result, * arg1, * arg2;
 
-	if (i->op != rule->op) return false;
+	if (i->op != rule->pattern->mode) return false;
 
 	EmptyRuleArgs();
 	MATCH_MODE = match_mode;
+	result = rule->pattern->l;
+	arg1 = rule->pattern->r->l;
+	arg2 = rule->pattern->r->r;
 
-	match = ArgMatch(rule->arg[0], i->result, INSTR_NULL) 
-		&& ArgMatch(rule->arg[1], i->arg1, INSTR_NULL) 
-		&& ArgMatch(rule->arg[2], i->arg2, INSTR_NULL);
+	match = ArgMatch(result, i->result, INSTR_NULL) 
+		&& ArgMatch(arg1, i->arg1, INSTR_NULL) 
+		&& ArgMatch(arg2, i->arg2, INSTR_NULL);
 
 	if (match) {
 		if (INSTR_MATCH_BREAK) {
@@ -541,8 +541,7 @@ void GenMatchedRule(Rule * rule)
 	rule_type.instr = rule->to;
 
 	rule_proc.mode = INSTR_VAR;
-	rule_proc.name2 = NULL;
-	rule_proc.idx = 0;
+	rule_proc.symbol = VOID;
 	rule_proc.type = &rule_type;
 
 	MemMove(args, MACRO_ARG, sizeof(args));
@@ -563,7 +562,7 @@ Bool InstrTranslate(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode
 			if (VERBOSE_NOW) {
 				Print("     "); EmitInstrOp(op, result, arg1, arg2);
 			}
-			GenRule(rule, result, arg1, arg2);
+			GenRule(rule, op, result, arg1, arg2);
 		} else if ((rule = TranslateRule(op, result, arg1, arg2))) {
 			GenMatchedRule(rule);
 		} else {
@@ -613,8 +612,8 @@ Purpose:
 	rule = TRANSLATE_RULES.rules[op];
 
 	for(; rule != NULL; rule = rule->next) {
-		if (rule->arg[0]->variant == INSTR_MATCH) {
-			result_type = rule->arg[0]->type;
+		if (rule->pattern->l->mode == INSTR_MATCH) {
+			result_type = rule->pattern->l->type;
 			if (IsSubset(type, result_type) && !IsSubset(result_type, type)) {
 				if (found_type == NULL || IsSubset(result_type, found_type)) found_type = result_type;
 			}
@@ -934,4 +933,51 @@ void TranslateInit()
 
 	RuleSetInit(&TRANSLATE_RULES);
 	RuleSetInit(&INSTR_RULES);
+}
+
+void PrintSrcLine(SrcLine * line)
+{
+	UInt8 col;
+	col = PrintColor(BLUE);
+	Print("[");
+	Print(LineFileName(line));
+	Print(":");
+	PrintInt(LineNumber(line));
+	Print("]");
+	PrintColor(col);
+}
+
+void PrintRule(Rule * rule)
+{
+	UInt8 col;
+	LineNo line_no = LineNumber(rule->line);
+
+	PrintSrcLine(rule->line);
+	col = PrintColor(RED+GREEN+LIGHT);
+	PrintKeyword("  rule ");
+	PrintCell(rule->pattern);
+	PrintColor(col);
+	PrintKeyword(" -> \n");
+	PrintEOL();
+//	PrintCode(rule->to, 0);
+}
+
+void PrintRuleSet(RuleSet * ruleset)
+{
+	Rule * rule;
+	UInt16 i;
+
+	for(i=0; i<INSTR_CNT;i++) {
+		for(rule = ruleset->rules[i]; rule != NULL; rule = rule->next) {
+			PrintRule(rule);
+		}
+	}
+}
+
+void PrintRules()
+{
+	PrintHeader(1, "Translate rules");
+	PrintRuleSet(&TRANSLATE_RULES);
+	PrintHeader(1, "Instruction rules");
+	PrintRuleSet(&INSTR_RULES);
 }

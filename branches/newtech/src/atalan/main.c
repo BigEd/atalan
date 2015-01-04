@@ -307,6 +307,10 @@ int main(int argc, char *argv[])
 	GenInternal(INSTR_PROLOGUE, NULL, NULL, NULL);
 	if (!Parse(filename, BLOCK_FILE, true, false)) goto failure;
 
+	if (Verbose(NULL)) {
+		PrintRules();
+	}
+
 //	if (*PLATFORM == 0) {
 //		SyntaxError("No target platform defined");
 //		goto failure;

@@ -23,9 +23,12 @@ GLOBAL UInt32 TMP_LBL_IDX;
 
 GLOBAL Var * ANY;
 GLOBAL Var * VOID;
+GLOBAL Cell * TMP_SYMBOL;
 
-Var ANYVAR;
-Var VOIDVAR;
+Cell ANYVAR;
+Cell VOIDVAR;
+
+char * TMP_NAME2 = "_";
 
 // Used for cell enumerating
 CellBlock * G_BLK;
@@ -324,10 +327,10 @@ Bool VarIsArrayElement(Var * var)
 	return adr->type != NULL && VarIsArray(adr);
 }
 
-Var * VarNewLabel(char * name)
+Var * VarNewLabel(Cell * symbol)
 {
 	Var * var;
-	var = NewVar(NULL, name, &TLBL);
+	var = NewVarWithSymbol(NULL, symbol, &TLBL);
 	return var;
 }
 
@@ -341,7 +344,7 @@ Var * FindOrAllocLabel(char * name)
 	var = VarFind(proc, name);
 	if (var == NULL) {
 		scope = InScope(proc);
-		var = VarNewLabel(name);
+		var = VarNewLabel(NewSymbol(name));
 		ReturnScope(scope);
 	}
 	return var;
@@ -357,10 +360,10 @@ void VarToLabel(Var * var)
 Var * VarNewTmpLabel()
 {
 	Var * var;
+	Cell * symbol;
 	TMP_LBL_IDX++;
-	var = VarNewLabel(NULL);
-	var->name2 = TMP_LBL_NAME;
-	var->idx  = TMP_LBL_IDX;
+	symbol = NewSymbolWithIndex(TMP_LBL_NAME, TMP_LBL_IDX);
+	var = VarNewLabel(symbol);
 	return var;
 }
 
@@ -486,7 +489,7 @@ Purpose:
 					// Make array aligned (it type defines address, it is definition of alignment)
 					if (type->l != NULL) {
 						rule = InstrRule2(INSTR_ALIGN, NULL, type->l, NULL);
-						GenRule(rule, NULL, type->l, NULL);
+						GenRule(rule, INSTR_ALIGN, NULL, type->l, NULL);
 					}
 					// Label & initializers
 					GenLabel(var);
@@ -504,7 +507,7 @@ Purpose:
 			// If there is an index rule for the array, generate the index
 			rule = InstrRule2(INSTR_ARRAY_INDEX, NULL, var, NULL);
 			if (rule != NULL) {
-				GenRule(rule, NULL, var, NULL);
+				GenRule(rule, INSTR_ARRAY_INDEX, NULL, var, NULL);
 			}
 		}
 	NEXT_VAR
@@ -518,7 +521,7 @@ Purpose:
 			if (arr->instr != NULL && arr->l != NULL && VarIsUsed(var)) {
 //			if ((var->mode == INSTR_VAR || var->mode == INSTR_NAME) && var->instr != NULL && var->adr != NULL && VarIsUsed(var)) {
 				rule = InstrRule2(INSTR_ORG, NULL, var->l, NULL);
-				GenRule(rule, NULL, var->l, NULL);
+				GenRule(rule, INSTR_ORG, NULL, var->l, NULL);
 				GenLabel(var);
 				GenBlock(arr->instr);
 			}
@@ -970,7 +973,6 @@ void VarInit()
 	TMP_IDX = 1;
 	TMP_LBL_IDX = 0;
 	SCOPE_IDX = 0;
-
 	CELL_BLOCKS = LAST_CELL_BLOCK = NewCellBlock();
 
 	VOIDVAR.mode = INSTR_EMPTY;
@@ -984,6 +986,8 @@ void VarInit()
 	CPU = &CPUS[0];
 
 	IntCellInit();
+
+	TMP_SYMBOL = NewSymbol("_");
 
 }
 

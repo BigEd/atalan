@@ -38,10 +38,9 @@ Cell * Interpret(Cell * proc, Cell * args)
 	Cell * v;
 
 	blk = FnVarCode(proc);
-
+next:
 	while(blk != NULL) {
 		for(i = blk->first; i != NULL; i = i->next) {
-next:
 			switch(i->op) {
 			case INSTR_ASSERT:
 				PrintCell(i->arg1);
@@ -58,7 +57,6 @@ next:
 				v = Eval(i->arg1);
 				if (!IsEqual(v, FALSE)) {
 					blk = IfInstr(i);
-					i = blk->first;
 					goto next;
 				}
 				break;

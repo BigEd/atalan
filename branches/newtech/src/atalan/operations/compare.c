@@ -49,7 +49,7 @@ Purpose:
 	if (type == NULL || master == NULL) return false;
 
 	if (VarIsRuleArg(type)) {
-		j = type->idx-1;
+		j = VarArgIdx(type)-1;
 		if (MACRO_ARG[j] == NULL) {
 			if (IsSubset(type, master)) {
 				MACRO_ARG[j] = type;
@@ -63,7 +63,7 @@ Purpose:
 
 	if (master->mode == INSTR_MATCH) {
 		if (VarIsRuleArg(master->l)) {
-			j = master->l->idx-1;
+			j = VarArgIdx(master->l)-1;
 			if (MACRO_ARG[j] == NULL) {
 				if (IsSubset(type, master->r)) {
 					MACRO_ARG[j] = type;

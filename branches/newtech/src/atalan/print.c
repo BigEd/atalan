@@ -73,6 +73,7 @@ void PrintCell(Var * var)
 			Print(")");
 		} else {
 			s = ii->symbol;
+			if (*s == 0) s = ii->name;
 
 			// Unary operator
 			if (ii->arg_type[2] == TYPE_VOID) {

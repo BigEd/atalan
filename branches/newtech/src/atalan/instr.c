@@ -21,8 +21,8 @@ void InstrDecl(Instr * i);
 InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_NULL,      "",    "null", {TYPE_VOID, TYPE_VOID, TYPE_VOID }, 0, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_VOID,      "nop", "void", {TYPE_VOID, TYPE_VOID, TYPE_VOID }, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_LET,       "let", "<-",   {TYPE_ANY,  TYPE_ANY,  TYPE_VOID }, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_IF,        "iff",  "if",  {TYPE_VOID, TYPE_ANY,  TYPE_LABEL}, 0, &VoidCellFree    , NULL,  &VoidEval },			// if arg1 goto arg2
+{ INSTR_LET,       "let", "<-",   {TYPE_ANY,  TYPE_ANY,  TYPE_VOID }, 0, &VoidCellFree    , &PrintLet,  &VoidEval },
+{ INSTR_IF,        "iff",  "if",  {TYPE_VOID, TYPE_ANY,  TYPE_LABEL}, 0, &VoidCellFree    , &PrintIf,  &VoidEval },			// if arg1 goto arg2
 
 { INSTR_EQ,        "eq", "=",     {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, &VoidCellFree, &PrintBinaryOp,  &EqEval },
 { INSTR_NE,        "ne", "<>",    {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_COMMUTATIVE_OPERATOR, &VoidCellFree, &PrintBinaryOp,  &NeEval },
@@ -48,42 +48,42 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_ROL,       "rotl", "<<",  {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , &PrintBinaryOp,  &VoidEval },				// bitwise rotate right
 { INSTR_ROR,       "rotr", ">>",  {TYPE_ANY, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , &PrintBinaryOp,  &VoidEval },				// bitwise rotate left
 
-{ INSTR_PROLOGUE,  "prologue", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_EPILOGUE,  "epilogue", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_PROLOGUE,  "prologue", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_EPILOGUE,  "epilogue", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , &PrintInstr,  &VoidEval },
 { INSTR_EMIT,      "emit", "",           {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_VARDEF,    "vardef", "",         {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_LABEL,     "label", "label",     {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_VARDEF,    "vardef", "",         {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_LABEL,     "label", "label",     {TYPE_LABEL, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
 
-{ INSTR_ALLOC,     "alloc", "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_FN,        "fn",    "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_RETURN,    "return", "return",   {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_ENDPROC,   "endfn", "",        {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_CALL,      "call", "",           {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_VAR_ARG,   "var_arg", "",        {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_ALLOC,     "alloc", "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_FN,        "fn",    "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_RETURN,    "return", "return",   {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_ENDPROC,   "endfn", "",        {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_CALL,      "call", "",           {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_VAR_ARG,   "var_arg", "",        {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , &PrintInstr,  &VoidEval },
 
-{ INSTR_DATA,      "data", "",           {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_DATA,      "data", "",           {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , &PrintInstr,  &VoidEval },
 { INSTR_FILE,      "file", "",           {TYPE_VOID, TYPE_STRING, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_ALIGN,     "align", "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_ORG,       "org", "",            {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },				// set the destination address of compilation
+{ INSTR_ALIGN,     "align", "",          {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_ORG,       "org", "",            {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },				// set the destination address of compilation
 { INSTR_HI,        "hi", "hi",           {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_LO,        "lo", "lo",           {TYPE_ANY, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_PTR,       "ptr", "",            {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_ARRAY_INDEX, "arrindex", "",     {TYPE_VOID, TYPE_ANY, TYPE_VOID}, INSTR_NON_CODE, &VoidCellFree    , NULL,  &VoidEval },		// generate index for array
 { INSTR_LET_ADR,   "let_adr", "=@",      {TYPE_ADR, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_DEBUG,     "debug", "",          {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_DEBUG,     "debug", "",          {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
 
-{ INSTR_ASSERT_BEGIN,"assert_begin", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_ASSERT,      "assert", "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_ASSERT_END,  "assert_end", "",   {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
+{ INSTR_ASSERT_BEGIN,"assert_begin", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_ASSERT,      "assert", "assert", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
+{ INSTR_ASSERT_END,  "assert_end", "",   {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },
 
 { INSTR_LINE2,      "line", "",          {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },				// reference line in the source code
 { INSTR_INCLUDE,   "include", "",        {TYPE_VOID, TYPE_STRING, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
 
 { INSTR_COMPILER,  "compiler", "",       {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },
-{ INSTR_CODE_END,  "code_end", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , NULL,  &VoidEval },		// end of BLK segment and start of data segment
-{ INSTR_DATA_END,  "data_end", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , NULL,  &VoidEval },		// end of data segment and start of variables segment
-{ INSTR_SRC_END,   "src_end", "",        {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , NULL,  &VoidEval },		// end of BLK segment and start of data segment
-{ INSTR_DECL,      "decl",    "decl",    {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },					// declare variable
+{ INSTR_CODE_END,  "code_end", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , &PrintInstr,  &VoidEval },		// end of BLK segment and start of data segment
+{ INSTR_DATA_END,  "data_end", "",       {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , &PrintInstr,  &VoidEval },		// end of data segment and start of variables segment
+{ INSTR_SRC_END,   "src_end", "",        {TYPE_VOID, TYPE_VOID, TYPE_VOID}, INSTR_OPTIONAL, &VoidCellFree    , &PrintInstr,  &VoidEval },		// end of BLK segment and start of data segment
+{ INSTR_DECL,      "decl",    "decl",    {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintInstr,  &VoidEval },					// declare variable
 
 { INSTR_VAR,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VarCellFree, &VarCellPrint,  &VarEval },			// Variable
 { INSTR_INT,       "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &IntCellFree, &IntCellPrint, &SelfEval },			// Integer constant
@@ -92,7 +92,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_RANGE,     "", "..", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree   , &PrintRange,  &RangeEval },			// x..y  (l = x, r = y) Used for slice array references
 { INSTR_TUPLE,     "", ",", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },			// { INSTR_LIST   (var may be another tuple)
 { INSTR_DEREF,     "", "@", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },			// dereference an address (var contains reference to dereferenced adr variable, type is type in [adr of type]. Byte if untyped adr is used.
-{ INSTR_ITEM,      "", "#", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },			// access field of structure
+{ INSTR_ITEM,      "", "#", {TYPE_VOID, TYPE_ANY, TYPE_VOID}, 0, &VoidCellFree    , &PrintBinaryOp,  &ItemEval },			// access field of structure
 { INSTR_TYPE,      "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_SCOPE,     "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_BIT,       "", "%", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },			// <var> <bit_index>  access bits of specified variable
@@ -102,7 +102,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_ARRAY,     "array", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		// Array constant
 { INSTR_SEQUENCE,  "sequence", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },	// Sequence
 { INSTR_EMPTY,     "()", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		// Empty
-{ INSTR_MATCH,     ":", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },		    // Match x:type
+{ INSTR_MATCH,     ":", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , &PrintMatch,  &VoidEval },		    // Match x:type
 { INSTR_VAL,	   "val", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },		    // Match const x:type
 { INSTR_ARRAY_TYPE,":array", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, &VoidCellFree    , NULL,  &VoidEval },
 { INSTR_FN_TYPE,   ":fn", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, INSTR_IS_TYPE, &VoidCellFree    , NULL,  &VoidEval },
@@ -113,6 +113,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_SRC_FILE,  "", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &SrcFilePrint,  &VoidEval },			//{ INSTR_SRC_FILE variable representing source file
 { INSTR_PRINT,     "print",  "print", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		// print
 { INSTR_CODE,     "code",  "code", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &CodeCellPrint,  &VoidEval },		// instr
+{ INSTR_SYMBOL,   "\'", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &TextCellFree, &SymbolCellPrint, &SelfEval },		// Text constant
 };
 
 
@@ -150,7 +151,7 @@ Purpose:
 	} else if (CellIsConst(t)) {
 		var = t;
 	} if (VarIsRuleArg(t)) {
-		var = MACRO_ARG[t->idx-1];
+		var = MACRO_ARG[VarArgIdx(t)-1];
 	}
 	return var;
 }
@@ -169,7 +170,7 @@ Type * TypeGen(Type * t)
 		var = t;
 		if (var->mode == INSTR_ELEMENT) {
 			if (VarIsRuleArg(var->l)) {
-				idx = MACRO_ARG[var->l->idx-1];
+				idx = MACRO_ARG[VarArgIdx(var->l)-1];
 				type = idx->type;
 			} else {
 				type = var->type;

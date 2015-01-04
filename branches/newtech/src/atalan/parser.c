@@ -1019,7 +1019,7 @@ Cell * ParseOperand()
 			if (LexId(NAME)) {
 				c = NAME[0];
 				if (NAME[1] == 0 && c >= 'A' && c <='Z') {
-					arg_no = c - 'A' + 1;
+					arg_no = c - 'A';
 				} else {
 					SyntaxError("Rule argument must be A..Z");
 				}
@@ -1267,7 +1267,7 @@ retry_indices:
 						var = ParseAdr();
 					}
 					parent_scope = InScope(var);
-					ParseExpression(NULL);
+					ParseSubExpression(NULL);
 					ReturnScope(parent_scope);
 					ifok {
 						if (TOP > 0) {
@@ -1572,10 +1572,12 @@ void ParseRel2()
 {
 	InstrOp op;
 	ParseTuple();
-	if (ParseRelOp(&op)) {
-		ParseTuple();
-		ifok {
-			InstrBinary(op);
+	if (!ParsingRule() || !EXP_IS_DESTINATION || EXP_PARENTHESES > 0) {
+		if (ParseRelOp(&op)) {
+			ParseTuple();
+			ifok {
+				InstrBinary(op);
+			}
 		}
 	}
 }
@@ -1612,10 +1614,6 @@ void ParseExpIf()
 	Var * var;
 	Bool negated = false;
 
-//	if (PARSING_CONDITION || ParsingRule()) {
-//		ParseLogOr();
-//		return;
-//	}
 	// IF <condition> THEN <true_val> ELSE <false_val>
 
 	if (LexWord("unless")) {
@@ -1630,7 +1628,6 @@ void ParseExpIf()
 		BufPush(var);	
 	} else {
 		ParseLogOr();
-//		ParseTuple();
 	}
 }
 
@@ -2971,7 +2968,9 @@ void ParseElements(Var * var)
 Bool ParseAssign2()
 {
 	Cell * var;
+	EXP_PARENTHESES++;
 	var = ParseDefExpression();
+	EXP_PARENTHESES--;
 	ifok {
 		if (var != NULL) {
 			if (var->mode == INSTR_EQ) {
@@ -3492,8 +3491,6 @@ Var * ParseInstrLabel()
 	return label;
 }
 
-RuleArg * ParseRuleArg2();
-
 void ParseInstr()
 /*
 Syntax: <instr_name> <result> <arg1> <arg2>
@@ -3654,336 +3651,6 @@ What about element?
 
 Bool PARSING_CONDITION;
 
-RuleArg * NewRuleArg()
-{
-	RuleArg * arg;
-	arg = MemAllocStruct(RuleArg);
-	return arg;
-}
-
-RuleArg * NewOpRule(InstrOp op, RuleArg * l, RuleArg * r)
-{
-	RuleArg * arg = NewRuleArg();
-	arg->variant = op;
-	arg->arr = l;
-	arg->index = r;
-	return arg;
-}
-
-RuleArg * ParseRuleElement();
-RuleArg * ParseRuleRange();
-
-/*
-void ParseRuleBinary(RuleArg * arg, InstrOp variant)
-{
-	RuleArg * arr;
-	arr = NewRuleArg();
-	MemMove(arr, arg, sizeof(RuleArg));
-	arg->variant = variant;
-	arg->arr     = arr;
-	arg->arg_no  = 0;
-
-	arg->index = NewRuleArg();
-//	ParseRuleElement(arg->index);
-	ParseRuleArg2(arg->index);
-}
-*/
-
-void ParseRuleType(RuleArg * arg)
-{
-	Var * type = NULL;
-	if (arg == NULL) return;
-	if (NextIs(TOKEN_COLON)) {
-		if (arg->variant == INSTR_NULL) {
-			arg->variant = INSTR_MATCH;
-		}
-		if (CPU->SCOPE != NULL) {
-			type = VarFind(CPU->SCOPE, NAME);
-			if (type != NULL) {
-				type->possible_values = ParseTypeInline();
-			}
-		}
-		if (type == NULL) {
-			type =	ParseTypeInline(); 
-		}
-		arg->type = type;
-	}
-}
-/*
-RuleArg *  ParseRuleArgArray(RuleArg * arg)
-{
-	if (NextCharIs(TOKEN_BYTE_INDEX)) {
-		NextToken();
-		ParseRuleBinary(arg, INSTR_BYTE);
-	} else if (NextCharIs(TOKEN_PERCENT)) {
-		NextToken();
-		ParseRuleBinary(arg, INSTR_BIT);
-	} else {
-		NextToken();
-	}
-}
-*/
-RuleArg *  ParseSimpleRuleArg(Bool from_deref)
-{
-	RuleArg * arg = NULL;
-	Var * var;
-	UInt8 arg_no;
-
-	if (TOK == TOKEN_ID) {
-		arg = NewRuleArg();
-		arg->variant = INSTR_VAR;
-		arg->var = ParseVariable();
-
-	} else if (LexInt(&var)) {
-		arg = NewRuleArg();
-		arg->variant = INSTR_VAR;
-		arg->var = var;
-
-	} else if (arg_no = ParseArgNo()) {
-		arg = NewRuleArg();
-		arg->arg_no = arg_no;
-		if (NextCharIs(TOKEN_ADR)) {
-			NextToken();
-			arg->variant = INSTR_VARIANT;
-			arg->var = ParseVariable();
-		} else {
-			NextToken();
-			arg->variant = INSTR_MATCH;
-			if (!from_deref) {
-//				ParseRuleArgArray(arg);
-			}
-		}
-
-	} else if (NextIs(TOKEN_CONST)) {
-		arg = NewRuleArg();
-		arg->variant = INSTR_VAL;
-		arg->arg_no  = ParseArgNo();
-
-	} else if (NextIs(TOKEN_OPEN_P)) {
-//		arg = ParseRuleRange();
-		arg = ParseRuleArg2();
-		if (OK && !NextIs(TOKEN_CLOSE_P)) {
-			SyntaxError("expected closing brace");
-		}
-	}
-
-	ParseRuleType(arg);
-	return arg;
-}
-
-RuleArg *  ParseRuleUnary()
-{
-	RuleArg * arg = NULL;
-	if (NextIs(TOKEN_ADR)) {
-		arg = NewRuleArg();
-		arg->variant = INSTR_DEREF;
-		arg->arr = ParseSimpleRuleArg(true);
-		if (arg->arr->variant == INSTR_MATCH) {
-//			arg = ParseRuleArgArray(arg);
-		}
-		ParseRuleType(arg->arr);
-	} else {
-		arg = ParseSimpleRuleArg(false);
-	}
-	return arg;
-}
-
-RuleArg *  ParseRuleElement()
-{
-	Bool with_open_p;
-	RuleArg * idx, * idx2;
-	RuleArg * arg = ParseRuleUnary();
-retry:
-	if (NextIs(TOKEN_HASH)) {
-		with_open_p = NextIs(TOKEN_OPEN_P);
-		goto indexes;
-	} else if (NextIs(TOKEN_OPEN_P)) {
-		with_open_p = true;
-indexes:
-		// Parse indexes (there can be comma separated list of indexes)
-		idx = NULL;
-		do {
-			idx2 = idx;
-			idx = ParseRuleArg2();
-			if (idx2 != NULL) {
-				idx = NewOpRule(INSTR_TUPLE, idx2, idx);
-			}
-
-		} while(NextIs(TOKEN_COMMA));
-
-		arg = NewOpRule(INSTR_ITEM, arg, idx);
-
-		if (OK && with_open_p && !NextIs(TOKEN_CLOSE_P)) {
-			SyntaxError("expected closing brace");
-		}
-		goto retry;
-	}
-	return arg;
-}
-
-
-RuleArg *  ParseRuleMulDiv()
-{
-	RuleArg * arg = ParseRuleElement();
-retry:
-	if (NextIs(TOKEN_MUL) || NextIs(TOKEN_MUL2)) {
-		arg = NewOpRule(INSTR_MUL, arg, ParseRuleElement());
-		goto retry;
-	} else if (NextIs(TOKEN_DIV)) {
-		arg = NewOpRule(INSTR_DIV, arg, ParseRuleElement());
-		goto retry;
-	}
-	return arg;
-}
-
-RuleArg *  ParseRuleAdd()
-{
-	RuleArg * arg = ParseRuleMulDiv();
-retry:
-	if (NextIs(TOKEN_MINUS)) {
-		arg = NewOpRule(INSTR_SUB, arg, ParseRuleMulDiv());
-		goto retry;
-	} else if (NextIs(TOKEN_PLUS)) {
-		arg = NewOpRule(INSTR_ADD, arg, ParseRuleMulDiv());
-		goto retry;
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleBAnd()
-{
-	RuleArg * arg = ParseRuleAdd();
-retry:
-	if (NextIs(TOKEN_BITAND)) {
-		arg = NewOpRule(INSTR_AND, arg, ParseRuleAdd());
-		goto retry;
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleBOr()
-{
-	RuleArg * arg;
-	arg = ParseRuleBAnd();
-retry:
-	if (NextIs(TOKEN_BITOR)) {
-		arg = NewOpRule(INSTR_OR, arg, ParseRuleBAnd());
-		goto retry;
-	} else if (NextIs(TOKEN_BITXOR)) {
-		arg = NewOpRule(INSTR_XOR, arg, ParseRuleBAnd());
-		goto retry;
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleArith()
-{
-	return ParseRuleBOr();
-}
-
-RuleArg * ParseRuleRange()
-{
-	RuleArg * arg;
-	arg = ParseRuleArith();
-	if (NextIs(TOKEN_DOTDOT)) {
-		arg = NewOpRule(INSTR_RANGE, arg, ParseRuleArith());
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleDeref()
-{
-	RuleArg * arg;
-	RuleArg * idx, * idx2;
-
-	arg = ParseRuleRange();
-	// Tuples
-	if (NextIs(TOKEN_OPEN_P)) {
-		idx = ParseRuleArg2();
-		if (NextIs(TOKEN_COMMA)) {
-			// There should be at least one comma
-			idx2 = ParseRuleArg2();
-			arg = NewOpRule(INSTR_TUPLE, idx, idx2);
-			NextIs(TOKEN_CLOSE_P);
-		}
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleRel()
-{
-	RuleArg * arg;
-	InstrOp op;
-	arg = ParseRuleDeref();
-//	if (PARSING_CONDITION) {
-		while (ParseRelOp(&op)) {
-			arg = NewOpRule(op, arg, ParseRuleDeref());
-		}
-//	}
-	return arg;
-}
-
-RuleArg * ParseRuleNot()
-{
-	RuleArg * arg;
-	Bool n = false;
-//	if (PARSING_CONDITION) {
-		if (NextIs(TOKEN_NOT)) {
-			n = true;
-		}
-//	}
-	arg = ParseRuleRel();
-	if (n) {
-		arg = NewOpRule(INSTR_NOT, arg, NULL);
-	}
-	return arg;
-}
-
-RuleArg * ParseRuleAnd()
-{
-	RuleArg * arg;
-	arg = ParseRuleNot();
-//	if (PARSING_CONDITION) {
-		if (NextIs(TOKEN_AND)) {
-			arg = NewOpRule(INSTR_AND, arg, ParseRuleRel());
-		}
-//	}
-	return arg;
-}
-
-RuleArg * ParseRuleOr()
-{
-	RuleArg * arg;
-	InstrOp op = INSTR_OR;
-	if (NextIs(TOKEN_EITHER)) {
-		op = INSTR_XOR;
-	}
-	arg = ParseRuleAnd();
-//	if (PARSING_CONDITION) {
-		if (NextIs(TOKEN_OR)) {
-			arg = NewOpRule(op, arg, ParseRuleAnd());
-		}
-//	}
-	return arg;
-}
-
-RuleArg *  ParseRuleArg2()
-{
-	return ParseRuleOr();
-}
-
-RuleArg *  ParseRuleArg()
-{
-	PARSING_CONDITION = false;
-	return ParseRuleArg2();
-}
-
-RuleArg * ParseRuleConditionArg()
-{
-	PARSING_CONDITION = true;
-	return ParseRuleArg2();
-}
-
 /*
 void ResolveRuleArg(Rule * rule, RuleArg * arg)
 {
@@ -4003,6 +3670,7 @@ void ResolveRuleArg(Rule * rule, RuleArg * arg)
 	}
 }
 */
+
 Bool ParsingRule()
 {
 	return PARSING_RULE;
@@ -4020,9 +3688,8 @@ Bool ParseRule()
 {
 	InstrOp op = INSTR_NULL;
 
-	UInt8 i, parsed_count;
 	Rule * rule;
-	Cell * rule2;
+	Cell * pattern;
 	char buf[255];
 	char *s, *d, c;
 	Bool macro_rule = false;
@@ -4050,7 +3717,7 @@ Bool ParseRule()
 		arg1 = ParseExpression2();
 		if (LexWord("goto")) {
 			arg2 = ParseExpression2();
-			rule2 = NewOp(INSTR_IF, arg1, arg2);
+			pattern = NewIf(arg1, arg2);
 		} else {
 			SyntaxError("Expected goto");
 		}
@@ -4059,19 +3726,14 @@ Bool ParseRule()
 		if (LexId(NAME)) {
 			op = InstrFind(NAME);
 			if (op != INSTR_NULL) {
-				EXP_IS_DESTINATION = true;
+				EXP_IS_DESTINATION = false;
+				EXP_PARENTHESES = 1;
 				EXP_EXTRA_SCOPE = CPU->SCOPE;
-					
-				parsed_count = 0;
-				for(i=0; i<3 && OK; i++) {
-					if (INSTR_INFO[op].arg_type[i] != TYPE_VOID) {
-						if (parsed_count > 0) {
-							LexSymbol(",");
-						}
-						rule->arg[i] = ParseExpression2();		//RuleArg();
-						parsed_count++;
-					}
-					EXP_IS_DESTINATION = false;
+				pattern = ParseExpression2();
+				EXP_PARENTHESES = 0;
+				EXP_EXTRA_SCOPE = NULL;
+				ifok {
+					pattern = NewOp(op, pattern, NULL);
 				}
 			} else {
 				SyntaxError("$ is not an instruction name");
@@ -4080,8 +3742,19 @@ Bool ParseRule()
 			SyntaxError("Expected instruction name.");
 		}
 	} else {
+		EXP_PARENTHESES = 0;
+		EXP_IS_DESTINATION = true;
+		arg1 = ParseExpression2();
+		EXP_IS_DESTINATION = false;
 
-		rule2 = ParseExpression2();
+		if (LexSymbol("=")) {
+			arg2 = ParseExpression2();
+		} else {
+			SyntaxError("Expected =");
+		}
+
+		pattern = NewOp(INSTR_LET, arg1, arg2);
+
 		//TODO: In future, we will parse the rule in a more general way
 //			EXP_IS_DESTINATION = true;
 //			rule->arg[0] = ParseRuleArg();
@@ -4195,6 +3868,7 @@ Bool ParseRule()
 		}
 
 		ifok {
+			rule->pattern = pattern;
 			if (macro_rule) {
 				GenRegisterRule(rule);
 			} else {
