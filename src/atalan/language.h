@@ -1223,13 +1223,15 @@ Rules are stored in rule sets. We have three sets of rules:
 
 */
 
+#define RULESET_SIZE INSTR_CNT
+
 typedef struct {
-	Rule * rules[INSTR_CNT];
+	Rule * rules[RULESET_SIZE];
 } RuleSet;
 
 void RuleSetInit(RuleSet * ruleset);
 void RuleSetAddRule(RuleSet * ruleset, Rule * rule);
-Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2);
+Rule * RuleSetFindRule(RuleSet * ruleset, CompilerPhase phase, InstrOp op, Var * result, Var * arg1, Var * arg2);
 void TranslateRules();
 void PrintRules();
 
@@ -1238,7 +1240,6 @@ void PrintKeyword(char * txt);
 void GenMatchedRule(Rule * rule);
 
 void RuleRegister(Rule * rule);
-//Bool RuleMatch(Rule * rule, Instr * i);
 
 #define GENERATE 0
 #define TEST_ONLY 1

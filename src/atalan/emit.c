@@ -14,7 +14,6 @@ Emit supports two basic function EmitByte & EmitStr, which is the point through 
 
 FILE * G_OUTPUT;
 
-extern Rule * EMIT_RULES[INSTR_CNT];
 extern Var   ROOT_PROC;
 
 /*
