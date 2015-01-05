@@ -41,7 +41,7 @@ Rule specificity
 
 The rules are sorted by their specificity.
 The most specific rule is the first in the list, less specific rules follow.
-This ensures, that the more specific rules have bigger priority than less specific ones and will be preffered when translating.
+This ensures, that the more specific rules have bigger priority than less specific ones and will be preferred when translating.
 
 Rule is more specific if it's arguments are more specific.
 
@@ -105,9 +105,26 @@ Purpose:
 void RuleSetInit(RuleSet * ruleset)
 {
 	UInt16 op;
-	for(op=0; op<INSTR_CNT; op++) {
+	for(op=0; op<RULESET_SIZE; op++) {
 		ruleset->rules[op] = NULL;
 	}
+}
+
+/*
+
+Rules are hashed. Currently, we use instruction op.
+In future, there should be better hash (for example for let instruction, we should use operator of the second argument - i.e. plus etc.)
+
+*/
+
+UInt16 RuleHash(Rule * rule)
+{
+	return rule->pattern->mode;
+}
+
+UInt16 InstrHash(Instr * i)
+{
+	return i->op;
 }
 
 void RuleSetAddRule(RuleSet * ruleset, Rule * rule)
@@ -118,7 +135,7 @@ Purpose:
 	The rules are hashed by operation.
 */
 {
-	InstrOp op = rule->pattern->mode;
+	UInt16 hash = rule->pattern->mode;
 	Rule * prev_r, * r;
 
 	if (!rule->to->first) {
@@ -126,7 +143,7 @@ Purpose:
 		return;
 	}
 
-	prev_r = NULL; r = ruleset->rules[op];
+	prev_r = NULL; r = ruleset->rules[hash];
 
 	while(r != NULL && !RuleIsMoreSpecific(rule, r)) {
 		prev_r = r;
@@ -136,7 +153,7 @@ Purpose:
 	rule->next = r;
 
 	if (prev_r == NULL) {
-		ruleset->rules[op] = rule;
+		ruleset->rules[hash] = rule;
 	} else {
 		prev_r->next = rule;
 	}
@@ -169,7 +186,7 @@ void RuleSetTranslate(RuleSet * ruleset)
 	if (Verbose(NULL)) {
 		PrintHeader(1, "Translate Rules");
 	}
-	for(i=0; i<INSTR_CNT;i++) {
+	for(i=0; i<RULESET_SIZE;i++) {
 		for(rule = ruleset->rules[i]; rule != NULL; rule = rule->next) {
 			if (rule->fn != NULL && FnVarCode(rule->fn) != NULL) {
 				TypeInfer(rule->fn);
@@ -188,7 +205,7 @@ void RuleSetTranslate(RuleSet * ruleset)
 void RuleSetGarbageCollect(RuleSet * ruleset)
 {
 	UInt8 op;
-	for(op=0; op<INSTR_CNT; op++) {
+	for(op=0; op<RULESET_SIZE; op++) {
 //		RulesMarkNonGarbage(ruleset->rules[op]);
 	}
 }
@@ -244,9 +261,10 @@ Purpose:
 	arg1 = rule->pattern->r->l;
 	arg2 = rule->pattern->r->r;
 
-	match = ArgMatch(result, i->result, INSTR_NULL) 
-		&& ArgMatch(arg1, i->arg1, INSTR_NULL) 
-		&& ArgMatch(arg2, i->arg2, INSTR_NULL);
+	match = ArgMatch(result, i->result, INSTR_NULL);
+	if (match) match = ArgMatch(arg1, i->arg1, INSTR_NULL);
+
+//		&& ArgMatch(arg2, i->arg2, INSTR_NULL);
 
 	if (match) {
 		if (INSTR_MATCH_BREAK) {
@@ -312,7 +330,7 @@ static Bool ArgMatch(Cell * pattern, Var * arg, InstrOp parent_variant)
 Purpose:
 	Match argument against pattern.
 	Argument should not be unaliased to allow matching against actual name.
-	Other matches that match structural identity should whowever ork with unaliased cells.
+	Other matches that match structural identity should however work with unaliased cells.
 */
 {
 	Type * atype;
@@ -463,7 +481,25 @@ Bool InstrRuleIsDefined(InstrOp op)
 
 }
 
-Rule * RuleSetFindRule(RuleSet * ruleset, InstrOp op, Var * result, Var * arg1, Var * arg2)
+Rule * RuleSetFindRuleInstr(RuleSet * ruleset, CompilerPhase phase, Instr * instr)
+/*
+Purpose:
+	Find rule that emits code for this instruction.
+	May be used to test, whether specified instruction may be emitted or not.
+*/
+{
+	Rule * rule;
+	UInt16 hash;
+
+	hash = InstrHash(instr);
+
+	for(rule = ruleset->rules[hash]; rule != NULL; rule = rule->next) {
+		if (RuleMatch(rule, instr, PHASE_TRANSLATE)) break;
+	}
+	return rule;
+}
+
+Rule * RuleSetFindRule(RuleSet * ruleset, CompilerPhase phase, InstrOp op, Var * result, Var * arg1, Var * arg2)
 /*
 Purpose:
 	Find rule that emits code for this instruction.
@@ -471,15 +507,9 @@ Purpose:
 */
 {
 	Instr i;
-	Rule * rule;
-	
-	rule = ruleset->rules[op];
 
 	i.op = op; i.result = result; i.arg1 = arg1; i.arg2 = arg2;
-	for(; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, &i, PHASE_TRANSLATE)) break;
-	}
-	return rule;
+	return RuleSetFindRuleInstr(ruleset, PHASE_TRANSLATE, &i);
 }
 
 
@@ -490,17 +520,7 @@ Purpose:
 	May be used to test, whether specified instruction may be emitted or not.
 */
 {
-	Rule * rule;
-	
-	rule = INSTR_RULES.rules[instr->op];
-
-	for(; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, instr, PHASE_EMIT)) {		
-			break;
-		}
-	}
-
-	return rule;
+	return RuleSetFindRuleInstr(&INSTR_RULES, PHASE_EMIT, instr);
 }
 
 Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
@@ -516,17 +536,11 @@ Rule * InstrRule2(InstrOp op, Var * result, Var * arg1, Var * arg2)
 Rule * TranslateRule(InstrOp op, Var * result, Var * arg1, Var * arg2)
 {
 	Instr i;
-	Rule * rule;
 	i.op = op;
 	i.result = result;
 	i.arg1 = arg1;
 	i.arg2 = arg2;
-	for(rule = TRANSLATE_RULES.rules[op]; rule != NULL; rule = rule->next) {
-		if (RuleMatch(rule, &i, PHASE_TRANSLATE)) {
-			return rule;
-		}
-	}
-	return NULL;
+	return RuleSetFindRuleInstr(&TRANSLATE_RULES, PHASE_TRANSLATE, &i);
 }
 
 void GenMatchedRule(Rule * rule)
@@ -551,6 +565,8 @@ void GenMatchedRule(Rule * rule)
 Bool InstrTranslate(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mode)
 {
 	Rule * rule;
+
+	ASSERT(arg2 == NULL);
 
 	if (FlagOn(mode, TEST_ONLY)) {
 		if (InstrRule2(op, result, arg1, arg2) != NULL) return true;
@@ -967,7 +983,7 @@ void PrintRuleSet(RuleSet * ruleset)
 	Rule * rule;
 	UInt16 i;
 
-	for(i=0; i<INSTR_CNT;i++) {
+	for(i=0; i<RULESET_SIZE;i++) {
 		for(rule = ruleset->rules[i]; rule != NULL; rule = rule->next) {
 			PrintRule(rule);
 		}

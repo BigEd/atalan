@@ -155,7 +155,7 @@ Purpose:
 	Rule * rule = NULL;
 
 	if (!ParsingRule()) {
-		rule = RuleSetFindRule(&GEN_RULES, op, result, arg1, arg2);
+		rule = RuleSetFindRule(&GEN_RULES, PHASE_TRANSLATE, op, result, arg1, arg2);
 	}
 	if (rule == NULL) {
 		GenInternal(op, result, arg1, arg2);

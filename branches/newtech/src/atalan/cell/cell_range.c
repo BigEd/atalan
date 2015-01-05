@@ -1,16 +1,5 @@
 /*
-Ranges
-
-Ranges represent continuous set of values beginning at minimal value and ending at maximal value.
-Step may be defined.
-
-0..7             = 0,1,2,3,4,5,6,7
-10..100 step 10  = 10,20,30,40,50,60,70,80,90,100
-
-
-l = min
-r = max
-m = step
+Range
 
 (c) 2013 Rudolf Kudla 
 Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
@@ -70,6 +59,27 @@ Cell * NewBitRange(UInt32 bit_count)
 	rt = NewRangeInt(Int0(), &n);
 
 	return rt;
+}
+
+Cell * RangeMin(Cell * range)
+{
+	ASSERT(range != NULL);
+	ASSERT(range->mode == INSTR_RANGE);
+	return range->l;
+}
+
+Cell * RangeMax(Cell * range)
+{
+	ASSERT(range != NULL);
+	ASSERT(range->mode == INSTR_RANGE);
+	return range->r;
+}
+
+Cell * RangeStep(Cell * range)
+{
+	ASSERT(range != NULL);
+	ASSERT(range->mode == INSTR_RANGE);
+	return range->m;
 }
 
 void PrintRange(Cell * cell)
