@@ -130,7 +130,6 @@
     <ClCompile Include="opt_values.c" />
     <ClCompile Include="opt_var_use.c" />
     <ClCompile Include="parser.c" />
-    <ClCompile Include="parse_type.c" />
     <ClCompile Include="print.c" />
     <ClCompile Include="simmilar_names.c" />
     <ClCompile Include="translate.c" />

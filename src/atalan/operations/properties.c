@@ -195,7 +195,7 @@ void ArrayItemCount(Type * index, BigInt * dest)
 	BigInt bi1, bi2;
 	if (index == NULL) {
 		IntInit(dest, 0);
-	} else if (index->variant == TYPE_INT) {
+//	} else if (index->variant == TYPE_INT) {
 //		IntRangeSize(dest, &index->range.min, &index->range.max);
 	} else if (index->mode == INSTR_TUPLE) {
 		ArrayItemCount(index->l, &bi1);

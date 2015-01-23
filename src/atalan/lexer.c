@@ -1206,28 +1206,6 @@ Bool NextIs(Token tok)
 	return true;
 }
 
-Bool NextNoSpaceIs(Token tok)
-{
-	if (TOK_NO_SPACES != tok) return false;
-	NextToken();
-	return true;
-}
-
-void ExpectToken(Token tok)
-{
-	ifok {
-		if (tok == TOKEN_ID) {
-			LEX.ignore_keywords = true;
-		}
-		NextToken();
-		LEX.ignore_keywords = false;
-
-		if (TOK != tok) {			
-			SyntaxError("unexpected token");
-		}
-	}
-}
-
 
 /***********************************************
 

@@ -65,9 +65,6 @@
     <ClCompile Include="gen.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="parse_type.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="opt_blocks.c">
       <Filter>Source Files\optimizations</Filter>
     </ClCompile>
