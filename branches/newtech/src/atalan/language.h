@@ -1,6 +1,5 @@
 /*
 TODO:
-	- remove ParseIntType
 	- remove INSTR_NAME
 	- remove INSTR_SCOPE
 	- range should include resolution? (default is 1, different for floats etc.)
@@ -179,13 +178,10 @@ extern char NAME2[256];
 // This functions are used only by parser
 
 void NextToken();
-void NextStringToken();
-void ExpectToken(Token tok);
 
 Bool Spaces();
 Bool NextCharIs(UInt8 chr);
 Bool NextIs(Token tok);
-Bool NextNoSpaceIs(Token tok);
 void NewBlock(Token end_token, Token stop_token);
 void EnterBlock();
 void EnterBlockWithStop(Token stop_token);
@@ -1286,10 +1282,6 @@ Bool ParsingPattern();
 void BufEmpty();
 void BufPush(Var * var);
 Var * BufPop();
-
-Type * ParseType3();
-Type * ParseType2(InstrOp mode);
-Type * ParseTypeInline();
 
 void ParseExpression(Var * result);
 void ParseExpressionType(Type * result_type);

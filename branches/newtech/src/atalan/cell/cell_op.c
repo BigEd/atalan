@@ -73,8 +73,12 @@ Argument:
 	item->r  = r;
 
 	// If this is element from in or out variable, it is in or out too
-	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
-	item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
+	if (l != NULL) {
+		item->submode |= (l->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
+	}
+	if (r != NULL) {
+		item->submode |= (r->submode & (SUBMODE_IN|SUBMODE_OUT|SUBMODE_REG));
+	}
 	return item;
 }
 

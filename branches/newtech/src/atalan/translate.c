@@ -54,7 +54,7 @@ Rule is more specific if it's arguments are more specific.
 
 Bool RuleArgIsRegister(Cell * l)
 {
-	if (l->variant == INSTR_VAR || l->variant == INSTR_VARIANT) return true;
+	if (l->mode == INSTR_VAR || l->mode == INSTR_VARIANT) return true;
 	return false;
 }
 
@@ -78,13 +78,13 @@ Bool RuleArgIsMoreSpecific(Cell * l, Cell * r)
 
 	if (r_is_reg) return false;
 
-	if (l->variant == INSTR_VAL) {
-		if (r->variant != INSTR_VAL) return true;
+	if (l->mode == INSTR_VAL) {
+		if (r->mode != INSTR_VAL) return true;
 	}
 
 	// Accessing variable using byte or element is more specific than other variants
-	if (l->variant == INSTR_BYTE || l->variant == INSTR_ELEMENT) {
-		if (r->variant != INSTR_BYTE && l->variant != INSTR_ELEMENT) return true;
+	if (l->mode == INSTR_BYTE || l->mode == INSTR_ELEMENT) {
+		if (r->mode != INSTR_BYTE && l->mode != INSTR_ELEMENT) return true;
 
 	}
 	return false;
@@ -251,15 +251,16 @@ Purpose:
 */
 {
 	Bool match;
-	Cell * result, * arg1, * arg2;
+	Cell * result, * arg1;
+	LineNo line_no;
 
 	if (i->op != rule->pattern->mode) return false;
 
+	line_no = LineNumber(rule->line);
 	EmptyRuleArgs();
 	MATCH_MODE = match_mode;
 	result = rule->pattern->l;
-	arg1 = rule->pattern->r->l;
-	arg2 = rule->pattern->r->r;
+	arg1 = rule->pattern->r;
 
 	match = ArgMatch(result, i->result, INSTR_NULL);
 	if (match) match = ArgMatch(arg1, i->arg1, INSTR_NULL);
@@ -281,7 +282,7 @@ Bool VarMatchesPattern(Var * var, Cell * pattern)
 	Var * adr;	
 
 	// Pattern expects reference to array with one or more indices
-	if (pattern->index != NULL) {
+	if (pattern->mode == INSTR_ELEMENT) {
 		if (var->mode == INSTR_ELEMENT) {
 			if (VarIsStructElement(var)) {
 				// This is reference to structure
@@ -341,7 +342,7 @@ Purpose:
 
 	if (pattern == NULL) return arg == NULL;
 
-	v = pattern->variant;
+	v = pattern->mode;
 	if (arg == NULL) return v == INSTR_NULL;
 
 	var = arg;
@@ -355,13 +356,43 @@ Purpose:
 
 	// If this is rule argument and it has been previously set, it must match exactly
 
-	TODO("Arg no");
-//	arg_no = pattern->arg_no;
-	if (arg_no != 0 && MACRO_ARG[arg_no-1] != NULL) {
-		return MACRO_ARG[arg_no-1] == arg;	
-	}
-
 	switch(v) {
+
+	//	case INSTR_MATCH:
+	//		if (arg->mode != INSTR_VAR) return false;
+	//		if (FlagOn(var->submode, SUBMODE_REG)) return false;
+	//		if (parent_variant != INSTR_BYTE && !VarMatchesPattern(var, pattern)) return false;
+	//		break;
+
+	case INSTR_MATCH:
+
+		arg_no = 0;
+		ASSERT(VarIsRuleArg(pattern->l));
+
+		arg_no = VarArgIdx(pattern->l);
+
+		if (arg_no != 0 && MACRO_ARG[arg_no-1] != NULL) {
+			return MACRO_ARG[arg_no-1] == arg;	
+		}
+		right = pattern->r;
+		while(right->mode == INSTR_VAR) right = VarType(right);
+
+		if (right->mode == INSTR_VARIANT) {
+			if (!ArgMatch(right->l, arg, parent_variant) && !ArgMatch(right->r, arg, parent_variant)) return false;
+		} else {
+
+	//		if (!VarMatchesPattern(arg, pattern->r)) return false;
+
+			if (!VarMatchesPattern(arg, right)) return false;
+		}
+
+		if (arg_no != 0) {
+			ASSERT(MACRO_ARG[arg_no-1] == NULL);
+			MACRO_ARG[arg_no-1] = arg;
+		}
+
+		break;
+
 
 	case INSTR_ADD:
 	case INSTR_SUB:
@@ -441,12 +472,6 @@ Purpose:
 	case INSTR_VARIANT:
 		if (!VarIsOneOf(arg, pattern)) return false;			// pattern->var
 		break;
-
-	case INSTR_MATCH:
-//		if (arg->mode != INSTR_VAR) return false;
-		if (FlagOn(var->submode, SUBMODE_REG)) return false;
-		if (parent_variant != INSTR_BYTE && !VarMatchesPattern(var, pattern)) return false;
-		break;
 	
 	// @%A
 	case INSTR_DEREF:
@@ -459,7 +484,7 @@ Purpose:
 		break;
 
 	default:
-		if (pattern->variant != arg->mode) return false;
+		if (pattern->mode != arg->mode) return false;
 		if (!ArgMatch(pattern->r, arg->r, v)) return false;
 		return ArgMatch(pattern->l, arg->l, v); 
 		break;
@@ -467,10 +492,6 @@ Purpose:
 
 	// If this is rule argument, we set it.
 
-	if (arg_no != 0) {
-		ASSERT(MACRO_ARG[arg_no-1] == NULL);
-		MACRO_ARG[arg_no-1] = arg;
-	}
 
 	return true;
 }
@@ -788,8 +809,8 @@ Bool InstrTranslate3(InstrOp op, Var * result, Var * arg1, Var * arg2, UInt8 mod
 		// The instruction must have a result, of course.
 
 		if (result != NULL && FlagOff(mode, BIGGER_RESULT)) {
-			if (result->mode == INSTR_VAR && result->type->variant == TYPE_INT) {
-				result_type = result->type; 
+			if (result->mode == INSTR_VAR && TypeIsInt2(VarType(result))) {	//			result->type->variant == TYPE_INT) {
+				result_type = VarType(result); 
 				while((result_type = TypeBiggerType(op, result_type)) != NULL) {			
 					VarInitType(&tmp_r, result_type);
 					if (InstrTranslate3(INSTR_LET, result, &tmp_r, NULL, mode | TEST_ONLY)) {
@@ -869,7 +890,7 @@ Purpose:
 
 	for(blk = first_blk; blk != NULL; blk = blk->next) {
 
-		if (Verbose(proc)) {
+		if (VERBOSE_NOW) {
 			PrintBlockHeader(blk);
 		}
 

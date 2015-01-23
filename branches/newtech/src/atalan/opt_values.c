@@ -634,7 +634,7 @@ Bool VarIsZeroNonzero(Var * var, Var ** p_zero, Var ** p_non_zero)
 /*
 Purpose:
 	Test, if variable may have just two values, 0 and some other.
-	This is basically true for 0..1 integers or enumerators with 0 and other value.
+	This is basically true for 0..1 or -1..0 integers or enumerators with 0 and other value.
 */
 {
 	Type * t;
@@ -643,7 +643,7 @@ Purpose:
 
 	if (var == NULL) return false;
 	ASSERT(var->mode == INSTR_VAR);
-	t = var->type;
+	t = VarType(var);
 	if (TypeIsInt(t)) {
 		if (t->mode == INSTR_TYPE && t->variant == TYPE_INT && t->is_enum) {
 

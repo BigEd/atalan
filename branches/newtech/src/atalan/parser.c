@@ -111,6 +111,7 @@ void BufPush(Var * var)
 Var * BufPop()
 {
 	Var * var;
+	if (TOP == 0) return NULL;
 	TOP--;
 	var = STACK[TOP];
 	return var;
@@ -977,7 +978,11 @@ Cell * ParseOperand()
 		last = NULL;
 		variant_type = false;
 		while (OK && !LexOutdent()) {
-			
+
+//			if (variant_type) {
+//				PrintVar(var); PrintEOL();
+//			}
+
 			if (ParseOpSymbol("\xE2\x80\xA2")) {
 				variant_type = true;
 			}
@@ -1026,10 +1031,10 @@ Cell * ParseOperand()
 				var = VarRuleArg(arg_no);		// TODO: Use real names...
 			}	
 			if (LexSymbol(":")) {
-				parent_scope = InScope(var);
+//				parent_scope = InScope(var);
 				ParseSubExpression(NULL);
 				type = BufPop();
-				ReturnScope(parent_scope);
+//				ReturnScope(parent_scope);
 
 			} else {
 				type = ANY;
@@ -1253,7 +1258,7 @@ retry_indices:
 		} else {
 
 			if (EXP_DEFINES_VARS) {
-				var = ParseType3();
+//				var = ParseType3();
 			}
 			return var;
 		}
@@ -2305,7 +2310,7 @@ Var * ParseFile()
 
 	ifok {
 		if (block) {
-			ExpectToken(TOKEN_BLOCK_END);
+//			ExpectToken(TOKEN_BLOCK_END);
 		} else {
 //			NextToken();
 		}
@@ -3190,7 +3195,7 @@ parsed:
 		// type elements to this variable
 		scope = InScope(vars[0]);
 		bookmark = SetBookmark();
-		type = ParseType2(mode);
+		FAILURE("type = ParseType2(mode)");
 		if (type == NULL) {
 			if (adr != NULL && adr->mode != INSTR_MEMORY) {
 				type = CellType(adr);
@@ -3558,7 +3563,8 @@ Syntax: <instr_name> <result> <arg1> <arg2>
 			if (op == INSTR_DECL) {
 				arg[1] = ParseInstrArg();
 				NextIs(TOKEN_COLON);
-				type = ParseTypeInline();
+				type = NULL;
+				FAILURE("type = ParseTypeInline()");
 				arg[1]->type = type;
 				n=3;
 
