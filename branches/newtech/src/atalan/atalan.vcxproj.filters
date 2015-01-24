@@ -277,5 +277,8 @@
     <ClInclude Include="cell\cell_match.h">
       <Filter>Source Files\cells</Filter>
     </ClInclude>
+    <ClInclude Include="cell\cell_op.h">
+      <Filter>Source Files\cells</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

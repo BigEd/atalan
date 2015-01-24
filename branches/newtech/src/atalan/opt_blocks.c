@@ -656,3 +656,9 @@ Bool OptimizeMergeBranchCode(Var * proc)
 	}
 	return modified;
 }
+
+Bool BlockDominates(Cell * dominator, Cell * blk)
+{
+	if (blk->from == dominator && blk->callers == NULL && blk->to == NULL && blk->cond_to == NULL) return true;
+	return false;
+}

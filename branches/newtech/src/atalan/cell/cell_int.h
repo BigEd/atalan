@@ -1,5 +1,6 @@
 extern Var * ZERO;
 extern Var * ONE;
+extern Var * TWO;
 extern Var * TRUE;
 extern Var * FALSE;
 extern Var * MINUS_ONE;

@@ -13,6 +13,7 @@ Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.p
 
 GLOBAL Var * ZERO;
 GLOBAL Var * ONE;
+GLOBAL Var * TWO;
 GLOBAL Var * MINUS_ONE;
 GLOBAL Var * TRUE;
 GLOBAL Var * FALSE;
@@ -111,6 +112,7 @@ Purpose:
 	MemEmpty(&INTS, sizeof(INTS));
 	ZERO = IntCellN(0);
 	ONE  = IntCellN(1);
+	TWO  = IntCellN(2);
 	TRUE = ONE;
 	FALSE = ZERO;
 	MINUS_ONE = IntCellN(-1);

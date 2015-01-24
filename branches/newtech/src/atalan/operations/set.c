@@ -412,3 +412,43 @@ Type * Remove(Type * cell, Type * restriction)
 
 	return r;
 }
+
+Cell * SequenceUnion(Cell * first, Cell * second)
+/*
+Purpose:
+	Create union of the two cells knowing, that we first had the value 'first' and then the value 'second'.
+	This makes it possible to keep information about some sequences.
+	If the information can not be used, normal union is used.
+*/
+{
+	BigInt * f, * step, * init;
+	SequenceCell * seq, * step_s;
+	BigInt f2;
+
+	if (first == NULL) return second;
+	if (second == NULL) return first;
+	if (second->mode == INSTR_SEQUENCE) {
+		seq = &second->seq;
+		if (seq->op == INSTR_ADD) {
+			init = IntFromCell(seq->init);
+			step = IntFromCell(seq->step);
+			f = IntFromCell(first);
+			if (init != NULL && step != NULL && f != NULL) {
+				IntSub(&f2, init, step);
+				if (IntEq(&f2, f)) {
+					return NewSequence(first, seq->step, seq->op, seq->limit, seq->compare_op);
+				}
+				IntFree(&f2);
+			// If step is defined by sequence, this sequence may define number of steps, we need to
+			// shift the sequence to zero, to ensure, that we do not perform extra steps.
+
+			} else if (init == NULL && seq->step != NULL && seq->step->mode == INSTR_SEQUENCE) {
+				step_s = &seq->step->seq;
+				if (seq->op == INSTR_ADD) {
+					return NewSequence(first, Sub(seq->step, step_s->init), seq->op, seq->limit, seq->compare_op);
+				}
+			}
+		}
+	}
+	return Union(first, second);
+}

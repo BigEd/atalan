@@ -150,6 +150,7 @@
     <ClInclude Include="cell\cell_let.h" />
     <ClInclude Include="cell\cell_match.h" />
     <ClInclude Include="cell\cell_memory.h" />
+    <ClInclude Include="cell\cell_op.h" />
     <ClInclude Include="cell\cell_range.h" />
     <ClInclude Include="cell\cell_sequence.h" />
     <ClInclude Include="cell\cell_src_file.h" />
