@@ -15,12 +15,30 @@ Cell * Add(Cell * l, Cell * r)
 {
 	Cell * result = NULL;
 	BigInt * il, * ir, ii;
+	SequenceCell * sl, * sr, * s_step;
 
 	if (r == NULL || l == NULL) return NULL;
 
 	switch(l->mode) {
 	case INSTR_SEQUENCE:
 		if (r->mode == INSTR_SEQUENCE) {
+			// * [sequence 0,..+(sequence 1,..,<>11)..,()] + [sequence 1,..,<>11]  ->  sequence 1,..+(sequence 1,..,<>11),()
+			// * [sequence A,..+(sequence B,..,<>C)..,()] + [sequence B,..,<>C]  ->  sequence A+B,..+(sequence B,..,<>C),()
+			//        step in both sequences must be same
+			//        init_1 += init_2
+			//        
+	
+			sl = &l->seq; sr = &r->seq;
+			if (sl->step != NULL && sl->step->mode == INSTR_SEQUENCE) {
+				s_step = &sl->step->seq;
+				if (s_step->op == sr->op) {
+					if (sr->op == INSTR_ADD) {
+						if (IsEqual(s_step->step, sr->step)) {
+							result = NewSequence(Add(sl->init, sr->init), Add(sl->step, s_step->step), sl->op, sl->limit, sl->compare_op);
+						}
+					}
+				}
+			}
 			//TODO: How do we add two sequences?
 		} else {
 			result = NewSequence(Add(l->seq.init,r), l->seq.step, l->seq.op, Add(l->seq.limit, r), l->seq.compare_op);
@@ -70,7 +88,7 @@ Var * Sub(Var * l, Var * r)
 
 	if (l->mode == INSTR_SEQUENCE) {
 		if (r->mode == INSTR_SEQUENCE) {
-			//TODO: How do we add two sequences?
+			//TODO: How do we sub two sequences?
 		} else {
 			result = NewSequence(Sub(l->seq.init,r), l->seq.step, l->seq.op, Sub(l->seq.limit, r), l->seq.compare_op);
 		}

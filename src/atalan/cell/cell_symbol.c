@@ -59,7 +59,7 @@ Bool SymbolIsNamed(Cell * symb, char * name)
 
 Bool SymbolIsTmp(Cell * symbol)
 {
-	return symbol->str == NULL;
+	return symbol->name == NULL;
 }
 
 GLOBAL char SYMBOL_NAME[128];

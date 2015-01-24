@@ -119,7 +119,7 @@ Result:
 {
 	Instr * i;
 	InstrBlock * caller;
-	Type * type, * type2, * old_type, * arg_type;
+	Type * type, * type2, * arg_type;
 	Var * var2;
 	UInt16 caller_count;
 	InstrOp op;
@@ -156,7 +156,7 @@ Result:
 
 		if (i->result == NULL) continue;
 
-		if (VarIdentical(i->result,var)) {
+		if (VarIdentical(i->result, var)) {
 
 			type = i->type[RESULT];
 			if (type != NULL && FlagOff(i->flags, InstrRestriction)) goto done;
@@ -215,10 +215,10 @@ sub1:
 			undefined++;
 			type = ANY;
 		}
+		goto done;
 	}
 
 
-	old_type = type;
 	caller_count = 0;
 	if (blk->from != NULL) {
 		caller_count++;
@@ -239,6 +239,10 @@ sub1:
 			type2 = TypeRestrictBlk(type2, var, loc->proc, blk->from, true);
 			type = Union(type, type2);
 			type = TypeRestrictBlk(type, var, loc->proc, blk->from, true);
+
+			if (BlockDominates(blk->from, blk)) {
+				type = CollapseSequence(type);
+			}
 		}
 	}
 
@@ -258,7 +262,11 @@ sub1:
 				goto done;
 			}
 			type2 = TypeRestrictBlk(type2, var, loc->proc, caller, false);
-			type = Union(type, type2);
+			if (caller_count == 2) {
+				type = SequenceUnion(type, type2);
+			} else {
+				type = Union(type, type2);
+			}
 			type = TypeRestrictBlk(type, var, loc->proc, caller, false);
 		}
 	}
@@ -323,10 +331,10 @@ Bool CellIsConst2(Cell * c)
 	return false;
 }
 
-Type * FindType(Loc * loc, Var * var, Bool report_errors)
+Type * FindType(Loc * loc, Cell * var, Bool report_errors)
 /*
 Purpose:
-	Find type of variable at specified location.
+	Find type of expression at specified location.
 Result:
 	NULL if type was not found or is undefined
 */
@@ -334,7 +342,7 @@ Result:
 	Type * type = NULL;
 	Type * arr_type;
 	Type * index_type;
-	Type * left, * right;
+	Type * l, * r;
 	InstrOp op;
 
 	if (var == NULL) return NULL;
@@ -348,35 +356,35 @@ Result:
 		break;
 
 	case INSTR_RANGE:
-		left = FindType(loc, var->l, report_errors);
-		right = FindType(loc, var->r, report_errors);
-		type = NewRange(left, right);
+		l = FindType(loc, L(var), report_errors);
+		r = FindType(loc, R(var), report_errors);
+		type = NewRange(l, r);
 		break;
 		
 	case INSTR_TUPLE:
-		left = FindType(loc, var->l, report_errors);
-		right = FindType(loc, var->r, report_errors);
-		type = NewTuple(left, right);
+		l = FindType(loc, L(var), report_errors);
+		r = FindType(loc, R(var), report_errors);
+		type = NewTuple(l, r);
 		break;
 
 	case INSTR_ITEM:
-//		right = FindType(loc, var->r, report_errors);
-//		if (right->mode == INSTR_INT) {
+//		r = FindType(loc, R(var), report_errors);
+//		if (r->mode == INSTR_INT) {
 //
 //		} else {
 			//TODO: If this is tuple, we use it as constant array
-			left = FindType(loc, var->l, report_errors);		
-			if (left != NULL) {
-				if (left->mode == INSTR_ARRAY_TYPE) {
-					type = IndexType(left);
+			l = FindType(loc, L(var), report_errors);		
+			if (l != NULL) {
+				if (l->mode == INSTR_ARRAY_TYPE) {
+					type = IndexType(l);
 				}
 			}
 //		}
 		break;
 
 	case INSTR_EQ:
-		if (CellIsConst2(var->l) && CellIsConst2(var->r)) {
-			if (IsEqual(var->l, var->r)) {
+		if (CellIsConst2(L(var)) && CellIsConst2(R(var))) {
+			if (IsEqual(L(var), R(var))) {
 				type = ONE;
 			} else {
 				type = ZERO;
@@ -390,12 +398,12 @@ Result:
 	case INSTR_LE:
 	case INSTR_LT:
 
-		left = FindType(loc, var->l, report_errors);
-		right = FindType(loc, var->r, report_errors);
-		if (left != NULL && right != NULL) {
-			if (HoldsForAllItems(op, left, right)) {
+		l = FindType(loc, L(var), report_errors);
+		r = FindType(loc, R(var), report_errors);
+		if (l != NULL && r != NULL) {
+			if (HoldsForAllItems(op, l, r)) {
 				type = ONE;
-			} else if (op != INSTR_MATCH && HoldsForAllItems(OpNot(op), left, right)) {
+			} else if (op != INSTR_MATCH && HoldsForAllItems(OpNot(op), l, r)) {
 				type = ZERO;
 			}
 		}
@@ -403,21 +411,21 @@ Result:
 
 	case INSTR_DIV:
 	case INSTR_MOD:
-		right = FindType(loc, var->r, report_errors);
-		if (right != NULL) {
+		r = FindType(loc, R(var), report_errors);
+		if (r != NULL) {
 			// Error is reported, when the compiler deduces, that there is a possibility of dividing by zero.
-			if (IsSubset(ZERO, right)) {
+			if (IsSubset(ZERO, r)) {
 				if (report_errors) {
-					if (IsEqual(ZERO, right)) {
+					if (IsEqual(ZERO, r)) {
 						LogicErrorLoc("Division by zero.", loc);
 					} else {
 						LogicErrorLoc("Possible division by zero.", loc);
 					}
 				}
 			} else {
-				left = FindType(loc, var->l, report_errors);
-				if (left != NULL) {
-					type = CellOp(var->mode, left, right);
+				l = FindType(loc, L(var), report_errors);
+				if (l != NULL) {
+					type = CellOp(var->mode, l, r);
 				}
 			}
 		}
@@ -426,10 +434,10 @@ Result:
 	case INSTR_ADD:
 	case INSTR_SUB:
 	case INSTR_MUL:
-		left = FindType(loc, var->l, report_errors);
-		right = FindType(loc, var->r, report_errors);
-		if (left != NULL && right != NULL) {
-			type = CellOp(var->mode, left, right);			
+		l = FindType(loc, L(var), report_errors);
+		r = FindType(loc, R(var), report_errors);
+		if (l != NULL && r != NULL) {
+			type = CellOp(var->mode, l, r);
 		}
 		break;
 
@@ -444,14 +452,14 @@ Result:
 	default:
 
 		// Type of input register is always it's type, as the value may change in any moment.
-		if (var->mode == INSTR_VAR && InVar(var)) return var->type;
+		if (var->mode == INSTR_VAR && InVar(var)) return VarType(var);
 
 		if (var->type == NULL) {
 			return NULL;
 		}
 
 		if (var->mode == INSTR_VAR && var->type->mode == INSTR_FN) {
-			type = var->type->type;
+			type = ResultType(VarType(var));
 		} else {
 
 #ifdef TRACE_INFER
@@ -463,7 +471,7 @@ Result:
 			MarkBlockAsUnprocessed(FnVarCode(loc->proc));
 			index_type = NULL;
 			if (VarIsArrayElement(var)) {
-				index_type = FindType(loc, var->r, false);
+				index_type = FindType(loc, R(var), false);
 			}
 			type = FindTypeBlock(loc, var, index_type, loc->blk, loc->i);
 
@@ -471,7 +479,7 @@ Result:
 			if (type == NULL || type->mode == INSTR_ANY) {
 
 				if (var->mode == INSTR_ELEMENT) {
-					arr_type = var->l->type;
+					arr_type = L(var)->type;
 //					if (VarIsArrayElement(var)) {
 //						type = ItemType(arr_type);
 //					} else
@@ -481,7 +489,7 @@ Result:
 							// adr of array of type
 							type = arr_type->element->element;
 						} else {
-							Print("");
+//							Print("");
 						}
 					}
 				}
@@ -882,23 +890,25 @@ Purpose:
 				d->modified = true;
 			}
 		}
-
+/*
 		if (i->arg2 != NULL && i->type[ARG2] == NULL) {
 			i->type[ARG2] = FindType(loc, i->arg2, d->final_pass);
 			if (i->type[ARG2] != NULL) d->modified = true;
 		}
-
+*/
 		// In some cases, we may find out, that the type at this place does allow only one value.
 		// That means, we may replace the variable with the constant.
 		ReplaceConst(&i->arg1, i->type[ARG1]);
-		ReplaceConst(&i->arg2, i->type[ARG2]);
+//		ReplaceConst(&i->arg2, i->type[ARG2]);
 
 		// For comparisons, we may check whether the condition is not always true or always false
 //		if (IS_INSTR_BRANCH(i->op)) {
 
 		result = i->result;
 
-		tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
+//		tr = TypeEval(i->op, i->type[ARG1], i->type[ARG2]);
+
+		tr = i->type[ARG1];
 
 		// Type was evaluated, test, whether there is not an error while assigning it
 		if (tr != NULL /*&& !InstrIsSelfReferencing(i)*/) {
@@ -943,6 +953,7 @@ Purpose:
 		// If the resulting type is defined and we failed to compute the type, we may try to
 		// deduce the type 'backwards'.
 		} else {
+
 		}
 
 		if (tr != NULL) {
@@ -1307,7 +1318,7 @@ Purpose:
 {
 
 	Instr * i;
-	Type * tr, * tl;
+	Cell * tr, * tl, * tres;
 	Var * var, * dest_var, * dest_proc;
 	Loc loc;
 	InferData data;
@@ -1318,7 +1329,8 @@ Purpose:
 	ProcInstrEnum(proc, &InstrInitInfer, NULL);
 	PrintProcHeader(2, proc);
 
-//	GenerateBasicBlocks(proc);
+	LinkBlocks(proc);
+	//GenerateBasicBlocks(proc);
 	TypeDeduce(proc);
 
 	data.modified = false;
@@ -1354,7 +1366,15 @@ Purpose:
 				tr = i->type[RESULT];
 				if (VarIsLocal(var, proc) && FlagOff(var->submode, SUBMODE_USER_DEFINED)) {
 					if (tr != NULL && tr->mode != INSTR_ANY && FlagOff(i->flags, InstrRestriction)) {
-						var->type = Union(var->type, i->type[RESULT]);
+						tres = VarType(var);
+						// ANY at this moment means, we haven't defined the type of variable, so we use the type from instruction.
+						// Use union of the two types otherwise.
+						if (tres->mode == INSTR_ANY) {
+							var->type = tr;
+						} else {
+							tr = ResolveSequence(tr);
+							var->type = Union(tres, tr);
+						}
 					} else {
 
 						// For temporary variable, there is no reason to define 

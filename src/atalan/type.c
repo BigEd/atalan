@@ -190,7 +190,7 @@ void PrintVars(Var * proc)
 				type = var->type;
 				if (type != NULL && type->variant == TYPE_LABEL) continue;
 				PrintFmt("%s: ", VarName(var));
-				PrintVar(var->type);
+				PrintCell(VarType(var));
 				Print("\n");
 			}
 		}

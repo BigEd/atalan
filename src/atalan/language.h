@@ -742,6 +742,7 @@ extern Type TLBL;
 #include "cell/cell_tuple.h"
 #include "cell/cell_range.h"
 #include "cell/cell_item.h"
+#include "cell/cell_op.h"
 
 /**********************************************
 
@@ -866,17 +867,7 @@ Var * TextCell(char * str);
 void VarInitStr(Var * var, char * str);
 
 //===== Op
-Var * NewOp(InstrOp op, Var * left, Var * right);
-Bool CellIsOp(Var * cell);
-void PrintBinaryOp(Cell * cell);
-void PrintUnaryOp(Cell * cell);
 void PrintInstr(Cell * cell);
-
-//===== Sequence
-Var * NewSequence(Var * init, Var * step, InstrOp step_op, Var * limit, InstrOp compare_op);
-Bool  SequenceRange(Type * type, Var ** p_min, Var ** p_max);
-Var * ResolveSequence(Var * cell);
-
 
 Var * VarEvalConst(Var * var);
 
@@ -1348,7 +1339,11 @@ void MarkBlockAsUnprocessed(InstrBlock * block);
 
 
 void ProcOptimize(Var * proc);
+
 void GenerateBasicBlocks(Var * proc);
+void LinkBlocks(Var * proc);
+Bool BlockDominates(Cell * dominator, Cell * blk);
+
 void MarkLoops(Var * proc);
 
 Bool OptimizeLive(Var * proc);

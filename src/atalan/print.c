@@ -63,9 +63,7 @@ void PrintCell(Var * var)
 	} else if (var->mode == INSTR_TYPE) {
 		PrintType(var->type);
 	} else {
-		if (var->mode == INSTR_RANGE) {
-			PrintCell(var->l); Print(".."); PrintCell(var->r);
-		} else if (var->mode == INSTR_TUPLE) {
+		if (var->mode == INSTR_TUPLE) {
 			Print("(");
 			PrintCell(var->l);
 			Print(",");
@@ -162,17 +160,7 @@ void PrintVar(Var * var)
 		PrintBigInt(&var->n);
 		return;
 	} else if (var->mode == INSTR_SEQUENCE) {
-		Print("sequence "); PrintVar(var->seq.init); 
-		if (var->seq.op == INSTR_ADD) {
-			if (!IsEqual(var->seq.step, ONE)) {
-			}
-			Print(",..,");
-			if (var->seq.compare_op != INSTR_LE) {
-				Print(INSTR_INFO[var->seq.compare_op].symbol);
-			}
-			PrintVar(var->seq.limit);
-		}
-
+		PrintCell(var);
 	} else if (var->mode == INSTR_ARRAY_TYPE) {
 		Print("array (");
 		PrintVar(IndexType(var));

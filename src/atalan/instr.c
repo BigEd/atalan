@@ -100,7 +100,7 @@ InstrInfo INSTR_INFO[INSTR_CNT] = {
 { INSTR_VARIANT,   "variant", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },		// one of the two values (set)
 { INSTR_NAME,      "name", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		//
 { INSTR_ARRAY,     "array", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		// Array constant
-{ INSTR_SEQUENCE,  "sequence", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },	// Sequence
+{ INSTR_SEQUENCE,  "sequence", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , &PrintSequence,  &VoidEval },	// Sequence
 { INSTR_EMPTY,     "()", "", {TYPE_VOID, TYPE_VOID, TYPE_VOID}, 0, &VoidCellFree    , NULL,  &VoidEval },		// Empty
 { INSTR_MATCH,     ":", ":", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , &PrintMatch,  &VoidEval },		    // Match x:type
 { INSTR_VAL,	   "val", "", {TYPE_VOID, TYPE_ANY, TYPE_ANY}, 0, &VoidCellFree    , NULL,  &VoidEval },		    // Match const x:type
